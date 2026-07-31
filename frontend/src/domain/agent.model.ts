@@ -1,5 +1,3 @@
-import { AssignmentStrategy } from './rule.model';
-
 export interface AgentModel {
   id: string;
   name: string;

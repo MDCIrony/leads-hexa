@@ -15,7 +15,7 @@ export enum AssignmentStrategy {
 
 export interface ScoringRuleModel {
   id: string;
-  name: str;
+  name: string;
   field: string;
   operator: Operator;
   value: unknown;
