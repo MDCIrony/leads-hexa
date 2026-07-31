@@ -1,0 +1,37 @@
+Business Source License 1.1
+
+Licensor: Lead Router Authors
+Licensed Work: Lead Router Core (including all source code, domain logic, APIs, and documentation in this repository).
+
+Additional Use Grant:
+You may use the Licensed Work for any internal business purpose of a single organization, including self-hosting, deploying, executing, and integrating the software within your own internal IT systems.
+You MAY NOT offer, host, re-sell, sub-license, or provide the Licensed Work (or any modified version thereof) as a managed third-party service, SaaS platform, cloud offering, or managed lead management / lead routing service to external third parties.
+
+Change Date: August 10, 2030
+
+Change License: GNU General Public License v3.0 or later (GPL-3.0-or-later)
+
+---
+
+### Terms of the Business Source License 1.1
+
+Parameters:
+- Licensor: Lead Router Authors
+- Licensed Work: Lead Router Core
+- Change Date: 2030-08-10
+- Change License: GPL-3.0-or-later
+
+1. License Grants.
+Subject to the terms and conditions of this License, Licensor hereby grants you a non-exclusive, royalty-free, worldwide license to copy, modify, display, perform, and distribute the Licensed Work, solely for non-production purposes or as permitted under the Additional Use Grant above.
+
+2. Change License.
+On the Change Date, or such earlier date as specified by Licensor, Licensor grants you a non-exclusive, royalty-free, worldwide license to use, copy, modify, and distribute the Licensed Work under the terms of the Change License specified above.
+
+3. Restrictions.
+Except as permitted under the Additional Use Grant, you may not make the Licensed Work available to third parties as a managed service, SaaS platform, or hosted offering where the primary value derived by the user is access to or operation of the Licensed Work.
+
+4. Intellectual Property Rights.
+Licensor retains all right, title, and interest in and to the Licensed Work, including all copyright and patent rights.
+
+5. Disclaimer of Warranty.
+THE LICENSED WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE LICENSED WORK OR THE USE OR OTHER DEALINGS IN THE LICENSED WORK.
