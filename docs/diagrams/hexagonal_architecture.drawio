@@ -1,0 +1,43 @@
+<mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="none">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    
+    <!-- Outer Infrastructure Ring -->
+    <mxCell id="infra_box" value="INFRASTRUCTURE LAYER (Frameworks, Drivers &amp; Adapters)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="40" y="40" width="880" height="460" as="geometry"/>
+    </mxCell>
+
+    <!-- Application Ring -->
+    <mxCell id="app_box" value="APPLICATION LAYER (Ports &amp; Use Cases)" style="swimlane;startSize=30;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=12;" vertex="1" parent="infra_box">
+      <mxGeometry x="40" y="50" width="800" height="370" as="geometry"/>
+    </mxCell>
+
+    <!-- Domain Core Ring -->
+    <mxCell id="domain_box" value="DOMAIN LAYER (Entities, Value Objects &amp; Domain Services)" style="swimlane;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=12;" vertex="1" parent="app_box">
+      <mxGeometry x="40" y="50" width="720" height="290" as="geometry"/>
+    </mxCell>
+
+    <!-- Domain Entities & VOs -->
+    <mxCell id="vo_entity" value="Entities &amp; Value Objects&#10;- Lead, ScoringRule, RoutingRule, Agent&#10;- EmailAddress, Money, LeadId, Score" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="domain_box">
+      <mxGeometry x="40" y="60" width="300" height="80" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="domain_serv" value="Domain Services&#10;- ScoringEngine (Rule Evaluation)&#10;- RouterEngine (Agent Assignment)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="domain_box">
+      <mxGeometry x="380" y="60" width="300" height="80" as="geometry"/>
+    </mxCell>
+
+    <!-- Ports inside Application -->
+    <mxCell id="input_ports" value="Driving Ports (Input)&#10;- IngestLeadInputPort&#10;- ProcessBatchInputPort" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="app_box">
+      <mxGeometry x="40" y="170" width="200" height="60" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="use_cases" value="Use Cases (Interactors)&#10;- IngestLeadUseCase&#10;- ProcessBatchUseCase" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="app_box">
+      <mxGeometry x="280" y="170" width="240" height="60" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="output_ports" value="Driven Ports (Output)&#10;- LeadRepositoryPort&#10;- WebhookDispatcherPort" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="app_box">
+      <mxGeometry x="550" y="170" width="210" height="60" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>
