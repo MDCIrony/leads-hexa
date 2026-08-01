@@ -2,7 +2,6 @@ from uuid import UUID
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from domain.entities.agent import Agent
-from domain.value_objects.agent_id import AgentId
 from application.ports.output.agent_repository_port import AgentRepositoryPort
 from infrastructure.adapters.input.api.dependencies import get_agent_repo
 from infrastructure.adapters.input.api.schemas import AgentCreate, AgentResponse
@@ -15,9 +14,7 @@ def create_agent(
     request: AgentCreate,
     agent_repo: AgentRepositoryPort = Depends(get_agent_repo),
 ):
-    agent_id = AgentId()
-    agent = Agent(
-        id=agent_id,
+    agent = Agent.create(
         name=request.name,
         email=request.email,
         team=request.team,

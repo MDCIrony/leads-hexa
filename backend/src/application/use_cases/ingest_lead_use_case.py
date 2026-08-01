@@ -6,13 +6,7 @@ from application.ports.output.agent_repository_port import AgentRepositoryPort
 from application.ports.output.webhook_dispatcher_port import WebhookDispatcherPort
 from application.dtos.commands import IngestLeadCommand, LeadProcessedResult
 from domain.entities.lead import Lead
-from domain.value_objects import (
-    LeadId,
-    TenantId,
-    EmailAddress,
-    Money,
-    LeadStatus,
-)
+from domain.value_objects.enums import LeadStatus
 from domain.services.scoring_engine import ScoringEngine
 from domain.services.router_engine import RouterEngine
 from domain.exceptions import DomainException
@@ -38,19 +32,14 @@ class IngestLeadUseCase(IngestLeadInputPort):
 
     def execute(self, command: IngestLeadCommand) -> LeadProcessedResult:
         try:
-            email_vo = EmailAddress(command.email)
-            money_vo = Money(command.budget)
-            tenant_id_vo = TenantId(command.tenant_id)
-            lead_id_vo = LeadId()
-
-            lead = Lead(
-                id=lead_id_vo,
-                tenant_id=tenant_id_vo,
+            # ✅ El servicio de aplicación delega la creación a la fábrica del Dominio
+            lead = Lead.create(
+                tenant_id=command.tenant_id,
                 first_name=command.first_name,
                 last_name=command.last_name,
-                email=email_vo,
+                email=command.email,
                 company=command.company,
-                budget=money_vo,
+                budget=command.budget,
                 industry=command.industry,
                 custom_attributes=command.custom_attributes,
                 phone=command.phone,
@@ -64,14 +53,14 @@ class IngestLeadUseCase(IngestLeadInputPort):
             )
 
         # 1. Scoring Engine
-        scoring_rules = self.rule_repo.get_scoring_rules_by_tenant(tenant_id_vo.value)
+        scoring_rules = self.rule_repo.get_scoring_rules_by_tenant(lead.tenant_id.value)
         self.scoring_engine.evaluate(lead, scoring_rules)
         lead.qualify(self.threshold_qualified, self.threshold_disqualified)
 
         # 2. Router Engine (si es QUALIFIED)
         assigned_agent = None
         if lead.status == LeadStatus.QUALIFIED:
-            routing_rules = self.rule_repo.get_routing_rules_by_tenant(tenant_id_vo.value)
+            routing_rules = self.rule_repo.get_routing_rules_by_tenant(lead.tenant_id.value)
             available_agents = self.agent_repo.get_available_agents()
             assigned_agent = self.router_engine.select_agent(lead, routing_rules, available_agents)
             if assigned_agent:

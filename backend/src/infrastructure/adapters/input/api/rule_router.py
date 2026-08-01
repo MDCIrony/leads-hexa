@@ -1,4 +1,3 @@
-import uuid
 from uuid import UUID
 from typing import List
 from fastapi import APIRouter, Depends, status
@@ -20,8 +19,7 @@ def create_scoring_rule(
     request: ScoringRuleCreate,
     rule_repo: RuleRepositoryPort = Depends(get_rule_repo),
 ):
-    rule = ScoringRule(
-        id=uuid.uuid4(),
+    rule = ScoringRule.create(
         name=request.name,
         field=request.field,
         operator=request.operator,
@@ -62,8 +60,7 @@ def create_routing_rule(
     request: RoutingRuleCreate,
     rule_repo: RuleRepositoryPort = Depends(get_rule_repo),
 ):
-    rule = RoutingRule(
-        id=uuid.uuid4(),
+    rule = RoutingRule.create(
         min_score=request.min_score,
         target_team=request.target_team,
         assignment_strategy=request.assignment_strategy,

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from decimal import Decimal
+from typing import Any, Dict, Optional, Union
+from uuid import UUID
 
 from domain.value_objects.email import EmailAddress
 from domain.value_objects.money import Money
@@ -26,6 +28,36 @@ class Lead:
     status: LeadStatus = LeadStatus.NEW
     assigned_agent_id: Optional[AgentId] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @classmethod
+    def create(
+        cls,
+        tenant_id: Union[str, UUID],
+        first_name: str,
+        last_name: str,
+        email: str,
+        company: str,
+        budget: Union[int, float, str, Decimal],
+        industry: str,
+        custom_attributes: Optional[Dict[str, Any]] = None,
+        phone: Optional[str] = None,
+        lead_id: Optional[Union[str, UUID]] = None,
+    ) -> "Lead":
+        """Factory method que encapsula la construcción de Value Objects e invariantes del Lead."""
+        return cls(
+            id=LeadId(lead_id),
+            tenant_id=TenantId(tenant_id),
+            first_name=first_name,
+            last_name=last_name,
+            email=EmailAddress(email),
+            company=company,
+            budget=Money(budget),
+            industry=industry,
+            custom_attributes=custom_attributes or {},
+            phone=phone,
+            score=Score(0),
+            status=LeadStatus.NEW,
+        )
 
     def apply_score(self, delta: int) -> None:
         self.score = self.score.add_points(delta)

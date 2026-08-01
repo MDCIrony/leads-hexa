@@ -2,7 +2,7 @@ import uuid
 from application.dtos.commands import IngestLeadCommand
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from domain.entities import ScoringRule, RoutingRule, Agent
-from domain.value_objects import Operator, AssignmentStrategy, AgentId
+from domain.value_objects import Operator, AssignmentStrategy
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
@@ -18,8 +18,7 @@ def test_ingest_lead_use_case_successful_flow():
     # Pre-cargar regla de scoring (+35 pts)
     rule_repo.save_scoring_rule(
         tenant_id,
-        ScoringRule(
-            id=uuid.uuid4(),
+        ScoringRule.create(
             name="Tech Corp High Budget",
             field="budget",
             operator=Operator.GREATER_THAN,
@@ -31,8 +30,7 @@ def test_ingest_lead_use_case_successful_flow():
     # Pre-cargar regla de routing
     rule_repo.save_routing_rule(
         tenant_id,
-        RoutingRule(
-            id=uuid.uuid4(),
+        RoutingRule.create(
             min_score=30,
             target_team="Sales",
             assignment_strategy=AssignmentStrategy.LOWEST_LOAD,
@@ -40,8 +38,7 @@ def test_ingest_lead_use_case_successful_flow():
     )
 
     # Pre-cargar agente disponible
-    agent = Agent(
-        id=AgentId(),
+    agent = Agent.create(
         name="Carlos Lopez",
         email="clopez@sales.com",
         team="Sales",
