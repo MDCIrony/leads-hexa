@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: postgrespassword
       POSTGRES_DB: leads_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     container_name: leads_hexa_backend
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
     depends_on:
