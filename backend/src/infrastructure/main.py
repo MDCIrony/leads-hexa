@@ -5,7 +5,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
-from infrastructure.adapters.output.persistence.sqlite_unit_of_work import SqliteUnitOfWork
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import RawSqlWebhookRepository
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
 from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
