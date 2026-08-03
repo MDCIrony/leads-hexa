@@ -1,13 +1,15 @@
 import json
 from typing import List, Optional
 from uuid import UUID
-import sqlite3
+
+import psycopg
 
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from domain.entities.lead import Lead
 
+
 class RawSqlLeadRepository(LeadRepositoryPort):
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
 
     def save(self, lead: Lead) -> Lead:
@@ -15,10 +17,24 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         assigned_agent_str = str(lead.assigned_agent_id) if lead.assigned_agent_id else None
 
         sql = """
-        INSERT OR REPLACE INTO leads (
+        INSERT INTO leads (
             id, tenant_id, first_name, last_name, email, company, budget, industry,
             custom_attributes, phone, score, status, assigned_agent_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (id) DO UPDATE SET
+            tenant_id = EXCLUDED.tenant_id,
+            first_name = EXCLUDED.first_name,
+            last_name = EXCLUDED.last_name,
+            email = EXCLUDED.email,
+            company = EXCLUDED.company,
+            budget = EXCLUDED.budget,
+            industry = EXCLUDED.industry,
+            custom_attributes = EXCLUDED.custom_attributes,
+            phone = EXCLUDED.phone,
+            score = EXCLUDED.score,
+            status = EXCLUDED.status,
+            assigned_agent_id = EXCLUDED.assigned_agent_id,
+            created_at = EXCLUDED.created_at
         """
         self.connection.execute(
             sql,
@@ -61,7 +77,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         )
 
     def get_by_id(self, lead_id: UUID) -> Optional[Lead]:
-        cursor = self.connection.execute("SELECT * FROM leads WHERE id = ?", (str(lead_id),))
+        cursor = self.connection.execute("SELECT * FROM leads WHERE id = %s", (str(lead_id),))
         row = cursor.fetchone()
         if not row:
             return None
@@ -69,7 +85,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
 
     def list_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[Lead]:
         cursor = self.connection.execute(
-            "SELECT * FROM leads WHERE tenant_id = ? LIMIT ? OFFSET ?",
+            "SELECT * FROM leads WHERE tenant_id = %s LIMIT %s OFFSET %s",
             (str(tenant_id), limit, offset),
         )
         rows = cursor.fetchall()

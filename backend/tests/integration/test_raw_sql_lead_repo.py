@@ -5,7 +5,7 @@ from domain.entities.lead import Lead
 from domain.value_objects import LeadStatus
 
 def test_raw_sql_lead_repository_lifecycle():
-    db = RawSqlDatabase(":memory:")
+    db = RawSqlDatabase()
     db.init_db()
 
     connection = db.get_connection()
