@@ -27,10 +27,10 @@ def get_uow(db: RawSqlDatabase = Depends(get_db)) -> Generator[UnitOfWorkPort, N
     yield uow
 
 def get_ingest_lead_use_case(request: Request, uow: UnitOfWorkPort = Depends(get_uow)) -> IngestLeadInputPort:
-    return IngestLeadUseCase(uow=uow, webhook_dispatcher=request.app.state.webhook_dispatcher)
+    return IngestLeadUseCase(uow=uow, event_publisher=getattr(request.app.state, "event_publisher", None))
 
 def get_process_batch_use_case(request: Request, uow: UnitOfWorkPort = Depends(get_uow)) -> ProcessBatchInputPort:
-    ingest_lead_use_case = IngestLeadUseCase(uow=uow, webhook_dispatcher=request.app.state.webhook_dispatcher)
+    ingest_lead_use_case = IngestLeadUseCase(uow=uow, event_publisher=getattr(request.app.state, "event_publisher", None))
     return ProcessBatchUseCase(file_parser=request.app.state.file_parser, ingest_lead_use_case=ingest_lead_use_case)
 
 def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsInputPort:

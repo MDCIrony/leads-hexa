@@ -49,10 +49,32 @@ def test_ingest_lead_use_case_successful_flow():
     )
     agent_repo.save(agent)
 
+    from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
+    from application.handlers.webhook_event_handler import WebhookEventHandler
+    from domain.events.lead_events import LeadProcessedEvent
+    from domain.entities.webhook import WebhookConfig
+    from domain.value_objects.enums import WebhookEventType
+
+    event_publisher = InMemoryEventPublisher()
+    mock_webhook_repo = MagicMock()
+    mock_webhook_repo.get_by_tenant_and_event.return_value = [
+        WebhookConfig.create(
+            tenant_id=str(tenant_id),
+            event_type=WebhookEventType.LEAD_PROCESSED,
+            target_url="https://hooks.example.com/lead",
+            secret_token="secret",
+        )
+    ]
+    webhook_handler = WebhookEventHandler(
+        webhook_repo=mock_webhook_repo,
+        webhook_dispatcher=webhook_dispatcher,
+    )
+    event_publisher.subscribe(LeadProcessedEvent, webhook_handler.handle_lead_processed)
+
     uow = InMemoryUnitOfWork(lead_repo, rule_repo, agent_repo)
     use_case = IngestLeadUseCase(
         uow=uow,
-        webhook_dispatcher=webhook_dispatcher,
+        event_publisher=event_publisher,
     )
 
     cmd = IngestLeadCommand(
