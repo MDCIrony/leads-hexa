@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.sqlite_unit_of_work import SqliteUnitOfWork
@@ -51,6 +52,18 @@ app = FastAPI(
 )
 
 add_exception_handlers(app)
+
+# Origins are configurable per environment; comma-separated list, e.g.
+# "https://app.example.com,https://admin.example.com" in production.
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:80").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include Routers
 app.include_router(lead_router, prefix="/api/v1/tenants/{tenant_id}/leads", tags=["Leads"])
