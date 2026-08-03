@@ -59,21 +59,35 @@ CREATE TABLE IF NOT EXISTS webhook_configs (
 
 class RawSqlDatabase:
     def __init__(self, db_path: str = ":memory:") -> None:
-        self.db_path = db_path
-        self._conn: Optional[sqlite3.Connection] = None
+        if db_path == ":memory:":
+            self.db_path = "file::memory:?cache=shared"
+            self.is_uri = True
+        else:
+            self.db_path = db_path
+            self.is_uri = False
+        self._keepalive_conn = None
 
     def get_connection(self) -> sqlite3.Connection:
-        if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-        return self._conn
+        conn = sqlite3.connect(
+            self.db_path, 
+            check_same_thread=False, 
+            uri=self.is_uri
+        )
+        conn.row_factory = sqlite3.Row
+        return conn
 
     def init_db(self) -> None:
+        if self.is_uri and self._keepalive_conn is None:
+            self._keepalive_conn = self.get_connection()
+            
         conn = self.get_connection()
-        with conn:
-            conn.executescript(CREATE_TABLES_SQL)
+        try:
+            with conn:
+                conn.executescript(CREATE_TABLES_SQL)
+        finally:
+            conn.close()
 
     def close(self) -> None:
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        if self._keepalive_conn:
+            self._keepalive_conn.close()
+            self._keepalive_conn = None

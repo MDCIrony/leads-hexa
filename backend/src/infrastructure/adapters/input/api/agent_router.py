@@ -2,8 +2,8 @@ from uuid import UUID
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from domain.entities.agent import Agent
-from application.ports.output.agent_repository_port import AgentRepositoryPort
-from infrastructure.adapters.input.api.dependencies import get_agent_repo
+from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from infrastructure.adapters.input.api.dependencies import get_uow
 from infrastructure.adapters.input.api.schemas import AgentCreate, AgentResponse
 
 router = APIRouter()
@@ -12,7 +12,7 @@ router = APIRouter()
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_agent(
     request: AgentCreate,
-    agent_repo: AgentRepositoryPort = Depends(get_agent_repo),
+    uow: UnitOfWorkPort = Depends(get_uow),
 ):
     agent = Agent.create(
         name=request.name,
@@ -21,7 +21,8 @@ def create_agent(
         active_leads_count=request.active_leads_count,
         is_active=request.is_active,
     )
-    saved = agent_repo.save(agent)
+    with uow:
+        saved = uow.agents.save(agent)
     return AgentResponse(
         id=str(saved.id),
         name=saved.name,
@@ -35,9 +36,10 @@ def create_agent(
 @router.get("/", response_model=List[AgentResponse], status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_agents(
     team: Optional[str] = None,
-    agent_repo: AgentRepositoryPort = Depends(get_agent_repo),
+    uow: UnitOfWorkPort = Depends(get_uow),
 ):
-    agents = agent_repo.get_available_agents(team=team)
+    with uow:
+        agents = uow.agents.get_available_agents(team=team)
     return [
         AgentResponse(
             id=str(a.id),
@@ -53,9 +55,10 @@ def list_agents(
 @router.get("/{agent_id}", response_model=AgentResponse, status_code=status.HTTP_200_OK)
 def get_agent(
     agent_id: UUID,
-    agent_repo: AgentRepositoryPort = Depends(get_agent_repo),
+    uow: UnitOfWorkPort = Depends(get_uow),
 ):
-    agent = agent_repo.get_by_id(agent_id)
+    with uow:
+        agent = uow.agents.get_by_id(agent_id)
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
     return AgentResponse(

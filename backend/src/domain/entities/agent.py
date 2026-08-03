@@ -1,7 +1,9 @@
 from dataclasses import dataclass
 from typing import Optional, Union
 from uuid import UUID
+
 from domain.value_objects.agent_id import AgentId
+
 
 @dataclass
 class Agent:
@@ -31,3 +33,4 @@ class Agent:
             active_leads_count=active_leads_count,
             is_active=is_active,
         )
+

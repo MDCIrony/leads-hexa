@@ -8,7 +8,8 @@ def test_raw_sql_lead_repository_lifecycle():
     db = RawSqlDatabase(":memory:")
     db.init_db()
 
-    repo = RawSqlLeadRepository(db)
+    connection = db.get_connection()
+    repo = RawSqlLeadRepository(connection)
     tenant_id = uuid.uuid4()
     lead_id = uuid.uuid4()
 

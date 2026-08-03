@@ -23,6 +23,7 @@ class LeadProcessedResult:
     applied_rules_count: int = 0
     webhook_dispatched: bool = False
     error: Optional[str] = None
+    error_code: Optional[str] = None
 
 @dataclass(frozen=True)
 class BatchProcessResult:

@@ -2,12 +2,14 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional, Union
 from uuid import UUID
-from domain.value_objects.tenant_id import TenantId
+
 from domain.value_objects.enums import WebhookEventType
+from domain.value_objects.tenant_id import TenantId
+
 
 @dataclass
 class WebhookConfig:
-    id: uuid.UUID
+    id: UUID
     tenant_id: TenantId
     event_type: WebhookEventType
     target_url: str
@@ -24,7 +26,13 @@ class WebhookConfig:
     ) -> "WebhookConfig":
         tid = tenant_id if isinstance(tenant_id, TenantId) else TenantId(tenant_id)
         evt = WebhookEventType(event_type) if isinstance(event_type, str) else event_type
-        cid = uuid.UUID(str(config_id)) if config_id else uuid.uuid4()
+        if config_id is None:
+            cid = uuid.uuid4()
+        elif isinstance(config_id, UUID):
+            cid = config_id
+        else:
+            cid = uuid.UUID(str(config_id))
+
         return cls(
             id=cid,
             tenant_id=tid,

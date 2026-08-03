@@ -29,6 +29,7 @@ class LeadProcessedResponse(BaseModel):
     applied_rules_count: int = 0
     webhook_dispatched: bool = False
     error: Optional[str] = None
+    error_code: Optional[str] = None
 
 class LeadResponse(BaseModel):
     id: str

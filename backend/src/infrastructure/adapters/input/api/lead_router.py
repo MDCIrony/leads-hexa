@@ -8,7 +8,7 @@ from application.ports.output.lead_repository_port import LeadRepositoryPort
 from infrastructure.adapters.input.api.dependencies import (
     get_ingest_lead_use_case,
     get_process_batch_use_case,
-    get_lead_repo,
+    get_uow,
 )
 from infrastructure.adapters.input.api.schemas import (
     IngestLeadRequest,
@@ -66,15 +66,18 @@ async def batch_upload(
         failed_rows=result.failed_rows,
     )
 
+from application.ports.output.unit_of_work_port import UnitOfWorkPort
+
 @router.get("", response_model=List[LeadResponse], status_code=status.HTTP_200_OK)
 @router.get("/", response_model=List[LeadResponse], status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_leads(
     tenant_id: UUID,
     limit: int = 100,
     offset: int = 0,
-    lead_repo: LeadRepositoryPort = Depends(get_lead_repo),
+    uow: UnitOfWorkPort = Depends(get_uow),
 ):
-    leads = lead_repo.list_by_tenant(tenant_id, limit=limit, offset=offset)
+    with uow:
+        leads = uow.leads.list_by_tenant(tenant_id, limit=limit, offset=offset)
     return [
         LeadResponse(
             id=str(lead.id),

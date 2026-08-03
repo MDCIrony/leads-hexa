@@ -7,7 +7,10 @@ from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_webhook_dispatcher import InMemoryWebhookDispatcher
-
+from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
+import pytest
+from unittest.mock import MagicMock
+from infrastructure.adapters.output.persistence.sqlite_unit_of_work import SqliteUnitOfWork
 def test_ingest_lead_use_case_successful_flow():
     tenant_id = uuid.uuid4()
     lead_repo = InMemoryLeadRepository()
@@ -46,10 +49,9 @@ def test_ingest_lead_use_case_successful_flow():
     )
     agent_repo.save(agent)
 
+    uow = InMemoryUnitOfWork(lead_repo, rule_repo, agent_repo)
     use_case = IngestLeadUseCase(
-        lead_repo=lead_repo,
-        rule_repo=rule_repo,
-        agent_repo=agent_repo,
+        uow=uow,
         webhook_dispatcher=webhook_dispatcher,
     )
 
@@ -74,10 +76,9 @@ def test_ingest_lead_use_case_successful_flow():
 
 def test_ingest_lead_use_case_invalid_email_error():
     tenant_id = uuid.uuid4()
+    uow = InMemoryUnitOfWork(InMemoryLeadRepository(), InMemoryRuleRepository(), InMemoryAgentRepository())
     use_case = IngestLeadUseCase(
-        lead_repo=InMemoryLeadRepository(),
-        rule_repo=InMemoryRuleRepository(),
-        agent_repo=InMemoryAgentRepository(),
+        uow=uow,
     )
 
     cmd = IngestLeadCommand(
@@ -95,3 +96,43 @@ def test_ingest_lead_use_case_invalid_email_error():
     assert result.status == "FAILED"
     assert result.error is not None
     assert "correo electrónico inválido" in result.error
+
+def test_rollback_on_persistence_error():
+    # Arrange
+    mock_uow = MagicMock()
+    mock_uow.__enter__.return_value = mock_uow
+    def mock_exit(exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            mock_uow.rollback()
+        else:
+            mock_uow.commit()
+        return False
+    mock_uow.__exit__.side_effect = mock_exit
+    mock_uow.rules.get_scoring_rules_by_tenant.return_value = []
+    mock_uow.rules.get_routing_rules_by_tenant.return_value = []
+    mock_uow.agents.get_available_agents.return_value = []
+    
+    # Simular que al intentar guardar el Lead se lanza un error
+    mock_uow.leads.save.side_effect = Exception("Database failure")
+
+    use_case = IngestLeadUseCase(uow=mock_uow)
+
+    command = IngestLeadCommand(
+        tenant_id=uuid.uuid4(),
+        first_name="Test",
+        last_name="User",
+        email="test@user.com",
+        company="Test Co",
+        budget=1000.0,
+        industry="Tech",
+        custom_attributes={},
+        phone="123456789",
+    )
+
+    # Act & Assert
+    with pytest.raises(Exception, match="Database failure"):
+        use_case.execute(command)
+
+    # El UnitOfWorkPort debió hacer rollback
+    mock_uow.rollback.assert_called_once()
+    mock_uow.commit.assert_not_called()
