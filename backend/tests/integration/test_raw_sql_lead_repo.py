@@ -28,6 +28,7 @@ def test_raw_sql_lead_repository_lifecycle():
     lead.status = LeadStatus.QUALIFIED
 
     repo.save(lead)
+    connection.commit()
 
     fetched = repo.get_by_id(lead_id)
     assert fetched is not None
