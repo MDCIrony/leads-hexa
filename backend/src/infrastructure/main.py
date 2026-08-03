@@ -7,8 +7,6 @@ from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.sqlite_unit_of_work import SqliteUnitOfWork
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
-from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.rule_router import router as rule_router
 from infrastructure.adapters.input.api.agent_router import router as agent_router
@@ -20,25 +18,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     db = RawSqlDatabase(db_path)
     db.init_db()
 
-    uow = SqliteUnitOfWork(db)
     webhook_dispatcher = HttpxWebhookDispatcher()
     file_parser = PandasFileParser()
 
-    ingest_lead_use_case = IngestLeadUseCase(
-        uow=uow,
-        webhook_dispatcher=webhook_dispatcher,
-    )
-    process_batch_use_case = ProcessBatchUseCase(
-        file_parser=file_parser,
-        ingest_lead_use_case=ingest_lead_use_case,
-    )
-
     app.state.db = db
-    app.state.uow = uow
     app.state.webhook_dispatcher = webhook_dispatcher
     app.state.file_parser = file_parser
-    app.state.ingest_lead_use_case = ingest_lead_use_case
-    app.state.process_batch_use_case = process_batch_use_case
 
     yield
 

@@ -1,14 +1,19 @@
 from uuid import UUID
 from typing import List
 from fastapi import APIRouter, Depends, status
-from domain.entities.rule import ScoringRule, RoutingRule
-from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from infrastructure.adapters.input.api.dependencies import get_uow
+from application.dtos.commands import CreateScoringRuleCommand, CreateRoutingRuleCommand
+from application.dtos.queries import GetRulesQuery
+from application.ports.input.rule_use_case_ports import (
+    CreateScoringRuleInputPort, GetScoringRulesInputPort,
+    CreateRoutingRuleInputPort, GetRoutingRulesInputPort
+)
+from infrastructure.adapters.input.api.dependencies import (
+    get_create_scoring_rule_use_case, get_get_scoring_rules_use_case,
+    get_create_routing_rule_use_case, get_get_routing_rules_use_case
+)
 from infrastructure.adapters.input.api.schemas import (
-    ScoringRuleCreate,
-    ScoringRuleResponse,
-    RoutingRuleCreate,
-    RoutingRuleResponse,
+    ScoringRuleCreate, ScoringRuleResponse,
+    RoutingRuleCreate, RoutingRuleResponse,
 )
 
 router = APIRouter()
@@ -17,17 +22,17 @@ router = APIRouter()
 def create_scoring_rule(
     tenant_id: UUID,
     request: ScoringRuleCreate,
-    uow: UnitOfWorkPort = Depends(get_uow),
+    use_case: CreateScoringRuleInputPort = Depends(get_create_scoring_rule_use_case),
 ):
-    rule = ScoringRule.create(
+    command = CreateScoringRuleCommand(
+        tenant_id=tenant_id,
         name=request.name,
         field=request.field,
-        operator=request.operator,
-        value=request.value,
+        operator=request.operator.value if hasattr(request.operator, 'value') else str(request.operator),
+        value=str(request.value),
         score_delta=request.score_delta,
     )
-    with uow:
-        saved = uow.rules.save_scoring_rule(tenant_id, rule)
+    saved = use_case.execute(command)
     return ScoringRuleResponse(
         id=str(saved.id),
         name=saved.name,
@@ -40,10 +45,10 @@ def create_scoring_rule(
 @router.get("/scoring", response_model=List[ScoringRuleResponse], status_code=status.HTTP_200_OK)
 def list_scoring_rules(
     tenant_id: UUID,
-    uow: UnitOfWorkPort = Depends(get_uow),
+    use_case: GetScoringRulesInputPort = Depends(get_get_scoring_rules_use_case),
 ):
-    with uow:
-        rules = uow.rules.get_scoring_rules_by_tenant(tenant_id)
+    query = GetRulesQuery(tenant_id=tenant_id)
+    rules = use_case.execute(query)
     return [
         ScoringRuleResponse(
             id=str(r.id),
@@ -60,16 +65,16 @@ def list_scoring_rules(
 def create_routing_rule(
     tenant_id: UUID,
     request: RoutingRuleCreate,
-    uow: UnitOfWorkPort = Depends(get_uow),
+    use_case: CreateRoutingRuleInputPort = Depends(get_create_routing_rule_use_case),
 ):
-    rule = RoutingRule.create(
+    command = CreateRoutingRuleCommand(
+        tenant_id=tenant_id,
         min_score=request.min_score,
         target_team=request.target_team,
         assignment_strategy=request.assignment_strategy,
         target_agent_ids=request.target_agent_ids,
     )
-    with uow:
-        saved = uow.rules.save_routing_rule(tenant_id, rule)
+    saved = use_case.execute(command)
     return RoutingRuleResponse(
         id=str(saved.id),
         min_score=saved.min_score,
@@ -81,10 +86,10 @@ def create_routing_rule(
 @router.get("/routing", response_model=List[RoutingRuleResponse], status_code=status.HTTP_200_OK)
 def list_routing_rules(
     tenant_id: UUID,
-    uow: UnitOfWorkPort = Depends(get_uow),
+    use_case: GetRoutingRulesInputPort = Depends(get_get_routing_rules_use_case),
 ):
-    with uow:
-        rules = uow.rules.get_routing_rules_by_tenant(tenant_id)
+    query = GetRulesQuery(tenant_id=tenant_id)
+    rules = use_case.execute(query)
     return [
         RoutingRuleResponse(
             id=str(r.id),

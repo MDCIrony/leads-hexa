@@ -31,3 +31,29 @@ class BatchProcessResult:
     total_rows: int
     successful_ingestions: int
     failed_rows: list
+
+from typing import List
+from pydantic import BaseModel
+
+class CreateAgentCommand(BaseModel):
+    name: str
+    email: str
+    team: str
+    active_leads_count: int = 0
+    is_active: bool = True
+
+class CreateScoringRuleCommand(BaseModel):
+    tenant_id: UUID
+    name: str
+    field: str
+    operator: str
+    value: str
+    score_delta: int
+
+class CreateRoutingRuleCommand(BaseModel):
+    tenant_id: UUID
+    min_score: int
+    target_team: str
+    assignment_strategy: str
+    target_agent_ids: List[UUID]
+

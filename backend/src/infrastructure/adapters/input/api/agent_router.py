@@ -1,9 +1,14 @@
 from uuid import UUID
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from domain.entities.agent import Agent
-from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from infrastructure.adapters.input.api.dependencies import get_uow
+from application.dtos.commands import CreateAgentCommand
+from application.dtos.queries import GetAgentsQuery, GetAgentQuery
+from application.ports.input.agent_use_case_ports import (
+    CreateAgentInputPort, GetAgentsInputPort, GetAgentInputPort
+)
+from infrastructure.adapters.input.api.dependencies import (
+    get_create_agent_use_case, get_get_agents_use_case, get_get_agent_use_case
+)
 from infrastructure.adapters.input.api.schemas import AgentCreate, AgentResponse
 
 router = APIRouter()
@@ -12,17 +17,16 @@ router = APIRouter()
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_agent(
     request: AgentCreate,
-    uow: UnitOfWorkPort = Depends(get_uow),
+    use_case: CreateAgentInputPort = Depends(get_create_agent_use_case),
 ):
-    agent = Agent.create(
+    command = CreateAgentCommand(
         name=request.name,
         email=request.email,
         team=request.team,
         active_leads_count=request.active_leads_count,
         is_active=request.is_active,
     )
-    with uow:
-        saved = uow.agents.save(agent)
+    saved = use_case.execute(command)
     return AgentResponse(
         id=str(saved.id),
         name=saved.name,
@@ -36,10 +40,10 @@ def create_agent(
 @router.get("/", response_model=List[AgentResponse], status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_agents(
     team: Optional[str] = None,
-    uow: UnitOfWorkPort = Depends(get_uow),
+    use_case: GetAgentsInputPort = Depends(get_get_agents_use_case),
 ):
-    with uow:
-        agents = uow.agents.get_available_agents(team=team)
+    query = GetAgentsQuery(team=team)
+    agents = use_case.execute(query)
     return [
         AgentResponse(
             id=str(a.id),
@@ -55,10 +59,10 @@ def list_agents(
 @router.get("/{agent_id}", response_model=AgentResponse, status_code=status.HTTP_200_OK)
 def get_agent(
     agent_id: UUID,
-    uow: UnitOfWorkPort = Depends(get_uow),
+    use_case: GetAgentInputPort = Depends(get_get_agent_use_case),
 ):
-    with uow:
-        agent = uow.agents.get_by_id(agent_id)
+    query = GetAgentQuery(agent_id=agent_id)
+    agent = use_case.execute(query)
     if not agent:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
     return AgentResponse(

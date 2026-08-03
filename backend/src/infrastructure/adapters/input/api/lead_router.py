@@ -2,13 +2,14 @@ from uuid import UUID
 from typing import List
 from fastapi import APIRouter, Depends, File, UploadFile, status
 from application.dtos.commands import IngestLeadCommand
+from application.dtos.queries import GetLeadsQuery
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
-from application.ports.output.lead_repository_port import LeadRepositoryPort
+from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
 from infrastructure.adapters.input.api.dependencies import (
     get_ingest_lead_use_case,
     get_process_batch_use_case,
-    get_uow,
+    get_get_leads_use_case,
 )
 from infrastructure.adapters.input.api.schemas import (
     IngestLeadRequest,
@@ -66,18 +67,16 @@ async def batch_upload(
         failed_rows=result.failed_rows,
     )
 
-from application.ports.output.unit_of_work_port import UnitOfWorkPort
-
 @router.get("", response_model=List[LeadResponse], status_code=status.HTTP_200_OK)
 @router.get("/", response_model=List[LeadResponse], status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_leads(
     tenant_id: UUID,
     limit: int = 100,
     offset: int = 0,
-    uow: UnitOfWorkPort = Depends(get_uow),
+    use_case: GetLeadsInputPort = Depends(get_get_leads_use_case),
 ):
-    with uow:
-        leads = uow.leads.list_by_tenant(tenant_id, limit=limit, offset=offset)
+    query = GetLeadsQuery(tenant_id=tenant_id, limit=limit, offset=offset)
+    leads = use_case.execute(query)
     return [
         LeadResponse(
             id=str(lead.id),
@@ -97,3 +96,4 @@ def list_leads(
         )
         for lead in leads
     ]
+
