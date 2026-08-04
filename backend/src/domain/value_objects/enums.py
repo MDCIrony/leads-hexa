@@ -26,3 +26,8 @@ class WebhookEventType(str, Enum):
     LEAD_ASSIGNED = "LEAD_ASSIGNED"
     LEAD_PROCESSED = "LEAD_PROCESSED"
     PROCESSING_ERROR = "PROCESSING_ERROR"
+
+class AgentRole(str, Enum):
+    ADMIN = "ADMIN"
+    MANAGER = "MANAGER"
+    AGENT = "AGENT"

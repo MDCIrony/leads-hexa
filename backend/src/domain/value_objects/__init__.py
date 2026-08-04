@@ -1,4 +1,4 @@
-from domain.value_objects.enums import Operator, LeadStatus, AssignmentStrategy, WebhookEventType
+from domain.value_objects.enums import Operator, LeadStatus, AssignmentStrategy, WebhookEventType, AgentRole
 from domain.value_objects.email import EmailAddress
 from domain.value_objects.money import Money
 from domain.value_objects.lead_id import LeadId
@@ -11,6 +11,7 @@ __all__ = [
     "LeadStatus",
     "AssignmentStrategy",
     "WebhookEventType",
+    "AgentRole",
     "EmailAddress",
     "Money",
     "LeadId",

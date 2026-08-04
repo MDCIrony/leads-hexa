@@ -58,6 +58,15 @@ CREATE_TABLES_STATEMENTS = [
     )
     """,
     """
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'AGENT'
+    """,
+    """
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS hashed_password TEXT
+    """,
+    """
+    ALTER TABLE agents ADD COLUMN IF NOT EXISTS tenant_id TEXT
+    """,
+    """
     CREATE TABLE IF NOT EXISTS webhook_configs (
         id TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL,

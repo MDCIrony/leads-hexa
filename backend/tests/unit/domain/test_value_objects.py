@@ -7,6 +7,7 @@ from domain.value_objects import (
     TenantId,
     AgentId,
     Score,
+    AgentRole,
 )
 from domain.exceptions import (
     InvalidEmailException,
@@ -56,3 +57,12 @@ def test_score_operations():
 
     score = score.subtract_points(10)
     assert int(score) == 25
+
+
+def test_agent_role_has_exactly_three_members():
+    assert {r.value for r in AgentRole} == {"ADMIN", "MANAGER", "AGENT"}
+
+
+def test_agent_role_is_string_enum():
+    assert AgentRole.ADMIN == "ADMIN"
+    assert isinstance(AgentRole.ADMIN.value, str)
