@@ -35,3 +35,18 @@ class AgentNotFoundException(DomainException):
     """Raised when a requested agent id does not exist."""
     def __init__(self, message: str = "Agent not found"):
         super().__init__(message, error_code="AGENT_NOT_FOUND", status_code=404)
+
+class InvalidCredentialsException(DomainException):
+    """Raised when a login attempt has a correct-looking but non-matching email/password pair."""
+    def __init__(self, message: str = "Invalid email or password"):
+        super().__init__(message, error_code="INVALID_CREDENTIALS", status_code=401)
+
+class UnauthorizedException(DomainException):
+    """Raised when a request has no token, an invalid/expired token, or references an agent that no longer exists or is inactive."""
+    def __init__(self, message: str = "Authentication required or token invalid"):
+        super().__init__(message, error_code="UNAUTHORIZED", status_code=401)
+
+class ForbiddenException(DomainException):
+    """Raised when an authenticated agent's role or tenant does not permit the requested action."""
+    def __init__(self, message: str = "You do not have permission to perform this action"):
+        super().__init__(message, error_code="FORBIDDEN", status_code=403)
