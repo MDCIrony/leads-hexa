@@ -108,3 +108,30 @@ def require_role(*allowed_roles: AgentRole) -> Callable[..., Agent]:
             raise ForbiddenException(f"Role {current_agent.role.value} is not permitted to perform this action")
         return current_agent
     return dependency
+
+
+def verify_tenant_access(
+    tenant_id: UUID,
+    current_agent: Agent = Depends(get_current_agent),
+) -> Agent:
+    if current_agent.role != AgentRole.ADMIN:
+        if current_agent.tenant_id is None or str(current_agent.tenant_id) != str(tenant_id):
+            raise ForbiddenException("You do not have access to this tenant's data")
+    return current_agent
+
+
+def require_role_and_tenant(*allowed_roles: AgentRole) -> Callable[..., Agent]:
+    role_checker = require_role(*allowed_roles)
+
+    def dependency(
+        tenant_id: UUID,
+        current_agent: Agent = Depends(role_checker),
+    ) -> Agent:
+        role_checker(current_agent)
+        if current_agent.role != AgentRole.ADMIN:
+            if current_agent.tenant_id is None or str(current_agent.tenant_id) != str(tenant_id):
+                raise ForbiddenException("You do not have access to this tenant's data")
+        return current_agent
+
+    return dependency
+

@@ -1,4 +1,5 @@
 import os
+import uuid
 import pytest
 from fastapi import HTTPException
 
@@ -8,14 +9,19 @@ from domain.entities.agent import Agent
 from domain.exceptions import UnauthorizedException, ForbiddenException
 from domain.value_objects.enums import AgentRole
 from infrastructure.security.jwt_service import create_access_token
-from infrastructure.adapters.input.api.dependencies import get_current_agent, require_role
+from infrastructure.adapters.input.api.dependencies import (
+    get_current_agent,
+    require_role,
+    verify_tenant_access,
+    require_role_and_tenant,
+)
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 
-def _uow_with_agent(role=AgentRole.AGENT, is_active=True):
+def _uow_with_agent(role=AgentRole.AGENT, is_active=True, tenant_id=None):
     repo = InMemoryAgentRepository()
-    agent = Agent.create("Test", "t@test.com", "Sales", role=role, is_active=is_active)
+    agent = Agent.create("Test", "t@test.com", "Sales", role=role, is_active=is_active, tenant_id=tenant_id)
     repo.save(agent)
     uow = InMemoryUnitOfWork(agents=repo)
     return uow, agent
@@ -52,3 +58,64 @@ def test_require_role_rejects_a_non_permitted_role():
     dependency = require_role(AgentRole.ADMIN, AgentRole.MANAGER)
     with pytest.raises(ForbiddenException):
         dependency(current_agent=agent)
+
+
+def test_verify_tenant_access_matching_tenant_allows():
+    tenant_id = uuid.uuid4()
+    _, agent = _uow_with_agent(role=AgentRole.AGENT, tenant_id=tenant_id)
+    resolved = verify_tenant_access(tenant_id=tenant_id, current_agent=agent)
+    assert resolved is agent
+
+
+def test_verify_tenant_access_mismatched_tenant_raises_forbidden():
+    tenant_id = uuid.uuid4()
+    other_tenant_id = uuid.uuid4()
+    _, agent = _uow_with_agent(role=AgentRole.AGENT, tenant_id=tenant_id)
+    with pytest.raises(ForbiddenException) as exc_info:
+        verify_tenant_access(tenant_id=other_tenant_id, current_agent=agent)
+    assert "do not have access to this tenant's data" in str(exc_info.value)
+
+
+def test_verify_tenant_access_admin_allowed_for_any_tenant():
+    admin_tenant_id = uuid.uuid4()
+    other_tenant_id = uuid.uuid4()
+    _, admin_agent = _uow_with_agent(role=AgentRole.ADMIN, tenant_id=admin_tenant_id)
+    resolved = verify_tenant_access(tenant_id=other_tenant_id, current_agent=admin_agent)
+    assert resolved is admin_agent
+
+
+def test_require_role_and_tenant_matching_role_and_tenant_allows():
+    tenant_id = uuid.uuid4()
+    _, agent = _uow_with_agent(role=AgentRole.MANAGER, tenant_id=tenant_id)
+    dependency = require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
+    resolved = dependency(tenant_id=tenant_id, current_agent=agent)
+    assert resolved is agent
+
+
+def test_require_role_and_tenant_mismatched_tenant_raises_forbidden():
+    tenant_id = uuid.uuid4()
+    other_tenant_id = uuid.uuid4()
+    _, agent = _uow_with_agent(role=AgentRole.MANAGER, tenant_id=tenant_id)
+    dependency = require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
+    with pytest.raises(ForbiddenException) as exc_info:
+        dependency(tenant_id=other_tenant_id, current_agent=agent)
+    assert "do not have access to this tenant's data" in str(exc_info.value)
+
+
+def test_require_role_and_tenant_admin_allowed_for_any_tenant():
+    other_tenant_id = uuid.uuid4()
+    _, admin_agent = _uow_with_agent(role=AgentRole.ADMIN, tenant_id=None)
+    dependency = require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
+    resolved = dependency(tenant_id=other_tenant_id, current_agent=admin_agent)
+    assert resolved is admin_agent
+
+
+def test_require_role_and_tenant_wrong_role_rejected_before_checking_tenant():
+    tenant_id = uuid.uuid4()
+    _, agent = _uow_with_agent(role=AgentRole.AGENT, tenant_id=tenant_id)
+    dependency = require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
+    with pytest.raises(ForbiddenException) as exc_info:
+        dependency(tenant_id=tenant_id, current_agent=agent)
+    assert "Role AGENT is not permitted" in str(exc_info.value)
+
+

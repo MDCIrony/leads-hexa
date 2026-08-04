@@ -7,9 +7,12 @@ from application.ports.input.rule_use_case_ports import (
     CreateScoringRuleInputPort, GetScoringRulesInputPort,
     CreateRoutingRuleInputPort, GetRoutingRulesInputPort
 )
+from domain.entities.agent import Agent
+from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
     get_create_scoring_rule_use_case, get_get_scoring_rules_use_case,
-    get_create_routing_rule_use_case, get_get_routing_rules_use_case
+    get_create_routing_rule_use_case, get_get_routing_rules_use_case,
+    require_role_and_tenant,
 )
 from infrastructure.adapters.input.api.schemas import (
     ScoringRuleCreate, ScoringRuleResponse,
@@ -23,6 +26,7 @@ def create_scoring_rule(
     tenant_id: UUID,
     request: ScoringRuleCreate,
     use_case: CreateScoringRuleInputPort = Depends(get_create_scoring_rule_use_case),
+    current_agent: Agent = Depends(require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)),
 ):
     command = CreateScoringRuleCommand(
         tenant_id=tenant_id,
@@ -46,6 +50,7 @@ def create_scoring_rule(
 def list_scoring_rules(
     tenant_id: UUID,
     use_case: GetScoringRulesInputPort = Depends(get_get_scoring_rules_use_case),
+    current_agent: Agent = Depends(require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)),
 ):
     query = GetRulesQuery(tenant_id=tenant_id)
     rules = use_case.execute(query)
@@ -66,6 +71,7 @@ def create_routing_rule(
     tenant_id: UUID,
     request: RoutingRuleCreate,
     use_case: CreateRoutingRuleInputPort = Depends(get_create_routing_rule_use_case),
+    current_agent: Agent = Depends(require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)),
 ):
     command = CreateRoutingRuleCommand(
         tenant_id=tenant_id,
@@ -87,6 +93,7 @@ def create_routing_rule(
 def list_routing_rules(
     tenant_id: UUID,
     use_case: GetRoutingRulesInputPort = Depends(get_get_routing_rules_use_case),
+    current_agent: Agent = Depends(require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)),
 ):
     query = GetRulesQuery(tenant_id=tenant_id)
     rules = use_case.execute(query)
@@ -100,3 +107,4 @@ def list_routing_rules(
         )
         for r in rules
     ]
+

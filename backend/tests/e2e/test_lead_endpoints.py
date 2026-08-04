@@ -1,6 +1,38 @@
+import os
 import uuid
+os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
+
 from fastapi.testclient import TestClient
 from infrastructure.main import app
+from infrastructure.security.jwt_service import create_access_token
+from domain.value_objects.enums import AgentRole
+
+
+def _get_auth_headers() -> dict:
+    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+    from domain.entities.agent import Agent
+
+    db = app.state.db
+    uow = PostgresUnitOfWork(db)
+    with uow:
+        active_agents = uow.agents.list_active()
+        if active_agents:
+            admin_agent = active_agents[0]
+            admin_agent.role = AgentRole.ADMIN
+            uow.agents.save(admin_agent)
+            admin_token = create_access_token(agent_id=str(admin_agent.id), role="ADMIN", tenant_id=None)
+            return {"Authorization": f"Bearer {admin_token}"}
+        else:
+            agent = Agent.create(
+                name="Admin",
+                email=f"admin_{uuid.uuid4().hex[:6]}@test.com",
+                team="Admin",
+                role=AgentRole.ADMIN,
+            )
+            uow.agents.save(agent)
+            admin_token = create_access_token(agent_id=str(agent.id), role="ADMIN", tenant_id=None)
+            return {"Authorization": f"Bearer {admin_token}"}
+
 
 def test_ingest_lead_endpoint_success():
     tenant_id = str(uuid.uuid4())
@@ -68,9 +100,10 @@ def test_list_leads_by_tenant_endpoint():
     }
 
     with TestClient(app) as client:
+        headers = _get_auth_headers()
         client.post(f"/api/v1/tenants/{tenant_id}/leads/ingest", json=payload)
 
-        response = client.get(f"/api/v1/tenants/{tenant_id}/leads")
+        response = client.get(f"/api/v1/tenants/{tenant_id}/leads", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, dict)
@@ -90,6 +123,7 @@ def test_list_leads_pagination_has_more_flag():
     }
 
     with TestClient(app) as client:
+        headers = _get_auth_headers()
         for i in range(3):
             client.post(
                 f"/api/v1/tenants/{tenant_id}/leads/ingest",
@@ -101,17 +135,18 @@ def test_list_leads_pagination_has_more_flag():
                 },
             )
 
-        response = client.get(f"/api/v1/tenants/{tenant_id}/leads?limit=2&offset=0")
+        response = client.get(f"/api/v1/tenants/{tenant_id}/leads?limit=2&offset=0", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 3
         assert len(data["items"]) == 2
         assert data["has_more"] is True
 
-        response = client.get(f"/api/v1/tenants/{tenant_id}/leads?limit=2&offset=2")
+        response = client.get(f"/api/v1/tenants/{tenant_id}/leads?limit=2&offset=2", headers=headers)
         data = response.json()
         assert len(data["items"]) == 1
         assert data["has_more"] is False
+
 
 def test_ingest_lead_endpoint_negative_budget_returns_400():
     tenant_id = str(uuid.uuid4())

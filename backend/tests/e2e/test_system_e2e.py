@@ -62,6 +62,7 @@ def test_full_system_lead_routing_flow_e2e():
                 "value": 10000,
                 "score_delta": 35,
             },
+            headers=headers,
         )
         assert scoring_resp.status_code == 201
 
@@ -74,8 +75,10 @@ def test_full_system_lead_routing_flow_e2e():
                 "assignment_strategy": "LOWEST_LOAD",
                 "target_agent_ids": [agent_id],
             },
+            headers=headers,
         )
         assert routing_resp.status_code == 201
+
 
         # 4. Ingestar Lead
         ingest_resp = client.post(

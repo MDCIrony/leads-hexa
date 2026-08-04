@@ -7,11 +7,14 @@ from application.dtos.queries import GetLeadsQuery
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
+from domain.entities.agent import Agent
 from infrastructure.adapters.input.api.dependencies import (
     get_ingest_lead_use_case,
     get_process_batch_use_case,
     get_get_leads_use_case,
+    verify_tenant_access,
 )
+
 from infrastructure.adapters.input.api.schemas import (
     IngestLeadRequest,
     LeadProcessedResponse,
@@ -93,7 +96,9 @@ def list_leads(
     limit: int = 100,
     offset: int = 0,
     use_case: GetLeadsInputPort = Depends(get_get_leads_use_case),
+    current_agent: Agent = Depends(verify_tenant_access),
 ):
+
     query = GetLeadsQuery(tenant_id=tenant_id, limit=limit, offset=offset)
     page = use_case.execute(query)
     items = [
