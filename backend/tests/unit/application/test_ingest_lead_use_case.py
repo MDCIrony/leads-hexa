@@ -10,7 +10,7 @@ from tests.unit.mocks.in_memory_webhook_dispatcher import InMemoryWebhookDispatc
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 import pytest
 from unittest.mock import MagicMock
-from infrastructure.adapters.output.persistence.sqlite_unit_of_work import SqliteUnitOfWork
+
 def test_ingest_lead_use_case_successful_flow():
     tenant_id = uuid.uuid4()
     lead_repo = InMemoryLeadRepository()
