@@ -5,13 +5,11 @@ from domain.exceptions import DomainException
 def add_exception_handlers(app: FastAPI):
     @app.exception_handler(DomainException)
     async def domain_exception_handler(request: Request, exc: DomainException):
-        """
-        Captura de forma global cualquier DomainException no controlada,
-        traduciéndola en una respuesta HTTP estándar 400 Bad Request
-        con el código de error propio del dominio.
-        """
+        # Each DomainException subclass carries its own status_code so that
+        # not-found-style failures map to 404 and validation-style failures
+        # map to 400, instead of every domain error collapsing to one code.
         return JSONResponse(
-            status_code=400,
+            status_code=exc.status_code,
             content={
                 "error": True,
                 "error_code": exc.error_code,
