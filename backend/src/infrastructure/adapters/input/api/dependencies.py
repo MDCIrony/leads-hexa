@@ -1,5 +1,7 @@
-from typing import Generator
+from typing import Generator, Callable, Optional
+from uuid import UUID
 from fastapi import Request, Depends
+from fastapi.security import OAuth2PasswordBearer
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
@@ -20,6 +22,10 @@ from application.use_cases.agent_use_cases import CreateAgentUseCase, GetAgentsU
 from application.use_cases.rule_use_cases import CreateScoringRuleUseCase, GetScoringRulesUseCase, CreateRoutingRuleUseCase, GetRoutingRulesUseCase
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import LoginUseCase
+from domain.entities.agent import Agent
+from domain.exceptions import UnauthorizedException, ForbiddenException
+from domain.value_objects.enums import AgentRole
+from infrastructure.security.jwt_service import decode_access_token
 
 def get_db(request: Request) -> RawSqlDatabase:
     return request.app.state.db
@@ -61,3 +67,44 @@ def get_get_routing_rules_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> Ge
 
 def get_login_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> LoginInputPort:
     return LoginUseCase(uow=uow)
+
+
+_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+_optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+def get_current_agent(
+    token: str = Depends(_oauth2_scheme),
+    uow: UnitOfWorkPort = Depends(get_uow),
+) -> Agent:
+    try:
+        payload = decode_access_token(token)
+    except Exception:
+        raise UnauthorizedException("Invalid or expired token")
+
+    with uow:
+        agent = uow.agents.get_by_id(UUID(payload.get("sub")))
+
+    if not agent or not agent.is_active:
+        raise UnauthorizedException("Agent no longer exists or is inactive")
+    return agent
+
+
+def get_optional_current_agent(
+    token: Optional[str] = Depends(_optional_oauth2_scheme),
+    uow: UnitOfWorkPort = Depends(get_uow),
+) -> Optional[Agent]:
+    if not token:
+        return None
+    try:
+        return get_current_agent(token=token, uow=uow)
+    except UnauthorizedException:
+        return None
+
+
+def require_role(*allowed_roles: AgentRole) -> Callable[..., Agent]:
+    def dependency(current_agent: Agent = Depends(get_current_agent)) -> Agent:
+        if current_agent.role not in allowed_roles:
+            raise ForbiddenException(f"Role {current_agent.role.value} is not permitted to perform this action")
+        return current_agent
+    return dependency
