@@ -30,3 +30,8 @@ class LeadRoutingException(DomainException):
     """Raised when lead assignment/routing fails."""
     def __init__(self, message: str = "Fallo en el enrutamiento del lead"):
         super().__init__(message, error_code="ROUTING_FAILED")
+
+class AgentNotFoundException(DomainException):
+    """Raised when a requested agent id does not exist."""
+    def __init__(self, message: str = "Agent not found"):
+        super().__init__(message, error_code="AGENT_NOT_FOUND", status_code=404)

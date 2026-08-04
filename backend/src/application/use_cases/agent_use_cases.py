@@ -6,6 +6,7 @@ from application.ports.input.agent_use_case_ports import (
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent
+from domain.exceptions import AgentNotFoundException
 
 class GetAgentsUseCase(GetAgentsInputPort):
     def __init__(self, uow: UnitOfWorkPort):
@@ -21,7 +22,10 @@ class GetAgentUseCase(GetAgentInputPort):
 
     def execute(self, query: GetAgentQuery) -> Agent:
         with self.uow:
-            return self.uow.agents.get_by_id(query.agent_id)
+            agent = self.uow.agents.get_by_id(query.agent_id)
+        if agent is None:
+            raise AgentNotFoundException()
+        return agent
 
 class CreateAgentUseCase(CreateAgentInputPort):
     def __init__(self, uow: UnitOfWorkPort):

@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from application.dtos.commands import CreateAgentCommand
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
 from application.ports.input.agent_use_case_ports import (
@@ -63,8 +63,6 @@ def get_agent(
 ):
     query = GetAgentQuery(agent_id=agent_id)
     agent = use_case.execute(query)
-    if not agent:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
     return AgentResponse(
         id=str(agent.id),
         name=agent.name,
