@@ -18,11 +18,12 @@ from infrastructure.adapters.input.api.exception_handlers import add_exception_h
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    db_path = os.getenv("DATABASE_PATH", ":memory:")
-    db = RawSqlDatabase(db_path)
+    db = RawSqlDatabase()
     db.init_db()
 
-    webhook_repo = RawSqlWebhookRepository(db.get_connection())
+    # Held open for the process lifetime and only ever read from, so it runs
+    # in autocommit mode rather than sitting in one long-lived transaction.
+    webhook_repo = RawSqlWebhookRepository(db.get_connection(autocommit=True))
     webhook_dispatcher = HttpxWebhookDispatcher()
     event_publisher = InMemoryEventPublisher()
 
