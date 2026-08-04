@@ -23,3 +23,15 @@ class InMemoryAgentRepository(AgentRepositoryPort):
 
     def get_by_id(self, agent_id: UUID) -> Optional[Agent]:
         return self.agents.get(agent_id)
+
+    def list_active(self, team: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
+        agents = [a for a in self.agents.values() if a.is_active]
+        if team:
+            agents = [a for a in agents if a.team == team]
+        return agents[offset:offset + limit]
+
+    def count_active(self, team: Optional[str] = None) -> int:
+        agents = [a for a in self.agents.values() if a.is_active]
+        if team:
+            agents = [a for a in agents if a.team == team]
+        return len(agents)

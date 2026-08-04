@@ -120,3 +120,10 @@ class AgentResponse(BaseModel):
     team: str
     active_leads_count: int
     is_active: bool
+
+class PaginatedAgentsResponse(BaseModel):
+    items: List[AgentResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool

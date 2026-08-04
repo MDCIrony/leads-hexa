@@ -73,3 +73,40 @@ class RawSqlAgentRepository(AgentRepositoryPort):
             active_leads_count=r["active_leads_count"],
             is_active=bool(r["is_active"]),
         )
+
+    def list_active(self, team: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
+        if team:
+            cursor = self.connection.execute(
+                "SELECT * FROM agents WHERE is_active = 1 AND team = %s ORDER BY id LIMIT %s OFFSET %s",
+                (team, limit, offset),
+            )
+        else:
+            cursor = self.connection.execute(
+                "SELECT * FROM agents WHERE is_active = 1 ORDER BY id LIMIT %s OFFSET %s",
+                (limit, offset),
+            )
+        rows = cursor.fetchall()
+        return [
+            Agent.create(
+                agent_id=r["id"],
+                name=r["name"],
+                email=r["email"],
+                team=r["team"],
+                active_leads_count=r["active_leads_count"],
+                is_active=bool(r["is_active"]),
+            )
+            for r in rows
+        ]
+
+    def count_active(self, team: Optional[str] = None) -> int:
+        if team:
+            cursor = self.connection.execute(
+                "SELECT COUNT(*) AS count FROM agents WHERE is_active = 1 AND team = %s",
+                (team,),
+            )
+        else:
+            cursor = self.connection.execute(
+                "SELECT COUNT(*) AS count FROM agents WHERE is_active = 1"
+            )
+        row = cursor.fetchone()
+        return row["count"]

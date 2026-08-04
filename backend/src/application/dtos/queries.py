@@ -9,6 +9,8 @@ class GetLeadsQuery(BaseModel):
 
 class GetAgentsQuery(BaseModel):
     team: Optional[str] = None
+    limit: int = 100
+    offset: int = 0
 
 class GetAgentQuery(BaseModel):
     agent_id: UUID

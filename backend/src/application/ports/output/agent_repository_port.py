@@ -19,3 +19,11 @@ class AgentRepositoryPort(ABC):
     @abstractmethod
     def get_by_id(self, agent_id: UUID) -> Optional[Agent]:
         pass
+
+    @abstractmethod
+    def list_active(self, team: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
+        pass
+
+    @abstractmethod
+    def count_active(self, team: Optional[str] = None) -> int:
+        pass

@@ -9,7 +9,7 @@ from application.ports.input.agent_use_case_ports import (
 from infrastructure.adapters.input.api.dependencies import (
     get_create_agent_use_case, get_get_agents_use_case, get_get_agent_use_case
 )
-from infrastructure.adapters.input.api.schemas import AgentCreate, AgentResponse
+from infrastructure.adapters.input.api.schemas import AgentCreate, AgentResponse, PaginatedAgentsResponse
 
 router = APIRouter()
 
@@ -36,15 +36,17 @@ def create_agent(
         is_active=saved.is_active,
     )
 
-@router.get("", response_model=List[AgentResponse], status_code=status.HTTP_200_OK)
-@router.get("/", response_model=List[AgentResponse], status_code=status.HTTP_200_OK, include_in_schema=False)
+@router.get("", response_model=PaginatedAgentsResponse, status_code=status.HTTP_200_OK)
+@router.get("/", response_model=PaginatedAgentsResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_agents(
     team: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
     use_case: GetAgentsInputPort = Depends(get_get_agents_use_case),
 ):
-    query = GetAgentsQuery(team=team)
-    agents = use_case.execute(query)
-    return [
+    query = GetAgentsQuery(team=team, limit=limit, offset=offset)
+    page = use_case.execute(query)
+    items = [
         AgentResponse(
             id=str(a.id),
             name=a.name,
@@ -53,8 +55,15 @@ def list_agents(
             active_leads_count=a.active_leads_count,
             is_active=a.is_active,
         )
-        for a in agents
+        for a in page.items
     ]
+    return PaginatedAgentsResponse(
+        items=items,
+        total=page.total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(items)) < page.total,
+    )
 
 @router.get("/{agent_id}", response_model=AgentResponse, status_code=status.HTTP_200_OK)
 def get_agent(

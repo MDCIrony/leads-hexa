@@ -1,6 +1,6 @@
 from typing import List
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
-from application.dtos.commands import CreateAgentCommand
+from application.dtos.commands import CreateAgentCommand, AgentsPageResult
 from application.ports.input.agent_use_case_ports import (
     GetAgentsInputPort, GetAgentInputPort, CreateAgentInputPort
 )
@@ -12,9 +12,11 @@ class GetAgentsUseCase(GetAgentsInputPort):
     def __init__(self, uow: UnitOfWorkPort):
         self.uow = uow
 
-    def execute(self, query: GetAgentsQuery) -> List[Agent]:
+    def execute(self, query: GetAgentsQuery) -> AgentsPageResult:
         with self.uow:
-            return self.uow.agents.get_available_agents(team=query.team)
+            items = self.uow.agents.list_active(team=query.team, limit=query.limit, offset=query.offset)
+            total = self.uow.agents.count_active(team=query.team)
+        return AgentsPageResult(items=items, total=total)
 
 class GetAgentUseCase(GetAgentInputPort):
     def __init__(self, uow: UnitOfWorkPort):

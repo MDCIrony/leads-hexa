@@ -31,6 +31,11 @@ class LeadsPageResult:
     total: int
 
 @dataclass(frozen=True)
+class AgentsPageResult:
+    items: list
+    total: int
+
+@dataclass(frozen=True)
 class BatchProcessResult:
     job_id: str
     total_rows: int
