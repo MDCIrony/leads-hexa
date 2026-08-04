@@ -51,6 +51,9 @@ class CreateAgentCommand(BaseModel):
     team: str
     active_leads_count: int = 0
     is_active: bool = True
+    password: str
+    role: str = "AGENT"
+    tenant_id: Optional[UUID] = None
 
 class CreateScoringRuleCommand(BaseModel):
     tenant_id: UUID

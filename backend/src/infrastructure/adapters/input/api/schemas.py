@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-from domain.value_objects.enums import Operator, AssignmentStrategy
+from domain.value_objects.enums import Operator, AssignmentStrategy, AgentRole
 
 
 def _validate_email_format(value: str) -> str:
@@ -107,6 +107,9 @@ class AgentCreate(BaseModel):
     team: str
     active_leads_count: int = 0
     is_active: bool = True
+    password: str
+    role: AgentRole = AgentRole.AGENT
+    tenant_id: Optional[UUID] = None
 
     @field_validator("email")
     @classmethod
@@ -120,6 +123,8 @@ class AgentResponse(BaseModel):
     team: str
     active_leads_count: int
     is_active: bool
+    role: str
+    tenant_id: Optional[str] = None
 
 class PaginatedAgentsResponse(BaseModel):
     items: List[AgentResponse]

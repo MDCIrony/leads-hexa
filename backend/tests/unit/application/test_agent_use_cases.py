@@ -1,8 +1,11 @@
 import uuid
 import pytest
 from application.dtos.queries import GetAgentQuery
-from application.use_cases.agent_use_cases import GetAgentUseCase
+from application.dtos.commands import CreateAgentCommand
+from application.use_cases.agent_use_cases import GetAgentUseCase, CreateAgentUseCase
+from domain.value_objects.enums import AgentRole
 from domain.exceptions import AgentNotFoundException
+from infrastructure.security.password_hasher import verify_password
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
@@ -20,3 +23,30 @@ def test_get_agent_use_case_raises_when_agent_missing():
 
     assert exc_info.value.error_code == "AGENT_NOT_FOUND"
     assert exc_info.value.status_code == 404
+
+
+def test_create_agent_hashes_the_password_and_stores_role_and_tenant():
+    uow = InMemoryUnitOfWork(agents=InMemoryAgentRepository())
+    use_case = CreateAgentUseCase(uow=uow)
+    command = CreateAgentCommand(
+        name="Jane",
+        email="jane@test.com",
+        team="Sales",
+        password="plain-password",
+        role="MANAGER",
+        tenant_id="11111111-1111-1111-1111-111111111111",
+    )
+    saved = use_case.execute(command)
+    assert saved.role == AgentRole.MANAGER
+    assert str(saved.tenant_id) == "11111111-1111-1111-1111-111111111111"
+    assert saved.hashed_password != "plain-password"
+    assert verify_password("plain-password", saved.hashed_password) is True
+
+
+def test_create_agent_defaults_role_to_agent_and_tenant_to_none():
+    uow = InMemoryUnitOfWork(agents=InMemoryAgentRepository())
+    use_case = CreateAgentUseCase(uow=uow)
+    command = CreateAgentCommand(name="Bob", email="bob@test.com", team="Sales", password="x")
+    saved = use_case.execute(command)
+    assert saved.role == AgentRole.AGENT
+    assert saved.tenant_id is None
