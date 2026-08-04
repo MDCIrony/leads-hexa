@@ -17,6 +17,7 @@ from infrastructure.adapters.input.api.schemas import (
     LeadProcessedResponse,
     BatchProcessResponse,
     LeadResponse,
+    PaginatedLeadsResponse,
 )
 
 router = APIRouter()
@@ -85,8 +86,8 @@ async def batch_upload(
         failed_rows=result.failed_rows,
     )
 
-@router.get("", response_model=List[LeadResponse], status_code=status.HTTP_200_OK)
-@router.get("/", response_model=List[LeadResponse], status_code=status.HTTP_200_OK, include_in_schema=False)
+@router.get("", response_model=PaginatedLeadsResponse, status_code=status.HTTP_200_OK)
+@router.get("/", response_model=PaginatedLeadsResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_leads(
     tenant_id: UUID,
     limit: int = 100,
@@ -94,8 +95,8 @@ def list_leads(
     use_case: GetLeadsInputPort = Depends(get_get_leads_use_case),
 ):
     query = GetLeadsQuery(tenant_id=tenant_id, limit=limit, offset=offset)
-    leads = use_case.execute(query)
-    return [
+    page = use_case.execute(query)
+    items = [
         LeadResponse(
             id=str(lead.id),
             tenant_id=str(lead.tenant_id),
@@ -112,6 +113,13 @@ def list_leads(
             assigned_agent_id=str(lead.assigned_agent_id) if lead.assigned_agent_id else None,
             created_at=lead.created_at.isoformat(),
         )
-        for lead in leads
+        for lead in page.items
     ]
+    return PaginatedLeadsResponse(
+        items=items,
+        total=page.total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(items)) < page.total,
+    )
 

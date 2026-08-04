@@ -17,3 +17,6 @@ class InMemoryLeadRepository(LeadRepositoryPort):
     def list_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[Lead]:
         items = [l for l in self.leads.values() if l.tenant_id.value == tenant_id]
         return items[offset:offset + limit]
+
+    def count_by_tenant(self, tenant_id: UUID) -> int:
+        return len([l for l in self.leads.values() if l.tenant_id.value == tenant_id])

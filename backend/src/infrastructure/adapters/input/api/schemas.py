@@ -52,6 +52,13 @@ class LeadResponse(BaseModel):
     assigned_agent_id: Optional[str]
     created_at: str
 
+class PaginatedLeadsResponse(BaseModel):
+    items: List[LeadResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
 class FailedRowResponse(BaseModel):
     row_number: int
     email: str

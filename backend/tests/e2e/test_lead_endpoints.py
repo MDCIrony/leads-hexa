@@ -73,9 +73,45 @@ def test_list_leads_by_tenant_endpoint():
         response = client.get(f"/api/v1/tenants/{tenant_id}/leads")
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
-        assert data[0]["email"] == "laura@example.com"
+        assert isinstance(data, dict)
+        assert data["total"] >= 1
+        assert data["limit"] == 100
+        assert data["offset"] == 0
+        assert isinstance(data["items"], list)
+        assert data["items"][0]["email"] == "laura@example.com"
+
+
+def test_list_leads_pagination_has_more_flag():
+    tenant_id = str(uuid.uuid4())
+    base_payload = {
+        "company": "DesignCorp",
+        "budget": 15000.0,
+        "industry": "Design",
+    }
+
+    with TestClient(app) as client:
+        for i in range(3):
+            client.post(
+                f"/api/v1/tenants/{tenant_id}/leads/ingest",
+                json={
+                    **base_payload,
+                    "first_name": f"Lead{i}",
+                    "last_name": "Test",
+                    "email": f"lead{i}@example.com",
+                },
+            )
+
+        response = client.get(f"/api/v1/tenants/{tenant_id}/leads?limit=2&offset=0")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 3
+        assert len(data["items"]) == 2
+        assert data["has_more"] is True
+
+        response = client.get(f"/api/v1/tenants/{tenant_id}/leads?limit=2&offset=2")
+        data = response.json()
+        assert len(data["items"]) == 1
+        assert data["has_more"] is False
 
 def test_ingest_lead_endpoint_negative_budget_returns_400():
     tenant_id = str(uuid.uuid4())

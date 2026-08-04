@@ -26,6 +26,11 @@ class LeadProcessedResult:
     error_code: Optional[str] = None
 
 @dataclass(frozen=True)
+class LeadsPageResult:
+    items: list
+    total: int
+
+@dataclass(frozen=True)
 class BatchProcessResult:
     job_id: str
     total_rows: int

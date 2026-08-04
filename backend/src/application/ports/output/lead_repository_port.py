@@ -15,3 +15,7 @@ class LeadRepositoryPort(ABC):
     @abstractmethod
     def list_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[Lead]:
         pass
+
+    @abstractmethod
+    def count_by_tenant(self, tenant_id: UUID) -> int:
+        pass

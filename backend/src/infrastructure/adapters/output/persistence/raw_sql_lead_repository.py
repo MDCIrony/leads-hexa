@@ -90,3 +90,11 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         )
         rows = cursor.fetchall()
         return [self._row_to_lead(row) for row in rows]
+
+    def count_by_tenant(self, tenant_id: UUID) -> int:
+        cursor = self.connection.execute(
+            "SELECT COUNT(*) AS count FROM leads WHERE tenant_id = %s",
+            (str(tenant_id),),
+        )
+        row = cursor.fetchone()
+        return int(row["count"]) if row else 0
