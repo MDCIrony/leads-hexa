@@ -14,6 +14,7 @@ from domain.events.lead_events import LeadProcessedEvent
 from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.rule_router import router as rule_router
 from infrastructure.adapters.input.api.agent_router import router as agent_router
+from infrastructure.adapters.input.api.auth_router import router as auth_router
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 
 @asynccontextmanager
@@ -69,3 +70,4 @@ app.add_middleware(
 app.include_router(lead_router, prefix="/api/v1/tenants/{tenant_id}/leads", tags=["Leads"])
 app.include_router(rule_router, prefix="/api/v1/tenants/{tenant_id}/rules", tags=["Rules"])
 app.include_router(agent_router, prefix="/api/v1/agents", tags=["Agents"])
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])

@@ -127,3 +127,8 @@ class PaginatedAgentsResponse(BaseModel):
     limit: int
     offset: int
     has_more: bool
+
+# --- Auth Schemas ---
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

@@ -18,6 +18,8 @@ from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
 from application.use_cases.agent_use_cases import CreateAgentUseCase, GetAgentsUseCase, GetAgentUseCase
 from application.use_cases.rule_use_cases import CreateScoringRuleUseCase, GetScoringRulesUseCase, CreateRoutingRuleUseCase, GetRoutingRulesUseCase
+from application.ports.input.auth_use_case_port import LoginInputPort
+from application.use_cases.auth_use_cases import LoginUseCase
 
 def get_db(request: Request) -> RawSqlDatabase:
     return request.app.state.db
@@ -56,3 +58,6 @@ def get_create_routing_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> 
 
 def get_get_routing_rules_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetRoutingRulesInputPort:
     return GetRoutingRulesUseCase(uow=uow)
+
+def get_login_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> LoginInputPort:
+    return LoginUseCase(uow=uow)
