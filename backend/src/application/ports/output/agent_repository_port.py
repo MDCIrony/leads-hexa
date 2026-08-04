@@ -27,3 +27,11 @@ class AgentRepositoryPort(ABC):
     @abstractmethod
     def count_active(self, team: Optional[str] = None) -> int:
         pass
+
+    @abstractmethod
+    def get_by_email(self, email: str) -> Optional[Agent]:
+        pass
+
+    @abstractmethod
+    def count(self) -> int:
+        pass

@@ -9,6 +9,7 @@ from domain.value_objects import (
     AssignmentStrategy,
     WebhookEventType,
 )
+from domain.value_objects.enums import AgentRole
 
 def test_lead_entity_lifecycle():
     lead = Lead.create(
@@ -61,6 +62,35 @@ def test_agent_entity_creation():
 
     agent_from_vo = Agent.create("C", "c@test.com", "Team", agent_id=vo_agent_id)
     assert agent_from_vo.id == vo_agent_id
+
+
+def test_agent_create_defaults_role_to_agent_and_has_no_password_or_tenant():
+    agent = Agent.create("A", "a@test.com", "Team")
+    assert agent.role == AgentRole.AGENT
+    assert agent.hashed_password is None
+    assert agent.tenant_id is None
+
+
+def test_agent_create_accepts_role_password_and_tenant():
+    tenant_uuid = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+    agent = Agent.create(
+        "B",
+        "b@test.com",
+        "Team",
+        role=AgentRole.MANAGER,
+        hashed_password="$2b$hash",
+        tenant_id=tenant_uuid,
+    )
+    assert agent.role == AgentRole.MANAGER
+    assert agent.hashed_password == "$2b$hash"
+    assert str(agent.tenant_id) == tenant_uuid
+
+
+def test_agent_create_positional_call_still_works():
+    # Guards against breaking the existing calling convention used elsewhere in the suite.
+    agent = Agent.create("C", "c@test.com", "Team", agent_id="11111111-1111-1111-1111-111111111111")
+    assert str(agent.id) == "11111111-1111-1111-1111-111111111111"
+    assert agent.role == AgentRole.AGENT
 
 
 def test_scoring_rule_entity_creation():
