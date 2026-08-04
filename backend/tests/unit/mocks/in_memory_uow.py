@@ -1,11 +1,11 @@
-from typing import Any
+from typing import Any, Optional
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 
 class InMemoryUnitOfWork(UnitOfWorkPort):
-    def __init__(self, lead_repo, rule_repo, agent_repo):
-        self.leads = lead_repo
-        self.rules = rule_repo
-        self.agents = agent_repo
+    def __init__(self, lead_repo=None, rule_repo=None, agent_repo=None, leads=None, rules=None, agents=None):
+        self.leads = leads if leads is not None else lead_repo
+        self.rules = rules if rules is not None else rule_repo
+        self.agents = agents if agents is not None else agent_repo
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self
