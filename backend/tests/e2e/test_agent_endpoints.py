@@ -11,3 +11,12 @@ def test_get_agent_not_found_returns_domain_error_shape():
         assert data["error"] is True
         assert data["error_code"] == "AGENT_NOT_FOUND"
         assert "message" in data
+
+
+def test_create_agent_rejects_malformed_email():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/agents",
+            json={"name": "Bad Agent", "email": "not-an-email", "team": "Sales"},
+        )
+        assert response.status_code == 422

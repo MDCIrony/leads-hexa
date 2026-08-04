@@ -3,6 +3,13 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 from domain.value_objects.enums import Operator, AssignmentStrategy
 
+
+def _validate_email_format(value: str) -> str:
+    if "@" not in value or "." not in value.split("@")[-1]:
+        raise ValueError("Formato de email inválido")
+    return value
+
+
 # --- Lead Schemas ---
 class IngestLeadRequest(BaseModel):
     first_name: str
@@ -17,9 +24,7 @@ class IngestLeadRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_email(cls, v: str) -> str:
-        if "@" not in v or "." not in v.split("@")[-1]:
-            raise ValueError("Formato de email inválido")
-        return v
+        return _validate_email_format(v)
 
 class LeadProcessedResponse(BaseModel):
     lead_id: str
@@ -94,6 +99,11 @@ class AgentCreate(BaseModel):
     team: str
     active_leads_count: int = 0
     is_active: bool = True
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _validate_email_format(v)
 
 class AgentResponse(BaseModel):
     id: str
