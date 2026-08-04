@@ -118,6 +118,7 @@ def test_ingest_lead_use_case_invalid_email_error():
     assert result.status == "FAILED"
     assert result.error is not None
     assert "correo electrónico inválido" in result.error
+    assert result.error_code == "INVALID_EMAIL"
 
 def test_rollback_on_persistence_error():
     # Arrange

@@ -54,6 +54,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 status=LeadStatus.FAILED.value,
                 score=0,
                 error=str(e),
+                error_code=e.error_code,
             )
 
         if self.uow:

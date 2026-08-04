@@ -56,6 +56,7 @@ class FailedRowResponse(BaseModel):
     row_number: int
     email: str
     error: str
+    error_code: Optional[str] = None
 
 class BatchProcessResponse(BaseModel):
     job_id: str

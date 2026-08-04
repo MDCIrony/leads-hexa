@@ -1,6 +1,7 @@
 from uuid import UUID
 from typing import List
 from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi.responses import JSONResponse
 from application.dtos.commands import IngestLeadCommand
 from application.dtos.queries import GetLeadsQuery
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
@@ -38,6 +39,22 @@ def ingest_lead(
         phone=request.phone,
     )
     result = use_case.execute(command)
+
+    if result.status == "FAILED":
+        # A row-level domain validation failure on the single-ingest path is a
+        # transport-level bad request, not a 201 "processed but rejected" body.
+        # The same use case is also called per-row from the batch upload path,
+        # where a FAILED result is a legitimate partial-success outcome — that
+        # path is untouched and keeps reading result.error/result.error_code directly.
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": True,
+                "error_code": result.error_code,
+                "message": result.error,
+            },
+        )
+
     return LeadProcessedResponse(
         lead_id=result.lead_id,
         status=result.status,
@@ -46,6 +63,7 @@ def ingest_lead(
         applied_rules_count=result.applied_rules_count,
         webhook_dispatched=result.webhook_dispatched,
         error=result.error,
+        error_code=result.error_code,
     )
 
 @router.post("/batch-upload", response_model=BatchProcessResponse, status_code=status.HTTP_200_OK)

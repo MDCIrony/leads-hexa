@@ -76,3 +76,22 @@ def test_list_leads_by_tenant_endpoint():
         assert isinstance(data, list)
         assert len(data) >= 1
         assert data[0]["email"] == "laura@example.com"
+
+def test_ingest_lead_endpoint_negative_budget_returns_400():
+    tenant_id = str(uuid.uuid4())
+    payload = {
+        "first_name": "Bad",
+        "last_name": "Budget",
+        "email": "bad.budget@example.com",
+        "company": "Corp",
+        "budget": -100.0,
+        "industry": "Tech",
+    }
+
+    with TestClient(app) as client:
+        response = client.post(f"/api/v1/tenants/{tenant_id}/leads/ingest", json=payload)
+        assert response.status_code == 400
+        data = response.json()
+        assert data["error"] is True
+        assert data["error_code"] == "INVALID_BUDGET"
+        assert "message" in data

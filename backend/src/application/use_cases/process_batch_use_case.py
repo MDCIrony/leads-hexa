@@ -24,7 +24,12 @@ class ProcessBatchUseCase(ProcessBatchInputPort):
             res = self.ingest_lead_use_case.execute(cmd)
             results.append(res)
             if res.error:
-                failed_rows.append({"row_number": idx, "email": cmd.email, "error": res.error})
+                failed_rows.append({
+                    "row_number": idx,
+                    "email": cmd.email,
+                    "error": res.error,
+                    "error_code": res.error_code,
+                })
             else:
                 successful += 1
 
