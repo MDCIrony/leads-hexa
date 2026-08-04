@@ -1,3 +1,6 @@
+import os
+os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
+
 import pytest
 from application.use_cases.auth_use_cases import LoginUseCase
 from domain.entities.agent import Agent

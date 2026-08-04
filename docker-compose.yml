@@ -25,6 +25,7 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
+      - JWT_SECRET=dev-secret-change-in-production
     depends_on:
       db:
         condition: service_healthy
