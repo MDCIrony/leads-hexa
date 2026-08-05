@@ -54,6 +54,11 @@ app = FastAPI(
 
 add_exception_handlers(app)
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
 # Origins are configurable per environment; comma-separated list, e.g.
 # "https://app.example.com,https://admin.example.com" in production.
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:80").split(",")
