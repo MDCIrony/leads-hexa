@@ -113,8 +113,8 @@ def test_require_role_and_tenant_admin_allowed_for_any_tenant():
 def test_require_role_and_tenant_wrong_role_rejected_before_checking_tenant():
     tenant_id = uuid.uuid4()
     _, agent = _uow_with_agent(role=AgentRole.AGENT, tenant_id=tenant_id)
-    dependency = require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
-    role_checker = dependency.__defaults__[0].dependency
+    require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
+    role_checker = require_role(AgentRole.ADMIN, AgentRole.MANAGER)
     with pytest.raises(ForbiddenException) as exc_info:
         role_checker(current_agent=agent)
     assert "Role AGENT is not permitted" in str(exc_info.value)
