@@ -127,7 +127,6 @@ def require_role_and_tenant(*allowed_roles: AgentRole) -> Callable[..., Agent]:
         tenant_id: UUID,
         current_agent: Agent = Depends(role_checker),
     ) -> Agent:
-        role_checker(current_agent)
         if current_agent.role != AgentRole.ADMIN:
             if current_agent.tenant_id is None or str(current_agent.tenant_id) != str(tenant_id):
                 raise ForbiddenException("You do not have access to this tenant's data")
