@@ -30,7 +30,7 @@ class DomainException(Exception):
 | `AgentNotFoundException` | `AGENT_NOT_FOUND` | `404 Not Found` | El agente solicitado no existe en la base de datos. |
 | `InvalidCredentialsException` | `INVALID_CREDENTIALS` | `401 Unauthorized` | Intento de login con credenciales incorrectas. |
 | `UnauthorizedException` | `UNAUTHORIZED` | `401 Unauthorized` | Token JWT ausente, expirado, inválido o agente inactivo. |
-| `ForbiddenException` | `FORBIDDEN` | `401 Unauthorized` / `403 Forbidden` | Rol o tenant insuficiente para realizar la acción solicitada. |
+| `ForbiddenException` | `FORBIDDEN` | `403 Forbidden` | Rol o tenant insuficiente para realizar la acción solicitada. |
 
 ---
 
