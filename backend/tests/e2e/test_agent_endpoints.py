@@ -8,7 +8,15 @@ from infrastructure.security.jwt_service import create_access_token
 from domain.value_objects.enums import AgentRole
 
 
-def _get_auth_headers() -> dict:
+def _get_auth_headers(client: TestClient) -> dict:
+    """Return bearer headers for a real, persisted ADMIN agent.
+
+    `get_current_agent` looks the bearer id up in the database, so a token
+    minted for a made-up id always 401s once the table is genuinely empty
+    between tests. With no active agents this rides the bootstrap rule
+    (first unauthenticated POST becomes ADMIN); otherwise it promotes one
+    of the agents already there. Either way the id is real.
+    """
     from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
     db = app.state.db
     uow = PostgresUnitOfWork(db)
@@ -18,16 +26,28 @@ def _get_auth_headers() -> dict:
             admin_agent = active_agents[0]
             admin_agent.role = AgentRole.ADMIN
             uow.agents.save(admin_agent)
-            admin_token = create_access_token(agent_id=str(admin_agent.id), role="ADMIN", tenant_id=None)
-            return {"Authorization": f"Bearer {admin_token}"}
-        else:
-            token = create_access_token(agent_id=str(uuid.uuid4()), role="ADMIN", tenant_id=None)
-            return {"Authorization": f"Bearer {token}"}
+            admin_id = str(admin_agent.id)
+
+    if not active_agents:
+        bootstrap_resp = client.post(
+            "/api/v1/agents",
+            json={
+                "name": "Bootstrap Admin",
+                "email": f"bootstrap_{uuid.uuid4().hex[:6]}@test.com",
+                "team": "HQ",
+                "password": "bootstrap-pass-123",
+            },
+        )
+        assert bootstrap_resp.status_code == 201
+        admin_id = bootstrap_resp.json()["id"]
+
+    admin_token = create_access_token(agent_id=admin_id, role="ADMIN", tenant_id=None)
+    return {"Authorization": f"Bearer {admin_token}"}
 
 
 def test_get_agent_not_found_returns_domain_error_shape():
     with TestClient(app) as client:
-        headers = _get_auth_headers()
+        headers = _get_auth_headers(client)
         response = client.get(f"/api/v1/agents/{uuid.uuid4()}", headers=headers)
         assert response.status_code == 404
         data = response.json()
@@ -38,7 +58,7 @@ def test_get_agent_not_found_returns_domain_error_shape():
 
 def test_create_agent_rejects_malformed_email():
     with TestClient(app) as client:
-        headers = _get_auth_headers()
+        headers = _get_auth_headers(client)
         response = client.post(
             "/api/v1/agents",
             json={"name": "Bad Agent", "email": "not-an-email", "team": "Sales", "password": "pass"},
@@ -49,7 +69,7 @@ def test_create_agent_rejects_malformed_email():
 
 def test_list_agents_returns_pagination_metadata():
     with TestClient(app) as client:
-        headers = _get_auth_headers()
+        headers = _get_auth_headers(client)
         team = f"team-{uuid.uuid4()}"
         for i in range(3):
             client.post(

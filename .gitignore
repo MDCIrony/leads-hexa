@@ -21,3 +21,6 @@ __pycache__/
 
 # AI / Gemini
 .gemini/
+
+# Template with placeholder values only; it documents the required vars, unlike the real .env above.
+!.env.example
