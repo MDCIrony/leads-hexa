@@ -36,3 +36,9 @@ minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+markers = [
+    "unit: no database, no network, no environment variables",
+    "integration: requires a live PostgreSQL test database",
+    "e2e: full HTTP stack against a live PostgreSQL test database",
+    "architecture: static analysis of the dependency rule",
+]
