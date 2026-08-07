@@ -1,13 +1,14 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: leads_hexa_db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespassword
       POSTGRES_DB: leads_db
     ports:
-      - "5432:5432"
+      # 5433 on the host: 5432 is commonly taken by a local PostgreSQL or by
+      # another project's container. Inside the compose network it is still 5432.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +21,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: leads_hexa_backend
     ports:
       - "8000:8000"
     environment:
@@ -41,7 +41,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: leads_hexa_frontend
     ports:
       - "80:80"
     depends_on:
