@@ -1,14 +1,14 @@
 import os
 import uuid
 import pytest
-from fastapi import HTTPException
 
 os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
 
+from application.ports.output.token_service_port import TokenClaims
 from domain.entities.agent import Agent
 from domain.exceptions import UnauthorizedException, ForbiddenException
 from domain.value_objects.enums import AgentRole
-from infrastructure.security.jwt_service import create_access_token
+from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from infrastructure.adapters.input.api.dependencies import (
     get_current_agent,
     require_role,
@@ -27,9 +27,14 @@ def _uow_with_agent(role=AgentRole.AGENT, is_active=True, tenant_id=None):
     return uow, agent
 
 
+def _issue_token(agent_id: str, role: str, tenant_id=None) -> str:
+    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
+    return token_service.issue(TokenClaims(agent_id=agent_id, role=role, tenant_id=tenant_id))
+
+
 def test_get_current_agent_returns_the_agent_for_a_valid_token():
     uow, agent = _uow_with_agent(role=AgentRole.MANAGER)
-    token = create_access_token(agent_id=str(agent.id), role="MANAGER", tenant_id=None)
+    token = _issue_token(agent_id=str(agent.id), role="MANAGER")
     resolved = get_current_agent(token=token, uow=uow)
     assert str(resolved.id) == str(agent.id)
 
@@ -42,7 +47,7 @@ def test_get_current_agent_rejects_an_invalid_token():
 
 def test_get_current_agent_rejects_an_inactive_agent():
     uow, agent = _uow_with_agent(is_active=False)
-    token = create_access_token(agent_id=str(agent.id), role="AGENT", tenant_id=None)
+    token = _issue_token(agent_id=str(agent.id), role="AGENT")
     with pytest.raises(UnauthorizedException):
         get_current_agent(token=token, uow=uow)
 

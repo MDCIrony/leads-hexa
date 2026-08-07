@@ -4,7 +4,8 @@ os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
-from infrastructure.security.jwt_service import create_access_token
+from application.ports.output.token_service_port import TokenClaims
+from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from domain.value_objects.enums import AgentRole
 
 
@@ -12,6 +13,7 @@ def _get_auth_headers() -> dict:
     from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
     from domain.entities.agent import Agent
 
+    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
     db = app.state.db
     uow = PostgresUnitOfWork(db)
     with uow:
@@ -20,7 +22,7 @@ def _get_auth_headers() -> dict:
             admin_agent = active_agents[0]
             admin_agent.role = AgentRole.ADMIN
             uow.agents.save(admin_agent)
-            admin_token = create_access_token(agent_id=str(admin_agent.id), role="ADMIN", tenant_id=None)
+            admin_token = token_service.issue(TokenClaims(agent_id=str(admin_agent.id), role="ADMIN", tenant_id=None))
             return {"Authorization": f"Bearer {admin_token}"}
         else:
             agent = Agent.create(
@@ -30,7 +32,7 @@ def _get_auth_headers() -> dict:
                 role=AgentRole.ADMIN,
             )
             uow.agents.save(agent)
-            admin_token = create_access_token(agent_id=str(agent.id), role="ADMIN", tenant_id=None)
+            admin_token = token_service.issue(TokenClaims(agent_id=str(agent.id), role="ADMIN", tenant_id=None))
             return {"Authorization": f"Bearer {admin_token}"}
 
 

@@ -4,7 +4,8 @@ os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
-from infrastructure.security.jwt_service import create_access_token
+from application.ports.output.token_service_port import TokenClaims
+from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from domain.value_objects.enums import AgentRole
 
 
@@ -41,7 +42,8 @@ def _get_auth_headers(client: TestClient) -> dict:
         assert bootstrap_resp.status_code == 201
         admin_id = bootstrap_resp.json()["id"]
 
-    admin_token = create_access_token(agent_id=admin_id, role="ADMIN", tenant_id=None)
+    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
+    admin_token = token_service.issue(TokenClaims(agent_id=admin_id, role="ADMIN", tenant_id=None))
     return {"Authorization": f"Bearer {admin_token}"}
 
 

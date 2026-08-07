@@ -4,7 +4,8 @@ os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
-from infrastructure.security.jwt_service import create_access_token
+from application.ports.output.token_service_port import TokenClaims
+from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from domain.value_objects.enums import AgentRole
 
 def test_full_system_lead_routing_flow_e2e():
@@ -40,7 +41,8 @@ def test_full_system_lead_routing_flow_e2e():
                     admin_agent = active_agents[0]
                     admin_agent.role = AgentRole.ADMIN
                     uow.agents.save(admin_agent)
-                    admin_token = create_access_token(agent_id=str(admin_agent.id), role="ADMIN", tenant_id=None)
+                    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
+                    admin_token = token_service.issue(TokenClaims(agent_id=str(admin_agent.id), role="ADMIN", tenant_id=None))
                     headers = {"Authorization": f"Bearer {admin_token}"}
                     agent_resp = client.post("/api/v1/agents", json=agent_payload, headers=headers)
 
@@ -49,7 +51,8 @@ def test_full_system_lead_routing_flow_e2e():
         agent_id = agent_data["id"]
 
         if not headers:
-            admin_token = create_access_token(agent_id=agent_id, role="ADMIN", tenant_id=None)
+            token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
+            admin_token = token_service.issue(TokenClaims(agent_id=agent_id, role="ADMIN", tenant_id=None))
             headers = {"Authorization": f"Bearer {admin_token}"}
 
         # 2. Crear regla de scoring

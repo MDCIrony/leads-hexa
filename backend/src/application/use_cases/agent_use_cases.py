@@ -1,13 +1,12 @@
-from typing import List
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
 from application.dtos.commands import CreateAgentCommand, AgentsPageResult
 from application.ports.input.agent_use_case_ports import (
     GetAgentsInputPort, GetAgentInputPort, CreateAgentInputPort
 )
+from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent
 from domain.exceptions import AgentNotFoundException
-from infrastructure.security.password_hasher import hash_password
 
 class GetAgentsUseCase(GetAgentsInputPort):
     def __init__(self, uow: UnitOfWorkPort):
@@ -31,8 +30,9 @@ class GetAgentUseCase(GetAgentInputPort):
         return agent
 
 class CreateAgentUseCase(CreateAgentInputPort):
-    def __init__(self, uow: UnitOfWorkPort):
+    def __init__(self, uow: UnitOfWorkPort, password_hasher: PasswordHasherPort):
         self.uow = uow
+        self.password_hasher = password_hasher
 
     def execute(self, command: CreateAgentCommand) -> Agent:
         agent = Agent.create(
@@ -42,7 +42,7 @@ class CreateAgentUseCase(CreateAgentInputPort):
             active_leads_count=command.active_leads_count,
             is_active=command.is_active,
             role=command.role,
-            hashed_password=hash_password(command.password),
+            hashed_password=self.password_hasher.hash(command.password),
             tenant_id=command.tenant_id,
         )
         with self.uow:

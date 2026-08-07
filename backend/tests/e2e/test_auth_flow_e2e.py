@@ -18,7 +18,7 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
             assert bootstrap_resp.json()["role"] == "ADMIN"
         elif bootstrap_resp.status_code == 401:
             from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-            from infrastructure.security.password_hasher import hash_password
+            from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
             from domain.entities.agent import Agent
             from domain.value_objects.enums import AgentRole
 
@@ -26,7 +26,7 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
             uow = PostgresUnitOfWork(db)
             with uow:
                 admin = Agent.create(name="Bootstrap Admin", email=admin_email, team="HQ", role=AgentRole.ADMIN)
-                admin.hashed_password = hash_password("bootstrap-pass-123")
+                admin.hashed_password = BcryptPasswordHasher().hash("bootstrap-pass-123")
                 uow.agents.save(admin)
         else:
             assert bootstrap_resp.status_code in (201, 401)

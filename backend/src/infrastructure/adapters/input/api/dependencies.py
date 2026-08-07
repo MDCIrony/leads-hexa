@@ -1,3 +1,4 @@
+import os
 from typing import Generator, Callable, Optional
 from uuid import UUID
 from fastapi import Request, Depends
@@ -25,7 +26,8 @@ from application.use_cases.auth_use_cases import LoginUseCase
 from domain.entities.agent import Agent
 from domain.exceptions import UnauthorizedException, ForbiddenException
 from domain.value_objects.enums import AgentRole
-from infrastructure.security.jwt_service import decode_access_token
+from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
+from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 
 def get_db(request: Request) -> RawSqlDatabase:
     return request.app.state.db
@@ -45,7 +47,7 @@ def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsIn
     return GetLeadsUseCase(uow=uow)
 
 def get_create_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateAgentInputPort:
-    return CreateAgentUseCase(uow=uow)
+    return CreateAgentUseCase(uow=uow, password_hasher=BcryptPasswordHasher())
 
 def get_get_agents_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetAgentsInputPort:
     return GetAgentsUseCase(uow=uow)
@@ -66,7 +68,11 @@ def get_get_routing_rules_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> Ge
     return GetRoutingRulesUseCase(uow=uow)
 
 def get_login_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> LoginInputPort:
-    return LoginUseCase(uow=uow)
+    return LoginUseCase(
+        uow=uow,
+        password_hasher=BcryptPasswordHasher(),
+        token_service=JwtTokenService(secret=os.environ["JWT_SECRET"]),
+    )
 
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -77,13 +83,10 @@ def get_current_agent(
     token: str = Depends(_oauth2_scheme),
     uow: UnitOfWorkPort = Depends(get_uow),
 ) -> Agent:
-    try:
-        payload = decode_access_token(token)
-    except Exception:
-        raise UnauthorizedException("Invalid or expired token")
+    claims = JwtTokenService(secret=os.environ["JWT_SECRET"]).verify(token)
 
     with uow:
-        agent = uow.agents.get_by_id(UUID(payload.get("sub")))
+        agent = uow.agents.get_by_id(UUID(claims.agent_id))
 
     if not agent or not agent.is_active:
         raise UnauthorizedException("Agent no longer exists or is inactive")
