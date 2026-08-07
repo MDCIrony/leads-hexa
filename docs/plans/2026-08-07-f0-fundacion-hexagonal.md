@@ -210,6 +210,15 @@ def clean_tables(request):
 
 - [ ] **Step 6: Documentar las variables de entorno**
 
+El `.gitignore` global del usuario ignora `.env.*`, lo que también atrapa a `.env.example`. Como es una plantilla sin secretos cuyo único propósito es estar versionada, añadir al final del `.gitignore` **de la raíz del repositorio** una negación explícita, que tiene precedencia:
+
+```
+# The template carries no secrets and only serves versioned; real .env files stay ignored.
+!.env.example
+```
+
+Verificar con `git check-ignore -v backend/.env.example`: no debe devolver una regla de exclusión.
+
 Crear `backend/.env.example`:
 
 ```bash
@@ -237,6 +246,19 @@ Espera a que el healthcheck esté en verde: `docker compose ps db`
 Run: `cd backend && TEST_DATABASE_URL=postgresql://postgres:postgrespassword@localhost:5433/leads_test DATABASE_URL=postgresql://postgres:postgrespassword@localhost:5433/leads_test JWT_SECRET=test-secret uv run pytest -q`
 Expected: PASS en los 71 tests. Los 12 que fallaban por `KeyError: 'DATABASE_URL'` ahora encuentran la variable.
 
+**Corrección adicional que el truncado destapa.** `tests/e2e/test_agent_endpoints.py:24` firma un token para un `uuid.uuid4()` inventado cuando la tabla `agents` está vacía, y `get_current_agent` lo rechaza con 401. Ese test venía pasando sólo porque la tabla arrastraba residuos de ejecuciones anteriores; con el truncado, falla.
+
+Arreglar `_get_auth_headers()` para que cree un administrador real mediante la regla de bootstrap —con `agents` vacía, un `POST /api/v1/agents` sin autenticación crea el primer agente y le fuerza el rol `ADMIN`— siguiendo el mismo patrón que ya usa `tests/e2e/test_auth_flow_e2e.py`. La función debe funcionar tanto con la tabla vacía como con agentes presentes, porque el orden de ejecución no está garantizado.
+
+Verificar aisladamente, con la tabla vacía:
+
+```bash
+PGPASSWORD=postgrespassword psql -h localhost -p 5433 -U postgres -d leads_test -c "TRUNCATE agents CASCADE"
+uv run pytest tests/e2e/test_agent_endpoints.py -q
+```
+
+Y ejecutar la suite completa **dos veces seguidas**: ambas deben quedar en verde. Ése es el objetivo real del truncado.
+
 - [ ] **Step 8: Commit**
 
 ```bash
@@ -248,7 +270,7 @@ git commit -m "test: add pytest markers, test database fixtures and env document
 
 ## Task 2: Test de arquitectura (guardián de la regla de dependencias)
 
-Este test es el que hace verificable todo lo demás. Se escribe **antes** de corregir las violaciones: debe fallar señalando exactamente las tres que existen hoy.
+Este test es el que hace verificable todo lo demás. Se escribe **antes** de corregir las violaciones: debe fallar señalando exactamente las cuatro que existen hoy (dos imports de `infrastructure` y dos de `pydantic`), repartidas en dos de sus cuatro funciones de test.
 
 **Files:**
 - Create: `backend/tests/architecture/test_dependency_rule.py`
@@ -575,7 +597,9 @@ Run: `uv run pytest tests/unit/domain/test_exceptions.py -v`
 Expected: PASS, 9 tests.
 
 Run: `uv run pytest -m unit -q`
-Expected: PASS. Ningún otro test unitario lee `status_code`.
+Expected: PASS.
+
+`tests/unit/application/test_agent_use_cases.py:25` afirma sobre `status_code` y romperá con este cambio. Eliminar esa única aserción, conservando la de `error_code`, que es la que sigue siendo el contrato. Es consecuencia directa del cambio, así que va en este mismo commit.
 
 - [ ] **Step 6: Verificar que la API sigue devolviendo los mismos códigos**
 

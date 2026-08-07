@@ -7,8 +7,6 @@ imported without its dependencies present."""
 import ast
 from pathlib import Path
 
-import pytest
-
 _SRC = Path(__file__).resolve().parents[2] / "src"
 
 # Everything the domain is allowed to depend on beyond the standard library:
