@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pytest
 
 from application.ports.output.token_service_port import TokenClaims
@@ -15,7 +17,13 @@ from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 _TENANT_ID = "b1a2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
 
 
-def _build_use_case(email, password, role=AgentRole.MANAGER, is_active=True, tenant_id=_TENANT_ID):
+def _build_use_case(
+    email: str,
+    password: str,
+    role: AgentRole = AgentRole.MANAGER,
+    is_active: bool = True,
+    tenant_id: Optional[str] = _TENANT_ID,
+):
     hasher = FakePasswordHasher()
     agent_repo = InMemoryAgentRepository()
     agent = Agent.create(
