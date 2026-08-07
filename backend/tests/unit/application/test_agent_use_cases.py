@@ -22,7 +22,6 @@ def test_get_agent_use_case_raises_when_agent_missing():
         use_case.execute(GetAgentQuery(agent_id=uuid.uuid4()))
 
     assert exc_info.value.error_code == "AGENT_NOT_FOUND"
-    assert exc_info.value.status_code == 404
 
 
 def test_create_agent_hashes_the_password_and_stores_role_and_tenant():

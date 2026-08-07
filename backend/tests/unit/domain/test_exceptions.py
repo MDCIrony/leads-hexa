@@ -1,52 +1,54 @@
+import pytest
+
 from domain.exceptions import (
+    AgentNotFoundException,
     DomainException,
-    InvalidEmailException,
+    ForbiddenException,
     InvalidBudgetException,
-    InvalidUUIDException,
-    InvalidRuleException,
-    LeadRoutingException,
+    InvalidCredentialsException,
+    InvalidEmailException,
+    UnauthorizedException,
 )
 
 
-def test_domain_exception_defaults_to_400():
-    exc = DomainException("generic failure")
-    assert exc.status_code == 400
+def test_base_exception_carries_message_and_default_code():
+    exc = DomainException("something broke")
+    assert exc.message == "something broke"
     assert exc.error_code == "DOMAIN_ERROR"
 
 
-def test_domain_exception_accepts_custom_status_code():
-    exc = DomainException("custom failure", error_code="CUSTOM", status_code=409)
-    assert exc.status_code == 409
-    assert exc.error_code == "CUSTOM"
+def test_base_exception_accepts_custom_code():
+    exc = DomainException("conflict", error_code="ALREADY_EXISTS")
+    assert exc.error_code == "ALREADY_EXISTS"
 
 
-def test_existing_subclasses_default_to_400():
-    for exc in (
-        InvalidEmailException(),
-        InvalidBudgetException(),
-        InvalidUUIDException(),
-        InvalidRuleException(),
-        LeadRoutingException(),
+def test_domain_exceptions_do_not_expose_transport_details():
+    """HTTP status codes belong to the adapter, not to the domain."""
+    for exception_type in (
+        DomainException,
+        InvalidEmailException,
+        InvalidBudgetException,
+        AgentNotFoundException,
+        InvalidCredentialsException,
+        UnauthorizedException,
+        ForbiddenException,
     ):
-        assert exc.status_code == 400
+        instance = exception_type("msg") if exception_type is DomainException else exception_type()
+        assert not hasattr(instance, "status_code"), (
+            f"{exception_type.__name__} still carries an HTTP status code"
+        )
 
 
-from domain.exceptions import InvalidCredentialsException, UnauthorizedException, ForbiddenException
-
-
-def test_invalid_credentials_exception_is_401():
-    exc = InvalidCredentialsException()
-    assert exc.error_code == "INVALID_CREDENTIALS"
-    assert exc.status_code == 401
-
-
-def test_unauthorized_exception_is_401():
-    exc = UnauthorizedException()
-    assert exc.error_code == "UNAUTHORIZED"
-    assert exc.status_code == 401
-
-
-def test_forbidden_exception_is_403():
-    exc = ForbiddenException()
-    assert exc.error_code == "FORBIDDEN"
-    assert exc.status_code == 403
+@pytest.mark.parametrize(
+    "exception_type,expected_code",
+    [
+        (InvalidEmailException, "INVALID_EMAIL"),
+        (InvalidBudgetException, "INVALID_BUDGET"),
+        (AgentNotFoundException, "AGENT_NOT_FOUND"),
+        (InvalidCredentialsException, "INVALID_CREDENTIALS"),
+        (UnauthorizedException, "UNAUTHORIZED"),
+        (ForbiddenException, "FORBIDDEN"),
+    ],
+)
+def test_each_exception_has_a_stable_error_code(exception_type, expected_code):
+    assert exception_type().error_code == expected_code
