@@ -1,19 +1,27 @@
+from dataclasses import dataclass
 from typing import Optional
-from pydantic import BaseModel
 from uuid import UUID
 
-class GetLeadsQuery(BaseModel):
+
+@dataclass(frozen=True)
+class GetLeadsQuery:
     tenant_id: UUID
     limit: int = 100
     offset: int = 0
 
-class GetAgentsQuery(BaseModel):
+
+@dataclass(frozen=True)
+class GetAgentsQuery:
     team: Optional[str] = None
     limit: int = 100
     offset: int = 0
 
-class GetAgentQuery(BaseModel):
+
+@dataclass(frozen=True)
+class GetAgentQuery:
     agent_id: UUID
 
-class GetRulesQuery(BaseModel):
+
+@dataclass(frozen=True)
+class GetRulesQuery:
     tenant_id: UUID
