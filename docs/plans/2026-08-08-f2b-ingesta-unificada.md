@@ -51,6 +51,7 @@ Vinculan a **todas** las tareas. Un incumplimiento es un fallo de la tarea, no u
 | C6 | **Un commit por tarea**, formato `type(scope): description`, sin `Co-authored-by` |
 | C7 | Los comentarios explican **por qué**, no qué. Sin verborrea |
 | C8 | **No se añade ninguna exigencia de contactabilidad** al hacer el correo opcional. Nada de «al menos una vía de contacto»: reproduciría el problema con otro nombre y dejaría la bandeja de descalificados vacía justo en el caso que la justifica |
+| C9 | **Toda migración tiene que ser idempotente.** `test_migration_runner.py` dropea `schema_migrations` dejando las tablas en pie, así que reejecuta cada fichero entero. `CREATE TABLE` y `ADD COLUMN` llevan `IF NOT EXISTS`; `ADD CONSTRAINT` no admite esa sintaxis y necesita una guarda manual contra `pg_constraint` |
 
 ### Harness (cambió en F2a — no uses el procedimiento viejo)
 
@@ -249,10 +250,19 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS source_id UUID NOT NULL REFERENCES le
 -- returns: invisible to every manager, and impossible to delete through the
 -- application. Closed here because this migration already rewrites the same
 -- tests the constraint affects.
--- PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS; the migration runner applies
--- each file exactly once, so the guard is unnecessary.
-ALTER TABLE leads ADD CONSTRAINT fk_leads_tenant
-    FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE;
+-- PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS, and the guard is NOT
+-- optional: test_migration_runner.py drops schema_migrations on purpose while
+-- leaving the tables in place, which replays every file. Without this check the
+-- replay dies with DuplicateObject.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_leads_tenant'
+    ) THEN
+        ALTER TABLE leads ADD CONSTRAINT fk_leads_tenant
+            FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE;
+    END IF;
+END $$;
 
 -- Contactability is an organization's rule, not an invariant of the data: a
 -- lead with no email must be able to exist and be disqualified by a rule
@@ -834,10 +844,17 @@ alguno no existe con ese nombre, usa el que haya y no inventes uno nuevo.
 ## Paso 3: la carga masiva recorre lo mismo
 
 `ProcessBatchUseCase.execute` (`process_batch_use_case.py:23-31`) ya llama al mismo caso de uso por
-fila, así que hereda el pipeline sin cambios de fondo. Lo único que toca: `FailedRow.email` es
-`str` y ahora puede ser `None` (`commands.py:131`) → `Optional[str]`. Añade
-`intake_record_id: str = ""` a `FailedRow` y rellénalo desde `res.intake_record_id`, que es lo que
-convierte una fila fallida en algo recuperable.
+fila, así que hereda el pipeline sin cambios de fondo. Dos cosas que sí toca:
+
+**1. `FailedRow.email` → `Optional[str]`, y `FailedRowResponse.email` también.** No es cosmético:
+desde T2 el correo puede faltar, y `process_batch_use_case.py:30` pasa `cmd.email` —que ya puede ser
+`None`— a un campo declarado `str`. El dataclass lo traga en silencio, pero `FailedRowResponse` es
+un modelo de Pydantic y **eleva `ValidationError`**, que sale por HTTP como un 500. Se dispara con
+un CSV cuya fila no traiga correo y falle por otra cosa, por ejemplo un presupuesto no numérico.
+Escribe ese caso como test.
+
+**2. `intake_record_id: str = ""` en `FailedRow`**, rellenado desde `res.intake_record_id`: es lo
+que convierte una fila fallida en algo recuperable desde la bandeja.
 
 ## Paso 4: retirar `FAILED`
 
