@@ -66,9 +66,9 @@ Esta tabla describe el **punto de partida**, no el estado actual. La columna de 
 | Fuga cross-tenant en la asignación | `get_available_agents()` no filtra por tenant | ✅ F1 |
 | Fuga cross-tenant en listados | `GET /agents` devuelve agentes de todas las organizaciones | ✅ F0.5 |
 | `active_leads_count` nunca decrece, con *lost update* | Read-modify-write sin atomicidad, y no hay cierre de leads | ✅ F1 |
-| Paginación no determinista | `list_by_tenant` sin `ORDER BY` | ✅ F0.5 en asesores · ⏳ **F2a** en leads |
-| El operador `IN` nunca se cumple | `CreateScoringRuleCommand.value: str` fuerza cadena; el motor exige lista | ⏳ **F2a** |
-| `applied_rules_count` miente | Cuenta reglas consultadas, no aplicadas | ⏳ **F2a** |
+| Paginación no determinista | `list_by_tenant` sin `ORDER BY` | ✅ F0.5 en asesores · ✅ F2a en leads |
+| El operador `IN` nunca se cumple | `rule_router.py` aplastaba el valor con `str(request.value)` antes de llegar al dominio | ✅ F2a |
+| `applied_rules_count` miente | Cuenta reglas consultadas, no aplicadas | ✅ F2a |
 | Ingesta individual y carga masiva sin autenticación | Cualquiera puede inyectar leads en cualquier tenant | ⏳ **F2b** |
 | Un lead con email inválido se pierde | Devuelve `FAILED` sin persistir nada | ⏳ **F2b** |
 | `webhook_dispatched` miente | Es `True` con sólo existir el publicador | ⏳ F3a |
@@ -306,15 +306,17 @@ Un `Lead` sólo existe si todos sus datos son válidos. Lo que no valida se qued
    cualquiera ── descarte           ──→ DISCARDED
 ```
 
-**Comportamiento:** `apply_score(delta)`, `qualify(policy)`, `assign_to(agent, at)`, `reassign_to(agent, at)`, `unassign()`, `discard(reason)`.
+**Comportamiento:** `apply_score(delta)`, `qualify(policy)`, `assign_to(agent, tenant, at)`, `reassign_to(agent, tenant, at)`, `unassign()`, `leave_unassigned()`, `discard(reason)`.
 
-**Invariantes de transición** (hoy inexistentes: `assign_to_agent` acepta cualquier estado y sobrescribe en silencio una asignación previa):
+**Invariantes de transición**, implementados en F2a. Antes no existían: `assign_to_agent` aceptaba cualquier estado y sobrescribía en silencio una asignación previa.
 
-- `assign_to` sólo desde `QUALIFIED` o `UNASSIGNED`.
-- `reassign_to` sólo desde `ASSIGNED`.
-- `discard` desde cualquier estado salvo `DISCARDED`.
-- El asesor destino debe pertenecer a la misma organización que el lead.
+- `assign_to` sólo desde `QUALIFIED` o `UNASSIGNED`. Un lead ya `ASSIGNED` lo rechaza: reemplazar al asesor en silencio es lo que hacía las reasignaciones intrazables.
+- `reassign_to` sólo desde `ASSIGNED`, y dice en voz alta que sustituye al asesor anterior.
+- `unassign` sólo desde `ASSIGNED`; `leave_unassigned` sólo desde `QUALIFIED`, para el lead que el motor no supo repartir.
+- `discard` desde `NEW`, `QUALIFIED`, `UNASSIGNED` o `ASSIGNED`, y exige un motivo no vacío. Deja fuera `DISQUALIFIED` y `FAILED`: ya salieron del flujo por su cuenta, y descartarlos otra vez no aporta información.
+- El asesor destino debe pertenecer a la misma organización que el lead (`CROSS_TENANT_ASSIGNMENT`). El caso de uso ni siquiera llega a ese invariante, porque resuelve al asesor con `get_by_id_and_tenant` y devuelve `404` antes; el invariante queda como defensa en profundidad.
 - Un lead `DISQUALIFIED` no entra al motor de asignación.
+- `NEW` **no es asignable**: un lead sin puntuar no se reparte. El paso obligatorio es `qualify()` tras la puntuación.
 
 ---
 
@@ -390,7 +392,7 @@ Criterio que suma o resta puntos a un lead según sus atributos.
 | `name` | `str` | sí | — | Nombre descriptivo: "Presupuesto alto", "Sector tecnológico" |
 | `field` | `str` | sí | — | Campo del lead a evaluar. Admite notación de punto para atributos personalizados: `custom_attributes.employee_count` |
 | `operator` | `Operator` | sí | — | Comparador a aplicar. Ver 6.12 |
-| `value` | `RuleValue` | sí | — | Valor de referencia, **conservando su tipo**. Hoy se fuerza a cadena en el router, lo que rompe el operador `IN` y hace que las comparaciones numéricas funcionen por casualidad |
+| `value` | `Any` | sí | — | Valor de referencia, **conservando su tipo**. F2a retiró la coerción a cadena del router, que rompía el operador `IN`; las comparaciones numéricas usan `Decimal`, nunca `float` |
 | `score_delta` | `int` | sí | — | Puntos a sumar si la regla se cumple. Negativo para penalizar |
 | `priority` | `int` | no | `0` | Orden de evaluación. La suma es conmutativa, así que sólo afecta a la trazabilidad del desglose |
 | `is_active` | `bool` | no | `True` | Permite desactivar una regla sin borrarla ni perder su histórico |
@@ -519,7 +521,7 @@ Se elimina `FAILED`: un lead que no valida ya no llega a ser `Lead`; se queda en
 | `EmailAddress` | Formato de correo válido |
 | `Money` | `Decimal` no negativo, con precisión monetaria preservada |
 | `Score` | Entero dentro de un rango razonable. Hoy no valida nada: `Score(-999999)` es aceptado |
-| `RuleValue` | **Nuevo.** Preserva el tipo del valor de una regla (número, texto, booleano o lista) a través de la serialización. Es lo que hace que el operador `IN` funcione |
+| `RuleValue` | **Descartado en F2a.** El tipo del valor se preserva sin envolverlo: el defecto no estaba en la serialización sino en el `str(request.value)` del router, y `ScoringRule.matches` compara con `Decimal`. Un objeto de valor aquí no habría arreglado nada y añadía una capa que no paga |
 
 ### 6.14 Políticas de dominio
 
@@ -558,9 +560,9 @@ para cada ScoringRule activa de la organización, ordenada por priority:
         registrar (regla.id, regla.name, regla.score_delta) en el desglose
 ```
 
-Devuelve la puntuación **y el desglose de reglas aplicadas**. Hoy sólo se devuelve `applied_rules_count`, que además cuenta las reglas consultadas y no las que efectivamente aplicaron; el desglose es lo que permite que la interfaz explique al gestor por qué un lead puntuó lo que puntuó.
+Devuelve la puntuación **y el desglose de reglas aplicadas**, implementado en F2a como `ScoreBreakdown`. El desglose es lo que permite que la interfaz explique al gestor por qué un lead puntuó lo que puntuó, y se persiste con el lead: las reglas que lo produjeron pueden editarse o borrarse después, y el lead debe seguir sabiendo explicarse.
 
-Correcciones respecto al motor actual:
+Correcciones respecto al motor anterior, **todas aplicadas en F2a**:
 
 - `NOT_EQUALS` aplica la misma coerción de tipos que `EQUALS`. Hoy no la hace, así que para el mismo par campo/valor ambos operadores pueden devolver verdadero a la vez.
 - Un campo ausente devuelve falso para los operadores positivos, pero **verdadero** para `NOT_EQUALS`. Hoy devuelve falso siempre, lo que es semánticamente incorrecto.
@@ -994,9 +996,9 @@ Esto elimina también la fragilidad actual: los tests extremo a extremo comparte
 
 Cada fase es entregable y demostrable por separado. La ordenación no es negociable: F0 establece las fronteras que el resto respeta, y hacerla al final significaría reescribir todo lo construido encima.
 
-**Estado real.** F0 se ejecutó en tres tramos: F0 (fundación), F0.5 (separación de los dos planos) y F0.6 (tipos nativos en SQL). F1 está cerrada y verificada. La siguiente es F2.
+**Estado real.** F0 se ejecutó en tres tramos: F0 (fundación), F0.5 (separación de los dos planos) y F0.6 (tipos nativos en SQL). F1 y **F2a** están cerradas y verificadas. La siguiente es **F2b**.
 
-**Por qué el motor de puntuación cae en F2.** Las correcciones de §7.1 no tenían fase asignada, y F2 no puede entregarse sin ellas: el pipeline de ingesta puntúa cada lead antes de asignarlo, la bandeja de entrada necesita el desglose de reglas aplicadas para explicar al gestor por qué un lead puntuó lo que puntuó, y `CreateScoringRuleCommand.value: str` mantiene roto el operador `IN` —una regla de puntuación que hoy no se cumple nunca—. Dejarlas fuera entregaría una ingesta que puntúa mal.
+**Por qué F2 se partió en dos.** F2a entregó el motor de puntuación de §7.1, la máquina de estados del lead, la asignación manual, el descarte y `/leads/mine`. F2b entrega lo que falta de la ingesta: `LeadSource`, `IntakeRecord`, `IntakeError`, el pipeline unificado y el cierre de la ingesta sin autenticar. F2b depende de F2a, no al revés: el pipeline necesita el motor corregido y los estados nuevos.
 
 ---
 

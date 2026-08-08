@@ -191,8 +191,8 @@ Procesa un archivo CSV o Excel para la ingesta masiva de leads de un tenant.
 Consulta de leads paginados. La organización sale del token, nunca de la URL. **Sólo para el gestor:** este endpoint devuelve el flujo completo de la organización, así que un asesor que lo alcanzara leería los leads de sus compañeros. La vista del asesor es [`GET /api/v1/leads/mine`](#get-apiv1leadsmine), en la sección 5.
 
 - **Autenticación**: Requerida (`Bearer Token`).
-- **Permisos**: Requiere acceso al tenant vía `verify_tenant_access` (cualquier agente autenticado perteneciente a `tenant_id`, o un `ADMIN`).
-- **Path Parameters**: `tenant_id` (UUID).
+- **Permisos**: `require_organization_manager`. Sólo `MANAGER`. Un `ADMIN` recibe `403`: el plano de plataforma no alcanza dato operativo.
+- **Path Parameters**: ninguno. La organización se deriva del token.
 - **Query Parameters**: `limit` (int, default=100), `offset` (int, default=0).
 - **Response (200 OK)** ([`PaginatedLeadsResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
