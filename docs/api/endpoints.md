@@ -16,24 +16,27 @@ El sistema implementa seguridad mediante **JWT Bearer Tokens** y control de acce
 - Si la base de datos de agentes está vacía (`agents.count() == 0`), el endpoint `POST /api/v1/agents` permite la creación sin autenticación del **primer agente**, al cual se le asigna forzosamente el rol `ADMIN`.
 - Una vez creado el primer agente, el endpoint exige autenticación y autorizaciones estándar.
 
+### Los dos planos: plataforma y organización
+Desde F0.5 el `ADMIN` y el resto de roles operan en planos disjuntos. Ninguna operación pertenece a los dos: el `ADMIN` administra organizaciones y sus gestores, y **no accede a ningún dato operativo** (leads, agentes, reglas) de ninguna organización, ni siquiera de la que acaba de crear.
+
 ### Roles y Permisos (`AgentRole`)
-1. **`ADMIN`**:
-   - Acceso global sin restricción de tenant (omite verificaciones de `tenant_id`).
-   - Puede crear agentes con cualquier rol (`ADMIN`, `MANAGER`, `AGENT`).
-   - Puede consultar y gestionar leads, agentes y reglas de cualquier tenant.
-2. **`MANAGER`**:
-   - Administrador acotado a su propio `tenant_id`.
-   - Puede crear agentes (`MANAGER` o `AGENT`) únicamente dentro de su propio tenant (`request.tenant_id == current_agent.tenant_id`). No puede crear otros `ADMIN`.
-   - Puede gestionar y consultar reglas de scoring/routing de su tenant (`require_role_and_tenant`).
-   - Puede consultar leads de su tenant (`verify_tenant_access`).
+1. **`ADMIN`** — plano de plataforma:
+   - No pertenece a ninguna organización (`tenant_id` siempre `None`).
+   - Único que puede crear organizaciones (`POST /api/v1/tenants`), junto con su gestor inicial, en una sola transacción.
+   - Lista organizaciones con el recuento de asesores de cada una, y puede activarlas/desactivarlas/renombrarlas.
+   - Recibe `403 Forbidden` en todo endpoint operativo (`/api/v1/leads`, `/api/v1/agents`, `/api/v1/rules/*`), incluso estando autenticado.
+2. **`MANAGER`** — plano de organización:
+   - Acotado siempre a su propio `tenant_id`, tomado del token, nunca del cuerpo de la petición.
+   - Puede crear agentes (`MANAGER` o `AGENT`) dentro de su propia organización. No puede crear otros `ADMIN`; el único nace del bootstrap.
+   - Único rol que puede listar y consultar asesores (`GET /api/v1/agents`, `GET /api/v1/agents/{id}`), siempre acotado a su organización.
+   - Puede gestionar y consultar reglas de scoring/routing y leads de su organización.
 3. **`AGENT`**:
-   - Usuario estándar de operaciones comerciales.
-   - Puede consultar la lista e información de agentes (`GET /api/v1/agents`).
-   - Puede consultar los leads asignados a su tenant (`verify_tenant_access`).
-   - **No** puede crear agentes ni administrar reglas.
+   - Usuario estándar de operaciones comerciales, acotado a su organización.
+   - **No** puede listar asesores (`403`); consulta su propia identidad por [`GET /api/v1/auth/me`](#get-apiv1authme).
+   - **No** puede crear agentes ni administrar reglas ni organizaciones.
 
 ### Aislamiento por Tenant (Tenant Scoping)
-Las dependencias [`verify_tenant_access`](../../backend/src/infrastructure/adapters/input/api/dependencies.py) y [`require_role_and_tenant`](../../backend/src/infrastructure/adapters/input/api/dependencies.py) garantizan que un `MANAGER` o `AGENT` solo pueda acceder a recursos cuyo `tenant_id` coincida exactamente con el de su usuario. Los usuarios con rol `ADMIN` sobrepasan esta restricción.
+El `RequestContext` construido por [`get_request_context`](../../backend/src/infrastructure/adapters/input/api/dependencies.py) deriva la organización siempre de la identidad verificada en el token, nunca de la petición. Las dependencias [`require_organization_manager`](../../backend/src/infrastructure/adapters/input/api/dependencies.py) y [`require_platform_admin`](../../backend/src/infrastructure/adapters/input/api/dependencies.py) invocan a [`AuthorizationPolicy`](../../backend/src/domain/policies/authorization_policy.py), en el dominio, para exigir el rol correcto de cada plano. Un `ADMIN` no tiene forma de acceder a recursos de organización: su `tenant_id` es siempre `None`, y `AuthorizationPolicy.can_access_tenant` es `False` para él por diseño.
 
 ---
 
@@ -48,6 +51,7 @@ Definidos en [`src/application/ports/input/`](../../backend/src/application/port
 - **`CreateScoringRuleInputPort` / `GetScoringRulesInputPort`**: Creación y consulta de reglas de scoring.
 - **`CreateRoutingRuleInputPort` / `GetRoutingRulesInputPort`**: Creación y consulta de reglas de ruteo.
 - **`LoginInputPort`**: Autenticación de agentes y generación de JWT.
+- **`CreateTenantInputPort` / `GetTenantsInputPort` / `UpdateTenantInputPort`**: Alta, listado y edición de organizaciones (plano de plataforma).
 
 ---
 
@@ -67,7 +71,9 @@ Verificación de estado de la aplicación.
 
 ---
 
-### 1. Autenticación (`POST /api/v1/auth/login`)
+### 1. Autenticación (`/api/v1/auth`)
+
+#### `POST /api/v1/auth/login`
 
 Autentica a un agente comercial mediante correo y contraseña.
 
@@ -83,7 +89,25 @@ Autentica a un agente comercial mediante correo y contraseña.
   "token_type": "bearer"
 }
 ```
-- **Errores**: `401 Unauthorized` (`INVALID_CREDENTIALS` si el correo o contraseña son incorrectos).
+- **Errores**: `401 Unauthorized` (`INVALID_CREDENTIALS` si el correo o contraseña son incorrectos, o si su organización está desactivada).
+
+#### `GET /api/v1/auth/me`
+
+Devuelve la identidad del agente autenticado. Es lo que el frontend necesita para decidir qué panel mostrar, incluido el caso del `AGENT`, que no tiene ningún otro endpoint para conocer su propio rol u organización.
+
+- **Autenticación**: Requerida (`Bearer Token`), cualquier rol.
+- **Response (200 OK)** ([`CurrentUserResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "id": "11111111-1111-1111-1111-111111111111",
+  "name": "Ana Ruiz",
+  "email": "ana@acme.test",
+  "role": "MANAGER",
+  "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  "tenant_name": "Acme Corp"
+}
+```
+- Para un `ADMIN`, `tenant_id` y `tenant_name` son siempre `null`: no pertenece a ninguna organización.
 
 ---
 
@@ -195,14 +219,114 @@ Consulta de leads paginados pertenecientes a un tenant.
 
 ---
 
-### 5. Gestión de Agentes (`/api/v1/agents`)
+### 5. Plano de Plataforma — Organizaciones (`/api/v1/tenants`)
+
+Todos los endpoints de esta sección exigen `Depends(require_platform_admin)`: sólo un `ADMIN` los alcanza. Un `MANAGER` o `AGENT` recibe `403 Forbidden`.
+
+#### `POST /api/v1/tenants`
+Crea una organización junto con su gestor inicial, en una sola transacción (decisión E2 del diseño de F0.5): si la creación del gestor falla — por ejemplo por correo duplicado —, la organización tampoco queda creada.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `ADMIN`.
+- **Request Body** ([`TenantCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "name": "Acme Corp",
+  "manager": {
+    "name": "Ana Ruiz",
+    "email": "ana@acme.test",
+    "password": "securepassword123"
+  }
+}
+```
+- **Response (201 Created)** ([`TenantResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  "name": "Acme Corp",
+  "slug": "acme-corp",
+  "is_active": true,
+  "created_at": "2026-08-07T10:00:00+00:00",
+  "agent_count": null,
+  "manager": {
+    "id": "11111111-1111-1111-1111-111111111111",
+    "name": "Ana Ruiz",
+    "email": "ana@acme.test",
+    "team": "Management",
+    "active_leads_count": 0,
+    "is_active": true,
+    "role": "MANAGER",
+    "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+  }
+}
+```
+- **Errores**: `400 Bad Request` (`TENANT_ALREADY_EXISTS` si el nombre ya existe como organización; `EMAIL_ALREADY_EXISTS` si el correo del gestor ya está en uso).
+
+#### `GET /api/v1/tenants`
+Lista organizaciones paginadas. Cada elemento lleva `agent_count` —el recuento de asesores activos— pero no `manager`: es un agregado, no una lista de identidades (decisión E3).
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `ADMIN`.
+- **Query Parameters**: `limit` (int, default=100), `offset` (int, default=0).
+- **Response (200 OK)** ([`PaginatedTenantsResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "items": [
+    {
+      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      "name": "Acme Corp",
+      "slug": "acme-corp",
+      "is_active": true,
+      "created_at": "2026-08-07T10:00:00+00:00",
+      "agent_count": 3,
+      "manager": null
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false
+}
+```
+
+#### `PATCH /api/v1/tenants/{tenant_id}`
+Renombra y/o activa/desactiva una organización. Desactivarla (`is_active: false`) desactiva en cascada a todos sus usuarios (decisión E7): pierden acceso de inmediato, aunque su token siga sin expirar, porque `POST /auth/login` vuelve a comprobar el estado en base de datos.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `ADMIN`.
+- **Path Parameters**: `tenant_id` (UUID).
+- **Request Body** ([`TenantUpdate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): `name` y/o `is_active`, ambos opcionales.
+```json
+{
+  "is_active": false
+}
+```
+- **Response (200 OK)** ([`TenantResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  "name": "Acme Corp",
+  "slug": "acme-corp",
+  "is_active": false,
+  "created_at": "2026-08-07T10:00:00+00:00",
+  "agent_count": null,
+  "manager": null
+}
+```
+- **Errores**: `404 Not Found` (`TENANT_NOT_FOUND`).
+
+---
+
+### 6. Gestión de Agentes (`/api/v1/agents`)
+
+Restringido al plano de organización: un `ADMIN` recibe `403 Forbidden` en los tres endpoints.
 
 #### `POST /api/v1/agents`
 Crea un nuevo agente de ventas.
 
-- **Autenticación**: Requerida (`Bearer Token`), excepto en estado Bootstrap (base de datos sin agentes).
-- **Permisos**: `ADMIN` o `MANAGER` (Managers solo pueden crear dentro de su propio `tenant_id` y no pueden crear otros `ADMIN`).
-- **Request Body** ([`AgentCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+- **Autenticación**: Requerida (`Bearer Token`), excepto en estado Bootstrap (base de datos sin agentes: el primer agente creado es forzosamente `ADMIN`).
+- **Permisos**: `MANAGER`, y sólo dentro de su propia organización. No puede crear otros `ADMIN`; el único nace del bootstrap.
+- **Request Body** ([`AgentCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). Sin `tenant_id`: la organización es siempre la del gestor autenticado, tomada del contexto, nunca de la petición.
 ```json
 {
   "name": "Carlos Ruiz",
@@ -211,8 +335,7 @@ Crea un nuevo agente de ventas.
   "active_leads_count": 0,
   "is_active": true,
   "password": "securepassword123",
-  "role": "MANAGER",
-  "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+  "role": "AGENT"
 }
 ```
 - **Response (201 Created)** ([`AgentResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
@@ -224,15 +347,16 @@ Crea un nuevo agente de ventas.
   "team": "Sales",
   "active_leads_count": 0,
   "is_active": true,
-  "role": "MANAGER",
+  "role": "AGENT",
   "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
 }
 ```
 
 #### `GET /api/v1/agents`
-Obtiene la lista paginada de agentes comerciales.
+Obtiene la lista paginada de agentes comerciales de la propia organización. Cierra la fuga cross-tenant que tenía antes de F0.5: ya no basta con estar autenticado, y nunca devuelve asesores de otra organización.
 
-- **Autenticación**: Requerida (`Bearer Token` - cualquier agente autenticado).
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`. Un `AGENT` recibe `403 Forbidden`.
 - **Query Parameters**: `team` (string, opcional), `limit` (int, default=100), `offset` (int, default=0).
 - **Response (200 OK)** ([`PaginatedAgentsResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
@@ -245,7 +369,7 @@ Obtiene la lista paginada de agentes comerciales.
       "team": "Sales",
       "active_leads_count": 0,
       "is_active": true,
-      "role": "MANAGER",
+      "role": "AGENT",
       "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
     }
   ],
@@ -257,9 +381,10 @@ Obtiene la lista paginada de agentes comerciales.
 ```
 
 #### `GET /api/v1/agents/{agent_id}`
-Obtiene el detalle de un agente por su UUID.
+Obtiene el detalle de un agente por su UUID, sólo si pertenece a la propia organización.
 
-- **Autenticación**: Requerida (`Bearer Token` - cualquier agente autenticado).
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
 - **Path Parameters**: `agent_id` (UUID).
 - **Response (200 OK)** ([`AgentResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
@@ -270,15 +395,15 @@ Obtiene el detalle de un agente por su UUID.
   "team": "Sales",
   "active_leads_count": 0,
   "is_active": true,
-  "role": "MANAGER",
+  "role": "AGENT",
   "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
 }
 ```
-- **Errores**: `404 Not Found` (`AGENT_NOT_FOUND`).
+- **Errores**: `404 Not Found` (`AGENT_NOT_FOUND`) tanto si el identificador no existe como si pertenece a otra organización — nunca `403`, para no confirmar con el código de estado que ese identificador existe en otro sitio.
 
 ---
 
-### 6. Gestión de Reglas (`/api/v1/tenants/{tenant_id}/rules`)
+### 7. Gestión de Reglas (`/api/v1/tenants/{tenant_id}/rules`)
 
 Todos los endpoints de reglas están acotados por tenant y requieren la dependencia `require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)`.
 

@@ -686,16 +686,16 @@ El `RequestContext` se construye **una vez** por petición y se pasa a los casos
 
 | Operación | `ADMIN` | `MANAGER` | `AGENT` |
 |---|---|---|---|
-| Crear organización | ✅ | ❌ | ❌ |
-| Crear gestor de una organización | ✅ | ❌ | ❌ |
-| Crear / editar / desactivar asesores | ✅ | ✅ su organización | ❌ |
-| Gestionar grupos | ✅ | ✅ su organización | ❌ |
-| Gestionar reglas | ✅ | ✅ su organización | ❌ |
-| Gestionar fuentes | ✅ | ✅ su organización | ❌ |
-| Ver todos los leads | ✅ | ✅ su organización | ❌ |
-| Ver sus leads asignados | — | ✅ | ✅ |
-| Asignar manualmente / descartar | ✅ | ✅ su organización | ❌ |
-| Resolver la bandeja de entrada | ✅ | ✅ su organización | ❌ |
+| Crear organización con su gestor | ✅ | ❌ | ❌ |
+| Listar organizaciones | ✅ | ❌ | ❌ |
+| Activar / desactivar / renombrar organización | ✅ | ❌ | ❌ |
+| Crear, editar y desactivar asesores | ❌ | ✅ los de su organización | ❌ |
+| Listar asesores | ❌ | ✅ los de su organización | ❌ |
+| Gestionar grupos, reglas y fuentes | ❌ | ✅ los de su organización | ❌ |
+| Ver todos los leads | ❌ | ✅ los de su organización | ❌ |
+| Ver sus leads asignados | ❌ | ✅ | ✅ |
+| Asignar manualmente y descartar | ❌ | ✅ los de su organización | ❌ |
+| Consultar la propia identidad | ✅ | ✅ | ✅ |
 
 Estas reglas viven en `AuthorizationPolicy`, en el dominio. Las dependencias de FastAPI se limitan a construir el contexto e invocar la política.
 
@@ -709,6 +709,8 @@ Estas reglas viven en `AuthorizationPolicy`, en el dominio. Las dependencias de 
 > 2. **Separación de planos:** el `ADMIN` gestiona organizaciones y sus gestores, pero no accede a datos operativos. Más seguro y más simple, y obliga a corregir la matriz de permisos.
 >
 > La segunda es la recomendada: un superadministrador que no puede leer los leads de sus clientes es una propiedad deseable, no una carencia.
+
+**Resuelto en F0.5.** Se adoptó la separación de planos (opción 2): el `ADMIN` administra organizaciones y sus gestores y no accede a ningún dato operativo. La matriz de la sección 9.2 de arriba ya refleja esa corrección. Detalle completo en [`docs/specs/2026-08-07-f05-separacion-de-planos-design.md`](./2026-08-07-f05-separacion-de-planos-design.md).
 
 ### 9.3 Arranque del sistema
 
