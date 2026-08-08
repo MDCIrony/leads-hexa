@@ -28,15 +28,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Held open for the process lifetime and only ever read from, so it runs
     # in autocommit mode rather than sitting in one long-lived transaction.
     # Needs a connection with a longer lifetime than a per-request unit of
-    # work, so it is built here rather than in the container.
-    webhook_handler = WebhookEventHandler(
-        webhook_repo=RawSqlWebhookRepository(container.database.get_connection(autocommit=True)),
-        webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
-    )
-    container.event_publisher.subscribe(LeadProcessedEvent, webhook_handler.handle_lead_processed)
+    # work, so it is built here rather than in the container. get_connection()
+    # is now a pool-backed context manager, so it wraps everything up to and
+    # including `yield`: the connection returns to the pool only at shutdown.
+    with container.database.get_connection(autocommit=True) as webhook_connection:
+        webhook_handler = WebhookEventHandler(
+            webhook_repo=RawSqlWebhookRepository(webhook_connection),
+            webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
+        )
+        container.event_publisher.subscribe(LeadProcessedEvent, webhook_handler.handle_lead_processed)
 
-    app.state.container = container
-    yield
+        app.state.container = container
+        yield
     container.database.close()
 
 app = FastAPI(

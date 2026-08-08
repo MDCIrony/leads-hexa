@@ -1,3 +1,4 @@
+from contextlib import AbstractContextManager
 from typing import Optional
 
 import psycopg
@@ -13,11 +14,17 @@ class PostgresUnitOfWork(UnitOfWorkPort):
     def __init__(self, db: RawSqlDatabase) -> None:
         self.db = db
         self.connection: Optional[psycopg.Connection] = None
+        self._connection_ctx: Optional[AbstractContextManager[psycopg.Connection]] = None
 
     def __enter__(self) -> "PostgresUnitOfWork":
         # With autocommit disabled, psycopg opens a transaction implicitly on
         # the first statement — no explicit BEGIN needed, unlike sqlite3.
-        self.connection = self.db.get_connection(autocommit=False)
+        # get_connection() is now a pool-backed context manager; it is
+        # entered/exited manually (rather than via a single `with`) because
+        # the borrowed connection must outlive this method and only be
+        # released once the caller's `with self.uow:` block exits.
+        self._connection_ctx = self.db.get_connection(autocommit=False)
+        self.connection = self._connection_ctx.__enter__()
 
         self.leads = RawSqlLeadRepository(self.connection)
         self.rules = RawSqlRuleRepository(self.connection)
@@ -28,8 +35,11 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         try:
             super().__exit__(exc_type, exc_val, exc_tb)
         finally:
-            if self.connection:
-                self.connection.close()
+            if self._connection_ctx is not None:
+                # commit()/rollback() above already ended the transaction;
+                # this just returns the connection to the pool.
+                self._connection_ctx.__exit__(exc_type, exc_val, exc_tb)
+                self._connection_ctx = None
                 self.connection = None
 
     def commit(self) -> None:

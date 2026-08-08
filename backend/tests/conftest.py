@@ -82,3 +82,8 @@ def clean_tables(request):
         conn.execute(
             f"TRUNCATE {', '.join(_TABLES)} RESTART IDENTITY CASCADE"
         )
+
+
+@pytest.fixture
+def dsn_of_test_db() -> str:
+    return _test_dsn()
