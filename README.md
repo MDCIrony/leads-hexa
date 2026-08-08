@@ -199,6 +199,7 @@ leads-hexa/
 │   ├── Dockerfile
 │   └── nginx.conf                      # SPA Server + Reverse Proxy Proxy Pass /api/v1
 ├── docs/
+│   ├── product/                        # Qué problema resuelve y cómo se usa (sin jerga técnica)
 │   ├── specs/                          # Diseño del MVP: el qué y el porqué
 │   ├── plans/                          # Planes de implementación por fase
 │   ├── api/                            # Referencia de endpoints y errores
@@ -211,6 +212,7 @@ leads-hexa/
 
 | Si buscas… | Ve a |
 |---|---|
+| Qué problema de negocio resuelve, en lenguaje llano | [docs/product/](docs/product/) |
 | Qué hace el sistema y por qué está diseñado así | [docs/specs/](docs/specs/2026-08-07-lead-router-mvp-design.md) |
 | Qué se está construyendo ahora | [docs/plans/](docs/plans/) — el plan sin marca de cerrado |
 | Contratos HTTP, cuerpos y códigos de error | [docs/api/endpoints.md](docs/api/endpoints.md) |
