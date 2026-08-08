@@ -12,6 +12,7 @@ No se confunde con el resto de `docs/`, que es material de construcción:
 | [`plans/`](../plans/) | Quien implementa | ¿En qué orden y con qué pasos? |
 | [`api/`](../api/) | Quien integra | ¿Qué endpoints hay y qué devuelven? |
 | [`diagrams/`](../diagrams/) | Quien diseña | ¿Cómo encajan las piezas? |
+| [`conceptos/`](../conceptos/) | Quien estudia | ¿Por qué se decidió así, y qué alternativas había? |
 
 Una regla para no mezclarlas: aquí **no se nombra una clase, un fichero ni un endpoint**. Si un
 párrafo sólo se entiende sabiendo Python, pertenece a `specs/`.

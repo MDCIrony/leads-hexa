@@ -178,6 +178,7 @@ sequenceDiagram
 |---|---|
 | Qué problema de negocio resuelve, en lenguaje llano | [docs/product/](docs/product/) |
 | Qué se dejó **fuera** a propósito, y por qué | [docs/product/mejoras-futuras/](docs/product/mejoras-futuras/) |
+| Dilemas de arquitectura analizados sobre casos reales del repositorio | [docs/conceptos/](docs/conceptos/) |
 | Contratos HTTP, cuerpos y códigos de error | [docs/api/endpoints.md](docs/api/endpoints.md) |
 | Cómo se valida y cómo se reparte el trabajo | [CLAUDE.md](CLAUDE.md) |
 
