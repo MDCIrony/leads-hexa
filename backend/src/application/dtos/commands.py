@@ -181,7 +181,6 @@ class LeadProcessedResult:
     score: int
     assigned_agent_id: Optional[str] = None
     applied_rules_count: int = 0
-    webhook_dispatched: bool = False
     error: Optional[str] = None
     error_code: Optional[str] = None
     # Always populated, success or rejection: the link from a result back to

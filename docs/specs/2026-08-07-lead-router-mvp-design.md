@@ -71,7 +71,7 @@ Esta tabla describe el **punto de partida**, no el estado actual. La columna de 
 | `applied_rules_count` miente | Cuenta reglas consultadas, no aplicadas | ✅ F2a |
 | Ingesta individual y carga masiva sin autenticación | Cualquiera puede inyectar leads en cualquier tenant | ✅ F2b |
 | Un lead con email inválido se pierde | Devuelve `FAILED` sin persistir nada | ✅ F2b |
-| `webhook_dispatched` miente | Es `True` con sólo existir el publicador | ⏳ F3a |
+| `webhook_dispatched` miente | Es `True` con sólo existir el publicador | ✅ F3a — el campo se retiró en vez de corregirse: no hay forma honesta de conocer, desde el caso de uso, el resultado de una entrega hecha por un manejador desacoplado |
 
 **Criterios comerciales escritos en el código.** No son errores de programación: son reglas de la
 organización colocadas donde el gestor no las alcanza. El criterio para distinguirlas de un
@@ -1109,7 +1109,7 @@ Esto elimina también la fragilidad actual: los tests extremo a extremo comparte
 | **F2b** — Ingesta unificada | `LeadSource`, `IntakeRecord`, `IntakeError`, pipeline unificado, **cierre de la ingesta sin autenticar**, **correo opcional en el lead** ([diseño](2026-08-08-f2b-ingesta-unificada-design.md), [plan](../plans/2026-08-08-f2b-ingesta-unificada/)) | ✅ **Cerrada (2026-08-08).** Ingesta autenticada y con `source_id` real; lo que no valida queda en la bandeja de `IntakeRecord` con su detalle, y el gestor lo corrige y promueve sin perder nada |
 | **F2d** — Recepción y procesamiento separados | `IntakeJob`, recepción y procesamiento en transacciones distintas, ingesta unitaria y carga masiva responden `202` con un `job_id`, consulta y reproceso de trabajos ([diseño](2026-08-08-f2d-recepcion-y-procesamiento-design.md), [plan](../plans/2026-08-08-f2d-recepcion-y-procesamiento/)) | ✅ **Cerrada (2026-08-08).** Ningún fallo al procesar puede ya borrar la constancia de haber recibido; un trabajo interrumpido queda visible y se reprocesa sin duplicar leads |
 | **F2c** — Reglas componibles | `Criterion` extraído, condiciones múltiples por regla, operadores de vacío, `DisqualificationRule`, condiciones por atributo en el reparto, **retirada del umbral fijo** ([diseño](2026-08-08-f2c-reglas-componibles-design.md)) | ✅ **Cerrada (2026-08-08).** El gestor escribe «sin teléfono y sin correo → descartar» y «los de este canal, a este equipo», y ambas se cumplen. Ningún criterio comercial queda en el código |
-| **F3a** — Notificaciones | `Notification`, manejadores de eventos, endpoints, contador de no leídas. Aquí se corrige que `webhook_dispatched` mienta (§2.2) | El asesor recibe aviso al asignársele un lead; el gestor lo recibe ante un rechazo o un lead sin asignar |
+| **F3a** — Notificaciones | `Notification`, manejadores de eventos, endpoints, contador de no leídas. Aquí se retira `webhook_dispatched` (§2.2) ([diseño](2026-08-08-f3a-notificaciones-design.md), [plan](../plans/2026-08-08-f3a-notificaciones/)) | ✅ **Cerrada (2026-08-08).** El asesor recibe aviso al asignársele un lead; el gestor lo recibe ante un rechazo o un lead sin asignar |
 | **F3b** — Webhook entrante | Adaptador de fuente externa autenticada por firma, sobre el contrato que F2b deja definido (§8) | Un sistema de terceros ingesta leads con el secreto de su origen, sin credencial de usuario |
 | **F4** — Frontend | Arquitectura (router, sesión, capa de datos, guards, tipos generados) y después las vistas de ambos paneles | Un gestor y un asesor completan sus recorridos contra el backend real, sin ningún dato simulado |
 

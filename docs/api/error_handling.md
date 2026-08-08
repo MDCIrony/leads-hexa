@@ -52,6 +52,7 @@ El código de estado de la columna derecha **no vive en la excepción**: lo deci
 | `DomainException` | `DISQUALIFICATION_RULE_NOT_FOUND` | `404 Not Found` | La regla de descalificación no existe en la organización. |
 | `DomainException` | `INVALID_RULE_CONDITIONS` | `400 Bad Request` | Una regla de descalificación se creó o actualizó con una lista de condiciones vacía: cumpliría siempre y descalificaría a toda la organización. |
 | `DomainException` | `INVALID_RULE_NAME` | `400 Bad Request` | El nombre de una regla de descalificación o de asignación llega vacío. Es el motivo que verá el gestor, así que no es opcional. |
+| `DomainException` | `NOTIFICATION_NOT_FOUND` | `404 Not Found` | La notificación no existe, o pertenece a otro destinatario — nunca `403`, por la misma razón que el resto de la API. |
 
 ---
 
@@ -81,7 +82,6 @@ class LeadProcessedResponse(BaseModel):
     score: int
     assigned_agent_id: Optional[str] = None
     applied_rules_count: int = 0
-    webhook_dispatched: bool = False
     error: Optional[str] = None
     error_code: Optional[str] = None
 ```

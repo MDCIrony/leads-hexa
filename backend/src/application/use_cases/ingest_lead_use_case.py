@@ -182,7 +182,6 @@ class IngestLeadUseCase(IngestLeadInputPort):
             score=int(saved_lead.score),
             assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
             applied_rules_count=len(breakdown.applied),
-            webhook_dispatched=True if self.event_publisher else False,
         )
 
     @staticmethod

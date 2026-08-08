@@ -515,6 +515,110 @@ verify_f2c() {
   check "borrar la regla de asignación" 204 "$(code "$r")"
 }
 
+# ------------------------------------------------------------------- F3a ---
+# Notifications: the bell an agent or manager reads instead of hunting for
+# what changed. AGENT_1/AGENT_2 already carry notices from the manual
+# assign/reassign in verify_f2a and the channel routing in verify_f2c, so
+# every check here is relative to a captured baseline, never to zero.
+
+verify_f3a() {
+  local r job base1 after_ingest notif_id lead_direct lead_orphan rec agent_tmp
+
+  section "F3a · la bandeja del asesor"
+
+  r=$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_1")
+  check "el asesor uno consulta su bandeja al empezar" 200 "$(code "$r")"
+  base1=$(body "$r" | f 'd.get("unread_count")')
+
+  # F2c deleted the assignment rule it created, so nothing currently routes
+  # to AGENT_1. The condition keeps this rule from also catching the
+  # "orphan" lead ingested later in this same function.
+  r=$(req -X POST "$API/rules/assignment" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"F3a directo\",\"target_agent_ids\":[\"$AGENT_1\"],\"conditions\":[{\"field\":\"custom_attributes.f3a\",\"operator\":\"EQUALS\",\"value\":\"direct\"}]}")
+  check "regla F3a hacia el asesor uno" 201 "$(code "$r")"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"F3a","last_name":"Directo","company":"Acme","industry":"Retail","budget":1000,"phone":"+573000000010","custom_attributes":{"f3a":"direct"}}')
+  check "el lead directo se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead_direct=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+
+  r=$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_1")
+  after_ingest=$(body "$r" | f 'd.get("unread_count")')
+  check "su unread_count sube" "$((base1 + 1))" "$after_ingest"
+
+  notif_id=$(body "$r" | f '(d.get("items") or [{}])[0].get("id") or ""')
+  check "la notificación más reciente es LEAD_ASSIGNED" LEAD_ASSIGNED "$(body "$r" | f '(d.get("items") or [{}])[0].get("kind") or ""')"
+  check "y trae el lead_id" "$lead_direct" "$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')"
+
+  r=$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_2")
+  check "el otro asesor no ve esa notificación" False "$(body "$r" | f 'any(i.get("id") == "'"$notif_id"'" for i in d.get("items") or [])')"
+
+  r=$(req -X POST "$API/notifications/$notif_id/read" -H "Authorization: Bearer $TOKEN_1")
+  check "marcar una como leída" 204 "$(code "$r")"
+  r=$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_1")
+  check "el contador baja" "$base1" "$(body "$r" | f 'd.get("unread_count")')"
+
+  r=$(req -X POST "$API/notifications/$notif_id/read" -H "Authorization: Bearer $TOKEN_2")
+  check "el otro asesor no puede marcarla (404, nunca 403)" 404 "$(code "$r")"
+
+  r=$(req -X POST "$API/notifications/read-all" -H "Authorization: Bearer $TOKEN_1")
+  check "marcar todas" 204 "$(code "$r")"
+  r=$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_1")
+  check "el contador queda en cero" 0 "$(body "$r" | f 'd.get("unread_count")')"
+
+  section "F3a · el gestor y el aislamiento entre organizaciones"
+
+  # A lead left unassigned needs a rule whose only candidate is unavailable.
+  # A disposable, already-deactivated agent is that candidate, so AGENT_1 and
+  # AGENT_2 — reused across this whole function — never need to be touched.
+  r=$(req -X POST "$API/agents/" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"F3a Temp\",\"email\":\"f3a-temp-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
+  agent_tmp=$(body "$r" | f 'd["id"] or ""')
+  check "asesor desechable creado" 201 "$(code "$r")"
+
+  r=$(req -X DELETE "$API/agents/$agent_tmp" -H "Authorization: Bearer $MGR_A")
+  check "y desactivado" 200 "$(code "$r")"
+
+  r=$(req -X POST "$API/rules/assignment" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"F3a huérfano\",\"target_agent_ids\":[\"$agent_tmp\"],\"conditions\":[{\"field\":\"custom_attributes.f3a\",\"operator\":\"EQUALS\",\"value\":\"orphan\"}]}")
+  check "regla F3a sin candidato disponible" 201 "$(code "$r")"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"F3a","last_name":"Huerfano","company":"Acme","industry":"Retail","budget":1000,"phone":"+573000000011","custom_attributes":{"f3a":"orphan"}}')
+  check "el lead huérfano se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead_orphan=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead_orphan" -H "Authorization: Bearer $MGR_A")
+  check "queda UNASSIGNED" UNASSIGNED "$(body "$r" | f 'd.get("status")')"
+
+  r=$(req "$API/notifications" -H "Authorization: Bearer $MGR_A")
+  check "el gestor recibe LEAD_LEFT_UNASSIGNED" True "$(body "$r" | f 'any(i.get("kind") == "LEAD_LEFT_UNASSIGNED" and i.get("lead_id") == "'"$lead_orphan"'" for i in d.get("items") or [])')"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"F3a","last_name":"Rechazo","email":"f3a-bad@@x.test","company":"Acme","industry":"Retail","budget":1000}')
+  check "el correo mal formado se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  rec=$(body "$r" | f '(d.get("items") or [{}])[0].get("id") or ""')
+  check "y queda REJECTED" REJECTED "$(body "$r" | f '(d.get("items") or [{}])[0].get("status") or ""')"
+
+  r=$(req "$API/notifications" -H "Authorization: Bearer $MGR_A")
+  check "el gestor recibe INTAKE_REJECTED con el registro" True "$(body "$r" | f 'any(i.get("kind") == "INTAKE_REJECTED" and i.get("intake_record_id") == "'"$rec"'" for i in d.get("items") or [])')"
+
+  r=$(req "$API/notifications" -H "Authorization: Bearer $MGR_B")
+  check "el gestor de otra organización no ve nada de esto" False "$(body "$r" | f 'any(i.get("lead_id") == "'"$lead_orphan"'" or i.get("intake_record_id") == "'"$rec"'" for i in d.get("items") or [])')"
+
+  # This function runs last, but a manager left with a pile of unread
+  # notices is a bad state to hand to whoever extends this file next.
+  req -X POST "$API/notifications/read-all" -H "Authorization: Bearer $MGR_A" >/dev/null
+}
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -533,6 +637,7 @@ verify_f2a
 verify_f2b
 verify_f2d
 verify_f2c
+verify_f3a
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then

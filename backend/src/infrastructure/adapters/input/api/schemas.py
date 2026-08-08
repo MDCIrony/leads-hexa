@@ -39,7 +39,6 @@ class LeadProcessedResponse(BaseModel):
     score: int
     assigned_agent_id: Optional[str] = None
     applied_rules_count: int = 0
-    webhook_dispatched: bool = False
     error: Optional[str] = None
     error_code: Optional[str] = None
     # The payload this lead came from. Answers "what did the client actually

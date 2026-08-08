@@ -103,7 +103,6 @@ def test_ingest_lead_use_case_successful_flow():
     assert result.status == "ASSIGNED"
     assert result.score == 35
     assert result.assigned_agent_id == str(agent.id)
-    assert result.webhook_dispatched is True
     assert len(webhook_dispatcher.dispatched_events) == 1
 
 def test_ingest_lead_use_case_invalid_email_error():

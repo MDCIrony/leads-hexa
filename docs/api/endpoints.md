@@ -944,3 +944,68 @@ Borra la regla.
 - **Path Parameters**: `rule_id` (UUID).
 - **Response**: `204 No Content`.
 - **Errores**: `404 Not Found` (`DISQUALIFICATION_RULE_NOT_FOUND`).
+
+---
+
+### 13. Notificaciones (`/api/v1/notifications`)
+
+La campana que avisa a quien debe actuar sin que tenga que ir a buscarlo (F3a). `NotificationHandler`
+las crea al asignarse o reasignarse un lead, al quedar uno sin asesor, o al rechazarse un registro de
+ingesta (sección 6) — ver
+[`domain/events/notification_events.py`](../../backend/src/domain/events/notification_events.py). Los
+tres endpoints exigen `Depends(require_organization_member)`: el destinatario sale siempre del token,
+nunca de la URL — un `MANAGER` o `AGENT` ve sólo las suyas, y un `ADMIN` recibe `403 Forbidden`
+porque no pertenece a ninguna organización.
+
+#### `GET /api/v1/notifications`
+Lista paginada de las notificaciones del que llama, con el contador de no leídas.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER` o `AGENT`, cualquiera con organización propia.
+- **Query Parameters**: `unread_only` (bool, default=`false`), `limit` (int, default=100), `offset` (int, default=0).
+- **Response (200 OK)** ([`NotificationsPageResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "items": [
+    {
+      "id": "55555555-5555-5555-5555-555555555555",
+      "kind": "LEAD_ASSIGNED",
+      "message": "Tienes un lead nuevo asignado",
+      "lead_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+      "intake_record_id": null,
+      "is_read": false,
+      "created_at": "2026-08-08T10:00:00+00:00"
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false,
+  "unread_count": 1
+}
+```
+`unread_count` es siempre el total de no leídas del destinatario, no el de la página: viaja junto a
+la lista porque la campana necesita las dos cosas a la vez, y dos peticiones para pintar un icono es
+lo que convierte el sondeo en un problema. La respuesta no lleva `recipient_id` ni `tenant_id`: quien
+pregunta ya sabe quién es.
+- **Errores**: `401 Unauthorized`; `403 Forbidden` (un `ADMIN` no tiene organización).
+
+#### `POST /api/v1/notifications/read-all`
+Marca **todas** las notificaciones del que llama como leídas. Idempotente: llamarlo dos veces no es
+un error.
+
+> **Declarado antes que `POST /{notification_id}/read`.** FastAPI resuelve rutas por orden de
+> declaración; al revés, `read-all` caería en la ruta paramétrica y fallaría al interpretarlo como UUID.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER` o `AGENT`.
+- **Response**: `204 No Content`.
+
+#### `POST /api/v1/notifications/{notification_id}/read`
+Marca una notificación como leída.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER` o `AGENT`, sólo sobre las propias.
+- **Path Parameters**: `notification_id` (UUID).
+- **Response**: `204 No Content`.
+- **Errores**: `404 Not Found` (`NOTIFICATION_NOT_FOUND` si no existe o pertenece a otro destinatario — nunca `403`, para no confirmar con el código de estado que ese identificador existe en otro sitio).

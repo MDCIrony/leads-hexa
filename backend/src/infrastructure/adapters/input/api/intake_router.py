@@ -190,7 +190,6 @@ def promote_intake_record(
         score=result.score,
         assigned_agent_id=result.assigned_agent_id,
         applied_rules_count=result.applied_rules_count,
-        webhook_dispatched=result.webhook_dispatched,
         error=result.error,
         error_code=result.error_code,
         intake_record_id=result.intake_record_id,

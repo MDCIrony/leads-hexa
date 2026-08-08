@@ -1,6 +1,6 @@
 # F3a — Notificaciones: diseño
 
-**Estado:** propuesto. Sucede a F2c.
+**Estado:** implementado. Sucede a F2c.
 
 **Documento maestro:** [spec del MVP](2026-08-07-lead-router-mvp-design.md). Este desarrolla §6.11,
 §6.15 y la fila `F3a` de §15.
