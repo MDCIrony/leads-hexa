@@ -48,6 +48,28 @@ await_job() {
 Devuelve el estado alcanzado, así que un job que no termina se ve como `TIMEOUT` en la comprobación
 que lo esperaba, en vez de como un fallo confuso más abajo.
 
+### Lo que hay que reparar, medido al cerrar la Tarea 4
+
+**25 comprobaciones en rojo.** Sólo cuatro son fallos directos del contrato; las otras veintiuna son
+la misma causa propagada:
+
+| Bloque | Qué pasa |
+|---|---|
+| Directas | `"el lead entra"` y `"un lead sin correo se acepta"` dan `202` donde se esperaba `201`; `"correo mal formado no se ingesta"` da `202` donde se esperaba `400`; la carga masiva ya no devuelve `total_rows`, `successful_ingestions` ni `failed_rows` |
+| En cascada | `"sin asesor queda UNASSIGNED"`, `"puntúa 40+25"`, `"applied_rules_count"`, `"el gestor ve el desglose"`, `"asignación manual"`, `"deja traza"`, `"reasignar"`, `"gestor ajeno lee el lead"`, `"asesor lee el lead de un compañero"`, `"el dueño lo ve"`, las cuatro de descarte de F2a, `"el lead dice de qué origen vino"` y las cuatro de la bandeja de F2b |
+
+**Las veintiuna en cascada se arreglan solas** al obtener `$LEAD` del job: ninguna afirma nada que
+haya cambiado, todas fallan porque su `$LEAD` viene vacío.
+
+**Por qué viene vacío, y la trampa a evitar:** `f()` sólo captura el fallo de `json.load`. Una
+expresión como `d["lead_id"]` sobre una respuesta que ya no lleva esa clave lanza `KeyError`, la
+variable queda vacía **sin ningún mensaje**, y el fallo aparece diez líneas más abajo. En las
+expresiones nuevas usa `d.get(...)` y encadena con `or ""`, para que una clave ausente se vea donde
+está.
+
+El detalle por fila del batch ya no lleva `row_number`: `IntakeRecord` no guarda la posición
+original en el fichero. Identifica la fila fallida **por contenido** —su correo—, no por índice.
+
 ## Paso 2: adaptar `verify_f2a` y `verify_f2b`
 
 **Sólo las llamadas de ingesta**, no las comprobaciones de negocio. El patrón:

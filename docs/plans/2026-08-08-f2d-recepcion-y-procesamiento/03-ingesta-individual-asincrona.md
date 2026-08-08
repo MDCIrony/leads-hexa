@@ -122,7 +122,11 @@ def ingest_and_resolve(client, headers: dict, payload: dict) -> dict:
 Devuelve el registro completo, que lleva `status`, `lead_id` y `errors`. Un test que necesitaba el
 identificador del lead usa `ingest_and_resolve(...)["lead_id"]`.
 
-El filtro `?job_id=` lo habilitó la Tarea 2 sobre el endpoint que ya existe.
+El filtro `?job_id=` lo habilitó la Tarea 2 sobre el endpoint que ya existe, de punta a punta:
+`queries.py`, `intake_record_use_cases.py` y el parámetro de consulta en `intake_router.py`.
+**Compruébalo antes de escribir el helper.** Si el parámetro no llega hasta el router, se ignora en
+silencio y el helper recibe todos los registros de la organización: la aserción `len(items) == 1`
+falla en un sitio que no tiene nada que ver con la causa.
 
 ## Paso 4: los siete ficheros
 

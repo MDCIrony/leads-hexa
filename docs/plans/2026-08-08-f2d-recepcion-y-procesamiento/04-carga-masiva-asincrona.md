@@ -76,9 +76,10 @@ class ProcessBatchUseCase(ProcessBatchInputPort):
 **Los registros se materializan y se confirman antes de procesar ninguno.** Ése es el punto: si el
 proceso muere a mitad del recorrido, las mil filas ya están persistidas y el reproceso las recupera.
 
-`_payload_of` reproduce lo que `IngestLeadUseCase._payload_of` escribe hoy: las mismas claves y el
-mismo tratamiento de `Decimal`. Si lo extraes a una función de módulo compartida, mejor; duplicarlo
-con otra forma haría que un registro del batch y uno unitario no se parezcan.
+`_payload_of` en el bloque de arriba es la función **`payload_of`** que la Tarea 2 extrajo a nivel de
+módulo en `ingest_lead_use_case.py`. **Impórtala, no la copies:** un segundo `_payload_of` con otra
+forma haría que un registro del batch y uno unitario no se parezcan, y el detalle por campo de la
+bandeja dejaría de ser comparable entre ambos.
 
 `job.set_total` va **después** de crear los registros, no antes: el total sólo se conoce al parsear, y
 es el motivo de que nazca nulo.

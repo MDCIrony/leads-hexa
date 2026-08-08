@@ -28,6 +28,13 @@ exista; no lo dejes para el final.
 |---|---|
 | `backend/src/application/dtos/commands.py` | `ReceiveIntakeCommand`, `ReceiveIntakeResult` |
 | `backend/src/infrastructure/adapters/input/api/dependencies.py` | Dos proveedores |
+| `backend/src/application/ports/output/intake_record_repository_port.py` | `list_by_tenant` y `count_by_tenant` ganan `job_id` |
+| `backend/src/infrastructure/adapters/output/persistence/raw_sql_intake_record_repository.py` | Ídem, en SQL |
+| `backend/tests/unit/mocks/in_memory_uow.py` | Ídem, en memoria |
+| `backend/src/application/dtos/queries.py` | `GetIntakeRecordsQuery` gana `job_id` |
+| `backend/src/application/use_cases/intake_record_use_cases.py` | `GetIntakeRecordsUseCase` lo propaga |
+| `backend/src/infrastructure/adapters/input/api/intake_router.py` | `GET /records` acepta `?job_id=` |
+| `backend/src/application/use_cases/ingest_lead_use_case.py` | `_payload_of` pasa a función de módulo y gana su inverso `command_from_record` |
 
 **Consume de la Tarea 1:** `IntakeJob` con `start`, `set_total`, `record_success`, `record_failure`,
 `complete` y `fail`; `uow.intake_jobs` con `save`, `get_by_id_and_tenant`, `list_by_tenant` y
@@ -115,6 +122,11 @@ Lee lo que la fase 1 dejó, lo procesa y actualiza el job. **Cada item se proces
 independiente: un fallo en uno no puede impedir que se procesen los demás ni borrar lo persistido.**
 
 ```python
+# A single run takes at most this many items. Beyond it the rest stay PENDING
+# and a second reprocess picks them up, because only PENDING records are read.
+_MAX_ITEMS_PER_RUN = 10_000
+
+
 class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
     def __init__(self, uow: UnitOfWorkPort, ingest: IngestLeadInputPort) -> None:
         self.uow = uow
@@ -127,27 +139,91 @@ class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
                 raise DomainException("El trabajo no existe", error_code="INTAKE_JOB_NOT_FOUND")
             job.start()
             self.uow.intake_jobs.save(job)
-        # ...recorrer los registros PENDING del job, invocar la ingesta por cada uno,
-        #    contar y, al final, completar el job.
+            pending = self.uow.intake_records.list_by_tenant(
+                tenant_id,
+                status=IntakeRecordStatus.PENDING,
+                job_id=job_id,
+                limit=_MAX_ITEMS_PER_RUN,
+            )
+
+        interrupted = False
+        for record in pending:
+            try:
+                result = self.ingest.execute(command_from_record(record), existing_record=record)
+            except Exception:
+                # An unforeseen failure counts and the run carries on. The record
+                # stays PENDING on purpose: it is the only state reprocessing
+                # reads, so a failure here is recoverable instead of lost.
+                job.record_failure()
+                interrupted = True
+                continue
+            if result.status == IntakeRecordStatus.REJECTED.value:
+                job.record_failure()
+            else:
+                job.record_success()
+
+        with self.uow:
+            # An interrupted run does NOT complete: a COMPLETED job refuses
+            # reprocessing, which would strand its PENDING records forever.
+            if not interrupted:
+                job.complete()
+            self.uow.intake_jobs.save(job)
 ```
 
-El recorrido, punto por punto:
+Cinco decisiones que el código de arriba fija y conviene no deshacer:
 
-1. Carga los registros `PENDING` del job (`list_by_tenant` filtrando por `job_id`; ver Paso 4)
-2. Por cada uno, llama a `self.ingest.execute(command, existing_record=record)`
-3. **Envuelve cada llamada en `try/except Exception`**: si un item revienta de forma imprevista, se
-   cuenta como fallo y el recorrido sigue. Sin eso, un item malo aborta el job entero y deja los
-   demás en `PENDING` para siempre
-4. `job.record_success()` o `job.record_failure()` según el resultado
-5. Al terminar, `job.complete()` y `save`
+1. **La ingesta no lanza cuando el dominio rechaza**: devuelve `LeadProcessedResult` con
+   `status == "REJECTED"` y su `error_code`. El `try/except` es para lo **imprevisto**, no para el
+   rechazo, y por eso hay dos ramas distintas.
+2. **El job se muta en memoria durante el recorrido y se guarda una vez al final.** Los contadores no
+   necesitan una transacción por item; si el proceso muere a mitad, el reproceso los recalcula desde
+   cero con `reset_counters()`.
+3. **Cada item va en su propia transacción**, la que `IngestLeadUseCase` ya abre. No envuelvas el
+   bucle en un `with self.uow` que las anide. Si necesitas el precedente, `ProcessBatchUseCase`
+   compone `IngestLeadUseCase` exactamente así.
+4. **Un recorrido interrumpido deja el job en `PROCESSING`.** Es lo que el spec §5 describe como job
+   interrumpido, y lo que hace que el criterio de aceptación 4 sea alcanzable: completarlo
+   condenaría a sus registros `PENDING`, porque el reproceso rechaza los jobs terminales.
+5. **Sólo se leen los registros `PENDING`**, y ésa es la propiedad que hace el reproceso seguro de
+   repetir: un registro ya `PROMOTED` no genera un segundo lead.
 
-**Cada item en su propia transacción.** `IngestLeadUseCase` ya abre la suya; no envuelvas el bucle en
-un `with self.uow` que las anide. Si necesitas el precedente, `ProcessBatchUseCase` compone
-`IngestLeadUseCase` exactamente así.
+### Reconstruir el comando desde el registro
 
-El `IngestLeadCommand` de cada item se reconstruye desde `record.payload`, con las mismas claves que
-`IngestLeadUseCase._payload_of` escribe: `first_name`, `last_name`, `email`, `company`, `budget`,
-`industry`, `custom_attributes`, `phone`.
+`IngestLeadUseCase._payload_of` es hoy un `@staticmethod`. **Pásalo a función de módulo** en
+`ingest_lead_use_case.py` —la Tarea 4 lo necesita desde `process_batch_use_case.py`, y un segundo
+`_payload_of` con otra forma haría que un registro del batch y uno unitario no se parezcan— y añade
+su inverso al lado:
+
+```python
+def payload_of(command: IngestLeadCommand) -> Dict[str, Any]:
+    """El actual _payload_of, tal cual, como función de módulo."""
+
+
+def command_from_record(record: IntakeRecord) -> IngestLeadCommand:
+    """Rebuild the command from what was stored, without re-validating it.
+
+    tenant_id and source_id come from the record, never from the payload: the
+    organization is the one that was authenticated at reception (C4), and the
+    payload is untrusted input that happens to carry a copy of both.
+    """
+    payload = record.payload or {}
+    return IngestLeadCommand(
+        tenant_id=record.tenant_id.value,
+        source_id=record.source_id.value,
+        first_name=payload.get("first_name"),
+        last_name=payload.get("last_name"),
+        company=payload.get("company"),
+        budget=payload.get("budget"),
+        industry=payload.get("industry"),
+        custom_attributes=payload.get("custom_attributes") or {},
+        phone=payload.get("phone"),
+        email=payload.get("email"),
+    )
+```
+
+`payload.get(...)` sin valores por defecto ni conversiones: un `budget` que llegó como `"abc"` se
+reconstruye como `"abc"` y es el dominio quien lo rechaza (V2). Poner un `0.0` aquí escondería el
+error y produciría un lead con datos inventados.
 
 ## Paso 4: filtrar registros por job
 
@@ -169,6 +245,36 @@ Va con valor por defecto para no romper a quien ya lo llama. **Las tres implemen
 sin una rompe la suite entera.
 
 Añade el mismo parámetro a `count_by_tenant`, que la Tarea 5 necesita para paginar.
+
+**El filtro tiene que llegar hasta HTTP, y son tres ficheros más.** La Tarea 3 construye su helper de
+tests sobre `GET /api/v1/intake/records?job_id=...`: sin esta cadena el parámetro se ignora en
+silencio, el helper devuelve todos los registros de la organización y sus aserciones de longitud
+fallan por un motivo que no está donde lo buscarías.
+
+```python
+# queries.py — GetIntakeRecordsQuery, junto a status
+    job_id: Optional[UUID] = None
+
+# intake_record_use_cases.py — GetIntakeRecordsUseCase.execute, en las dos llamadas
+            items = self.uow.intake_records.list_by_tenant(
+                query.tenant_id, status=status, job_id=query.job_id,
+                limit=query.limit, offset=query.offset,
+            )
+            total = self.uow.intake_records.count_by_tenant(
+                query.tenant_id, status=status, job_id=query.job_id,
+            )
+
+# intake_router.py — list_intake_records, un parámetro de consulta más
+def list_intake_records(
+    status: Optional[str] = None,
+    job_id: Optional[UUID] = None,
+    ...
+    query = GetIntakeRecordsQuery(
+        tenant_id=context.tenant_id, status=status, job_id=job_id, limit=limit, offset=offset,
+    )
+```
+
+Es aditivo: quien no manda `job_id` sigue viendo exactamente lo mismo que antes.
 
 ## Paso 5: cableado
 
@@ -200,12 +306,13 @@ vacío y `ReceiveIntakeUseCase` fallará con `SOURCE_NOT_FOUND` si no lo haces.
 | Procesar un job con un payload inválido | Job `COMPLETED` con `failed=1`, registro `REJECTED` con error de campo |
 | Procesar un job mixto (uno bueno, uno malo) | `succeeded=1`, `failed=1`, y **los dos registros en estado terminal** |
 | Procesar un job de otra organización | `INTAKE_JOB_NOT_FOUND` |
+| Listar registros filtrando por `job_id` con dos jobs sembrados | Sólo los del job pedido |
 
 Y el que justifica la fase entera:
 
 | Caso | Esperado |
 |---|---|
-| **La ingesta revienta con una excepción imprevista** (no una `DomainException`) | El registro **sigue existiendo** con su payload intacto, el job cuenta el fallo, y el recorrido continúa con los demás items |
+| **La ingesta revienta con una excepción imprevista** (no una `DomainException`) | El registro **sigue existiendo** con su payload intacto y en `PENDING`, el job cuenta el fallo y queda en `PROCESSING`, y el recorrido continúa con los demás items |
 
 Ese último se escribe con un doble de `IngestLeadInputPort` cuyo `execute` lanza `RuntimeError` para
 un payload concreto. Es la única forma de demostrar lo que la fase promete: que el fallo al procesar

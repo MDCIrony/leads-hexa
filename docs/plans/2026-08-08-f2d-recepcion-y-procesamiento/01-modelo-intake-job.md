@@ -126,11 +126,31 @@ Métodos, cada uno rechazando la transición desde un estado terminal con
 | `record_failure()` | `failed += 1` |
 | `complete()` | → `COMPLETED`, sella `completed_at` |
 | `fail()` | → `FAILED`, sella `completed_at` |
+| `reset_counters()` | `succeeded` y `failed` a cero, y el estado vuelve a `PENDING` |
 
 `record_success` y `record_failure` **no** cambian el estado: contar y terminar son decisiones
 distintas, y quien recorre los items no siempre sabe si queda trabajo.
 
-`create()` acepta `kind` como `str` o enum, igual que `IntakeRecord.create` hace con `status`.
+`reset_counters()` lo usa el reproceso de la Tarea 5, que vuelve a recorrer los mismos items: sin
+poner los contadores a cero, sumarlos otra vez daría totales imposibles. Vuelve a `PENDING` porque
+`start()` sólo acepta ese estado. **Se admite desde `PENDING` y desde `PROCESSING`** —un job que
+nunca llegó a arrancar también se relanza, y ahí es idempotente— y se rechaza desde los terminales
+con `INVALID_JOB_TRANSITION`: un job `COMPLETED` no se reprocesa.
+
+La factoría, con la firma exacta que usa la Tarea 2:
+
+```python
+    @staticmethod
+    def create(
+        tenant_id: UUID,
+        source_id: UUID,
+        kind: IntakeJobKind,
+        total_items: Optional[int] = None,
+    ) -> "IntakeJob":
+```
+
+`total_items` va en la firma porque la recepción unitaria lo conoce (`1`) y la masiva no (`None`).
+`kind` se acepta como `str` o enum, igual que `IntakeRecord.create` hace con `status`.
 
 ## Paso 4: `IntakeRecord` gana `job_id`
 
@@ -201,6 +221,8 @@ cada ida y vuelta.
 | `record_success` / `record_failure` | Suben el contador y **no** cambian el estado |
 | `complete` y `fail` | Sellan `completed_at` |
 | Cualquier transición desde un estado terminal | `INVALID_JOB_TRANSITION` |
+| `reset_counters` sobre un job `PROCESSING` con contadores | Vuelve a `PENDING` con `succeeded=0`, `failed=0` |
+| `reset_counters` sobre un job `COMPLETED` | `INVALID_JOB_TRANSITION` |
 
 **`tests/integration/test_intake_job_repo.py`** (marcador `integration`):
 

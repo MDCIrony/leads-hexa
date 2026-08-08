@@ -73,10 +73,9 @@ class ReprocessIntakeJobUseCase(ReprocessIntakeJobInputPort):
         self.process.execute(tenant_id, job_id)
 ```
 
-`reset_counters()` es un método nuevo en la entidad `IntakeJob`: pone `succeeded` y `failed` a cero y
-devuelve el estado a `PENDING`, para que `start()` de la fase 2 lo acepte. **Añádelo en
-`intake_job.py` con su test unitario**, aunque el fichero no esté en la lista de la Tarea 1: es la
-excepción reactiva declarada.
+`reset_counters()` **ya existe** desde la Tarea 1: pone `succeeded` y `failed` a cero y devuelve el
+estado a `PENDING`, para que `start()` de la fase 2 lo acepte. Aquí sólo se usa. Si no lo encuentras
+en `intake_job.py`, eso es una discrepancia que reportar, no un método que improvisar.
 
 **Sólo se reprocesan los registros que siguen en `PENDING`.** La fase 2 ya los filtra así, de modo que
 un registro `PROMOTED` no genera un segundo lead. Eso es lo que hace el reproceso seguro de repetir, y

@@ -16,21 +16,39 @@ marca lo que persistió la fase 1. `IngestLeadUseCase` deja de crear el registro
 
 ## Estado
 
-Una tarea por fichero. Cada una se despacha a un subagente, deja la suite en verde y hace **un
-commit**. Este README es la parte que vincula a todas: se lee junto al fichero de la tarea, no en
-lugar de él.
+Una tarea por fichero, **un commit por tarea**. Este README es la parte que vincula a todas: se lee
+junto al fichero de la tarea, no en lugar de él.
 
 | # | Tarea | Rompe | Estado |
 |---|---|---|---|
-| 1 | [El modelo: `IntakeJob`](01-modelo-intake-job.md) | Nada | ⏳ **siguiente** |
-| 2 | [Las dos fases en la aplicación](02-las-dos-fases.md) | Tests unitarios del pipeline | ⏳ |
-| 3 | [La ingesta individual responde 202](03-ingesta-individual-asincrona.md) | **7 ficheros e2e** | ⏳ |
-| 4 | [La carga masiva responde 202](04-carga-masiva-asincrona.md) | Tests del batch | ⏳ |
-| 5 | [Consulta y reproceso](05-consulta-y-reproceso.md) | Nada, aditiva | ⏳ |
-| 6 | [Harness y cierre](06-harness-y-cierre.md) | — | ⏳ |
+| 1 | [El modelo: `IntakeJob`](01-modelo-intake-job.md) | Nada | ✅ `1dde531` |
+| 2 | [Las dos fases en la aplicación](02-las-dos-fases.md) | Tests unitarios del pipeline | ✅ `53958ac` |
+| 3 | [La ingesta individual responde 202](03-ingesta-individual-asincrona.md) | **7 ficheros e2e** | ✅ `8b73246` |
+| 4 | [La carga masiva responde 202](04-carga-masiva-asincrona.md) | Tests del batch | ✅ `4a5f0a3` |
+| 5 | [Consulta y reproceso](05-consulta-y-reproceso.md) | Nada, aditiva | ✅ `d0ff271` |
+| 6 | [Harness y cierre](06-harness-y-cierre.md) | — | ✅ `eea65e9` |
 
-**Por qué la 3 va sola:** es la única que rompe un contrato público. Aislarla permite revisarla
-aparte de las cuatro que sólo añaden.
+**Fase cerrada el 2026-08-08.** 416 tests, guardián 4/4, harness con 74 comprobaciones, migraciones
+reejecutadas desde volumen vacío. Dos desvíos del plan, ambos con su motivo en el código: el
+reproceso corre **síncrono** —una excepción en una tarea de fondo llega cuando la respuesta ya
+empezó a enviarse y se convierte en `RuntimeError`, nunca en un 404 limpio— y `set_total` admite
+también `PENDING`, porque la carga masiva fija el total antes de que la fase 2 arranque el job.
+
+### Reparto en tres despachos
+
+Las tareas se agrupan de dos en dos por afinidad semántica: un subagente por par, cada tarea con su
+commit. Partirlas de una en una haría que seis subagentes releyeran el mismo contexto, y las tres
+parejas son justo las que comparten superficie.
+
+| Despacho | Tareas | Qué cierra | Al terminar |
+|---|---|---|---|
+| **A** | 1 + 2 | El modelo y las dos fases, sin que ningún router las use | Todo en verde, harness incluido |
+| **B** | 3 + 4 | La frontera HTTP pasa a `202`, unitaria y masiva | Suite verde, **`verify-e2e.sh` en rojo a propósito** |
+| **C** | 5 + 6 | Consulta, reproceso y el harness reescrito | Todo en verde |
+
+**Por qué la 3 y la 4 van juntas y no solas:** la 3 es la única que rompe un contrato público, pero
+la 4 rompe el mismo y termina la inversión que la 3 empieza. Separarlas deja el sistema con dos
+contratos de ingesta distintos entre commits, que es peor que revisarlas de una vez.
 
 ---
 
