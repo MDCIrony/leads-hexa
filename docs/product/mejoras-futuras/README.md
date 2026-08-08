@@ -25,6 +25,7 @@ defecto conocido, va al catálogo de [`03 — Dominio y organización`](../03-do
 | Documento | De qué trata | Por qué no entra ahora |
 |---|---|---|
 | [01 — Identidad del contacto](01-identidad-del-contacto.md) | Reconocer que dos entradas son la misma persona: histórico de intentos, rescate de descartados, métrica real por canal | El identificador lo elige cada organización, así que exige una pantalla de configuración propia. Y arrastra dos decisiones abiertas, una de ellas de protección de datos |
+| [02 — La definición del lead por organización](02-la-definicion-del-lead-por-organizacion.md) | Que cada organización decida qué campos tiene un lead suyo y qué se exige de cada uno, en vez de heredar una definición única | Exige decidir antes qué es un lead como mínimo, qué pasa con lo ya capturado cuando la definición cambia y qué se le promete a quien envía. Y con una definición configurable el MVP demostraría **peor** lo que tiene que demostrar |
 
 ## Cómo se escribe aquí
 
