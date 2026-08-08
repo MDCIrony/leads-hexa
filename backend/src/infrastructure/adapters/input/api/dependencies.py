@@ -20,6 +20,10 @@ from application.ports.input.sales_group_use_case_ports import (
     CreateSalesGroupInputPort, DeleteSalesGroupInputPort, GetSalesGroupsInputPort,
     UpdateSalesGroupInputPort,
 )
+from application.ports.input.lead_source_use_case_ports import (
+    CreateLeadSourceInputPort, DeleteLeadSourceInputPort, GetLeadSourcesInputPort,
+    UpdateLeadSourceInputPort,
+)
 from application.ports.input.lead_lifecycle_use_case_ports import (
     AssignLeadInputPort, DiscardLeadInputPort, GetLeadInputPort, GetMyLeadsInputPort,
 )
@@ -35,6 +39,9 @@ from application.use_cases.rule_use_cases import (
 )
 from application.use_cases.sales_group_use_cases import (
     CreateSalesGroupUseCase, DeleteSalesGroupUseCase, GetSalesGroupsUseCase, UpdateSalesGroupUseCase,
+)
+from application.use_cases.lead_source_use_cases import (
+    CreateLeadSourceUseCase, DeleteLeadSourceUseCase, GetLeadSourcesUseCase, UpdateLeadSourceUseCase,
 )
 from application.use_cases.lead_lifecycle_use_cases import (
     AssignLeadUseCase, DiscardLeadUseCase, GetLeadUseCase, GetMyLeadsUseCase,
@@ -130,6 +137,18 @@ def get_update_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> U
 
 def get_delete_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteSalesGroupInputPort:
     return DeleteSalesGroupUseCase(uow=uow)
+
+def get_create_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateLeadSourceInputPort:
+    return CreateLeadSourceUseCase(uow=uow)
+
+def get_get_lead_sources_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadSourcesInputPort:
+    return GetLeadSourcesUseCase(uow=uow)
+
+def get_update_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateLeadSourceInputPort:
+    return UpdateLeadSourceUseCase(uow=uow)
+
+def get_delete_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteLeadSourceInputPort:
+    return DeleteLeadSourceUseCase(uow=uow)
 
 def get_assign_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> AssignLeadInputPort:
     return AssignLeadUseCase(uow=uow)

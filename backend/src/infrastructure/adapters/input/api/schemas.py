@@ -1,7 +1,10 @@
 from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-from domain.value_objects.enums import AgentMatchMode, Operator, AssignmentStrategy, AgentRole
+from domain.value_objects.enums import (
+    AgentMatchMode, Operator, AssignmentStrategy, AgentRole, LeadSourceKind,
+)
 
 
 def _validate_email_format(value: str) -> str:
@@ -205,6 +208,32 @@ class SalesGroupResponse(BaseModel):
 
 class PaginatedGroupsResponse(BaseModel):
     items: List[SalesGroupResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+# --- Lead Source Schemas ---
+class LeadSourceCreate(BaseModel):
+    name: str
+    kind: LeadSourceKind
+    field_mapping: Optional[Dict[str, str]] = None
+
+class LeadSourceUpdate(BaseModel):
+    name: Optional[str] = None
+    field_mapping: Optional[Dict[str, str]] = None
+    is_active: Optional[bool] = None
+
+class LeadSourceResponse(BaseModel):
+    id: str
+    name: str
+    kind: str
+    field_mapping: Dict[str, str]
+    is_active: bool
+    created_at: datetime
+
+class PaginatedSourcesResponse(BaseModel):
+    items: List[LeadSourceResponse]
     total: int
     limit: int
     offset: int

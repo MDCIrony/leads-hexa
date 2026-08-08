@@ -28,6 +28,12 @@ class InMemoryLeadRepository(LeadRepositoryPort):
     def count_by_tenant(self, tenant_id: UUID) -> int:
         return len([l for l in self.leads.values() if l.tenant_id.value == tenant_id])
 
+    def count_by_source(self, tenant_id: UUID, source_id: UUID) -> int:
+        return len([
+            l for l in self.leads.values()
+            if l.tenant_id.value == tenant_id and l.source_id.value == source_id
+        ])
+
     def _assigned_to(self, lead: Lead, tenant_id: UUID, agent_id: UUID) -> bool:
         return (
             lead.tenant_id.value == tenant_id

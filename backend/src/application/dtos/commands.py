@@ -5,6 +5,7 @@ from uuid import UUID
 if TYPE_CHECKING:
     from domain.entities.agent import Agent
     from domain.entities.lead import Lead
+    from domain.entities.lead_source import LeadSource
     from domain.entities.sales_group import SalesGroup
     from domain.entities.tenant import Tenant
 
@@ -221,3 +222,27 @@ class BatchProcessResult:
     total_rows: int
     successful_ingestions: int
     failed_rows: List[FailedRow]
+
+
+@dataclass(frozen=True)
+class CreateLeadSourceCommand:
+    tenant_id: UUID
+    name: str
+    kind: str
+    field_mapping: Optional[Dict[str, str]] = None
+
+
+@dataclass(frozen=True)
+class UpdateLeadSourceCommand:
+    tenant_id: UUID
+    source_id: UUID
+    # None-means-unchanged, same convention as UpdateSalesGroupCommand.
+    name: Optional[str] = None
+    field_mapping: Optional[Dict[str, str]] = None
+    is_active: Optional[bool] = None
+
+
+@dataclass(frozen=True)
+class LeadSourcesPageResult:
+    items: List["LeadSource"]
+    total: int

@@ -80,6 +80,10 @@ class LeadSource:
         self.field_mapping = field_mapping
         self._touch()
 
+    def activate(self) -> None:
+        self.is_active = True
+        self._touch()
+
     def deactivate(self) -> None:
         self.is_active = False
         self._touch()

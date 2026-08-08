@@ -25,6 +25,10 @@ class LeadRepositoryPort(ABC):
         pass
 
     @abstractmethod
+    def count_by_source(self, tenant_id: UUID, source_id: UUID) -> int:
+        pass
+
+    @abstractmethod
     def list_by_agent(
         self, tenant_id: UUID, agent_id: UUID, limit: int = 100, offset: int = 0
     ) -> List[Lead]:

@@ -59,3 +59,10 @@ class GetMyLeadsQuery:
 class GetLeadQuery:
     tenant_id: UUID
     lead_id: UUID
+
+
+@dataclass(frozen=True)
+class GetLeadSourcesQuery:
+    tenant_id: UUID
+    limit: int = 100
+    offset: int = 0
