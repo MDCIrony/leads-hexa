@@ -223,10 +223,10 @@ siguen en discusión— vive en [03 — Dominio y organización](03-dominio-y-or
 | Reparto por tramo de puntuación, con estrategias | ✅ Funciona |
 | Asignación y descarte manuales, con motivo | ✅ Funciona |
 | Estado propio para "vale pero nadie lo cubre" | ✅ Funciona |
-| **Etapa de viabilidad con reglas del gestor** | ❌ No existe. La sustituye un corte fijo en el código |
-| **Condiciones "está vacío" / "no está vacío"** | ❌ No existen. Sin ellas no se puede expresar "sin contacto" |
-| **Combinar varias condiciones en una regla** | ❌ Cada regla admite sólo una |
-| **Reparto por canal, zona o especialidad** | ❌ Sólo se puede repartir por tramo de puntuación |
+| **Etapa de viabilidad con reglas del gestor** | ✅ Funciona |
+| **Condiciones "está vacío" / "no está vacío"** | ✅ Funciona |
+| **Combinar varias condiciones en una regla** | ✅ Funciona |
+| **Reparto por canal, zona o especialidad** | ✅ Funciona |
 | **Lead sin correo, conservado y revisable** | ❌ El correo es obligatorio: el lead que no lo trae se pierde sin dejar rastro |
 | **Identidad del contacto entre entradas** | ❌ No existe |
 

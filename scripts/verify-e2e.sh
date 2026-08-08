@@ -387,8 +387,133 @@ verify_f2d() {
   check "reprocesar un trabajo ya terminado" INVALID_JOB_TRANSITION "$(body "$r" | f 'd.get("error_code")')"
 }
 
-# ---------------------------------------------------------------- next up ---
-# verify_f2c()  reglas componibles: descalificación con motivo, reparto por canal
+# ------------------------------------------------------------------- F2c ---
+# Composable rules: a disqualification stage that cuts the flow with a
+# reason instead of a score, several conditions per rule (AND), assignment
+# routed by attribute instead of band alone, and qualify() with no threshold
+# of its own — so nothing processed can be left stuck at NEW.
+
+verify_f2c() {
+  local r job lead dq_rule_id assign_rule_id
+
+  section "F2c · descalificación: alta de reglas"
+
+  r=$(req -X POST "$API/rules/disqualification" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"name":"Sin via de contacto","conditions":[{"field":"phone","operator":"IS_EMPTY"},{"field":"email","operator":"IS_EMPTY"}]}')
+  check "dos condiciones IS_EMPTY se acepta" 201 "$(code "$r")"
+  dq_rule_id=$(body "$r" | f 'd.get("id") or ""')
+
+  r=$(req -X POST "$API/rules/disqualification" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"name":"Vacia","conditions":[]}')
+  check "una lista de condiciones vacía se rechaza" 400 "$(code "$r")"
+  check "con el código INVALID_RULE_CONDITIONS" INVALID_RULE_CONDITIONS "$(body "$r" | f 'd.get("error_code")')"
+
+  r=$(req -X POST "$API/rules/disqualification" -H "Authorization: Bearer $TOKEN_1" -H 'Content-Type: application/json' \
+    -d '{"name":"Intento de asesor","conditions":[{"field":"phone","operator":"IS_EMPTY"}]}')
+  check "un asesor no crea reglas de descalificación" 403 "$(code "$r")"
+
+  r=$(req -X PATCH "$API/rules/disqualification/$dq_rule_id" -H "Authorization: Bearer $MGR_B" -H 'Content-Type: application/json' \
+    -d '{"priority":5}')
+  check "una regla de otra organización" 404 "$(code "$r")"
+
+  section "F2c · descalificación: sin teléfono y sin correo (criterio 1)"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Sin","last_name":"Contacto","company":"Acme","industry":"Retail","budget":1000}')
+  check "un lead sin teléfono ni correo se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "queda DISQUALIFIED" DISQUALIFIED "$(body "$r" | f 'd.get("status")')"
+  check "el motivo es el nombre de la regla, no una puntuación" "Sin via de contacto" "$(body "$r" | f 'd.get("disqualification_reason")')"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Con","last_name":"Telefono","company":"Acme","industry":"Retail","budget":1000,"phone":"+573000000001"}')
+  check "un lead con sólo teléfono se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "con sólo teléfono no se descalifica" True "$(body "$r" | f 'd.get("status") != "DISQUALIFIED"')"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Con","last_name":"Correo","company":"Acme","industry":"Retail","budget":1000,"email":"con-correo-'"$STAMP"'@x.test"}')
+  check "un lead con sólo correo se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "con sólo correo no se descalifica" True "$(body "$r" | f 'd.get("status") != "DISQUALIFIED"')"
+
+  section "F2c · puntuación con varias condiciones"
+
+  r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"name":"Retail BigBox","conditions":[{"field":"industry","operator":"EQUALS","value":"Retail"},{"field":"company","operator":"EQUALS","value":"BigBox"}],"score_delta":15}')
+  check "regla de puntuación con dos condiciones se acepta" 201 "$(code "$r")"
+  # No PATCH/DELETE for scoring rules yet (out of this phase's scope), so
+  # this one is not cleaned up — harmless, each run uses a fresh tenant.
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Cumple","last_name":"Ambas","company":"BigBox","industry":"Retail","budget":1000,"phone":"+573000000002"}')
+  check "el lead que cumple ambas se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "cumple las dos condiciones y suma" 15 "$(body "$r" | f 'd.get("score")')"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Cumple","last_name":"Solo Una","company":"Acme","industry":"Retail","budget":1000,"phone":"+573000000003"}')
+  check "el lead que cumple sólo una se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "cumple sólo una condición y no suma" 0 "$(body "$r" | f 'd.get("score")')"
+
+  section "F2c · reparto por condición de atributo (criterio 3)"
+
+  r=$(req -X POST "$API/rules/assignment" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"Referidos\",\"target_agent_ids\":[\"$AGENT_1\"],\"conditions\":[{\"field\":\"custom_attributes.channel\",\"operator\":\"EQUALS\",\"value\":\"referral\"}]}")
+  check "regla de asignación con condición de canal se acepta" 201 "$(code "$r")"
+  assign_rule_id=$(body "$r" | f 'd.get("id") or ""')
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Del","last_name":"Canal","company":"Acme","industry":"Retail","budget":1000,"phone":"+573000000004","custom_attributes":{"channel":"referral"}}')
+  check "el lead de ese canal se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "el lead de ese canal va a ese equipo" "$AGENT_1" "$(body "$r" | f 'd.get("assigned_agent_id")')"
+
+  section "F2c · ningún lead procesado queda en NEW (criterio 5)"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Puntuacion","last_name":"Baja","company":"Acme","industry":"Retail","budget":1000,"phone":"+573000000005"}')
+  check "un lead de puntuación baja se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "nunca queda en NEW" True "$(body "$r" | f 'd.get("status") != "NEW"')"
+
+  section "F2c · limpieza de las reglas propias"
+
+  r=$(req -X DELETE "$API/rules/disqualification/$dq_rule_id" -H "Authorization: Bearer $MGR_A")
+  check "borrar la regla de descalificación" 204 "$(code "$r")"
+
+  r=$(req -X DELETE "$API/rules/assignment/$assign_rule_id" -H "Authorization: Bearer $MGR_A")
+  check "borrar la regla de asignación" 204 "$(code "$r")"
+}
 
 # ------------------------------------------------------------------- main ---
 
@@ -407,6 +532,7 @@ bootstrap
 verify_f2a
 verify_f2b
 verify_f2d
+verify_f2c
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then

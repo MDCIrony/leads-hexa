@@ -771,8 +771,16 @@ Borra el grupo. Sus asesores **no** se borran: quedan sin grupo (`group_id: null
 
 Todos los endpoints de reglas exigen `Depends(require_organization_manager)`; el tenant sale siempre del token, nunca de la URL o del cuerpo.
 
+Desde F2c, las condiciones de toda regla —puntuación, asignación o descalificación— viajan como una
+lista de `Criterion` (`{"field", "operator", "value"}`), nunca como un `field`/`operator`/`value`
+suelto en la regla. Una regla se cumple cuando se cumplen **todas** sus condiciones; no hay `OR`. Los
+operadores `IS_EMPTY` / `IS_NOT_EMPTY` ignoran `value`. La lista blanca de campos evaluables
+(`EVALUABLE_FIELDS` en [`criterion.py`](../../backend/src/domain/value_objects/criterion.py)) es la
+misma en las tres etapas.
+
 #### `POST /api/v1/rules/scoring`
-Crea una regla de scoring para la organización del gestor autenticado.
+Crea una regla de scoring para la organización del gestor autenticado. Suma `score_delta` cuando se
+cumplen **todas** sus condiciones.
 
 - **Autenticación**: Requerida (`Bearer Token`).
 - **Permisos**: `MANAGER`.
@@ -780,9 +788,7 @@ Crea una regla de scoring para la organización del gestor autenticado.
 ```json
 {
   "name": "High Budget Rule",
-  "field": "budget",
-  "operator": "GREATER_THAN",
-  "value": 10000,
+  "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 10000}],
   "score_delta": 20
 }
 ```
@@ -791,12 +797,13 @@ Crea una regla de scoring para la organización del gestor autenticado.
 {
   "id": "22222222-2222-2222-2222-222222222222",
   "name": "High Budget Rule",
-  "field": "budget",
-  "operator": "GREATER_THAN",
-  "value": 10000,
-  "score_delta": 20
+  "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 10000}],
+  "score_delta": 20,
+  "priority": 0,
+  "is_active": true
 }
 ```
+- **Errores**: `400 Bad Request` (`INVALID_RULE_FIELD` si algún campo llega vacío; `FIELD_NOT_SCORABLE` si no está en la lista blanca; `INVALID_RULE_VALUE` si el operador `IN` no recibe una lista).
 
 #### `GET /api/v1/rules/scoring`
 Obtiene las reglas de scoring de la organización del gestor autenticado.
@@ -809,20 +816,20 @@ Obtiene las reglas de scoring de la organización del gestor autenticado.
   {
     "id": "22222222-2222-2222-2222-222222222222",
     "name": "High Budget Rule",
-    "field": "budget",
-    "operator": "GREATER_THAN",
-    "value": 10000,
-    "score_delta": 20
+    "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 10000}],
+    "score_delta": 20,
+    "priority": 0,
+    "is_active": true
   }
 ]
 ```
 
 #### `POST /api/v1/rules/assignment`
-Crea una regla de asignación. Reemplaza a la antigua regla de ruteo: tiene nombre (mostrable en una interfaz), banda con techo (`max_score`, no sólo `min_score`), prioridad explícita para desempatar bandas solapadas, y un `rr_cursor` que persiste en base de datos en vez de vivir en memoria.
+Crea una regla de asignación. Tiene nombre (mostrable en una interfaz), banda con techo (`max_score`, no sólo `min_score`), prioridad explícita para desempatar bandas solapadas, un `rr_cursor` que persiste en base de datos en vez de vivir en memoria y, desde F2c, condiciones sobre atributos del lead — el eje de canal o zona que la banda por sí sola no puede expresar.
 
 - **Autenticación**: Requerida (`Bearer Token`).
 - **Permisos**: `MANAGER`.
-- **Request Body** ([`AssignmentRuleCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). La regla debe apuntar a un grupo (`target_group_id`), a asesores concretos (`target_agent_ids`) o a ambos; `agent_match_mode` decide si son la unión (`ANY`, por defecto) o la intersección (`ONLY`) con el grupo. `strategy` es opcional: si se omite, se usa la estrategia por defecto del grupo destino.
+- **Request Body** ([`AssignmentRuleCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). La regla debe apuntar a un grupo (`target_group_id`), a asesores concretos (`target_agent_ids`) o a ambos; `agent_match_mode` decide si son la unión (`ANY`, por defecto) o la intersección (`ONLY`) con el grupo. `strategy` es opcional: si se omite, se usa la estrategia por defecto del grupo destino. `conditions` es opcional y por defecto vacía: una regla sin condiciones discrimina sólo por banda, que es como se comportaban todas antes de F2c.
 ```json
 {
   "name": "Enterprise band",
@@ -831,7 +838,8 @@ Crea una regla de asignación. Reemplaza a la antigua regla de ruteo: tiene nomb
   "target_group_id": "22222222-2222-2222-2222-222222222222",
   "agent_match_mode": "ANY",
   "strategy": "ROUND_ROBIN",
-  "priority": 10
+  "priority": 10,
+  "conditions": [{"field": "custom_attributes.channel", "operator": "EQUALS", "value": "referral"}]
 }
 ```
 - **Response (201 Created)** ([`AssignmentRuleResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
@@ -847,7 +855,8 @@ Crea una regla de asignación. Reemplaza a la antigua regla de ruteo: tiene nomb
   "strategy": "ROUND_ROBIN",
   "priority": 10,
   "is_active": true,
-  "rr_cursor": 0
+  "rr_cursor": 0,
+  "conditions": [{"field": "custom_attributes.channel", "operator": "EQUALS", "value": "referral"}]
 }
 ```
 
@@ -876,3 +885,61 @@ Borra la regla. No toca a los asesores que nombraba ni a los que pertenecían a 
 - **Path Parameters**: `rule_id` (UUID).
 - **Response**: `204 No Content`.
 - **Errores**: `404 Not Found` (`ASSIGNMENT_RULE_NOT_FOUND`).
+
+#### `POST /api/v1/rules/disqualification`
+Crea una regla de descalificación — la etapa de viabilidad (F2c). Se evalúa **antes** de puntuar y **corta el flujo**: si se cumple, el lead queda `DISQUALIFIED` con `name` como motivo, y no llega a puntuarse ni a repartirse.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Request Body** ([`DisqualificationRuleCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). `conditions` no puede llegar vacía (R3): una regla sin condiciones se cumple siempre y descalificaría a toda la organización.
+```json
+{
+  "name": "Sin vía de contacto",
+  "conditions": [
+    {"field": "phone", "operator": "IS_EMPTY"},
+    {"field": "email", "operator": "IS_EMPTY"}
+  ],
+  "priority": 0
+}
+```
+- **Response (201 Created)** ([`DisqualificationRuleResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "id": "44444444-4444-4444-4444-444444444444",
+  "name": "Sin vía de contacto",
+  "conditions": [
+    {"field": "phone", "operator": "IS_EMPTY", "value": null},
+    {"field": "email", "operator": "IS_EMPTY", "value": null}
+  ],
+  "priority": 0,
+  "is_active": true
+}
+```
+- **Errores**: `400 Bad Request` (`INVALID_RULE_NAME` si el nombre llega vacío; `INVALID_RULE_CONDITIONS` si `conditions` llega vacía).
+
+#### `GET /api/v1/rules/disqualification`
+Lista las reglas de descalificación de la organización, paginadas.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Query Parameters**: `limit` (int, default=100), `offset` (int, default=0).
+- **Response (200 OK)** ([`PaginatedDisqualificationRulesResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): misma forma que las demás listas paginadas, con `items` de tipo `DisqualificationRuleResponse`.
+
+#### `PATCH /api/v1/rules/disqualification/{rule_id}`
+Actualiza una regla existente. Todos los campos son opcionales y se dejan sin cambios si se omiten, con la misma validación que `create()`: un `name` o `conditions` enviados vacíos se rechazan en vez de guardarse.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `rule_id` (UUID).
+- **Request Body** ([`DisqualificationRuleUpdate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)).
+- **Response (200 OK)** ([`DisqualificationRuleResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)).
+- **Errores**: `404 Not Found` (`DISQUALIFICATION_RULE_NOT_FOUND` si la regla no existe o pertenece a otra organización); `400 Bad Request` (`INVALID_RULE_NAME`, `INVALID_RULE_CONDITIONS`).
+
+#### `DELETE /api/v1/rules/disqualification/{rule_id}`
+Borra la regla.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `rule_id` (UUID).
+- **Response**: `204 No Content`.
+- **Errores**: `404 Not Found` (`DISQUALIFICATION_RULE_NOT_FOUND`).

@@ -49,6 +49,9 @@ El código de estado de la columna derecha **no vive en la excepción**: lo deci
 | `DomainException` | `INTAKE_JOB_NOT_FOUND` | `404 Not Found` | El trabajo de ingesta no existe en la organización. |
 | `DomainException` | `INVALID_JOB_TRANSITION` | `400 Bad Request` | Reprocesar un trabajo ya `COMPLETED` o `FAILED`, o una transición interna inválida sobre `IntakeJob`. |
 | `DomainException` | `INVALID_JOB_STATUS` | `400 Bad Request` | El filtro `status` de la lista de trabajos no es un estado conocido. |
+| `DomainException` | `DISQUALIFICATION_RULE_NOT_FOUND` | `404 Not Found` | La regla de descalificación no existe en la organización. |
+| `DomainException` | `INVALID_RULE_CONDITIONS` | `400 Bad Request` | Una regla de descalificación se creó o actualizó con una lista de condiciones vacía: cumpliría siempre y descalificaría a toda la organización. |
+| `DomainException` | `INVALID_RULE_NAME` | `400 Bad Request` | El nombre de una regla de descalificación o de asignación llega vacío. Es el motivo que verá el gestor, así que no es opcional. |
 
 ---
 

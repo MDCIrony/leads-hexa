@@ -1,6 +1,6 @@
 # F2c — Reglas componibles: diseño
 
-**Estado:** propuesto. Sucede a F2b.
+**Estado:** implementado. Sucede a F2b.
 
 **Objetivo en una frase:** que ningún criterio comercial quede escrito en el código.
 
