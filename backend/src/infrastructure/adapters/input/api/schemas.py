@@ -37,6 +37,9 @@ class LeadProcessedResponse(BaseModel):
     webhook_dispatched: bool = False
     error: Optional[str] = None
     error_code: Optional[str] = None
+    # The payload this lead came from. Answers "what did the client actually
+    # send?" for a lead whose data looks wrong after the fact.
+    intake_record_id: str = ""
 
 class LeadResponse(BaseModel):
     id: str
@@ -102,6 +105,10 @@ class FailedRowResponse(BaseModel):
     email: Optional[str] = None
     error: str
     error_code: Optional[str] = None
+    # Without this the manager can see WHICH rows failed but not WHERE they
+    # were stored, and has to pair a 500-row upload against the inbox by
+    # matching contents — ambiguous the moment two rows look alike.
+    intake_record_id: str = ""
 
 class BatchProcessResponse(BaseModel):
     job_id: str

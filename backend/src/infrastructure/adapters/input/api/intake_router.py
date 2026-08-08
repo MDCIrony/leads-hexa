@@ -78,6 +78,7 @@ def ingest_lead(
         webhook_dispatched=result.webhook_dispatched,
         error=result.error,
         error_code=result.error_code,
+        intake_record_id=result.intake_record_id,
     )
 
 # Unauthenticated by design until F2 introduces LeadSource credentials.
@@ -109,6 +110,7 @@ async def batch_upload(
                 email=row.email,
                 error=row.error,
                 error_code=row.error_code,
+                intake_record_id=row.intake_record_id,
             )
             for row in result.failed_rows
         ],

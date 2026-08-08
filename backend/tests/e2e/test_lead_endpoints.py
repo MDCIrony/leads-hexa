@@ -141,10 +141,21 @@ def test_batch_upload_reports_failed_rows_without_losing_the_valid_ones():
         assert failed["email"] == "email-sin-arroba"
         assert failed["error_code"] == "INVALID_EMAIL"
 
-        # A bad row must not drag the good ones down with it: only the 2
-        # valid rows are actually persisted for this tenant.
+        # The row must say WHERE it was kept, not just that it failed. Without
+        # this the manager has to pair the response against the inbox by
+        # matching contents, which is ambiguous as soon as two rows look alike.
         from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
         uow = PostgresUnitOfWork(app.state.container.database)
+        assert failed["intake_record_id"]
+        with uow:
+            record = uow.intake_records.get_by_id_and_tenant(
+                uuid.UUID(failed["intake_record_id"]), uuid.UUID(tenant_id)
+            )
+        assert record is not None
+        assert record.status.value == "REJECTED"
+
+        # A bad row must not drag the good ones down with it: only the 2
+        # valid rows are actually persisted for this tenant.
         with uow:
             persisted_count = uow.leads.count_by_tenant(uuid.UUID(tenant_id))
         assert persisted_count == 2
