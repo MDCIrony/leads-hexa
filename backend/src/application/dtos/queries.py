@@ -12,6 +12,7 @@ class GetLeadsQuery:
 
 @dataclass(frozen=True)
 class GetAgentsQuery:
+    tenant_id: UUID
     team: Optional[str] = None
     limit: int = 100
     offset: int = 0
@@ -19,6 +20,7 @@ class GetAgentsQuery:
 
 @dataclass(frozen=True)
 class GetAgentQuery:
+    tenant_id: UUID
     agent_id: UUID
 
 

@@ -127,3 +127,28 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         params.extend([limit, offset])
         rows = self.connection.execute(sql, tuple(params)).fetchall()
         return [self._row_to_agent(row) for row in rows]
+
+    def count_by_tenant(self, tenant_id: UUID, team: Optional[str] = None) -> int:
+        sql = "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s AND is_active = 1"
+        params: list = [str(tenant_id)]
+        if team:
+            sql += " AND team = %s"
+            params.append(team)
+        row = self.connection.execute(sql, tuple(params)).fetchone()
+        return int(row["count"])
+
+    def get_by_id_and_tenant(self, agent_id: UUID, tenant_id: UUID) -> Optional[Agent]:
+        row = self.connection.execute(
+            "SELECT * FROM agents WHERE id = %s AND tenant_id = %s",
+            (str(agent_id), str(tenant_id)),
+        ).fetchone()
+        return self._row_to_agent(row) if row else None
+
+    def distinct_tenant_ids(self) -> List[UUID]:
+        # Not part of Task 5's literal spec (only declared abstract there,
+        # for Task 7 to consume); implemented now because ABC requires every
+        # concrete subclass to fill every abstract method immediately.
+        rows = self.connection.execute(
+            "SELECT DISTINCT tenant_id FROM agents WHERE tenant_id IS NOT NULL"
+        ).fetchall()
+        return [UUID(row["tenant_id"]) for row in rows]

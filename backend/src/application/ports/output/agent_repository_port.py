@@ -48,3 +48,21 @@ class AgentRepositoryPort(ABC):
         offset: int = 0,
     ) -> List[Agent]:
         """Return a page of active agents of this organization."""
+
+    @abstractmethod
+    def count_by_tenant(self, tenant_id: UUID, team: Optional[str] = None) -> int:
+        """Return how many active agents this organization has."""
+
+    @abstractmethod
+    def get_by_id_and_tenant(self, agent_id: UUID, tenant_id: UUID) -> Optional[Agent]:
+        """Return the agent only when it belongs to this organization.
+
+        Returning None for an agent of another organization is deliberate: a
+        403 would confirm that the identifier exists."""
+
+    @abstractmethod
+    def distinct_tenant_ids(self) -> List[UUID]:
+        """Return every organization identifier referenced by an agent.
+
+        Used by the backfill command of Task 7; declared here so the port is
+        modified once instead of twice."""

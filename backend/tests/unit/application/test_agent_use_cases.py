@@ -19,7 +19,7 @@ def test_get_agent_use_case_raises_when_agent_missing():
     use_case = GetAgentUseCase(uow=uow)
 
     with pytest.raises(AgentNotFoundException) as exc_info:
-        use_case.execute(GetAgentQuery(agent_id=uuid.uuid4()))
+        use_case.execute(GetAgentQuery(tenant_id=uuid.uuid4(), agent_id=uuid.uuid4()))
 
     assert exc_info.value.error_code == "AGENT_NOT_FOUND"
 

@@ -54,3 +54,22 @@ class InMemoryAgentRepository(AgentRepositoryPort):
             agents = [a for a in agents if a.team == team]
         agents.sort(key=lambda a: (a.name, str(a.id)))
         return agents[offset : offset + limit]
+
+    def count_by_tenant(self, tenant_id: UUID, team: Optional[str] = None) -> int:
+        agents = [
+            a
+            for a in self.agents.values()
+            if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
+        ]
+        if team:
+            agents = [a for a in agents if a.team == team]
+        return len(agents)
+
+    def get_by_id_and_tenant(self, agent_id: UUID, tenant_id: UUID) -> Optional[Agent]:
+        agent = self.agents.get(agent_id)
+        if agent is None or agent.tenant_id is None or agent.tenant_id.value != tenant_id:
+            return None
+        return agent
+
+    def distinct_tenant_ids(self) -> List[UUID]:
+        return list({a.tenant_id.value for a in self.agents.values() if a.tenant_id is not None})

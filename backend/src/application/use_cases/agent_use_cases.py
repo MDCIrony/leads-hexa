@@ -14,8 +14,10 @@ class GetAgentsUseCase(GetAgentsInputPort):
 
     def execute(self, query: GetAgentsQuery) -> AgentsPageResult:
         with self.uow:
-            items = self.uow.agents.list_active(team=query.team, limit=query.limit, offset=query.offset)
-            total = self.uow.agents.count_active(team=query.team)
+            items = self.uow.agents.list_by_tenant(
+                query.tenant_id, team=query.team, limit=query.limit, offset=query.offset
+            )
+            total = self.uow.agents.count_by_tenant(query.tenant_id, team=query.team)
         return AgentsPageResult(items=items, total=total)
 
 class GetAgentUseCase(GetAgentInputPort):
@@ -24,7 +26,7 @@ class GetAgentUseCase(GetAgentInputPort):
 
     def execute(self, query: GetAgentQuery) -> Agent:
         with self.uow:
-            agent = self.uow.agents.get_by_id(query.agent_id)
+            agent = self.uow.agents.get_by_id_and_tenant(query.agent_id, query.tenant_id)
         if agent is None:
             raise AgentNotFoundException()
         return agent
