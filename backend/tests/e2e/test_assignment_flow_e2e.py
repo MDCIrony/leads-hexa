@@ -59,7 +59,6 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
         admin_headers = _bootstrap_admin_headers(client)
         org = _create_org(client, admin_headers, f"Acme {uuid.uuid4().hex[:6]}")
         headers = org["manager_headers"]
-        tenant_id = org["tenant_id"]
 
         # 2. Two groups: Enterprise capped at one lead per agent, PYME uncapped.
         enterprise = client.post(

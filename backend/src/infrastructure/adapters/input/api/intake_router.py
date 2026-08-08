@@ -20,7 +20,7 @@ from infrastructure.adapters.input.api.schemas import (
 
 router = APIRouter()
 
-@router.post("/ingest", response_model=LeadProcessedResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/leads/ingest", response_model=LeadProcessedResponse, status_code=status.HTTP_201_CREATED)
 def ingest_lead(
     request: IngestLeadRequest,
     context: RequestContext = Depends(require_organization_manager),
@@ -73,7 +73,7 @@ def ingest_lead(
         intake_record_id=result.intake_record_id,
     )
 
-@router.post("/batch-upload", response_model=BatchProcessResponse, status_code=status.HTTP_200_OK)
+@router.post("/leads/batch-upload", response_model=BatchProcessResponse, status_code=status.HTTP_200_OK)
 async def batch_upload(
     file: UploadFile = File(...),
     context: RequestContext = Depends(require_organization_manager),

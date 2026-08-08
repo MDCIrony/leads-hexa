@@ -65,7 +65,7 @@ def test_full_system_lead_routing_flow_e2e():
     """
     with TestClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
-        tenant_id, headers = _create_tenant_and_manager_headers(client, admin_headers)
+        _, headers = _create_tenant_and_manager_headers(client, admin_headers)
 
         # 1. Crear agente
         agent_payload = {
