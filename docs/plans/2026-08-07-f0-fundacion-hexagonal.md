@@ -1939,7 +1939,7 @@ class AuthorizationPolicy:
 - [ ] **Step 4: Ejecutar y verificar que pasa**
 
 Run: `uv run pytest tests/unit/domain/test_authorization_policy.py -v`
-Expected: PASS, 16 tests.
+Expected: PASS, 14 tests.
 
 Run: `uv run pytest tests/architecture/ -v`
 Expected: PASS.
@@ -2222,16 +2222,28 @@ if actor.role != AgentRole.ADMIN:
     AuthorizationPolicy.ensure_can_access_tenant(actor, request.tenant_id)
 ```
 
-- [ ] **Step 8: Nota sobre los endpoints públicos de ingesta**
+- [ ] **Step 8: Separar la ingesta pública en su propio router**
 
-`POST /leads/ingest` y `POST /leads/batch-upload` quedan **sin cambios de autorización en F0**. Su modelo de acceso depende de `LeadSource`, que se introduce en F2. Documentarlo con un comentario en cada endpoint:
+Los tres endpoints de leads viven hoy en `lead_router.py`, pero tras este cambio necesitan **prefijos distintos**, y un `APIRouter` sólo admite uno:
+
+- `list_leads` deriva la organización del token → prefijo `/api/v1/leads`.
+- `ingest` y `batch-upload` son públicos y no tienen token del que derivarla → necesitan el tenant en la ruta.
+
+Por tanto, **crear `infrastructure/adapters/input/api/intake_router.py`** y mover ahí `ingest_lead` y `batch_upload` tal cual, conservando su parámetro `tenant_id: UUID`. `lead_router.py` se queda únicamente con `list_leads`, sin `tenant_id` en la firma.
+
+Registrar ambos en `main.py`:
+
+```python
+app.include_router(lead_router, prefix="/api/v1/leads", tags=["Leads"])
+app.include_router(intake_router, prefix="/api/v1/intake/{tenant_id}", tags=["Intake"])
+```
+
+Estos dos endpoints quedan **sin cambios de autorización en F0**: su modelo de acceso depende de `LeadSource`, que llega en F2. Documentarlo con un comentario en cada uno:
 
 ```python
 # Unauthenticated by design until F2 introduces LeadSource credentials.
 # Tracked in docs/specs/2026-08-07-lead-router-mvp-design.md §8.
 ```
-
-Provisionalmente, el `tenant_id` de estos dos endpoints se mantiene como parámetro de ruta bajo el prefijo `/api/v1/intake/{tenant_id}/`, para no dejarlos sin forma de identificar la organización.
 
 - [ ] **Step 9: Actualizar los tests extremo a extremo**
 
