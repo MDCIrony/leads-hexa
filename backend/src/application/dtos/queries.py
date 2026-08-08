@@ -75,3 +75,11 @@ class GetIntakeRecordsQuery:
     job_id: Optional[UUID] = None
     limit: int = 100
     offset: int = 0
+
+
+@dataclass(frozen=True)
+class GetIntakeJobsQuery:
+    tenant_id: UUID
+    status: Optional[str] = None
+    limit: int = 100
+    offset: int = 0

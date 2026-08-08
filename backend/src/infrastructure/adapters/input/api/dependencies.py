@@ -33,6 +33,9 @@ from application.ports.input.lead_lifecycle_use_case_ports import (
 from application.ports.input.intake_record_use_case_ports import (
     DiscardIntakeRecordInputPort, GetIntakeRecordsInputPort, PromoteIntakeRecordInputPort,
 )
+from application.ports.input.intake_job_use_case_ports import (
+    GetIntakeJobInputPort, GetIntakeJobsInputPort, ReprocessIntakeJobInputPort,
+)
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
@@ -56,6 +59,9 @@ from application.use_cases.lead_lifecycle_use_cases import (
 )
 from application.use_cases.intake_record_use_cases import (
     DiscardIntakeRecordUseCase, GetIntakeRecordsUseCase, PromoteIntakeRecordUseCase,
+)
+from application.use_cases.intake_job_use_cases import (
+    GetIntakeJobUseCase, GetIntakeJobsUseCase, ReprocessIntakeJobUseCase,
 )
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import LoginUseCase
@@ -116,6 +122,20 @@ def get_promote_intake_record_use_case(
 
 def get_discard_intake_record_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DiscardIntakeRecordInputPort:
     return DiscardIntakeRecordUseCase(uow=uow)
+
+def get_get_intake_jobs_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeJobsInputPort:
+    return GetIntakeJobsUseCase(uow=uow)
+
+def get_get_intake_job_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeJobInputPort:
+    return GetIntakeJobUseCase(uow=uow)
+
+# Depends on get_process_intake_job_use_case, defined above: same def-time
+# default-argument resolution as get_process_batch_use_case below.
+def get_reprocess_intake_job_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    process: ProcessIntakeJobInputPort = Depends(get_process_intake_job_use_case),
+) -> ReprocessIntakeJobInputPort:
+    return ReprocessIntakeJobUseCase(uow=uow, process=process)
 
 def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsInputPort:
     return GetLeadsUseCase(uow=uow)

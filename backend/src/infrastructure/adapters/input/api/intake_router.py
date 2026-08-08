@@ -5,7 +5,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, statu
 from fastapi.responses import JSONResponse
 from application.dtos.commands import PromoteIntakeRecordCommand, ReceiveIntakeCommand
 from application.dtos.context import RequestContext
-from application.dtos.queries import GetIntakeRecordsQuery
+from application.dtos.queries import GetIntakeJobsQuery, GetIntakeRecordsQuery
+from application.ports.input.intake_job_use_case_ports import (
+    GetIntakeJobInputPort,
+    GetIntakeJobsInputPort,
+    ReprocessIntakeJobInputPort,
+)
 from application.ports.input.intake_phase_use_case_ports import (
     ProcessIntakeJobInputPort,
     ReceiveIntakeInputPort,
@@ -16,15 +21,19 @@ from application.ports.input.intake_record_use_case_ports import (
     PromoteIntakeRecordInputPort,
 )
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
+from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.enums import IntakeJobKind, IntakeRecordStatus
 from infrastructure.adapters.input.api.dependencies import (
     get_discard_intake_record_use_case,
+    get_get_intake_job_use_case,
+    get_get_intake_jobs_use_case,
     get_get_intake_records_use_case,
     get_process_batch_use_case,
     get_process_intake_job_use_case,
     get_promote_intake_record_use_case,
     get_receive_intake_use_case,
+    get_reprocess_intake_job_use_case,
     require_organization_manager,
 )
 
@@ -32,6 +41,8 @@ from infrastructure.adapters.input.api.schemas import (
     IngestLeadRequest,
     IntakeAcceptedResponse,
     IntakeErrorResponse,
+    IntakeJobResponse,
+    IntakeJobsPageResponse,
     IntakeRecordResponse,
     IntakeRecordsPageResponse,
     LeadProcessedResponse,
@@ -59,6 +70,19 @@ def _to_record_response(record: IntakeRecord) -> IntakeRecordResponse:
         received_at=record.received_at,
         processed_at=record.processed_at,
         lead_id=str(record.lead_id) if record.lead_id else None,
+    )
+
+def _to_job_response(job: IntakeJob) -> IntakeJobResponse:
+    return IntakeJobResponse(
+        id=str(job.id),
+        source_id=str(job.source_id),
+        kind=job.kind.value,
+        status=job.status.value,
+        total_items=job.total_items,
+        succeeded=job.succeeded,
+        failed=job.failed,
+        created_at=job.created_at,
+        completed_at=job.completed_at,
     )
 
 @router.post("/leads/ingest", response_model=IntakeAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -179,3 +203,49 @@ def discard_intake_record(
     use_case: DiscardIntakeRecordInputPort = Depends(get_discard_intake_record_use_case),
 ):
     use_case.execute(tenant_id=context.tenant_id, record_id=record_id)
+
+# Literal route declared before the parametric one below, so a future
+# sibling literal under /jobs can never be shadowed by {job_id}.
+@router.get("/jobs", response_model=IntakeJobsPageResponse, status_code=status.HTTP_200_OK)
+def list_intake_jobs(
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    context: RequestContext = Depends(require_organization_manager),
+    use_case: GetIntakeJobsInputPort = Depends(get_get_intake_jobs_use_case),
+):
+    query = GetIntakeJobsQuery(tenant_id=context.tenant_id, status=status, limit=limit, offset=offset)
+    page = use_case.execute(query)
+    items = [_to_job_response(job) for job in page.items]
+    return IntakeJobsPageResponse(
+        items=items,
+        total=page.total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(items)) < page.total,
+    )
+
+@router.get("/jobs/{job_id}", response_model=IntakeJobResponse, status_code=status.HTTP_200_OK)
+def get_intake_job(
+    job_id: UUID,
+    context: RequestContext = Depends(require_organization_manager),
+    use_case: GetIntakeJobInputPort = Depends(get_get_intake_job_use_case),
+):
+    return _to_job_response(use_case.execute(context.tenant_id, job_id))
+
+@router.post("/jobs/{job_id}/reprocess", response_model=IntakeJobResponse, status_code=status.HTTP_202_ACCEPTED)
+def reprocess_intake_job(
+    job_id: UUID,
+    context: RequestContext = Depends(require_organization_manager),
+    reprocess: ReprocessIntakeJobInputPort = Depends(get_reprocess_intake_job_use_case),
+    get_job: GetIntakeJobInputPort = Depends(get_get_intake_job_use_case),
+):
+    # Not backgrounded, unlike ingest: Starlette has already started sending
+    # the response by the time a background task runs, so a DomainException
+    # raised in there (unowned job, already-terminal job) cannot become a
+    # clean 404/400 anymore — it surfaces as a bare RuntimeError instead.
+    # Running synchronously keeps the ownership/transition checks inside the
+    # normal exception-handling path, and the work itself stays bounded by
+    # the same _MAX_ITEMS_PER_RUN cap regular processing uses.
+    reprocess.execute(context.tenant_id, job_id)
+    return _to_job_response(get_job.execute(context.tenant_id, job_id))

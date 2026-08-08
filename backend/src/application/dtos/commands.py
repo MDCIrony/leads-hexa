@@ -4,6 +4,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from domain.entities.agent import Agent
+    from domain.entities.intake_job import IntakeJob
     from domain.entities.intake_record import IntakeRecord
     from domain.entities.lead import Lead
     from domain.entities.lead_source import LeadSource
@@ -278,3 +279,9 @@ class ReceiveIntakeResult:
     job_id: str
     record_ids: List[str]
     status: str
+
+
+@dataclass(frozen=True)
+class IntakeJobsPageResult:
+    items: List["IntakeJob"]
+    total: int

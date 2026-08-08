@@ -344,6 +344,26 @@ class IntakeRecordsPageResponse(BaseModel):
 class PromoteIntakeRecordRequest(BaseModel):
     payload: Dict[str, Any]
 
+class IntakeJobResponse(BaseModel):
+    id: str
+    source_id: str
+    kind: str
+    status: str
+    # Null until the file is parsed: in a batch upload the total is not known
+    # when the request is accepted.
+    total_items: Optional[int] = None
+    succeeded: int
+    failed: int
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+class IntakeJobsPageResponse(BaseModel):
+    items: List[IntakeJobResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
 # --- Auth Schemas ---
 class LoginResponse(BaseModel):
     access_token: str
