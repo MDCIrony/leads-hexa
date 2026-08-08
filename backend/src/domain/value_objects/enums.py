@@ -55,3 +55,11 @@ class LeadSourceKind(str, Enum):
     MANUAL_FORM = "MANUAL_FORM"
     FILE_UPLOAD = "FILE_UPLOAD"
     WEBHOOK = "WEBHOOK"
+
+class IntakeRecordStatus(str, Enum):
+    """What happened to a payload after it arrived."""
+
+    PENDING = "PENDING"
+    PROMOTED = "PROMOTED"
+    REJECTED = "REJECTED"
+    DISCARDED = "DISCARDED"
