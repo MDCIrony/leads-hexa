@@ -1107,6 +1107,7 @@ Esto elimina también la fragilidad actual: los tests extremo a extremo comparte
 | **F1** — Grupos y asignación | `Tenant`, `SalesGroup`, `AssignmentRule` renovada, motor de asignación corregido, carga derivada, CRUD completo de asesores, grupos y reglas | Un gestor crea grupos, asesores y reglas, y un lead ingestado se asigna al asesor correcto según cada estrategia |
 | **F2a** — Puntuación y ciclo de vida | Motor de puntuación corregido (§7.1) con desglose de reglas aplicadas, máquina de estados del lead, asignación manual, descarte, `/leads/mine` | ✅ Cerrada. Un lead sin asesor queda `UNASSIGNED` y se puede asignar a mano; el gestor ve qué reglas puntuaron |
 | **F2b** — Ingesta unificada | `LeadSource`, `IntakeRecord`, `IntakeError`, pipeline unificado, **cierre de la ingesta sin autenticar**, **correo opcional en el lead** ([diseño](2026-08-08-f2b-ingesta-unificada-design.md), [plan](../plans/2026-08-08-f2b-ingesta-unificada/)) | ✅ **Cerrada (2026-08-08).** Ingesta autenticada y con `source_id` real; lo que no valida queda en la bandeja de `IntakeRecord` con su detalle, y el gestor lo corrige y promueve sin perder nada |
+| **F2d** — Recepción y procesamiento separados | `IntakeJob`, recepción y procesamiento en transacciones distintas, ingesta unitaria y carga masiva responden `202` con un `job_id`, consulta y reproceso de trabajos ([diseño](2026-08-08-f2d-recepcion-y-procesamiento-design.md), [plan](../plans/2026-08-08-f2d-recepcion-y-procesamiento/)) | ✅ **Cerrada (2026-08-08).** Ningún fallo al procesar puede ya borrar la constancia de haber recibido; un trabajo interrumpido queda visible y se reprocesa sin duplicar leads |
 | **F2c** — Reglas componibles | `Criterion` extraído, condiciones múltiples por regla, operadores de vacío, `DisqualificationRule`, condiciones por atributo en el reparto, **retirada del umbral fijo** ([diseño](2026-08-08-f2c-reglas-componibles-design.md)) | El gestor escribe «sin teléfono y sin correo → descartar» y «los de este canal, a este equipo», y ambas se cumplen. Ningún criterio comercial queda en el código |
 | **F3a** — Notificaciones | `Notification`, manejadores de eventos, endpoints, contador de no leídas. Aquí se corrige que `webhook_dispatched` mienta (§2.2) | El asesor recibe aviso al asignársele un lead; el gestor lo recibe ante un rechazo o un lead sin asignar |
 | **F3b** — Webhook entrante | Adaptador de fuente externa autenticada por firma, sobre el contrato que F2b deja definido (§8) | Un sistema de terceros ingesta leads con el secreto de su origen, sin credencial de usuario |
@@ -1126,7 +1127,7 @@ habría que resolver antes de construirla.
 | **Constructor visual de reglas** | El valor está en el modelo de composición, no en la interfaz. Con reglas componibles (F2c) el lienzo es una capa encima, no un rediseño |
 | **Rango acotado de puntuación** | Hoy la escala no tiene límites y nada impide una regla de ±9999. Catalogado en [`03 §6`](../product/03-dominio-y-organizacion.md) |
 
-**Estado real.** F0 se ejecutó en tres tramos: F0 (fundación), F0.5 (separación de los dos planos) y F0.6 (tipos nativos en SQL). F1, **F2a** y **F2b** están cerradas y verificadas. La siguiente es **F2c**.
+**Estado real.** F0 se ejecutó en tres tramos: F0 (fundación), F0.5 (separación de los dos planos) y F0.6 (tipos nativos en SQL). F1, **F2a**, **F2b** y **F2d** están cerradas y verificadas. La siguiente es **F2c**.
 
 **Por qué F2 se partió en tres.** F2a entregó el motor de puntuación y el ciclo de vida del lead.
 F2b entrega la ingesta: nada de lo que entra se pierde, y nadie ingesta sin credencial. F2c convierte
@@ -1136,6 +1137,10 @@ en configuración los criterios comerciales que hoy están escritos en el códig
 teléfono y sin correo»— no puede dispararse mientras el correo sea obligatorio, porque el lead sin
 correo no llega a existir. F2b es la fase que lo hace opcional y que conserva lo que hoy se pierde.
 Adelantar F2c dejaría su funcionalidad principal sin datos sobre los que actuar.
+
+**Por qué F2d va antes de F2c y no después.** F2c reescribe el motor de reglas dentro del mismo caso
+de uso que F2d parte en dos fases con transacciones distintas. Hacerlo en el otro orden habría
+obligado a rehacer esa reescritura sobre el nuevo recorrido.
 
 ---
 

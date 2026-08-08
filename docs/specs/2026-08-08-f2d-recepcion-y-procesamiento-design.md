@@ -1,6 +1,6 @@
 # F2d — Recepción y procesamiento separados
 
-**Estado:** propuesto
+**Estado:** implementado
 **Documento maestro:** [spec del MVP](2026-08-07-lead-router-mvp-design.md)
 **Fundamento conceptual:** [Dónde se valida lo que entra](../conceptos/01-donde-se-valida-lo-que-entra.md)
 **Orden:** va **antes** de [F2c](2026-08-08-f2c-reglas-componibles-design.md). F2c reescribe el motor de

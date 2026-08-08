@@ -46,8 +46,11 @@ El `RequestContext` construido por [`get_request_context`](../../backend/src/inf
 
 Definidos en [`src/application/ports/input/`](../../backend/src/application/ports/input/):
 
-- **`IngestLeadInputPort`**: Procesa la ingesta de un lead individual.
-- **`ProcessBatchInputPort`**: Procesa la ingesta masiva de leads desde archivos CSV/Excel.
+- **`ReceiveIntakeInputPort`**: Fase 1 de la ingesta (individual o masiva) — persiste el payload como `IntakeRecord` y crea su `IntakeJob` en una transacción propia, y responde antes de intentar interpretarlo.
+- **`ProcessIntakeJobInputPort`**: Fase 2 — lee los registros `PENDING` de un `IntakeJob` y los interpreta vía `IngestLeadInputPort`, en una transacción distinta de la recepción. La ejecuta un `BackgroundTasks` de FastAPI tras responder.
+- **`IngestLeadInputPort`**: Interpreta un payload ya persistido — puntúa, asigna y emite eventos de dominio. Lo invocan `ProcessIntakeJobInputPort` (fase 2) y `PromoteIntakeRecordInputPort` (reintento manual desde la bandeja).
+- **`ProcessBatchInputPort`**: Parsea un archivo CSV/Excel y crea un `IntakeRecord` `PENDING` por fila; no las procesa, eso lo hace `ProcessIntakeJobInputPort` a continuación.
+- **`GetIntakeJobsInputPort` / `GetIntakeJobInputPort` / `ReprocessIntakeJobInputPort`**: Consulta paginada de trabajos de ingesta, detalle de uno con sus contadores, y reproceso de los registros que sigan `PENDING` en un trabajo interrumpido.
 - **`GetLeadsInputPort`**: Consulta leads paginados por tenant.
 - **`AssignLeadInputPort` / `DiscardLeadInputPort` / `GetMyLeadsInputPort` / `GetLeadInputPort`**: Ciclo de vida manual del lead — asignación/reasignación, descarte, la vista propia del asesor y el detalle con desglose de puntuación.
 - **`CreateAgentInputPort` / `GetAgentsInputPort` / `GetAgentInputPort` / `UpdateAgentInputPort` / `DeactivateAgentInputPort`**: Gestión y consulta de agentes comerciales.
@@ -119,13 +122,22 @@ Devuelve la identidad del agente autenticado. Es lo que el frontend necesita par
 
 ### 2. Ingesta de Lead (`POST /api/v1/intake/leads/ingest`)
 
-Recibe un comando de ingesta de lead, evalúa reglas de scoring y de asignación, asigna un agente y emite eventos de dominio. Persiste el payload como `IntakeRecord` **antes** de intentar interpretarlo: si la interpretación falla, el dato no se pierde, queda en la bandeja de entrada (sección 6).
+Recibe un lead y responde `202 Accepted` **antes** de interpretarlo. La fase 1 (recepción) persiste
+el payload como `IntakeRecord` y crea su `IntakeJob` en una transacción propia; la fase 2
+(procesamiento) corre después, en segundo plano y en una transacción distinta, y es la que puntúa,
+asigna y emite eventos de dominio. Ningún fallo en la fase 2 puede ya borrar la constancia de haber
+recibido — es el objetivo de F2d. El resultado se consulta por el `job_id` (sección 8) o por el
+registro (sección 6).
 
 > **Desde F2b, exige credencial.** El endpoint ya no toma la organización de la URL: la deriva del token, como el resto de la API. Cierra el defecto registrado en la sección 2.3 del spec del MVP.
+>
+> **Desde F2d, responde `202` en vez de `201`.** El cuerpo ya no lleva el resultado del
+> procesamiento — puntuación, asesor asignado —, porque cuando la petición responde ese procesamiento
+> todavía no ha corrido.
 
 - **Autenticación**: Requerida (`Bearer Token`).
 - **Permisos**: `require_organization_manager`. Sólo `MANAGER`. La organización sale del token; un `tenant_id` en el cuerpo se ignora.
-- **Request Body** ([`IngestLeadRequest`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). `email` es opcional desde F2b: el value object valida el **formato** cuando hay valor, pero la organización decide si exige la presencia mediante sus propias reglas.
+- **Request Body** ([`IngestLeadRequest`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). `email` es opcional. **Desde F2d el esquema ya no valida su formato**: esa comprobación duplicaba peor la del dominio y producía un `422` que descartaba el payload sin dejar rastro (decisión V1 del diseño de F2d). Un correo mal formado llega ahora al dominio, que lo rechaza dejando el registro — con su detalle — en la bandeja (sección 6) en vez de perderlo.
 ```json
 {
   "first_name": "Maria",
@@ -138,58 +150,49 @@ Recibe un comando de ingesta de lead, evalúa reglas de scoring y de asignación
   "phone": "+573001234567"
 }
 ```
-- **Response (201 Created)** ([`LeadProcessedResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+- **Response (202 Accepted)** ([`IntakeAcceptedResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
 {
-  "lead_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
-  "status": "QUALIFIED",
-  "score": 45,
-  "assigned_agent_id": "11111111-1111-1111-1111-111111111111",
-  "applied_rules_count": 2,
-  "webhook_dispatched": true,
-  "error": null,
-  "error_code": null,
-  "intake_record_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "record_ids": ["7c9e6679-7425-40de-944b-e07fc1f90ae7"],
+  "status": "PENDING"
 }
 ```
-- **Response Error (400 Bad Request)** (si falla la validación de dominio a nivel de fila). El `IntakeRecord` **sí queda persistido** como `REJECTED` — `intake_record_id` es la vía para localizarlo y corregirlo en la bandeja (sección 6):
-```json
-{
-  "error": true,
-  "error_code": "INVALID_EMAIL",
-  "message": "Formato de correo electrónico inválido",
-  "intake_record_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-}
-```
-- **Errores**: `401 Unauthorized`; `403 Forbidden` (un `AGENT` no ingesta); `400 Bad Request` (validación de dominio a nivel de fila, ver arriba).
+- **Errores**: `401 Unauthorized`; `403 Forbidden` (un `AGENT` no ingesta); `404 Not Found` (`SOURCE_NOT_FOUND`, si la organización no tiene un origen `MANUAL_FORM` activo). Un payload que no interpreta ya **no** responde con un error síncrono: la petición igual responde `202`, y el registro queda `REJECTED` en la bandeja (sección 6) con el trabajo `COMPLETED` y `failed: 1`.
 
 ---
 
 ### 3. Carga Masiva de Leads (`POST /api/v1/intake/leads/batch-upload`)
 
-Procesa un archivo CSV o Excel para la ingesta masiva de leads de la organización del gestor autenticado, fila a fila por el mismo pipeline que la ingesta individual (sección 2): la fila que falla no se pierde, queda como su propio `IntakeRecord` en la bandeja.
+Recibe un archivo CSV o Excel y responde `202 Accepted` **antes** de parsearlo. La fase 1 crea el
+`IntakeJob` en su propia transacción; la fase 2 corre después, en segundo plano, parsea el fichero,
+crea un `IntakeRecord` `PENDING` por fila y las procesa por el mismo pipeline que la ingesta
+individual (sección 2) — la fila que falla no se pierde, queda como su propio `IntakeRecord` en la
+bandeja (sección 6).
+
+> **Desde F2d, responde `202` en vez de `200`.** El cuerpo ya no lleva `total_rows`,
+> `successful_ingestions` ni `failed_rows`: el fichero todavía no se ha parseado cuando la petición
+> responde. Esos datos se consultan después por el `job_id` (sección 8); sus filas, en la bandeja
+> filtrada por `job_id` (sección 6). Ahí la fila fallida se identifica **por contenido** — su
+> correo, por ejemplo — y no por `row_number`: `IntakeRecord` no guarda la posición original en el
+> fichero.
 
 - **Autenticación**: Requerida (`Bearer Token`).
 - **Permisos**: `require_organization_manager`. Sólo `MANAGER`.
 - **Form Data**: `file` (`UploadFile`, Multipart/form-data).
-- **Response (200 OK)** ([`BatchProcessResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+- **Response (202 Accepted)** ([`IntakeAcceptedResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "total_rows": 10,
-  "successful_ingestions": 9,
-  "failed_rows": [
-    {
-      "row_number": 3,
-      "email": "invalid-email",
-      "error": "Formato de correo electrónico inválido",
-      "error_code": "INVALID_EMAIL",
-      "intake_record_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-    }
-  ]
+  "record_ids": [],
+  "status": "PENDING"
 }
 ```
-- **Errores**: `401 Unauthorized`; `403 Forbidden`.
+`record_ids` siempre vacío aquí: las filas todavía no existen cuando la petición se acepta, sólo el
+`IntakeJob` — la fase 2 es la que las crea al parsear el fichero.
+- **Errores**: `401 Unauthorized`; `403 Forbidden`; `404 Not Found` (`SOURCE_NOT_FOUND`, si la
+  organización no tiene un origen `FILE_UPLOAD` activo). Un fichero ilegible tampoco responde con un
+  error: la petición ya contestó `202`, y el trabajo queda `FAILED` sin ningún registro (sección 8).
 
 ---
 
@@ -431,6 +434,72 @@ Borra la fuente, sólo si ningún lead la referencia.
 - **Path Parameters**: `source_id` (UUID).
 - **Response**: `204 No Content`.
 - **Errores**: `404 Not Found` (`SOURCE_NOT_FOUND`); `400 Bad Request` (`SOURCE_IN_USE` si tiene leads asociados — no se borra en silencio la trazabilidad de esos leads).
+
+---
+
+### 8. Trabajos de Ingesta (`/api/v1/intake/jobs`)
+
+`IntakeJob` es lo que la fase 1 de la ingesta (secciones 2 y 3) crea y responde como `job_id`: por él
+se sabe si la fase 2 —el procesamiento en segundo plano— ya terminó, y cómo le fue.
+
+#### `GET /api/v1/intake/jobs`
+Lista los trabajos de ingesta de la organización, paginados.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Query Parameters**: `status` (opcional: `PENDING` · `PROCESSING` · `COMPLETED` · `FAILED`), `limit` (int, default=100), `offset` (int, default=0).
+- **Response (200 OK)** ([`IntakeJobsPageResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "source_id": "22222222-2222-2222-2222-222222222222",
+      "kind": "SINGLE",
+      "status": "COMPLETED",
+      "total_items": 1,
+      "succeeded": 1,
+      "failed": 0,
+      "created_at": "2026-08-08T10:00:00+00:00",
+      "completed_at": "2026-08-08T10:00:01+00:00"
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false
+}
+```
+- **Errores**: `401 Unauthorized`; `403 Forbidden`; `400 Bad Request` (`INVALID_JOB_STATUS` si `status` no es un valor conocido).
+
+#### `GET /api/v1/intake/jobs/{job_id}`
+Detalle de un trabajo: estado y contadores. `total_items` es `null` en una carga masiva hasta que la
+fase 2 parsea el fichero — no se conoce todavía al aceptar la petición (sección 3).
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `job_id` (UUID).
+- **Response (200 OK)** ([`IntakeJobResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): misma forma que un elemento de la lista anterior.
+- **Errores**: `404 Not Found` (`INTAKE_JOB_NOT_FOUND` si no existe o pertenece a otra organización — nunca `403`, por la misma razón que el resto de la API).
+
+#### `POST /api/v1/intake/jobs/{job_id}/reprocess`
+Relanza un trabajo que se quedó a medias — interrumpido antes de que la fase 2 llegara a correr, o
+detenido por un fallo imprevisto. Reinicia sus contadores y vuelve a leer únicamente los
+`IntakeRecord` que sigan `PENDING`: los que ya llegaron a un estado terminal no se tocan, así que
+reprocesar dos veces nunca duplica un lead ni cuenta un registro dos veces — es la propiedad que hará
+segura la cola cuando exista (fuera de alcance de F2d).
+
+No corre en segundo plano como la ingesta (secciones 2 y 3): la comprobación de propiedad y de
+estado es síncrona, porque una excepción lanzada dentro de una tarea de fondo ya no puede convertirse
+en un `404`/`400` limpio una vez que la respuesta ha empezado a enviarse — se pierde como error de
+servidor sin que el llamante lo vea. El propio reproceso queda acotado al mismo límite de registros
+por ejecución que el procesamiento normal.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `job_id` (UUID).
+- **Response (202 Accepted)** ([`IntakeJobResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): el trabajo ya en su estado final, `COMPLETED` o `FAILED`.
+- **Errores**: `404 Not Found` (`INTAKE_JOB_NOT_FOUND`); `400 Bad Request` (`INVALID_JOB_TRANSITION` si el trabajo ya está `COMPLETED` o `FAILED` — un trabajo terminado no se reprocesa).
 
 ---
 

@@ -56,6 +56,22 @@ check() {
 
 section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
+# await_job <token> <job_id> — waits until a job reaches a terminal status.
+# Bounded polling, never a fixed sleep: a short one makes the harness flaky,
+# a long one makes it useless. Unlike TestClient in the pytest suite, this
+# script talks to a real running container, where the background task genuinely
+# runs after the response is sent.
+await_job() {
+  local i r st
+  for i in $(seq 1 30); do
+    r=$(req "$API/intake/jobs/$2" -H "Authorization: Bearer $1")
+    st=$(body "$r" | f 'd.get("status")')
+    case "$st" in COMPLETED|FAILED) printf '%s' "$st"; return 0 ;; esac
+    sleep 0.2
+  done
+  printf 'TIMEOUT'
+}
+
 # ------------------------------------------------------------- scaffolding ---
 
 # Platform admin, two organizations, three agents. Everything later builds on
@@ -111,7 +127,7 @@ bootstrap() {
 # isolation answering 404 rather than 403.
 
 verify_f2a() {
-  local r
+  local r job
   section "F2a · reglas de puntuación"
 
   r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
@@ -140,13 +156,17 @@ verify_f2a() {
   r=$(req -X POST "$API/intake/leads/ingest" -H 'Content-Type: application/json' \
     -H "Authorization: Bearer $MGR_A" \
     -d '{"first_name":"Ana","last_name":"Diaz","email":"ana@lead.test","company":"Acme","industry":"Tech","budget":9000}')
-  check "el lead entra" 201 "$(code "$r")"
-  check "sin asesor queda UNASSIGNED" UNASSIGNED "$(body "$r" | f 'd.get("status")')"
-  check "puntúa 40+25 y la inactiva no cuenta" 65 "$(body "$r" | f 'd.get("score")')"
-  check "applied_rules_count es real" 2 "$(body "$r" | f 'd.get("applied_rules_count")')"
-  LEAD=$(body "$r" | f 'd["lead_id"]')
+  check "el lead se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  LEAD=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
 
   r=$(req "$API/leads/$LEAD" -H "Authorization: Bearer $MGR_A")
+  check "sin asesor queda UNASSIGNED" UNASSIGNED "$(body "$r" | f 'd.get("status")')"
+  check "puntúa 40+25 y la inactiva no cuenta" 65 "$(body "$r" | f 'd.get("score")')"
+  check "applied_rules_count es real" 2 "$(body "$r" | f 'len(d.get("score_breakdown") or [])')"
   check "el gestor ve el desglose" 2 "$(body "$r" | f 'len(d.get("score_breakdown") or [])')"
 
   section "F2a · ciclo de vida"
@@ -194,7 +214,7 @@ verify_f2a() {
 # correct and promote what didn't parse.
 
 verify_f2b() {
-  local r rec src total lead
+  local r rec src total lead job
   section "F2b · la ingesta exige credencial"
 
   r=$(req -X POST "$API/intake/leads/ingest" -H 'Content-Type: application/json' \
@@ -215,8 +235,12 @@ verify_f2b() {
 
   r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
     -d '{"first_name":"Sin","last_name":"Correo","company":"Acme","industry":"Tech","budget":2000}')
-  check "un lead sin correo se acepta" 201 "$(code "$r")"
-  lead=$(body "$r" | f 'd["lead_id"]')
+  check "un lead sin correo se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
 
   r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
   check "el correo ausente llega como null" "" "$(body "$r" | f 'd.get("email") or ""')"
@@ -226,9 +250,14 @@ verify_f2b() {
 
   r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
     -d '{"first_name":"Jane","last_name":"Bad","email":"jane@@example.com","company":"Acme","industry":"Tech","budget":3000}')
-  check "correo mal formado no se ingesta" 400 "$(code "$r")"
-  check "pero deja un registro de ingesta" True "$(body "$r" | f 'bool(d.get("intake_record_id"))')"
-  rec=$(body "$r" | f 'd["intake_record_id"]')
+  check "un correo mal formado ya no se pierde" 202 "$(code "$r")"
+  check "pero deja un registro de ingesta" True "$(body "$r" | f 'bool((d.get("record_ids") or [None])[0])')"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  rec=$(body "$r" | f '(d.get("record_ids") or [""])[0]')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  check "y queda REJECTED para revisión" REJECTED "$(body "$r" | f '(d.get("items") or [{}])[0].get("status") or ""')"
 
   r=$(req "$API/intake/records?status=REJECTED" -H "Authorization: Bearer $MGR_A")
   check "aparece en la bandeja de rechazados" True "$(body "$r" | f 'any(i["id"] == "'"$rec"'" for i in d["items"])')"
@@ -254,10 +283,17 @@ verify_f2b() {
     "$STAMP" > /tmp/leads-$STAMP.csv
   r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" \
     -F "file=@/tmp/leads-$STAMP.csv")
-  check "la fila buena entra" 1 "$(body "$r" | f 'd["successful_ingestions"]')"
-  check "la fila mala no se pierde" 1 "$(body "$r" | f 'len(d["failed_rows"])')"
-  check "la fila mala deja registro" True "$(body "$r" | f 'bool(d["failed_rows"][0].get("intake_record_id"))')"
+  check "la carga se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
   rm -f /tmp/leads-$STAMP.csv
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  check "la fila buena entra" 1 "$(body "$r" | f 'sum(1 for i in d.get("items") or [] if i.get("status") == "PROMOTED")')"
+  check "la fila mala no se pierde" 1 "$(body "$r" | f 'sum(1 for i in d.get("items") or [] if i.get("status") == "REJECTED")')"
+  # Identified by content (its email), not by row_number: IntakeRecord does
+  # not keep the row's original position in the file.
+  check "la fila mala deja registro" True "$(body "$r" | f 'any(i.get("status") == "REJECTED" and i.get("payload", {}).get("email") == "mala@@x.test" for i in d.get("items") or [])')"
 
   section "F2b · aislamiento y protección de los orígenes"
 
@@ -266,6 +302,89 @@ verify_f2b() {
 
   r=$(req -X DELETE "$API/sources/$src" -H "Authorization: Bearer $MGR_A")
   check "borrar un origen con leads" SOURCE_IN_USE "$(body "$r" | f 'd.get("error_code")')"
+}
+
+# ------------------------------------------------------------------- F2d ---
+# Reception and processing on separate transactions: intake answers 202
+# immediately with a job_id, a background task finishes the work, and the
+# resulting job — finished or stalled — can be queried and relaunched.
+
+verify_f2d() {
+  local r job1 job2 job3 job4 lead
+
+  section "F2d · ingesta unitaria"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Uni","last_name":"Taria","email":"uni-'"$STAMP"'@x.test","company":"Acme","industry":"Tech","budget":4000}')
+  check "la ingesta unitaria se acepta" 202 "$(code "$r")"
+  job1=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job1")"
+
+  r=$(req "$API/intake/jobs/$job1" -H "Authorization: Bearer $MGR_A")
+  check "total_items del trabajo" 1 "$(body "$r" | f 'd.get("total_items")')"
+  check "succeeded del trabajo" 1 "$(body "$r" | f 'd.get("succeeded")')"
+
+  r=$(req "$API/intake/records?job_id=$job1" -H "Authorization: Bearer $MGR_A")
+  check "su registro queda PROMOTED" PROMOTED "$(body "$r" | f '(d.get("items") or [{}])[0].get("status") or ""')"
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "y el lead existe" 200 "$(code "$r")"
+
+  section "F2d · carga masiva con una fila buena y una mala"
+
+  printf 'first_name,last_name,email,company,industry,budget\nBuena,F2d,ok-f2d-%s@x.test,Acme,Tech,4500\nMala,F2d,mala-f2d@@x.test,Acme,Tech,4500\n' \
+    "$STAMP" > /tmp/f2d-batch-$STAMP.csv
+  r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" \
+    -F "file=@/tmp/f2d-batch-$STAMP.csv")
+  check "la carga masiva se acepta" 202 "$(code "$r")"
+  job2=$(body "$r" | f 'd.get("job_id") or ""')
+  rm -f /tmp/f2d-batch-$STAMP.csv
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job2")"
+
+  r=$(req "$API/intake/jobs/$job2" -H "Authorization: Bearer $MGR_A")
+  check "total_items de la carga" 2 "$(body "$r" | f 'd.get("total_items")')"
+  check "succeeded de la carga" 1 "$(body "$r" | f 'd.get("succeeded")')"
+  check "failed de la carga" 1 "$(body "$r" | f 'd.get("failed")')"
+
+  r=$(req "$API/intake/records?job_id=$job2" -H "Authorization: Bearer $MGR_A")
+  check "una fila PROMOTED" 1 "$(body "$r" | f 'sum(1 for i in d.get("items") or [] if i.get("status") == "PROMOTED")')"
+  check "una fila REJECTED con error de email" True "$(body "$r" | f 'any(i.get("status") == "REJECTED" and (i.get("errors") or [{}])[0].get("field") == "email" for i in d.get("items") or [])')"
+
+  section "F2d · un correo mal formado ya no se pierde"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Jane","last_name":"F2d","email":"jane@@example.com","company":"Acme","industry":"Tech","budget":3500}')
+  check "se acepta igualmente" 202 "$(code "$r")"
+  job3=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job3")"
+
+  r=$(req "$API/intake/records?job_id=$job3" -H "Authorization: Bearer $MGR_A")
+  check "y el registro queda REJECTED" REJECTED "$(body "$r" | f '(d.get("items") or [{}])[0].get("status") or ""')"
+
+  section "F2d · un fichero ilegible no rompe el trabajo"
+
+  # .xlsx by name, not by content: PandasFileParser dispatches on the filename
+  # extension (pandas_file_parser.py), and pd.read_csv is lenient enough to
+  # accept arbitrary text as a one-column, zero-row file instead of raising.
+  # Forcing the Excel reader on non-Excel bytes is what actually fails to parse.
+  printf 'esto no es un csv ni un xlsx\x00\x01\x02' > /tmp/basura-$STAMP.xlsx
+  r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" \
+    -F "file=@/tmp/basura-$STAMP.xlsx")
+  check "el fichero ilegible se acepta sin 500" 202 "$(code "$r")"
+  job4=$(body "$r" | f 'd.get("job_id") or ""')
+  rm -f /tmp/basura-$STAMP.xlsx
+  check "el trabajo queda FAILED" FAILED "$(await_job "$MGR_A" "$job4")"
+
+  r=$(req "$API/intake/records?job_id=$job4" -H "Authorization: Bearer $MGR_A")
+  check "sin registros" 0 "$(body "$r" | f 'd.get("total")')"
+
+  section "F2d · consulta y reproceso de trabajos"
+
+  r=$(req "$API/intake/jobs/$job1" -H "Authorization: Bearer $MGR_B")
+  check "un trabajo de otra organización" 404 "$(code "$r")"
+
+  r=$(req -X POST "$API/intake/jobs/$job1/reprocess" -H "Authorization: Bearer $MGR_A")
+  check "reprocesar un trabajo ya terminado" INVALID_JOB_TRANSITION "$(body "$r" | f 'd.get("error_code")')"
 }
 
 # ---------------------------------------------------------------- next up ---
@@ -287,6 +406,7 @@ fi
 bootstrap
 verify_f2a
 verify_f2b
+verify_f2d
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then

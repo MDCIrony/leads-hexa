@@ -46,6 +46,9 @@ El código de estado de la columna derecha **no vive en la excepción**: lo deci
 | `DomainException` | `INVALID_INTAKE_TRANSITION` | `400 Bad Request` | Promover o descartar un registro ya `PROMOTED` o `DISCARDED`. |
 | `DomainException` | `INVALID_INTAKE_STATUS` | `400 Bad Request` | El filtro `status` de la bandeja no es un estado conocido. |
 | `DomainException` | `REJECTION_WITHOUT_ERRORS` | `400 Bad Request` | Rechazar un registro exige al menos un error de campo. |
+| `DomainException` | `INTAKE_JOB_NOT_FOUND` | `404 Not Found` | El trabajo de ingesta no existe en la organización. |
+| `DomainException` | `INVALID_JOB_TRANSITION` | `400 Bad Request` | Reprocesar un trabajo ya `COMPLETED` o `FAILED`, o una transición interna inválida sobre `IntakeJob`. |
+| `DomainException` | `INVALID_JOB_STATUS` | `400 Bad Request` | El filtro `status` de la lista de trabajos no es un estado conocido. |
 
 ---
 
