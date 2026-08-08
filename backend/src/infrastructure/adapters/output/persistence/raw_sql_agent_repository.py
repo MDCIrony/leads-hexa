@@ -144,6 +144,13 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         ).fetchone()
         return self._row_to_agent(row) if row else None
 
+    def deactivate_all_by_tenant(self, tenant_id: UUID) -> int:
+        cursor = self.connection.execute(
+            "UPDATE agents SET is_active = 0 WHERE tenant_id = %s AND is_active = 1",
+            (str(tenant_id),),
+        )
+        return cursor.rowcount
+
     def distinct_tenant_ids(self) -> List[UUID]:
         # Not part of Task 5's literal spec (only declared abstract there,
         # for Task 7 to consume); implemented now because ABC requires every

@@ -96,9 +96,7 @@ class UpdateTenantUseCase(UpdateTenantInputPort):
                     tenant.deactivate()
                     # A suspended organization must not leave working credentials
                     # behind, so its users are deactivated with it.
-                    for agent in self.uow.agents.list_by_tenant(command.tenant_id):
-                        agent.is_active = False
-                        self.uow.agents.save(agent)
+                    self.uow.agents.deactivate_all_by_tenant(command.tenant_id)
 
             self.uow.tenants.save(tenant)
         return tenant

@@ -71,5 +71,15 @@ class InMemoryAgentRepository(AgentRepositoryPort):
             return None
         return agent
 
+    def deactivate_all_by_tenant(self, tenant_id: UUID) -> int:
+        affected = [
+            a
+            for a in self.agents.values()
+            if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
+        ]
+        for agent in affected:
+            agent.is_active = False
+        return len(affected)
+
     def distinct_tenant_ids(self) -> List[UUID]:
         return list({a.tenant_id.value for a in self.agents.values() if a.tenant_id is not None})

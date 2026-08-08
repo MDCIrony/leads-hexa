@@ -141,6 +141,26 @@ class TestUpdateTenant:
         )
         assert uow.agents.get_by_id(agent.id.value).is_active is False
 
+    def test_deactivating_reaches_past_one_page_of_users(self):
+        """A paged loop would silently leave the users beyond the page active."""
+        uow = _uow()
+        tenant = uow.tenants.save(Tenant.create(name="Big Corp"))
+        from domain.entities.agent import Agent
+
+        for index in range(150):
+            uow.agents.save(
+                Agent.create(
+                    f"Agent {index:03d}",
+                    f"agent{index}@big.test",
+                    "Sales",
+                    tenant_id=tenant.id.value,
+                )
+            )
+        UpdateTenantUseCase(uow=uow).execute(
+            UpdateTenantCommand(tenant_id=tenant.id.value, is_active=False)
+        )
+        assert uow.agents.count_by_tenant(tenant.id.value) == 0
+
     def test_unknown_organization_raises(self):
         uow = _uow()
         with pytest.raises(DomainException):

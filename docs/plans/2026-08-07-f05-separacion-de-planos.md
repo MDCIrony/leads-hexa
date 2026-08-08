@@ -1257,15 +1257,13 @@ class UpdateTenantUseCase(UpdateTenantInputPort):
                     tenant.deactivate()
                     # A suspended organization must not leave working credentials
                     # behind, so its users are deactivated with it.
-                    for agent in self.uow.agents.list_by_tenant(command.tenant_id):
-                        agent.is_active = False
-                        self.uow.agents.save(agent)
+                    self.uow.agents.deactivate_all_by_tenant(command.tenant_id)
 
             self.uow.tenants.save(tenant)
         return tenant
 ```
 
-`list_by_tenant` es el método que introduce la Task 5 en `AgentRepositoryPort`. Si esta tarea se ejecuta antes, añádelo primero al puerto y a sus dos implementaciones.
+`deactivate_all_by_tenant` es un método que introduce la Task 5 en `AgentRepositoryPort`. Si esta tarea se ejecuta antes, añádelo primero al puerto y a sus dos implementaciones. Una sola sentencia, no un bucle paginado: cualquier tamaño de página sería un techo silencioso sobre la garantía de que suspender una organización no deja credenciales operativas.
 
 - [ ] **Step 6: Ejecutar y verificar que pasa**
 
@@ -1297,7 +1295,7 @@ Cierra la fuga descrita en la sección 2 del spec, en la capa donde se origina.
 - Create: `backend/tests/integration/test_agent_repo_tenant_scoping.py`
 
 **Interfaces:**
-- Produces: `AgentRepositoryPort.list_by_tenant(tenant_id, team=None, limit=100, offset=0)`, `count_by_tenant(tenant_id, team=None)`, `get_by_id_and_tenant(agent_id, tenant_id)`. `GetAgentsQuery` y `GetAgentQuery` ganan `tenant_id: UUID`.
+- Produces: `AgentRepositoryPort.list_by_tenant(tenant_id, team=None, limit=100, offset=0)`, `count_by_tenant(tenant_id, team=None)`, `get_by_id_and_tenant(agent_id, tenant_id)`, `deactivate_all_by_tenant(tenant_id) -> int`, `distinct_tenant_ids() -> List[UUID]`. `GetAgentsQuery` y `GetAgentQuery` ganan `tenant_id: UUID`.
 
 - [ ] **Step 1: Escribir el test de aislamiento**
 
