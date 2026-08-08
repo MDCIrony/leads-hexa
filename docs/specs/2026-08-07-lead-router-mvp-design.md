@@ -73,6 +73,17 @@ Esta tabla describe el **punto de partida**, no el estado actual. La columna de 
 | Un lead con email inválido se pierde | Devuelve `FAILED` sin persistir nada | ⏳ **F2b** |
 | `webhook_dispatched` miente | Es `True` con sólo existir el publicador | ⏳ F3a |
 
+**Criterios comerciales escritos en el código.** No son errores de programación: son reglas de la
+organización colocadas donde el gestor no las alcanza. El criterio para distinguirlas de un
+invariante está en [`docs/product/03`](../product/03-dominio-y-organizacion.md).
+
+| Criterio | Dónde está hoy | Cómo se manifiesta | Estado |
+|---|---|---|---|
+| A partir de qué puntuación un lead merece asesor | `threshold_qualified = 30`, valor por defecto de un constructor que nadie sobrescribe | Una regla de reparto para leads mediocres **no se dispara nunca**, sin mensaje de error, y el gestor no puede ver ni mover el corte | ⏳ **F2c** |
+| Qué hace contactable a un lead | `email` obligatorio en el modelo | El lead sin correo **se pierde**: no hay bandeja donde revisarlo ni forma de rescatarlo si vuelve con datos | ⏳ **F2b** |
+| Qué canal o zona atiende cada equipo | No se puede expresar: el reparto sólo condiciona por banda de puntuación | El gestor recurre a sumar cientos de puntos a un canal para reservarle un tramo, y se rompe al añadir cualquier otra regla | ⏳ **F2c** |
+| La franja de puntuación sin veredicto | `qualify()` tiene dos ramas para tres tramos | Un lead entre ambos umbrales se queda `NEW`, indistinguible de uno sin procesar, y nunca entra al reparto | ⏳ **F2c** |
+
 ### 2.4 Deuda de infraestructura
 
 Sin índices, sin claves foráneas, sin `UNIQUE` en `agents.email`, sin migraciones versionadas, sin pool de conexiones, sin logging, sin `.dockerignore`, sin `conftest.py`, sin marcadores de pytest. Los tipos de columna son `TEXT` donde deberían ser `UUID`, `TIMESTAMPTZ`, `NUMERIC` y `JSONB`.
@@ -265,9 +276,19 @@ Agregado separado, relación uno a uno con `Agent`. Existe para que el secreto n
 
 ---
 
-### 6.5 `Lead` — prospecto comercial validado
+### 6.5 `Lead` — prospecto comercial
 
-Un `Lead` sólo existe si todos sus datos son válidos. Lo que no valida se queda en `IntakeRecord` (6.6).
+Un `Lead` existe si sus datos son **coherentes**, no si son **comercialmente útiles**. Un payload que
+no se puede interpretar se queda en `IntakeRecord` (6.6); un lead interpretable pero inservible —sin
+ninguna vía de contacto, por ejemplo— **sí se crea**, y una regla de descalificación lo marca. La
+diferencia importa: lo que no llega a `Lead` no aparece en ninguna bandeja, no se puede revisar y no
+participará nunca de la resolución de identidad.
+
+**El correo deja de ser obligatorio a partir de F2b.** «Sin correo no vale la pena» es una regla que
+varía por organización, no un invariante: hay quien contacta por teléfono, por mensajería o por
+redes. Lo que se conserva como invariante es el **formato**: si viene un correo, es un correo. El
+criterio completo de qué es invariante y qué es regla está en
+[`docs/product/03`](../product/03-dominio-y-organizacion.md).
 
 | Campo | Tipo | Obl. | Por defecto | Descripción |
 |---|---|---|---|---|
@@ -276,7 +297,7 @@ Un `Lead` sólo existe si todos sus datos son válidos. Lo que no valida se qued
 | `source_id` | `SourceId` | sí | — | Fuente por la que entró. Permite responder "¿de dónde vienen mis leads?" y segmentar métricas por canal |
 | `first_name` | `str` | sí | — | Nombre |
 | `last_name` | `str` | sí | — | Apellidos |
-| `email` | `EmailAddress` | sí | — | Correo. El value object garantiza el formato |
+| `email` | `EmailAddress \| None` | **no** (desde F2b) | `None` | Correo. El value object garantiza el **formato** cuando hay valor; la **presencia** la exige, si acaso, una regla de descalificación de la organización |
 | `phone` | `str \| None` | no | `None` | Teléfono de contacto |
 | `company` | `str` | sí | — | Empresa del prospecto |
 | `industry` | `str` | sí | — | Sector. Es uno de los campos típicos sobre los que se definen reglas de puntuación |
@@ -290,21 +311,28 @@ Un `Lead` sólo existe si todos sus datos son válidos. Lo que no valida se qued
 | `created_at` | `datetime` | sí | ahora | Momento de entrada al sistema |
 | `updated_at` | `datetime` | sí | ahora | Última modificación. Hoy no existe, así que no hay traza de reasignaciones |
 
-**Máquina de estados:**
+**Máquina de estados objetivo** (a partir de F2c; ver §7.0 para la etapa de viabilidad):
 
 ```
-                    ┌── score < umbral inferior ──→ DISQUALIFIED
-                    │
-   NEW ── scoring ──┤
-                    │                        ┌── hay asesor ──→ ASSIGNED
-                    └── score ≥ umbral ──→ QUALIFIED
-                                             └── sin asesor ──→ UNASSIGNED
+   NEW ─┬─ regla de descalificación se cumple ──→ DISQUALIFIED (con motivo)
+        │
+        └─ pasa ── scoring ── reparto ─┬── hay asesor ──→ ASSIGNED
+                                       └── sin asesor ──→ UNASSIGNED
 
    UNASSIGNED ── asignación manual ──→ ASSIGNED
    ASSIGNED   ── reasignación       ──→ ASSIGNED (otro asesor)
    ASSIGNED   ── liberación         ──→ UNASSIGNED
-   cualquiera ── descarte           ──→ DISCARDED
+   NEW|QUALIFIED|UNASSIGNED|ASSIGNED ── descarte manual ──→ DISCARDED
 ```
+
+`QUALIFIED` sobrevive como estado transitorio entre el scoring y el reparto. Deja de tener un
+umbral propio: **la banda más baja de las reglas de asignación es el único corte de puntuación**, y
+lo escribe el gestor.
+
+**Estado actual, hasta F2c.** La calificación usa dos umbrales fijados en el código —30 y 0— y sólo
+dos ramas para tres tramos, así que un lead entre ambos **no cambia de estado**: se queda `NEW` sin
+entrar al reparto, indistinguible de uno recién llegado. `DISQUALIFIED` sólo se alcanza con
+puntuación negativa. Es el defecto que F2c cierra sustituyendo el corte oculto por reglas visibles.
 
 **Comportamiento:** `apply_score(delta)`, `qualify(policy)`, `assign_to(agent, tenant, at)`, `reassign_to(agent, tenant, at)`, `unassign()`, `leave_unassigned()`, `discard(reason)`.
 
@@ -405,13 +433,14 @@ Criterio que suma o resta puntos a un lead según sus atributos.
 
 ### 6.10 `AssignmentRule` — regla de asignación
 
-Renombra a la actual `RoutingRule`. Decide a quién se asigna un lead en función de su puntuación.
+Renombra a la actual `RoutingRule`. Decide a quién se asigna un lead.
 
 | Campo | Tipo | Obl. | Por defecto | Descripción |
 |---|---|---|---|---|
 | `id` | `RuleId` | sí | generado | Identidad de la regla |
 | `tenant_id` | `TenantId` | sí | — | Organización propietaria |
 | `name` | `str` | sí | — | Nombre descriptivo. Hoy la regla no tiene nombre, lo que la hace imposible de identificar en una interfaz |
+| `conditions` | `list[Criterion]` | no | `[]` | **F2c.** Condiciones sobre atributos del lead; todas deben cumplirse. Es lo que permite «los de este canal, a este equipo». Lista vacía significa que la regla sólo discrimina por banda |
 | `min_score` | `int` | no | `0` | Puntuación mínima (inclusive) para que la regla aplique |
 | `max_score` | `int \| None` | no | `None` | Puntuación máxima (inclusive). Permite definir bandas: "de 30 a 60 puntos, al equipo junior". `None` significa sin límite superior |
 | `target_group_id` | `GroupId \| None` | no | `None` | Grupo destinatario. Clave foránea real, no una cadena |
@@ -486,7 +515,25 @@ Se elimina `FAILED`: un lead que no valida ya no llega a ser `Lead`; se queda en
 | `FILE_UPLOAD` | Carga masiva de fichero CSV o XLSX | MVP |
 | `WEBHOOK` | Empuje desde una plataforma externa, con firma HMAC | F3b |
 
-**`Operator`** — comparadores de las reglas de puntuación. Sin cambios respecto al modelo actual: `EQUALS`, `NOT_EQUALS`, `GREATER_THAN`, `LESS_THAN`, `CONTAINS`, `IN`.
+**`Operator`** — comparadores de un `Criterion`, compartidos por las tres etapas.
+
+| Valor | Semántica | Desde |
+|---|---|---|
+| `EQUALS` | Igualdad, con coerción numérica vía `Decimal` | — |
+| `NOT_EQUALS` | Negación de `EQUALS`, con la **misma** coerción | — |
+| `GREATER_THAN` / `LESS_THAN` | Comparación numérica. Si algún lado no es numérico, no se cumple | — |
+| `CONTAINS` | Subcadena si el campo es texto; pertenencia si es lista o diccionario | — |
+| `IN` | Pertenencia a una lista. Exige que el valor de la regla **sea** una lista | — |
+| `IS_EMPTY` | El campo falta, es nulo, es cadena vacía **o sólo espacios** | **F2c** |
+| `IS_NOT_EMPTY` | Negación de `IS_EMPTY` | **F2c** |
+
+**Los dos operadores nuevos se evalúan antes del cortocircuito de campo ausente.** Hoy un campo
+nulo sale por una rama previa en la que sólo `NOT_EQUALS` es verdadero; sin ese cambio, una regla
+`IS_EMPTY` devolvería falso justo en el caso que quiere detectar.
+
+Contar `"   "` como vacío no es un detalle de implementación sino una decisión de producto: un CSV
+con una columna en blanco produce espacios, y una regla que a ojo debería cumplirse y no se cumple
+es indistinguible de una regla rota.
 
 **`AssignmentStrategy`** — algoritmo de reparto.
 
@@ -525,7 +572,16 @@ Se elimina `FAILED`: un lead que no valida ya no llega a ser `Lead`; se queda en
 
 ### 6.14 Políticas de dominio
 
-**`QualificationPolicy(threshold_qualified, threshold_disqualified)`** — decide si un lead queda calificado o descalificado según su puntuación. Hoy los umbrales `30` y `0` están escritos como valores por defecto del constructor de un caso de uso, que nadie sobrescribe: la política de negocio ni existe como concepto ni es configurable. Pasa a ser un objeto de dominio, configurable por organización.
+**`QualificationPolicy` — descartada en F2c.** El diseño original la proponía como objeto de dominio
+configurable por organización, para sustituir los umbrales `30` y `0` escritos como valores por
+defecto de un constructor que nadie sobrescribe. Hacerla configurable **no resolvía el defecto de
+fondo**: dos cortes independientes para la misma decisión —el umbral de calificación y la banda de
+cada regla de asignación— que nadie sincroniza y de los que uno es invisible.
+
+F2c toma la salida más simple: **el umbral desaparece y la banda más baja de las reglas de asignación
+queda como único corte de puntuación**, escrito por el gestor. Una política configurable habría
+añadido un concepto más para el gestor sin eliminar la duplicidad. Ver
+[diseño de F2c](2026-08-08-f2c-reglas-componibles-design.md).
 
 **`AuthorizationPolicy`** — concentra las decisiones de quién puede hacer qué: `can_manage_agents(actor)`, `can_manage_groups(actor)`, `can_manage_rules(actor)`, `can_view_lead(actor, lead)`, `can_create_agent_with_role(actor, role)`, `can_access_tenant(actor, tenant_id)`. Hoy estas reglas están repartidas entre `dependencies.py` y `agent_router.py`, acopladas a FastAPI y no reutilizables.
 
@@ -548,7 +604,66 @@ En F3b se añade un segundo consumidor, `OutboundWebhookHandler`, sin tocar ni l
 
 ---
 
-## 7. Motor de puntuación y asignación
+## 7. Los tres motores
+
+Un lead atraviesa tres etapas, y cada una responde a una pregunta de **naturaleza distinta**. La
+justificación de negocio está en [`docs/product/02`](../product/02-el-modelo-de-decision.md); aquí
+va el contrato.
+
+| Etapa | Pregunta | Naturaleza | Corta el flujo |
+|---|---|---|---|
+| **7.0 Viabilidad** | ¿Se puede trabajar? | Binaria | **Sí**: si descalifica, no se puntúa ni se reparte |
+| **7.1 Puntuación** | ¿Cuánto vale? | Continua | No |
+| **7.2 Asignación** | ¿Quién lo atiende? | Categórica | No |
+
+El error que este desglose corrige: hasta F2a, la puntuación era la **única** herramienta para las
+tres decisiones, lo que obliga al gestor a codificar en un número cosas que no son un número —restar
+9999 puntos para expresar "descartar siempre", sumar 1000 para reservar una banda a un canal—. Un
+número enorme en una regla es siempre la señal de que al modelo le falta una etapa.
+
+---
+
+### 7.0 Motor de viabilidad — *nuevo en F2c*
+
+Evalúa las **reglas de descalificación** de la organización antes de puntuar. Si alguna se cumple,
+el lead queda `DISQUALIFIED` con el motivo de esa regla, y el pipeline se detiene.
+
+**`DisqualificationRule`**
+
+| Campo | Tipo | Obl. | Por defecto | Descripción |
+|---|---|---|---|---|
+| `id` | `RuleId` | sí | generado | |
+| `tenant_id` | `TenantId` | sí | — | Organización propietaria |
+| `name` | `str` | sí | — | Lo que se muestra como motivo del descarte: "Sin vía de contacto" |
+| `conditions` | `list[Criterion]` | sí | — | **Todas** deben cumplirse. Lista vacía se rechaza: una regla que siempre se cumple descalificaría todo |
+| `priority` | `int` | no | `0` | Orden de evaluación. Determina qué motivo se registra si varias se cumplen |
+| `is_active` | `bool` | no | `True` | |
+
+**Semántica de composición**, y es el punto que gobierna toda la configuración de reglas:
+
+| Lo que el gestor quiere expresar | Cómo lo escribe |
+|---|---|
+| Se cumplen **todas** las condiciones (Y) | **Una regla** con varias condiciones |
+| Basta con que se cumpla **alguna** (O) | **Varias reglas**, una por condición |
+
+Con esas dos formas se expresa cualquier criterio en forma normal disyuntiva, que es todo lo que un
+constructor de reglas necesita. No hay operador `OR` explícito, ni modo configurable por regla, ni
+anidamiento: el gestor lee *«esta regla se cumple cuando pasa todo esto»* y compone alternativas
+escribiendo más reglas.
+
+**`Criterion` — value object compartido por las tres etapas**
+
+```
+Criterion(field: str, operator: Operator, value: Any)
+    .matches(lead) -> bool
+```
+
+Es la pieza que hoy vive dentro de `ScoringRule` y que F2c extrae. La misma unidad la consumen la
+regla de descalificación, la de puntuación y la de asignación. Extraerla es lo que convierte a F2c
+en una fase coherente y no en tres parches: **una sola gramática de condiciones para todo el
+sistema**.
+
+---
 
 ### 7.1 Motor de puntuación
 
@@ -990,7 +1105,9 @@ Esto elimina también la fragilidad actual: los tests extremo a extremo comparte
 |---|---|---|
 | **F0** — Fundación | Puertos de seguridad, DTOs sin framework, políticas de dominio, composition root, contexto de petición, excepciones sin HTTP, migraciones, pool, logging, `conftest.py`, marcadores, test de arquitectura | El test de arquitectura pasa; `pytest -m unit` verde sin base de datos; la suite completa verde con el compose levantado |
 | **F1** — Grupos y asignación | `Tenant`, `SalesGroup`, `AssignmentRule` renovada, motor de asignación corregido, carga derivada, CRUD completo de asesores, grupos y reglas | Un gestor crea grupos, asesores y reglas, y un lead ingestado se asigna al asesor correcto según cada estrategia |
-| **F2** — Ingesta y ciclo de vida | `LeadSource`, `IntakeRecord`, pipeline unificado, **motor de puntuación corregido (§7.1) con desglose de reglas aplicadas**, **cierre de la ingesta sin autenticar**, máquina de estados del lead, asignación manual, descarte, `/leads/mine` | Un lead mal formado queda en la bandeja con su error; el gestor lo corrige y se promueve; un lead sin asesor queda `UNASSIGNED` y se puede asignar a mano; nadie ingesta sin credencial |
+| **F2a** — Puntuación y ciclo de vida | Motor de puntuación corregido (§7.1) con desglose de reglas aplicadas, máquina de estados del lead, asignación manual, descarte, `/leads/mine` | ✅ Cerrada. Un lead sin asesor queda `UNASSIGNED` y se puede asignar a mano; el gestor ve qué reglas puntuaron |
+| **F2b** — Ingesta unificada | `LeadSource`, `IntakeRecord`, `IntakeError`, pipeline unificado, **cierre de la ingesta sin autenticar**, **correo opcional en el lead** ([diseño](2026-08-08-f2b-ingesta-unificada-design.md)) | Un lead mal formado queda en la bandeja con su error; el gestor lo corrige y se promueve; nadie ingesta sin credencial; nada de lo que entra se pierde |
+| **F2c** — Reglas componibles | `Criterion` extraído, condiciones múltiples por regla, operadores de vacío, `DisqualificationRule`, condiciones por atributo en el reparto, retirada del umbral fijo ([diseño](2026-08-08-f2c-reglas-componibles-design.md)) | El gestor escribe «sin teléfono y sin correo → descartar» y «los de este canal, a este equipo», y ambas se cumplen. Ningún criterio comercial queda en el código |
 | **F3a** — Notificaciones | `Notification`, manejadores de eventos, endpoints, contador de no leídas | El asesor recibe aviso al asignársele un lead; el gestor lo recibe ante un rechazo o un lead sin asignar |
 | **F4** — Frontend | Arquitectura (router, sesión, capa de datos, guards, tipos generados) y después las vistas de ambos paneles | Un gestor y un asesor completan sus recorridos contra el backend real, sin ningún dato simulado |
 
@@ -998,7 +1115,14 @@ Cada fase es entregable y demostrable por separado. La ordenación no es negocia
 
 **Estado real.** F0 se ejecutó en tres tramos: F0 (fundación), F0.5 (separación de los dos planos) y F0.6 (tipos nativos en SQL). F1 y **F2a** están cerradas y verificadas. La siguiente es **F2b**.
 
-**Por qué F2 se partió en dos.** F2a entregó el motor de puntuación de §7.1, la máquina de estados del lead, la asignación manual, el descarte y `/leads/mine`. F2b entrega lo que falta de la ingesta: `LeadSource`, `IntakeRecord`, `IntakeError`, el pipeline unificado y el cierre de la ingesta sin autenticar. F2b depende de F2a, no al revés: el pipeline necesita el motor corregido y los estados nuevos.
+**Por qué F2 se partió en tres.** F2a entregó el motor de puntuación y el ciclo de vida del lead.
+F2b entrega la ingesta: nada de lo que entra se pierde, y nadie ingesta sin credencial. F2c convierte
+en configuración los criterios comerciales que hoy están escritos en el código.
+
+**Por qué F2c va después de F2b y no antes.** La regla de descalificación de referencia —«sin
+teléfono y sin correo»— no puede dispararse mientras el correo sea obligatorio, porque el lead sin
+correo no llega a existir. F2b es la fase que lo hace opcional y que conserva lo que hoy se pierde.
+Adelantar F2c dejaría su funcionalidad principal sin datos sobre los que actuar.
 
 ---
 
