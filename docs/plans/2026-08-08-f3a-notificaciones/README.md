@@ -16,10 +16,28 @@ uso ya confirmó — y ése es justo el punto: notificar no puede deshacer un le
 
 | # | Tarea | Rompe | Estado |
 |---|---|---|---|
-| 1 | [La entidad y su persistencia](01-entidad-y-persistencia.md) | Nada | ⏳ **siguiente** |
-| 2 | [Los eventos y el manejador](02-eventos-y-manejador.md) | Nada, aditiva | ⏳ |
-| 3 | [Los endpoints y el contador](03-endpoints.md) | Nada, aditiva | ⏳ |
-| 4 | [Retirada de `webhook_dispatched`, harness y cierre](04-webhook-harness-y-cierre.md) | El campo sale de dos respuestas | ⏳ |
+| 1 | [La entidad y su persistencia](01-entidad-y-persistencia.md) | Nada | ✅ `f730604` |
+| 2 | [Los eventos y el manejador](02-eventos-y-manejador.md) | Nada, aditiva | ✅ `0d59d18` |
+| 3 | [Los endpoints y el contador](03-endpoints.md) | Nada, aditiva | ✅ `f97a12b` |
+| 4 | [Retirada de `webhook_dispatched`, harness y cierre](04-webhook-harness-y-cierre.md) | El campo sale de dos respuestas | ✅ `075c69e` |
+
+**Fase cerrada el 2026-08-08.** 491 tests, guardián 4/4, harness con 130 comprobaciones, migraciones
+007 y 008 reejecutadas desde volumen vacío. `webhook_dispatched` no aparece ya en `backend/` ni en
+`docs/api/`.
+
+**Un desvío del plan, con su motivo:** para dejar un lead sin asesor, la Tarea 4 proponía desactivar
+temporalmente a los asesores y volver a activarlos. **No se puede: no existe endpoint de
+reactivación.** `DELETE /agents/{id}` sólo desactiva y `AgentUpdate` admite únicamente `name` y
+`group_id`, así que desactivar a `AGENT_1` habría dejado el harness sin forma de revertirlo. El
+ejecutor creó en su lugar un asesor desechable con una regla de asignación condicionada que no
+interfiere con el resto del bloque. Queda anotado como hueco del producto, no del plan.
+
+**Nota de la Tarea 2, para quien lea el código después:** la publicación de `IntakeRejected` no puede
+ir donde estaba el `return` de la rama de rechazo —dentro del bloque transaccional—, porque
+publicaría antes del commit y un rollback posterior dejaría un aviso describiendo un rechazo que
+nunca ocurrió. El resultado se guarda en `rejection_result` y se publica al cerrar el bloque. Pyright
+marca `lead` como *possibly unbound* en ese camino: es un falso positivo, `lead` sólo se usa cuando
+`rejection_result is None`, y el analizador no puede correlacionar las dos variables.
 
 ### Reparto en dos despachos
 
