@@ -93,6 +93,7 @@ def test_agent_create_positional_call_still_works():
 
 def test_scoring_rule_entity_creation():
     rule = ScoringRule.create(
+        tenant_id=uuid.uuid4(),
         name="High Budget",
         field="budget",
         operator="GREATER_THAN",
