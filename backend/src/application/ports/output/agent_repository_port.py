@@ -35,3 +35,16 @@ class AgentRepositoryPort(ABC):
     @abstractmethod
     def count(self) -> int:
         pass
+
+    # list_by_tenant is a prerequisite pulled in from Task 5 (organization
+    # filtering): Task 4's UpdateTenantUseCase needs it to deactivate an
+    # organization's agents when the organization itself is deactivated.
+    @abstractmethod
+    def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        team: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Agent]:
+        """Return a page of active agents of this organization."""

@@ -109,3 +109,21 @@ class RawSqlAgentRepository(AgentRepositoryPort):
     def count(self) -> int:
         cursor = self.connection.execute("SELECT COUNT(*) AS total FROM agents")
         return cursor.fetchone()["total"]
+
+    def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        team: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Agent]:
+        sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = 1"
+        params: list = [str(tenant_id)]
+        if team:
+            sql += " AND team = %s"
+            params.append(team)
+        # Explicit ordering: without it a page can repeat or skip rows.
+        sql += " ORDER BY name, id LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
+        return [self._row_to_agent(row) for row in rows]

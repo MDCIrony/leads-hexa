@@ -5,6 +5,7 @@ from uuid import UUID
 if TYPE_CHECKING:
     from domain.entities.agent import Agent
     from domain.entities.lead import Lead
+    from domain.entities.tenant import Tenant
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,39 @@ class LeadsPageResult:
 @dataclass(frozen=True)
 class AgentsPageResult:
     items: List["Agent"]
+    total: int
+
+
+@dataclass(frozen=True)
+class CreateTenantCommand:
+    name: str
+    manager_name: str
+    manager_email: str
+    manager_password: str
+
+
+@dataclass(frozen=True)
+class UpdateTenantCommand:
+    tenant_id: UUID
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@dataclass(frozen=True)
+class TenantWithManagerResult:
+    tenant: "Tenant"
+    manager: "Agent"
+
+
+@dataclass(frozen=True)
+class TenantSummary:
+    tenant: "Tenant"
+    agent_count: int
+
+
+@dataclass(frozen=True)
+class TenantsPageResult:
+    items: List[TenantSummary]
     total: int
 
 

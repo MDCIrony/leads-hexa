@@ -41,3 +41,16 @@ class InMemoryAgentRepository(AgentRepositoryPort):
 
     def count(self) -> int:
         return len(self.agents)
+
+    def list_by_tenant(
+        self, tenant_id: UUID, team: Optional[str] = None, limit: int = 100, offset: int = 0
+    ) -> List[Agent]:
+        agents = [
+            a
+            for a in self.agents.values()
+            if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
+        ]
+        if team:
+            agents = [a for a in agents if a.team == team]
+        agents.sort(key=lambda a: (a.name, str(a.id)))
+        return agents[offset : offset + limit]
