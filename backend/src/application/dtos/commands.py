@@ -154,6 +154,20 @@ class LeadsPageResult:
 
 
 @dataclass(frozen=True)
+class AssignLeadCommand:
+    tenant_id: UUID
+    lead_id: UUID
+    agent_id: UUID
+
+
+@dataclass(frozen=True)
+class DiscardLeadCommand:
+    tenant_id: UUID
+    lead_id: UUID
+    reason: str
+
+
+@dataclass(frozen=True)
 class AgentsPageResult:
     items: List["Agent"]
     total: int

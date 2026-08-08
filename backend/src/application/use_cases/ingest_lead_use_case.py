@@ -58,7 +58,10 @@ class IngestLeadUseCase(IngestLeadInputPort):
         assigned_agent = None
         with self.uow:
             scoring_rules = self.uow.rules.get_scoring_rules_by_tenant(lead.tenant_id.value)
-            self.scoring_engine.evaluate(lead, scoring_rules)
+            breakdown = self.scoring_engine.evaluate(lead, scoring_rules)
+            # The rules that produced a score can be edited or deleted later,
+            # so the lead keeps its own record to be able to explain itself.
+            lead.score_breakdown = breakdown.applied
             lead.qualify(self.threshold_qualified, self.threshold_disqualified)
 
             if lead.status == LeadStatus.QUALIFIED:
@@ -74,6 +77,10 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 assigned_agent = self.engine.select_agent(
                     lead, assignment_rules, available_agents, groups_by_id, loads
                 )
+                if assigned_agent is None:
+                    # QUALIFIED and UNASSIGNED used to be indistinguishable, so
+                    # a lead nobody could take looked like one not yet routed.
+                    lead.leave_unassigned()
                 # Only the rule the engine actually used can have rotated;
                 # saving just that one avoids rewriting every rule per lead.
                 for rule in assignment_rules:
@@ -98,6 +105,6 @@ class IngestLeadUseCase(IngestLeadInputPort):
             status=saved_lead.status.value,
             score=int(saved_lead.score),
             assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
-            applied_rules_count=len(scoring_rules),
+            applied_rules_count=len(breakdown.applied),
             webhook_dispatched=True if self.event_publisher else False,
         )

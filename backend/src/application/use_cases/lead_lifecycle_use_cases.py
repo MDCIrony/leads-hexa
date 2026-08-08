@@ -1,0 +1,84 @@
+from uuid import UUID
+
+from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand, LeadsPageResult
+from application.dtos.queries import GetLeadQuery, GetMyLeadsQuery
+from application.ports.input.lead_lifecycle_use_case_ports import (
+    AssignLeadInputPort,
+    DiscardLeadInputPort,
+    GetLeadInputPort,
+    GetMyLeadsInputPort,
+)
+from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from domain.entities.agent import Agent
+from domain.entities.lead import Lead
+from domain.exceptions import DomainException
+from domain.value_objects.enums import LeadStatus
+
+
+def _get_owned_lead(uow: UnitOfWorkPort, tenant_id: UUID, lead_id: UUID) -> Lead:
+    """Scoped through get_by_id_and_tenant so a lead from another
+    organization reads back as missing rather than confirming it exists."""
+    lead = uow.leads.get_by_id_and_tenant(lead_id, tenant_id)
+    if lead is None:
+        raise DomainException("El lead no existe", error_code="LEAD_NOT_FOUND")
+    return lead
+
+
+def _get_owned_agent(uow: UnitOfWorkPort, tenant_id: UUID, agent_id: UUID) -> Agent:
+    """Same existence-hiding reason as _get_owned_lead: an agent belonging to
+    another organization must read back as missing, not merely forbidden."""
+    agent = uow.agents.get_by_id_and_tenant(agent_id, tenant_id)
+    if agent is None:
+        raise DomainException("El asesor no existe", error_code="AGENT_NOT_FOUND")
+    return agent
+
+
+class AssignLeadUseCase(AssignLeadInputPort):
+    def __init__(self, uow: UnitOfWorkPort) -> None:
+        self.uow = uow
+
+    def execute(self, command: AssignLeadCommand) -> Lead:
+        with self.uow:
+            lead = _get_owned_lead(self.uow, command.tenant_id, command.lead_id)
+            agent = _get_owned_agent(self.uow, command.tenant_id, command.agent_id)
+            # One action for the manager regardless of the lead's current
+            # state: reassign_to is explicit about replacing an existing
+            # agent, assign_to refuses to do that silently.
+            if lead.status == LeadStatus.ASSIGNED:
+                lead.reassign_to(agent.id, agent.tenant_id)
+            else:
+                lead.assign_to(agent.id, agent.tenant_id)
+            return self.uow.leads.save(lead)
+
+
+class DiscardLeadUseCase(DiscardLeadInputPort):
+    def __init__(self, uow: UnitOfWorkPort) -> None:
+        self.uow = uow
+
+    def execute(self, command: DiscardLeadCommand) -> Lead:
+        with self.uow:
+            lead = _get_owned_lead(self.uow, command.tenant_id, command.lead_id)
+            lead.discard(command.reason)
+            return self.uow.leads.save(lead)
+
+
+class GetMyLeadsUseCase(GetMyLeadsInputPort):
+    def __init__(self, uow: UnitOfWorkPort) -> None:
+        self.uow = uow
+
+    def execute(self, query: GetMyLeadsQuery) -> LeadsPageResult:
+        with self.uow:
+            items = self.uow.leads.list_by_agent(
+                query.tenant_id, query.agent_id, limit=query.limit, offset=query.offset
+            )
+            total = self.uow.leads.count_by_agent(query.tenant_id, query.agent_id)
+        return LeadsPageResult(items=items, total=total)
+
+
+class GetLeadUseCase(GetLeadInputPort):
+    def __init__(self, uow: UnitOfWorkPort) -> None:
+        self.uow = uow
+
+    def execute(self, query: GetLeadQuery) -> Lead:
+        with self.uow:
+            return _get_owned_lead(self.uow, query.tenant_id, query.lead_id)
