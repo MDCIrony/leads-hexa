@@ -41,7 +41,6 @@ def test_agent_entity_creation():
     agent = Agent.create(
         name="Carlos Lopez",
         email="clopez@sales.com",
-        team="Enterprise Sales",
         active_leads_count=2,
     )
     assert agent.is_active is True
@@ -54,18 +53,18 @@ def test_agent_entity_creation():
     str_uuid = str(raw_uuid)
     vo_agent_id = AgentId(raw_uuid)
 
-    agent_from_str = Agent.create("A", "a@test.com", "Team", agent_id=str_uuid)
+    agent_from_str = Agent.create("A", "a@test.com", agent_id=str_uuid)
     assert agent_from_str.id.value == raw_uuid
 
-    agent_from_uuid = Agent.create("B", "b@test.com", "Team", agent_id=raw_uuid)
+    agent_from_uuid = Agent.create("B", "b@test.com", agent_id=raw_uuid)
     assert agent_from_uuid.id.value == raw_uuid
 
-    agent_from_vo = Agent.create("C", "c@test.com", "Team", agent_id=vo_agent_id)
+    agent_from_vo = Agent.create("C", "c@test.com", agent_id=vo_agent_id)
     assert agent_from_vo.id == vo_agent_id
 
 
 def test_agent_create_defaults_role_to_agent_and_has_no_password_or_tenant():
-    agent = Agent.create("A", "a@test.com", "Team")
+    agent = Agent.create("A", "a@test.com")
     assert agent.role == AgentRole.AGENT
     assert agent.hashed_password is None
     assert agent.tenant_id is None
@@ -76,7 +75,6 @@ def test_agent_create_accepts_role_password_and_tenant():
     agent = Agent.create(
         "B",
         "b@test.com",
-        "Team",
         role=AgentRole.MANAGER,
         hashed_password="$2b$hash",
         tenant_id=tenant_uuid,
@@ -87,10 +85,13 @@ def test_agent_create_accepts_role_password_and_tenant():
 
 
 def test_agent_create_positional_call_still_works():
-    # Guards against breaking the existing calling convention used elsewhere in the suite.
-    agent = Agent.create("C", "c@test.com", "Team", agent_id="11111111-1111-1111-1111-111111111111")
+    # Guards against breaking the existing calling convention used elsewhere in the suite:
+    # group_id is now the third positional slot that team used to occupy.
+    group_id = uuid.uuid4()
+    agent = Agent.create("C", "c@test.com", group_id, agent_id="11111111-1111-1111-1111-111111111111")
     assert str(agent.id) == "11111111-1111-1111-1111-111111111111"
     assert agent.role == AgentRole.AGENT
+    assert agent.group_id.value == group_id
 
 
 def test_scoring_rule_entity_creation():
@@ -134,5 +135,23 @@ def test_webhook_config_entity_creation():
     assert webhook.target_url == "https://example.com/webhook"
     assert webhook.secret_token == "secret123"
     assert isinstance(webhook.id, uuid.UUID)
+
+
+class TestAgentGroupMembership:
+    def test_an_agent_starts_without_a_group(self):
+        """Belonging to a group is a decision the manager makes later."""
+        agent = Agent.create(name="Ana", email="ana@a.test")
+        assert agent.group_id is None
+
+    def test_an_agent_can_be_created_inside_a_group(self):
+        group_id = uuid.uuid4()
+        agent = Agent.create(name="Ana", email="ana@a.test", group_id=group_id)
+        assert agent.group_id is not None
+        assert agent.group_id.value == group_id
+
+    def test_the_group_can_be_given_as_a_string(self):
+        group_id = uuid.uuid4()
+        agent = Agent.create(name="Ana", email="ana@a.test", group_id=str(group_id))
+        assert agent.group_id.value == group_id
 
 
