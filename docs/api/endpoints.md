@@ -48,12 +48,13 @@ Definidos en [`src/application/ports/input/`](../../backend/src/application/port
 
 - **`ReceiveIntakeInputPort`**: Fase 1 de la ingesta (individual o masiva) — persiste el payload como `IntakeRecord` y crea su `IntakeJob` en una transacción propia, y responde antes de intentar interpretarlo.
 - **`ProcessIntakeJobInputPort`**: Fase 2 — lee los registros `PENDING` de un `IntakeJob` y los interpreta vía `IngestLeadInputPort`, en una transacción distinta de la recepción. La ejecuta un `BackgroundTasks` de FastAPI tras responder.
-- **`IngestLeadInputPort`**: Interpreta un payload ya persistido — puntúa, asigna y emite eventos de dominio. Lo invocan `ProcessIntakeJobInputPort` (fase 2) y `PromoteIntakeRecordInputPort` (reintento manual desde la bandeja).
+- **`IngestLeadInputPort`**: Interpreta un payload ya persistido — evalúa viabilidad, puntúa, asigna y emite eventos de dominio. Si una regla de descalificación se cumple, corta ahí: no puntúa ni reparte. Lo invocan `ProcessIntakeJobInputPort` (fase 2) y `PromoteIntakeRecordInputPort` (reintento manual desde la bandeja).
 - **`ProcessBatchInputPort`**: Parsea un archivo CSV/Excel y crea un `IntakeRecord` `PENDING` por fila; no las procesa, eso lo hace `ProcessIntakeJobInputPort` a continuación.
 - **`GetIntakeJobsInputPort` / `GetIntakeJobInputPort` / `ReprocessIntakeJobInputPort`**: Consulta paginada de trabajos de ingesta, detalle de uno con sus contadores, y reproceso de los registros que sigan `PENDING` en un trabajo interrumpido.
 - **`GetLeadsInputPort`**: Consulta leads paginados por tenant.
 - **`AssignLeadInputPort` / `DiscardLeadInputPort` / `GetMyLeadsInputPort` / `GetLeadInputPort`**: Ciclo de vida manual del lead — asignación/reasignación, descarte, la vista propia del asesor y el detalle con desglose de puntuación.
 - **`CreateAgentInputPort` / `GetAgentsInputPort` / `GetAgentInputPort` / `UpdateAgentInputPort` / `DeactivateAgentInputPort`**: Gestión y consulta de agentes comerciales.
+- **`CreateDisqualificationRuleInputPort` / `GetDisqualificationRulesInputPort` / `UpdateDisqualificationRuleInputPort` / `DeleteDisqualificationRuleInputPort`**: CRUD de reglas de descalificación — la etapa de viabilidad, que se evalúa antes de puntuar y corta el flujo. Una regla sin condiciones se rechaza: se cumpliría para todos.
 - **`CreateScoringRuleInputPort` / `GetScoringRulesInputPort`**: Creación y consulta de reglas de scoring.
 - **`CreateAssignmentRuleInputPort` / `GetAssignmentRulesInputPort` / `UpdateAssignmentRuleInputPort` / `DeleteAssignmentRuleInputPort`**: CRUD de reglas de asignación (banda de puntuación, grupo/asesores destino, prioridad, estrategia).
 - **`CreateSalesGroupInputPort` / `GetSalesGroupsInputPort` / `UpdateSalesGroupInputPort` / `DeleteSalesGroupInputPort`**: CRUD de grupos de ventas.

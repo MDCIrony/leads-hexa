@@ -86,8 +86,8 @@ La corrección no es afinar los números. Es **darle a cada decisión la herrami
 Tres etapas, tres responsabilidades. La primera **corta el flujo**: no tiene sentido puntuar ni
 repartir algo que nadie puede trabajar.
 
-> **Hoy la etapa 1 no existe.** Su papel lo hace un corte de puntuación fijado en el código, que el
-> gestor no ve ni puede cambiar. Ver §6.
+> La etapa 1 **existe desde F2c**, con reglas que el gestor escribe. Antes su papel lo hacía un corte
+> de puntuación fijado en el código, que nadie veía ni podía cambiar.
 
 ---
 
@@ -227,10 +227,14 @@ siguen en discusión— vive en [03 — Dominio y organización](03-dominio-y-or
 | **Condiciones "está vacío" / "no está vacío"** | ✅ Funciona |
 | **Combinar varias condiciones en una regla** | ✅ Funciona |
 | **Reparto por canal, zona o especialidad** | ✅ Funciona |
-| **Lead sin correo, conservado y revisable** | ❌ El correo es obligatorio: el lead que no lo trae se pierde sin dejar rastro |
+| **Lead sin correo, conservado y revisable** | ✅ Funciona. El correo es opcional, y lo que no se puede interpretar queda en la bandeja con su detalle en vez de perderse |
 | **Identidad del contacto entre entradas** | ❌ No existe |
 
-Las cuatro primeras carencias se apoyan en **la misma pieza**: la capacidad de evaluar una condición
-—*este campo, comparado así, con este valor*— contra un lead. Esa pieza ya existe y la usan las
-reglas de puntuación. Extenderla y reutilizarla en las tres etapas es lo que convierte esta lista en
-una fase coherente, y no en cuatro parches sueltos.
+Las cuatro que estaban en rojo se apoyaban en **la misma pieza**: la capacidad de evaluar una
+condición —*este campo, comparado así, con este valor*— contra un lead. Extraerla como unidad
+compartida y reutilizarla en las tres etapas es lo que las cerró de una vez, en lugar de con cuatro
+parches sueltos.
+
+Lo único que sigue abierto es la identidad del contacto, y no por tamaño: el campo que decide si dos
+entradas son la misma persona lo elige cada organización, así que arrastra su propia configuración.
+Está desarrollado en [Mejoras futuras · Identidad del contacto](mejoras-futuras/01-identidad-del-contacto.md).
