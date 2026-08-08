@@ -22,7 +22,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      # 8001 on the host: 8000 is a common default and is often already taken.
+      # Inside the compose network the API still listens on 8000.
+      - "8001:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
       - JWT_SECRET=dev-secret-change-in-production

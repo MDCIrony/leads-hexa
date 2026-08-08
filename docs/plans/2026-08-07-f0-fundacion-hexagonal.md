@@ -3348,7 +3348,7 @@ docker compose up -d --build
 Run: `docker compose ps`
 Expected: `db` y `backend` en `healthy`, `frontend` en `running`.
 
-Run: `curl -s http://localhost:8000/health`
+Run: `curl -s http://localhost:8001/health`
 Expected: `{"status":"ok"}`
 
 Run: `curl -s -o /dev/null -w "%{http_code}" http://localhost/`
@@ -3372,7 +3372,7 @@ Sustituir la sección de arranque de `README.md` por instrucciones que reflejen 
     docker compose up --build -d
 
 - Frontend: http://localhost
-- API (Swagger UI): http://localhost:8000/docs
+- API (Swagger UI): http://localhost:8001/docs
 
 ### Ejecución de la suite de pruebas
 
