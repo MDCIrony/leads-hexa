@@ -1,10 +1,14 @@
 import hmac
 import hashlib
 import json
+import logging
 import time
 from typing import Any, Dict
 import httpx
 from application.ports.output.webhook_dispatcher_port import WebhookDispatcherPort
+
+_LOGGER = logging.getLogger(__name__)
+
 
 class HttpxWebhookDispatcher(WebhookDispatcherPort):
     def __init__(self, timeout: float = 5.0) -> None:
@@ -30,4 +34,5 @@ class HttpxWebhookDispatcher(WebhookDispatcherPort):
                 response = client.post(target_url, content=payload_bytes, headers=headers)
                 return response.status_code in (200, 201, 202, 204)
         except Exception:
+            _LOGGER.warning("Webhook dispatch to %s failed", target_url, exc_info=True)
             return False

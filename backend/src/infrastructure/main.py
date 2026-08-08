@@ -17,9 +17,11 @@ from infrastructure.adapters.input.api.auth_router import router as auth_router
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
+from infrastructure.logging_config import configure_logging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    configure_logging()
     settings = Settings.from_environment()
     container = Container(settings)
     migrations_dir = Path(__file__).resolve().parents[2] / "migrations"

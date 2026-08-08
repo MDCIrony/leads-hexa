@@ -1,6 +1,9 @@
+import logging
 from typing import Callable, Dict, List, Type
 from application.ports.output.domain_event_publisher_port import DomainEventPublisherPort
 from domain.events.domain_event import DomainEvent
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class InMemoryEventPublisher(DomainEventPublisherPort):
@@ -19,6 +22,12 @@ class InMemoryEventPublisher(DomainEventPublisherPort):
 
     def publish(self, event: DomainEvent) -> None:
         """Publish an event to all subscribed handlers for its type."""
-        handlers = self._handlers.get(type(event), [])
-        for handler in handlers:
-            handler(event)
+        for handler in self._handlers.get(type(event), []):
+            try:
+                handler(event)
+            except Exception:
+                # A failing side effect must not undo work that is already
+                # committed, nor stop the remaining handlers.
+                _LOGGER.error(
+                    "Handler %s failed for %s", handler, event.event_type, exc_info=True
+                )
