@@ -1,6 +1,9 @@
 import os
 import uuid
 os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
+# `infrastructure.main` reads Settings at module level (for CORS), so
+# DATABASE_URL must exist by import time, not just by app startup.
+os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgrespassword@localhost:5433/leads_test")
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
@@ -22,7 +25,7 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
             from domain.entities.agent import Agent
             from domain.value_objects.enums import AgentRole
 
-            db = app.state.db
+            db = app.state.container.database
             uow = PostgresUnitOfWork(db)
             with uow:
                 admin = Agent.create(name="Bootstrap Admin", email=admin_email, team="HQ", role=AgentRole.ADMIN)
@@ -130,7 +133,7 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
 
         # 9. Deactivating the plain agent immediately revokes their existing token (re-fetch from repo, not JWT trust).
         from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-        db = app.state.db
+        db = app.state.container.database
         uow = PostgresUnitOfWork(db)
         with uow:
             deactivated = uow.agents.get_by_id(uuid.UUID(agent_resp.json()["id"]))

@@ -22,6 +22,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
         rule_repo: Optional[RuleRepositoryPort] = None,
         agent_repo: Optional[AgentRepositoryPort] = None,
         event_publisher: Optional[DomainEventPublisherPort] = None,
+        router_engine: Optional[RouterEngine] = None,
         threshold_qualified: int = 30,
         threshold_disqualified: int = 0,
     ) -> None:
@@ -31,7 +32,11 @@ class IngestLeadUseCase(IngestLeadInputPort):
         self.agent_repo = agent_repo
         self.event_publisher = event_publisher
         self.scoring_engine = ScoringEngine()
-        self.router_engine = RouterEngine()
+        # Round-robin state lives on the engine instance: the composition root
+        # injects one instance shared across requests, so the index keeps
+        # advancing; a caller that does not care (tests, ad-hoc scripts) gets
+        # a private one instead of being forced to wire it up.
+        self.router_engine = router_engine or RouterEngine()
         self.threshold_qualified = threshold_qualified
         self.threshold_disqualified = threshold_disqualified
 

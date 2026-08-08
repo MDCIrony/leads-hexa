@@ -1,6 +1,9 @@
 import os
 import uuid
 os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
+# `infrastructure.main` reads Settings at module level (for CORS), so
+# DATABASE_URL must exist by import time, not just by app startup.
+os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgrespassword@localhost:5433/leads_test")
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
@@ -16,7 +19,7 @@ def _manager_auth_headers(tenant_id: str) -> dict:
     from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
     from domain.entities.agent import Agent
 
-    db = app.state.db
+    db = app.state.container.database
     uow = PostgresUnitOfWork(db)
     manager = Agent.create(
         name="Manager",
@@ -116,7 +119,7 @@ def test_batch_upload_reports_failed_rows_without_losing_the_valid_ones():
         # A bad row must not drag the good ones down with it: only the 2
         # valid rows are actually persisted for this tenant.
         from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-        uow = PostgresUnitOfWork(app.state.db)
+        uow = PostgresUnitOfWork(app.state.container.database)
         with uow:
             persisted_count = uow.leads.count_by_tenant(uuid.UUID(tenant_id))
         assert persisted_count == 2

@@ -1,13 +1,10 @@
-import os
-from typing import Generator, Optional
+from typing import Optional
 from uuid import UUID
 from fastapi import Request, Depends
 from fastapi.security import OAuth2PasswordBearer
 from application.dtos.context import RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.ports.output.token_service_port import TokenServicePort
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
@@ -28,28 +25,46 @@ from application.use_cases.auth_use_cases import LoginUseCase
 from domain.entities.agent import Agent
 from domain.exceptions import UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
-from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
-from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
+from infrastructure.di.container import Container
 
-def get_db(request: Request) -> RawSqlDatabase:
-    return request.app.state.db
+def get_container(request: Request) -> Container:
+    return request.app.state.container
 
-def get_uow(db: RawSqlDatabase = Depends(get_db)) -> Generator[UnitOfWorkPort, None, None]:
-    uow = PostgresUnitOfWork(db)
-    yield uow
+def get_uow(container: Container = Depends(get_container)) -> UnitOfWorkPort:
+    return container.unit_of_work()
 
-def get_ingest_lead_use_case(request: Request, uow: UnitOfWorkPort = Depends(get_uow)) -> IngestLeadInputPort:
-    return IngestLeadUseCase(uow=uow, event_publisher=getattr(request.app.state, "event_publisher", None))
+def get_token_service(container: Container = Depends(get_container)) -> TokenServicePort:
+    return container.token_service
 
-def get_process_batch_use_case(request: Request, uow: UnitOfWorkPort = Depends(get_uow)) -> ProcessBatchInputPort:
-    ingest_lead_use_case = IngestLeadUseCase(uow=uow, event_publisher=getattr(request.app.state, "event_publisher", None))
-    return ProcessBatchUseCase(file_parser=request.app.state.file_parser, ingest_lead_use_case=ingest_lead_use_case)
+def get_ingest_lead_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> IngestLeadInputPort:
+    return IngestLeadUseCase(
+        uow=uow,
+        event_publisher=container.event_publisher,
+        router_engine=container.assignment_engine,
+    )
+
+def get_process_batch_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> ProcessBatchInputPort:
+    ingest_lead_use_case = IngestLeadUseCase(
+        uow=uow,
+        event_publisher=container.event_publisher,
+        router_engine=container.assignment_engine,
+    )
+    return ProcessBatchUseCase(file_parser=container.file_parser, ingest_lead_use_case=ingest_lead_use_case)
 
 def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsInputPort:
     return GetLeadsUseCase(uow=uow)
 
-def get_create_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateAgentInputPort:
-    return CreateAgentUseCase(uow=uow, password_hasher=BcryptPasswordHasher())
+def get_create_agent_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> CreateAgentInputPort:
+    return CreateAgentUseCase(uow=uow, password_hasher=container.password_hasher)
 
 def get_get_agents_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetAgentsInputPort:
     return GetAgentsUseCase(uow=uow)
@@ -69,20 +84,19 @@ def get_create_routing_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> 
 def get_get_routing_rules_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetRoutingRulesInputPort:
     return GetRoutingRulesUseCase(uow=uow)
 
-def get_login_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> LoginInputPort:
+def get_login_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> LoginInputPort:
     return LoginUseCase(
         uow=uow,
-        password_hasher=BcryptPasswordHasher(),
-        token_service=JwtTokenService(secret=os.environ["JWT_SECRET"]),
+        password_hasher=container.password_hasher,
+        token_service=container.token_service,
     )
 
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 _optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
-
-
-def get_token_service() -> TokenServicePort:
-    return JwtTokenService(secret=os.environ["JWT_SECRET"])
 
 
 def resolve_current_agent(token: str, uow: UnitOfWorkPort, token_service: TokenServicePort) -> Agent:
@@ -134,4 +148,3 @@ def require_organization_manager(
 ) -> RequestContext:
     AuthorizationPolicy.ensure_can_manage_organization(context.actor)
     return context
-
