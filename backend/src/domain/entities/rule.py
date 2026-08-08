@@ -1,10 +1,11 @@
 import uuid
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any, List, Optional, Union
 from uuid import UUID
 
 from domain.exceptions import DomainException
+from domain.value_objects.criterion import Criterion
+from domain.value_objects.criterion import EVALUABLE_FIELDS as SCORABLE_FIELDS, _CUSTOM_PREFIX
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, Operator
 
 if TYPE_CHECKING:
@@ -12,16 +13,6 @@ if TYPE_CHECKING:
     # module level would create a cycle the moment it needs a rule back.
     from domain.entities.sales_group import SalesGroup
     from domain.entities.lead import Lead
-
-
-# Reflection over any attribute name let a rule read tenant_id or an internal
-# value object. Scoring is a business concept: these are the fields a manager
-# may reason about, plus anything the source itself supplied.
-SCORABLE_FIELDS = frozenset(
-    {"first_name", "last_name", "email", "company", "industry", "budget", "phone", "score"}
-)
-_CUSTOM_PREFIX = "custom_attributes."
-_MISSING = object()
 
 
 @dataclass
@@ -85,72 +76,13 @@ class ScoringRule:
         )
 
     def matches(self, lead: "Lead") -> bool:
-        actual = self._field_value(lead)
-        if actual is _MISSING:
-            # A lead with no such field genuinely does not equal the target,
-            # so only NOT_EQUALS is satisfied by absence.
-            return self.operator == Operator.NOT_EQUALS
+        return self.as_criterion().matches(lead)
 
-        if self.operator == Operator.EQUALS:
-            return self._equal(actual, self.value)
-        if self.operator == Operator.NOT_EQUALS:
-            return not self._equal(actual, self.value)
-        if self.operator == Operator.GREATER_THAN:
-            return self._compare(actual, self.value, greater=True)
-        if self.operator == Operator.LESS_THAN:
-            return self._compare(actual, self.value, greater=False)
-        if self.operator == Operator.CONTAINS:
-            if isinstance(actual, str):
-                return str(self.value) in actual
-            if isinstance(actual, (list, tuple, dict)):
-                return self.value in actual
-            return False
-        if self.operator == Operator.IN:
-            return isinstance(self.value, (list, tuple)) and self._in(actual, self.value)
-        return False
-
-    def _field_value(self, lead: "Lead") -> Any:
-        if self.field.startswith(_CUSTOM_PREFIX):
-            key = self.field[len(_CUSTOM_PREFIX):]
-            return lead.custom_attributes.get(key, _MISSING)
-        raw = getattr(lead, self.field, _MISSING)
-        if raw is _MISSING or raw is None:
-            return _MISSING
-        # Value objects expose their payload as .value or .amount.
-        for attr in ("amount", "value"):
-            if hasattr(raw, attr):
-                return getattr(raw, attr)
-        return raw
-
-    @staticmethod
-    def _equal(actual: Any, expected: Any) -> bool:
-        if actual == expected:
-            return True
-        as_numbers = ScoringRule._as_decimals(actual, expected)
-        if as_numbers is not None:
-            return as_numbers[0] == as_numbers[1]
-        return str(actual) == str(expected)
-
-    @staticmethod
-    def _compare(actual: Any, expected: Any, greater: bool) -> bool:
-        as_numbers = ScoringRule._as_decimals(actual, expected)
-        if as_numbers is None:
-            return False
-        left, right = as_numbers
-        return left > right if greater else left < right
-
-    @staticmethod
-    def _in(actual: Any, options: Union[list, tuple]) -> bool:
-        return any(ScoringRule._equal(actual, option) for option in options)
-
-    @staticmethod
-    def _as_decimals(left: Any, right: Any) -> Optional[tuple]:
-        """Decimal, never float: money compared through binary floating point
-        gives wrong answers for values a manager typed exactly."""
-        try:
-            return Decimal(str(left)), Decimal(str(right))
-        except (InvalidOperation, ValueError, TypeError):
-            return None
+    def as_criterion(self) -> Criterion:
+        # Uses the plain constructor, not create(): the field was already
+        # validated when the rule was built, and re-validating here would make
+        # a rule stored before the allow-list existed unreadable.
+        return Criterion(field=self.field, operator=self.operator, value=self.value)
 
 
 @dataclass

@@ -7,6 +7,10 @@ class Operator(str, Enum):
     LESS_THAN = "LESS_THAN"
     CONTAINS = "CONTAINS"
     IN = "IN"
+    # Emptiness is a question about presence, not about value, and it is the
+    # only way to express "has no way of being contacted".
+    IS_EMPTY = "IS_EMPTY"
+    IS_NOT_EMPTY = "IS_NOT_EMPTY"
 
 class LeadStatus(str, Enum):
     NEW = "NEW"
