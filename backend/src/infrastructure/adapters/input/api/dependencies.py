@@ -27,6 +27,9 @@ from application.ports.input.lead_source_use_case_ports import (
 from application.ports.input.lead_lifecycle_use_case_ports import (
     AssignLeadInputPort, DiscardLeadInputPort, GetLeadInputPort, GetMyLeadsInputPort,
 )
+from application.ports.input.intake_record_use_case_ports import (
+    DiscardIntakeRecordInputPort, GetIntakeRecordsInputPort, PromoteIntakeRecordInputPort,
+)
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
@@ -45,6 +48,9 @@ from application.use_cases.lead_source_use_cases import (
 )
 from application.use_cases.lead_lifecycle_use_cases import (
     AssignLeadUseCase, DiscardLeadUseCase, GetLeadUseCase, GetMyLeadsUseCase,
+)
+from application.use_cases.intake_record_use_cases import (
+    DiscardIntakeRecordUseCase, GetIntakeRecordsUseCase, PromoteIntakeRecordUseCase,
 )
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import LoginUseCase
@@ -86,6 +92,18 @@ def get_process_batch_use_case(
         engine=container.assignment_engine,
     )
     return ProcessBatchUseCase(file_parser=container.file_parser, ingest_lead_use_case=ingest_lead_use_case)
+
+def get_get_intake_records_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeRecordsInputPort:
+    return GetIntakeRecordsUseCase(uow=uow)
+
+def get_promote_intake_record_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    ingest: IngestLeadInputPort = Depends(get_ingest_lead_use_case),
+) -> PromoteIntakeRecordInputPort:
+    return PromoteIntakeRecordUseCase(uow=uow, ingest=ingest)
+
+def get_discard_intake_record_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DiscardIntakeRecordInputPort:
+    return DiscardIntakeRecordUseCase(uow=uow)
 
 def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsInputPort:
     return GetLeadsUseCase(uow=uow)

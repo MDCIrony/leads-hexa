@@ -4,6 +4,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from domain.entities.agent import Agent
+    from domain.entities.intake_record import IntakeRecord
     from domain.entities.lead import Lead
     from domain.entities.lead_source import LeadSource
     from domain.entities.sales_group import SalesGroup
@@ -245,4 +246,19 @@ class UpdateLeadSourceCommand:
 @dataclass(frozen=True)
 class LeadSourcesPageResult:
     items: List["LeadSource"]
+    total: int
+
+
+@dataclass(frozen=True)
+class PromoteIntakeRecordCommand:
+    tenant_id: UUID
+    record_id: UUID
+    # The full corrected payload, not a patch: the manager resends the whole
+    # form from the inbox.
+    payload: Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class IntakeRecordsPageResult:
+    items: List["IntakeRecord"]
     total: int

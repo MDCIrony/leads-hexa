@@ -79,7 +79,10 @@ class IntakeRecord:
         self.processed_at = datetime.now(timezone.utc)
 
     def reject(self, errors: List[IntakeError]) -> None:
-        if self.status != IntakeRecordStatus.PENDING:
+        # Same reason as promote(): the manager corrects a rejected record and
+        # the correction can fail again. Both transitions start from the same
+        # states, or the inbox would never close the loop.
+        if self.status not in _REOPENABLE_STATUSES:
             raise DomainException(
                 f"Cannot reject an intake record from status {self.status.value}",
                 error_code="INVALID_INTAKE_TRANSITION",

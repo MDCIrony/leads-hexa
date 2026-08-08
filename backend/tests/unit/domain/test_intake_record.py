@@ -55,11 +55,19 @@ def test_reject_succeeds_from_pending():
     assert record.processed_at is not None
 
 
-@pytest.mark.parametrize(
-    "status",
-    [IntakeRecordStatus.REJECTED, IntakeRecordStatus.PROMOTED, IntakeRecordStatus.DISCARDED],
-)
-def test_reject_fails_outside_pending(status):
+def test_reject_from_rejected_replaces_errors_and_stays_rejected():
+    record = _record(IntakeRecordStatus.PENDING)
+    record.reject([IntakeError(field="email", message="Invalid format")])
+
+    record.reject([IntakeError(field="budget", message="Must be positive")])
+
+    assert record.status == IntakeRecordStatus.REJECTED
+    assert len(record.errors) == 1
+    assert record.errors[0].field == "budget"
+
+
+@pytest.mark.parametrize("status", [IntakeRecordStatus.PROMOTED, IntakeRecordStatus.DISCARDED])
+def test_reject_fails_from_a_terminal_status(status):
     record = _record(status)
 
     with pytest.raises(DomainException) as exc_info:

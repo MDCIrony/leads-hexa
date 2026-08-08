@@ -66,3 +66,11 @@ class GetLeadSourcesQuery:
     tenant_id: UUID
     limit: int = 100
     offset: int = 0
+
+
+@dataclass(frozen=True)
+class GetIntakeRecordsQuery:
+    tenant_id: UUID
+    status: Optional[str] = None
+    limit: int = 100
+    offset: int = 0

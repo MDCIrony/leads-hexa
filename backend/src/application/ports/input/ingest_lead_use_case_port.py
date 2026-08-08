@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 from uuid import UUID
 
 from application.dtos.commands import IngestLeadCommand, LeadProcessedResult
+from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.enums import LeadSourceKind
 
 class IngestLeadInputPort(ABC):
@@ -10,5 +12,9 @@ class IngestLeadInputPort(ABC):
         pass
 
     @abstractmethod
-    def execute(self, command: IngestLeadCommand) -> LeadProcessedResult:
+    def execute(
+        self,
+        command: IngestLeadCommand,
+        existing_record: Optional[IntakeRecord] = None,
+    ) -> LeadProcessedResult:
         pass

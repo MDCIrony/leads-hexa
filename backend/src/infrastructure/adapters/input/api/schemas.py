@@ -313,6 +313,33 @@ class PaginatedTenantsResponse(BaseModel):
     offset: int
     has_more: bool
 
+# --- Intake Record Schemas ---
+class IntakeErrorResponse(BaseModel):
+    field: str
+    message: str
+    received_value: Optional[str] = None
+    error_code: Optional[str] = None
+
+class IntakeRecordResponse(BaseModel):
+    id: str
+    source_id: str
+    status: str
+    payload: Dict[str, Any]
+    errors: List[IntakeErrorResponse]
+    received_at: datetime
+    processed_at: Optional[datetime] = None
+    lead_id: Optional[str] = None
+
+class IntakeRecordsPageResponse(BaseModel):
+    items: List[IntakeRecordResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+class PromoteIntakeRecordRequest(BaseModel):
+    payload: Dict[str, Any]
+
 # --- Auth Schemas ---
 class LoginResponse(BaseModel):
     access_token: str
