@@ -26,8 +26,8 @@ lugar de él.
 | 4 | [El pipeline unificado y la retirada de `FAILED`](04-pipeline-unificado.md) | ✅ `0be1127` |
 | 5a | [La organización sale del token](05a-autenticacion.md) | ✅ `b34a534`, `34e84aa` |
 | 5b | [CRUD de orígenes](05b-crud-origenes.md) | ✅ `921ec8c` |
-| 5c | [La bandeja de entrada](05c-bandeja.md) | ⏳ **siguiente** |
-| 6 | [Harness y cierre](06-harness-y-cierre.md) | ⏳ |
+| 5c | [La bandeja de entrada](05c-bandeja.md) | ✅ `f4f9ea6` |
+| 6 | [Harness y cierre](06-harness-y-cierre.md) | ⏳ **siguiente** |
 
 Trabajo previo, fuera de las tareas: `edba1cc` desacopla el harness del orden de importación,
 `f1d7ffa` fija el intérprete local a 3.12, `0a095e4` mueve la configuración de Pyright a la raíz y

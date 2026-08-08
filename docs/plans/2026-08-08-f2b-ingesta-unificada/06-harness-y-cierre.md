@@ -47,6 +47,14 @@ misma forma que usa `verify_f2a`.
 | 11 | Un origen de otra organización | `404` |
 | 12 | Borrar un origen que tiene leads | `SOURCE_IN_USE` |
 
+**El correo inválido de la comprobación 6 tiene que ser `jane@@example.com`, no algo como
+`sin-arroba`.** El esquema `IngestLeadRequest` valida el correo con Pydantic *antes* de que la
+petición llegue al dominio, así que un valor groseramente roto sale por un `422` que **no persiste
+ningún registro**, y la bandeja se queda vacía justo en el caso que la fase existe para demostrar.
+`jane@@example.com` pasa la validación laxa de Pydantic —tiene `@` y un punto después del último— y
+falla el regex de `EmailAddress`, que no admite un segundo `@`. Lo descubrió la Tarea 5c; usa el
+mismo valor.
+
 Arranque de la función, con el estilo exacto de `verify_f2a`:
 
 ```bash
@@ -79,7 +87,7 @@ Para el correo ausente (comprobación 4) el cuerpo simplemente no lleva la clave
 Para la carga masiva (comprobación 10), un CSV al vuelo y `curl -F`:
 
 ```bash
-  printf 'first_name,last_name,email,company,industry,budget\nBuena,Fila,ok-%s@x.test,Acme,Tech,5000\nMala,Fila,sin-arroba,Acme,Tech,5000\n' \
+  printf 'first_name,last_name,email,company,industry,budget\nBuena,Fila,ok-%s@x.test,Acme,Tech,5000\nMala,Fila,mala@@x.test,Acme,Tech,5000\n' \
     "$STAMP" > /tmp/leads-$STAMP.csv
   r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" \
     -F "file=@/tmp/leads-$STAMP.csv")
