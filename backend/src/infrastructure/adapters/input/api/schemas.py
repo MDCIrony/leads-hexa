@@ -47,6 +47,7 @@ class LeadProcessedResponse(BaseModel):
 class LeadResponse(BaseModel):
     id: str
     tenant_id: str
+    source_id: str
     first_name: str
     last_name: str
     email: Optional[str]
@@ -75,6 +76,7 @@ class AppliedRuleResponse(BaseModel):
 class LeadDetailResponse(BaseModel):
     id: str
     tenant_id: str
+    source_id: str
     first_name: str
     last_name: str
     email: Optional[str]

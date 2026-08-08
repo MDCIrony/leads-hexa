@@ -39,6 +39,7 @@ def _to_lead_response(lead: Lead) -> LeadResponse:
     return LeadResponse(
         id=str(lead.id),
         tenant_id=str(lead.tenant_id),
+        source_id=str(lead.source_id),
         first_name=lead.first_name,
         last_name=lead.last_name,
         email=str(lead.email) if lead.email else None,
@@ -58,6 +59,7 @@ def _to_detail_response(lead: Lead) -> LeadDetailResponse:
     return LeadDetailResponse(
         id=str(lead.id),
         tenant_id=str(lead.tenant_id),
+        source_id=str(lead.source_id),
         first_name=lead.first_name,
         last_name=lead.last_name,
         email=str(lead.email) if lead.email else None,

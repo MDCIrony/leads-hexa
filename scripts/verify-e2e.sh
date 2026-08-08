@@ -217,13 +217,10 @@ verify_f2b() {
     -d '{"first_name":"Sin","last_name":"Correo","company":"Acme","industry":"Tech","budget":2000}')
   check "un lead sin correo se acepta" 201 "$(code "$r")"
   lead=$(body "$r" | f 'd["lead_id"]')
-  rec=$(body "$r" | f 'd["intake_record_id"]')
 
   r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
   check "el correo ausente llega como null" "" "$(body "$r" | f 'd.get("email") or ""')"
-
-  r=$(req "$API/intake/records" -H "Authorization: Bearer $MGR_A")
-  check "lleva el source_id del formulario manual" "$src" "$(body "$r" | f 'next(i for i in d["items"] if i["id"] == "'"$rec"'")["source_id"]')"
+  check "el lead dice de qué origen vino" "$src" "$(body "$r" | f 'd["source_id"]')"
 
   section "F2b · lo que no se puede interpretar queda en la bandeja"
 
