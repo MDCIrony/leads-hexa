@@ -21,6 +21,7 @@ WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
+COPY --from=builder /app/migrations /app/migrations
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 
 ENV PATH="/app/.venv/bin:$PATH" \

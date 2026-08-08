@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import RawSqlWebhookRepository
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
 from application.handlers.webhook_event_handler import WebhookEventHandler
@@ -20,7 +22,8 @@ from infrastructure.di.container import Container
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = Settings.from_environment()
     container = Container(settings)
-    container.database.init_db()
+    migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
+    MigrationRunner(container.database, migrations_dir).apply_pending()
 
     # Held open for the process lifetime and only ever read from, so it runs
     # in autocommit mode rather than sitting in one long-lived transaction.
