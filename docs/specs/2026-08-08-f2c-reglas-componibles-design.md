@@ -102,23 +102,29 @@ gestor debe entender para cubrir un caso que ya cubren dos reglas. No paga.
 expresa con dos reglas. El anidamiento sólo se justifica cuando existe una interfaz visual que lo
 haga legible, y esa interfaz no está en el MVP.
 
-### Por qué esta decisión no puede posponerse
+### Por qué esta decisión se toma ahora
 
-La forma del dato es lo único que después **no se cambia barato**:
+**No hay nada que migrar.** El sistema no está desplegado y los únicos datos existentes son de
+prueba. Ningún paso de esta fase escribe código de traducción ni de backfill: el modelo cambia y las
+migraciones se aplican sobre base vacía.
 
-| Cambio posterior | Coste |
-|---|---|
-| Añadir un operador nuevo | Bajo. Los datos existentes siguen siendo válidos |
-| Añadir un campo opcional a la regla | Bajo |
-| **Pasar de una condición a N condiciones** | **Alto**: migración semántica de la configuración de cada cliente |
-| Cambiar la unidad de agrupación | Muy alto |
+El argumento es **preventivo**, y por eso vale ahora y no después. Los cambios posteriores no cuestan
+lo mismo:
 
-Una migración de configuración de cliente no es como una migración de esquema: **no se puede
-verificar sin conocer la intención de quien escribió la regla**. Una regla mal traducida no falla —
-cambia a quién se asignan los leads de esa organización, en silencio, y se detecta cuando alguien se
-queja semanas después.
+| Cambio posterior | Coste | Por qué |
+|---|---|---|
+| Añadir un operador nuevo | Bajo | **Añade** información. Lo guardado sigue significando lo mismo |
+| Añadir un campo opcional a la regla | Bajo | Ídem: valor por defecto y las reglas existentes no cambian de comportamiento |
+| **Pasar de una condición a N condiciones** | Alto | **Reinterpreta** lo guardado. Hay que decidir por el gestor si dos reglas suyas eran un Y o un O |
+| Cambiar la unidad de agrupación | Muy alto | Cambia el objeto que el gestor manipula, no sólo cómo se almacena |
 
-Hoy no hay ningún dato que migrar. El coste de acertar ahora es **cero**.
+La línea que separa los dos primeros de los dos últimos: **añadir información nueva es barato;
+reinterpretar la existente no lo es**, porque no se puede verificar sin conocer la intención de quien
+la escribió. Una regla mal reinterpretada no falla: cambia a quién se asignan los leads, en silencio.
+
+Hoy esa reinterpretación no tiene víctimas porque no hay configuración real. Ése es exactamente el
+motivo de fijar la forma ahora: **el coste de acertar es cero, y sólo lo es hasta el primer
+despliegue con clientes**.
 
 Esto no contradice el principio de no construir de más: no se construye el constructor visual, ni el
 anidamiento, ni la biblioteca de reglas. Se elige **la forma del dato que va a persistir**, que es
