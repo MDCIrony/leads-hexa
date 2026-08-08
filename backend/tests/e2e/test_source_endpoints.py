@@ -209,7 +209,7 @@ def test_delete_source_with_a_lead_returns_source_in_use_not_500():
             },
             headers=manager_headers,
         )
-        assert ingest_resp.status_code == 201
+        assert ingest_resp.status_code == 202
 
         manual_form_id = next(
             item["id"]

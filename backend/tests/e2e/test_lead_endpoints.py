@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from infrastructure.main import app
 from application.ports.output.token_service_port import TokenClaims
 from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
-from domain.value_objects.enums import AgentRole, IntakeRecordStatus, LeadSourceKind
+from domain.value_objects.enums import AgentRole, LeadSourceKind
+
+from _intake_helpers import ingest_and_resolve
 
 
 def _manager_auth_headers(tenant_id: str) -> dict:
@@ -75,14 +77,18 @@ def test_ingest_lead_endpoint_success():
         # happen after entering this block, not before it.
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
-        response = client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
-        assert response.status_code == 201
-        data = response.json()
-        assert "lead_id" in data
+        record = ingest_and_resolve(client, headers, payload)
+        assert record["lead_id"]
+
+        lead = client.get(f"/api/v1/leads/{record['lead_id']}", headers=headers)
+        assert lead.status_code == 200
+        data = lead.json()
         assert data["status"] in ("NEW", "QUALIFIED", "DISQUALIFIED", "ASSIGNED")
         assert "score" in data
 
-def test_ingest_lead_endpoint_invalid_email_validation():
+def test_ingest_lead_endpoint_invalid_email_is_accepted_and_rejected_in_the_tray():
+    # V1: the schema's loose email format check is gone, so this reaches the
+    # domain instead of bouncing as a 422 that would have discarded it.
     tenant_id = str(uuid.uuid4())
     payload = {
         "first_name": "Maria",
@@ -96,8 +102,9 @@ def test_ingest_lead_endpoint_invalid_email_validation():
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
-        response = client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
-        assert response.status_code == 422
+        record = ingest_and_resolve(client, headers, payload)
+        assert record["status"] == "REJECTED"
+        assert record["errors"][0]["field"] == "email"
 
 def test_batch_upload_endpoint():
     tenant_id = str(uuid.uuid4())
@@ -227,7 +234,7 @@ def test_list_leads_pagination_has_more_flag():
         assert data["has_more"] is False
 
 
-def test_ingest_lead_endpoint_negative_budget_returns_400():
+def test_ingest_lead_endpoint_negative_budget_is_accepted_and_rejected_in_the_tray():
     tenant_id = str(uuid.uuid4())
     payload = {
         "first_name": "Bad",
@@ -241,22 +248,11 @@ def test_ingest_lead_endpoint_negative_budget_returns_400():
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
-        response = client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
-        assert response.status_code == 400
-        data = response.json()
-        assert data["error"] is True
-        assert data["error_code"] == "INVALID_BUDGET"
-        assert "message" in data
-        assert data["intake_record_id"]
+        record = ingest_and_resolve(client, headers, payload)
 
         # The hinge of this phase: a payload that fails validation is still
-        # persisted, not lost — it lands as a REJECTED IntakeRecord instead
-        # of vanishing behind a 400.
-        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-        uow = PostgresUnitOfWork(app.state.container.database)
-        with uow:
-            record = uow.intake_records.get_by_id_and_tenant(
-                uuid.UUID(data["intake_record_id"]), uuid.UUID(tenant_id)
-            )
-        assert record is not None
-        assert record.status == IntakeRecordStatus.REJECTED
+        # persisted, not lost — it lands as a REJECTED IntakeRecord with its
+        # detail, instead of vanishing behind a synchronous error response.
+        assert record["id"]
+        assert record["status"] == "REJECTED"
+        assert record["errors"][0]["error_code"] == "INVALID_BUDGET"

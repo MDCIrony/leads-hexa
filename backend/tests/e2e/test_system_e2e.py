@@ -7,6 +7,8 @@ from infrastructure.main import app
 from application.ports.output.token_service_port import TokenClaims
 from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 
+from _intake_helpers import ingest_and_resolve
+
 
 def _bootstrap_admin_headers(client: TestClient) -> dict:
     """The agents table is empty at the start of every e2e test (see
@@ -108,9 +110,10 @@ def test_full_system_lead_routing_flow_e2e():
 
 
         # 4. Ingestar Lead
-        ingest_resp = client.post(
-            "/api/v1/intake/leads/ingest",
-            json={
+        record = ingest_and_resolve(
+            client,
+            headers,
+            {
                 "first_name": "Maria",
                 "last_name": "Gomez",
                 "email": "mgomez@techcorp.com",
@@ -119,10 +122,10 @@ def test_full_system_lead_routing_flow_e2e():
                 "industry": "Technology",
                 "custom_attributes": {"employee_count": 150},
             },
-            headers=headers,
         )
-        assert ingest_resp.status_code == 201
-        result = ingest_resp.json()
+        lead_resp = client.get(f"/api/v1/leads/{record['lead_id']}", headers=headers)
+        assert lead_resp.status_code == 200
+        result = lead_resp.json()
 
         # 5. Verificaciones
         assert result["status"] == "ASSIGNED"

@@ -3,6 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from infrastructure.main import app
+from _intake_helpers import ingest_and_resolve
 
 
 def _bootstrap_admin_headers(client: TestClient) -> dict:
@@ -131,9 +132,10 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
             assert scoring_resp.status_code == 201, scoring_resp.text
 
         def _ingest(budget: float) -> dict:
-            resp = client.post(
-                "/api/v1/intake/leads/ingest",
-                json={
+            record = ingest_and_resolve(
+                client,
+                headers,
+                {
                     "first_name": "Lead",
                     "last_name": "Test",
                     "email": f"lead_{uuid.uuid4().hex[:6]}@example.com",
@@ -141,10 +143,10 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
                     "budget": budget,
                     "industry": "Tech",
                 },
-                headers=headers,
             )
-            assert resp.status_code == 201, resp.text
-            return resp.json()
+            lead = client.get(f"/api/v1/leads/{record['lead_id']}", headers=headers)
+            assert lead.status_code == 200, lead.text
+            return lead.json()
 
         # 5. A high-score lead lands on an Enterprise agent.
         first = _ingest(100000.0)

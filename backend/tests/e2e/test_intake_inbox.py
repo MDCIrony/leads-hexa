@@ -5,6 +5,7 @@ from infrastructure.main import app
 
 from test_intake_authentication import _agent_auth_headers
 from test_lead_endpoints import _manager_auth_headers, _seed_tenant_with_sources
+from _intake_helpers import ingest_and_resolve
 
 _VALID_PAYLOAD = {
     "first_name": "Ana",
@@ -25,14 +26,11 @@ def test_rejected_payload_can_be_corrected_and_promoted_through_the_inbox():
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
-        # 1. Double "@" passes the request schema's loose format check but
-        # fails the domain's EmailAddress regex, so it reaches the pipeline
-        # and lands as a REJECTED IntakeRecord instead of a 422 that would
-        # never persist anything.
+        # 1. V1 retired the schema's email check entirely, so this reaches the
+        # domain unfiltered — the EmailAddress regex rejects the double "@"
+        # and the record lands REJECTED in the tray instead of being lost.
         bad_payload = {**_VALID_PAYLOAD, "email": "jane@@example.com"}
-        ingest_resp = client.post("/api/v1/intake/leads/ingest", json=bad_payload, headers=headers)
-        assert ingest_resp.status_code == 400
-        record_id = ingest_resp.json()["intake_record_id"]
+        record_id = ingest_and_resolve(client, headers, bad_payload)["id"]
         assert record_id
 
         # 2. Shows up in the inbox with its field error and original payload.
@@ -83,8 +81,7 @@ def test_promote_with_a_still_invalid_payload_stays_rejected_with_new_errors():
         headers = _manager_auth_headers(tenant_id)
 
         bad_payload = {**_VALID_PAYLOAD, "email": "jane@@example.com"}
-        ingest_resp = client.post("/api/v1/intake/leads/ingest", json=bad_payload, headers=headers)
-        record_id = ingest_resp.json()["intake_record_id"]
+        record_id = ingest_and_resolve(client, headers, bad_payload)["id"]
 
         still_bad_payload = {**_VALID_PAYLOAD, "email": "ana@example.com", "budget": -50.0}
         promote_resp = client.post(
@@ -108,8 +105,7 @@ def test_discard_a_rejected_record():
         headers = _manager_auth_headers(tenant_id)
 
         bad_payload = {**_VALID_PAYLOAD, "email": "jane@@example.com"}
-        ingest_resp = client.post("/api/v1/intake/leads/ingest", json=bad_payload, headers=headers)
-        record_id = ingest_resp.json()["intake_record_id"]
+        record_id = ingest_and_resolve(client, headers, bad_payload)["id"]
 
         discard_resp = client.post(f"/api/v1/intake/records/{record_id}/discard", headers=headers)
         assert discard_resp.status_code == 204
@@ -125,9 +121,7 @@ def test_discard_an_already_promoted_record_fails():
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
-        ingest_resp = client.post("/api/v1/intake/leads/ingest", json=_VALID_PAYLOAD, headers=headers)
-        assert ingest_resp.status_code == 201
-        record_id = ingest_resp.json()["intake_record_id"]
+        record_id = ingest_and_resolve(client, headers, _VALID_PAYLOAD)["id"]
 
         discard_resp = client.post(f"/api/v1/intake/records/{record_id}/discard", headers=headers)
         assert discard_resp.status_code == 400
@@ -166,9 +160,7 @@ def test_cross_organization_access_to_intake_records_is_rejected():
         headers_a = _manager_auth_headers(tenant_a)
         headers_b = _manager_auth_headers(tenant_b)
 
-        ingest_resp = client.post("/api/v1/intake/leads/ingest", json=_VALID_PAYLOAD, headers=headers_a)
-        assert ingest_resp.status_code == 201
-        record_id = ingest_resp.json()["intake_record_id"]
+        record_id = ingest_and_resolve(client, headers_a, _VALID_PAYLOAD)["id"]
 
         # Never leaks into another organization's own listing.
         listing_b = client.get("/api/v1/intake/records", headers=headers_b).json()
@@ -195,9 +187,7 @@ def test_agent_role_is_forbidden_from_all_three_inbox_endpoints():
         manager_headers = _manager_auth_headers(tenant_id)
         agent_headers = _agent_auth_headers(tenant_id)
 
-        ingest_resp = client.post("/api/v1/intake/leads/ingest", json=_VALID_PAYLOAD, headers=manager_headers)
-        assert ingest_resp.status_code == 201
-        record_id = ingest_resp.json()["intake_record_id"]
+        record_id = ingest_and_resolve(client, manager_headers, _VALID_PAYLOAD)["id"]
 
         assert client.get("/api/v1/intake/records", headers=agent_headers).status_code == 403
         assert client.post(

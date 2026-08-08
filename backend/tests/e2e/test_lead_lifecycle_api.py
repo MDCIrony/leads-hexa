@@ -3,6 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from infrastructure.main import app
+from _intake_helpers import ingest_and_resolve
 
 
 def _bootstrap_admin(client: TestClient) -> str:
@@ -79,9 +80,11 @@ def _create_agent(client: TestClient, manager_token: str) -> tuple[str, str]:
 
 
 def _ingest_qualified_lead(client: TestClient, manager_token: str, tenant_id: str) -> str:
-    ingested = client.post(
-        "/api/v1/intake/leads/ingest",
-        json={
+    headers = {"Authorization": f"Bearer {manager_token}"}
+    record = ingest_and_resolve(
+        client,
+        headers,
+        {
             "first_name": "Lead",
             "last_name": uuid.uuid4().hex[:6],
             "email": f"lead_{uuid.uuid4().hex[:6]}@x.test",
@@ -89,11 +92,13 @@ def _ingest_qualified_lead(client: TestClient, manager_token: str, tenant_id: st
             "budget": 1000,
             "industry": "tech",
         },
-        headers={"Authorization": f"Bearer {manager_token}"},
     )
-    assert ingested.status_code == 201, ingested.text
-    assert ingested.json()["status"] == "UNASSIGNED", ingested.text
-    return ingested.json()["lead_id"]
+    lead_id = record["lead_id"]
+
+    lead = client.get(f"/api/v1/leads/{lead_id}", headers=headers)
+    assert lead.status_code == 200, lead.text
+    assert lead.json()["status"] == "UNASSIGNED", lead.text
+    return lead_id
 
 
 def _ingest_and_assign(client: TestClient, manager_token: str, tenant_id: str, agent_id: str) -> str:

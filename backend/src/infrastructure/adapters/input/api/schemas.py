@@ -15,6 +15,10 @@ def _validate_email_format(value: str) -> str:
 
 # --- Lead Schemas ---
 class IngestLeadRequest(BaseModel):
+    # V1: no format validation here on purpose. It used to duplicate
+    # EmailAddress with a looser rule and produce a 422 that discarded the
+    # payload before anything was persisted — a malformed email now reaches
+    # the domain, which rejects it while keeping the record in the tray.
     first_name: str
     last_name: str
     email: Optional[str] = None
@@ -24,12 +28,10 @@ class IngestLeadRequest(BaseModel):
     custom_attributes: Dict[str, Any] = Field(default_factory=dict)
     phone: Optional[str] = None
 
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: Optional[str]) -> Optional[str]:
-        if v is None or not v.strip():
-            return None
-        return _validate_email_format(v)
+class IntakeAcceptedResponse(BaseModel):
+    job_id: str
+    record_ids: List[str]
+    status: str
 
 class LeadProcessedResponse(BaseModel):
     lead_id: str

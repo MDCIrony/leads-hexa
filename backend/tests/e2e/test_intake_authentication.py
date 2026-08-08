@@ -8,6 +8,7 @@ from infrastructure.adapters.output.security.jwt_token_service import JwtTokenSe
 from domain.value_objects.enums import AgentRole
 
 from test_lead_endpoints import _manager_auth_headers, _seed_tenant_with_sources
+from _intake_helpers import ingest_and_resolve
 
 _PAYLOAD = {
     "first_name": "Ana",
@@ -67,9 +68,8 @@ def test_ingest_with_manager_token_lands_in_their_own_organization():
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
-        response = client.post("/api/v1/intake/leads/ingest", json=_PAYLOAD, headers=headers)
-        assert response.status_code == 201
-        lead_id = response.json()["lead_id"]
+        record = ingest_and_resolve(client, headers, _PAYLOAD)
+        lead_id = record["lead_id"]
 
         detail = client.get(f"/api/v1/leads/{lead_id}", headers=headers)
         assert detail.status_code == 200
@@ -86,15 +86,26 @@ def test_ingest_ignores_a_tenant_id_in_the_body_and_uses_the_token_instead():
         headers_a = _manager_auth_headers(tenant_a)
         headers_b = _manager_auth_headers(tenant_b)
 
-        response = client.post(
-            "/api/v1/intake/leads/ingest",
-            json={**_PAYLOAD, "tenant_id": tenant_b},
-            headers=headers_a,
-        )
-        assert response.status_code == 201
-        lead_id = response.json()["lead_id"]
+        record = ingest_and_resolve(client, headers_a, {**_PAYLOAD, "tenant_id": tenant_b})
+        lead_id = record["lead_id"]
 
         # Lands in A — the token's organization...
         assert client.get(f"/api/v1/leads/{lead_id}", headers=headers_a).status_code == 200
         # ...never in B, despite what the body claimed.
         assert client.get(f"/api/v1/leads/{lead_id}", headers=headers_b).status_code == 404
+
+
+def test_ingest_with_a_malformed_email_is_accepted_and_rejected_in_the_tray():
+    """V1: the schema's loose email check is gone. What used to be a 422 that
+    discarded the payload before anything was persisted now reaches the
+    domain, which rejects it and keeps the record — with its detail — in the
+    tray instead of losing it."""
+    tenant_id = str(uuid.uuid4())
+
+    with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
+        headers = _manager_auth_headers(tenant_id)
+        record = ingest_and_resolve(client, headers, {**_PAYLOAD, "email": "not-an-email"})
+
+        assert record["status"] == "REJECTED"
+        assert record["errors"][0]["field"] == "email"
