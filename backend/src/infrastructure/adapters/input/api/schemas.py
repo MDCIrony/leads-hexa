@@ -78,6 +78,8 @@ class ScoringRuleCreate(BaseModel):
     operator: Operator
     value: Any
     score_delta: int
+    priority: int = 0
+    is_active: bool = True
 
 class ScoringRuleResponse(BaseModel):
     id: str
@@ -86,6 +88,8 @@ class ScoringRuleResponse(BaseModel):
     operator: str
     value: Any
     score_delta: int
+    priority: int
+    is_active: bool
 
 # --- Assignment Rule Schemas ---
 class AssignmentRuleCreate(BaseModel):

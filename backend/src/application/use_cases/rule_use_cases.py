@@ -36,11 +36,14 @@ class CreateScoringRuleUseCase(CreateScoringRuleInputPort):
 
     def execute(self, command: CreateScoringRuleCommand) -> ScoringRule:
         rule = ScoringRule.create(
+            tenant_id=command.tenant_id,
             name=command.name,
             field=command.field,
             operator=Operator(command.operator),
             value=command.value,
-            score_delta=command.score_delta
+            score_delta=command.score_delta,
+            priority=command.priority,
+            is_active=command.is_active,
         )
         with self.uow:
             return self.uow.rules.save_scoring_rule(command.tenant_id, rule)

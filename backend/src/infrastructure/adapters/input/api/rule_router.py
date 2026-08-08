@@ -33,8 +33,12 @@ def create_scoring_rule(
         name=request.name,
         field=request.field,
         operator=request.operator.value if hasattr(request.operator, 'value') else str(request.operator),
-        value=str(request.value),
+        # Not str(request.value): the engine needs the type the manager sent
+        # (a list for IN, a number for GREATER_THAN), not its string form.
+        value=request.value,
         score_delta=request.score_delta,
+        priority=request.priority,
+        is_active=request.is_active,
     )
     saved = use_case.execute(command)
     return ScoringRuleResponse(
@@ -44,6 +48,8 @@ def create_scoring_rule(
         operator=saved.operator.value,
         value=saved.value,
         score_delta=saved.score_delta,
+        priority=saved.priority,
+        is_active=saved.is_active,
     )
 
 @router.get("/scoring", response_model=List[ScoringRuleResponse], status_code=status.HTTP_200_OK)
@@ -61,6 +67,8 @@ def list_scoring_rules(
             operator=r.operator.value,
             value=r.value,
             score_delta=r.score_delta,
+            priority=r.priority,
+            is_active=r.is_active,
         )
         for r in rules
     ]

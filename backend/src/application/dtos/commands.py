@@ -50,8 +50,12 @@ class CreateScoringRuleCommand:
     name: str
     field: str
     operator: str
-    value: str
+    # Any, not str: coercing here is what kept the IN operator from ever
+    # matching, since the engine needs the list the manager actually sent.
+    value: Any
     score_delta: int
+    priority: int = 0
+    is_active: bool = True
 
 
 @dataclass(frozen=True)
