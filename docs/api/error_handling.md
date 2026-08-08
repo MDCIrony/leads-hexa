@@ -1,6 +1,8 @@
 # Manejo Centralizado de Excepciones (RFC 7807)
 
-El sistema implementa una jerarquía de excepciones de dominio con códigos de error de negocio (`error_code`) y códigos de estado HTTP estandarizados (`status_code`), mapeados automáticamente a respuestas JSON estructuradas por el manejador global.
+El sistema implementa una jerarquía de excepciones de dominio con códigos de error de negocio (`error_code`) estables, que un adaptador traduce a respuestas JSON estructuradas.
+
+**El dominio no conoce HTTP.** Una excepción de dominio lleva un `message` y un `error_code`, nunca un `status_code`: qué número devuelve el transporte es decisión del adaptador, y el guardián de arquitectura falla si el dominio importa algo que lo delate. La tabla de traducción vive en [`exception_handlers.py`](../../backend/src/infrastructure/adapters/input/api/exception_handlers.py), y lo que no figura en ella es un `400` por defecto.
 
 ---
 
@@ -10,14 +12,20 @@ Definida en [`src/domain/exceptions.py`](../../backend/src/domain/exceptions.py)
 
 ```python
 class DomainException(Exception):
-    def __init__(self, message: str, error_code: str = "DOMAIN_ERROR", status_code: int = 400) -> None:
+    """Base domain exception.
+
+    Carries a stable error_code so that adapters can map it to whatever their
+    transport requires. The domain itself knows nothing about HTTP."""
+
+    def __init__(self, message: str, error_code: str = "DOMAIN_ERROR"):
         super().__init__(message)
         self.message = message
         self.error_code = error_code
-        self.status_code = status_code
 ```
 
-### Excepciones Definidas y Mapeo HTTP
+### Excepciones Definidas y Traducción HTTP
+
+El código de estado de la columna derecha **no vive en la excepción**: lo decide `STATUS_BY_ERROR_CODE` en el adaptador.
 
 | Excepción | `error_code` | Status Code HTTP | Descripción |
 | :--- | :--- | :--- | :--- |

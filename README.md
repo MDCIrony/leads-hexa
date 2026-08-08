@@ -36,22 +36,24 @@ graph TB
     end
 
     subgraph PlatformContainer ["Plataforma Lead Router Container"]
-        APIGateway["🔌 FastAPI REST API Router<br/>(Lifespan DI Container - Puerto 8000)"]
-        
+        APIGateway["🔌 FastAPI REST API Router<br/>(Lifespan DI Container - 8000 interno, 8001 en el host)"]
+
         subgraph HexagonalCore ["Core de Negocio (Hexagonal)"]
-            UseCases["⚙️ Use Cases / Application Layer<br/>(IngestLeadUseCase, ProcessBatchUseCase)"]
-            DomainEngine["🧩 Domain Engine<br/>(ScoringEngine, RouterEngine, ValueObjects)"]
+            UseCases["⚙️ Use Cases / Application Layer<br/>(Ingest, Batch, Agent, Group, Rule, Tenant, Auth)"]
+            DomainEngine["🧩 Domain Engine<br/>(ScoringEngine, AssignmentEngine,<br/>AuthorizationPolicy, ValueObjects)"]
         end
-        
-        RawSQLPersistence["🗄️ Persistencia Raw SQL<br/>(RawSqlLeadRepository - PostgreSQL / SQLite)<br/>*Sin ORM / Sin SQLAlchemy*"]
+
+        RawSQLPersistence["🗄️ Persistencia Raw SQL + Unit of Work<br/>(PostgreSQL 16 vía psycopg 3, pool de conexiones)<br/>*Sin ORM / Sin SQLAlchemy*"]
+        Security["🔐 Seguridad<br/>(JwtTokenService, BcryptPasswordHasher)"]
         HttpxDispatcher["🚀 Webhook Dispatcher<br/>(HttpxWebhookDispatcher + HMAC SHA-256)"]
         PandasParser["📊 File Parser<br/>(PandasFileParser CSV / XLSX)"]
     end
 
     SPA -->|Proxy Pass /api/v1| APIGateway
     APIGateway -->|Inyecta Dependencias| UseCases
+    APIGateway -->|Autentica y deriva el tenant del token| Security
     UseCases -->|Aplica Reglas & Invariantes| DomainEngine
-    UseCases -->|Raw SQL Queries| RawSQLPersistence
+    UseCases -->|Raw SQL Queries en una transacción| RawSQLPersistence
     UseCases -->|Parsea Archivos| PandasParser
     UseCases -->|Despacha Notificaciones| HttpxDispatcher
     HttpxDispatcher -->|HTTP POST Payload Firmado| ExternalWebhook
@@ -65,52 +67,60 @@ Muestra la separación concéntrica estricta en el Backend. Las capas internas j
 ```mermaid
 graph TD
     subgraph DrivingAdapters ["1. Adaptadores de Entrada (Driving)"]
-        FastAPIRouters["FastAPI Routers<br/>(/ingest, /batch-upload, /rules, /agents)"]
+        FastAPIRouters["FastAPI Routers<br/>(/intake, /leads, /rules, /agents,<br/>/groups, /tenants, /auth)"]
     end
 
     subgraph ApplicationLayer ["2. Capa de Aplicación (Ports & Use Cases)"]
         subgraph InputPorts ["Driving Ports (Interfaces)"]
             IngestPort["IngestLeadInputPort"]
             BatchPort["ProcessBatchInputPort"]
+            GroupPort["SalesGroup / Rule / Agent<br/>InputPorts"]
         end
-        
+
         subgraph Interactors ["Casos de Uso (Use Cases)"]
             IngestUC["IngestLeadUseCase"]
             BatchUC["ProcessBatchUseCase"]
+            AdminUC["SalesGroup / Rule / Agent /<br/>Tenant / Auth UseCases"]
         end
 
         subgraph OutputPorts ["Driven Ports (Interfaces)"]
-            LeadRepoPort["LeadRepositoryPort"]
-            RuleRepoPort["RuleRepositoryPort"]
-            AgentRepoPort["AgentRepositoryPort"]
+            UoWPort["UnitOfWorkPort<br/>(leads, rules, agents, tenants, groups)"]
             DispatcherPort["WebhookDispatcherPort"]
             ParserPort["FileParserPort"]
+            SecurityPort["TokenServicePort<br/>PasswordHasherPort"]
         end
     end
 
     subgraph DomainCore ["3. Capa de Dominio (Núcleo Puro sin Librerías)"]
-        Entities["Entidades:<br/>Lead, ScoringRule, RoutingRule, Agent"]
-        ValueObjects["Value Objects (Validaciones):<br/>EmailAddress, Money, Score, LeadId, TenantId"]
-        DomainServices["Servicios de Dominio:<br/>ScoringEngine, RouterEngine"]
+        Entities["Entidades:<br/>Lead, Agent, Tenant, SalesGroup,<br/>ScoringRule, AssignmentRule"]
+        ValueObjects["Value Objects (Validaciones):<br/>EmailAddress, Money, Score,<br/>LeadId, TenantId, AgentId, GroupId"]
+        DomainServices["Servicios y Políticas:<br/>ScoringEngine, AssignmentEngine,<br/>AuthorizationPolicy"]
     end
 
     subgraph DrivenAdapters ["4. Adaptadores de Salida (Driven)"]
-        RawSQLRepo["RawSqlLeadRepository<br/>(Consultas Directas SQL)"]
+        PostgresUoW["PostgresUnitOfWork<br/>(transacción única por caso de uso)"]
+        RawSQLRepo["RawSql*Repository<br/>(Consultas Directas SQL)"]
         HttpxDisp["HttpxWebhookDispatcher<br/>(httpx HMAC)"]
         PandasPars["PandasFileParser<br/>(pandas CSV/XLSX)"]
+        SecurityAd["JwtTokenService<br/>BcryptPasswordHasher"]
     end
 
     FastAPIRouters -->|Invoca| IngestPort
     FastAPIRouters -->|Invoca| BatchPort
+    FastAPIRouters -->|Invoca| GroupPort
     IngestPort -.->|Implementa| IngestUC
     BatchPort -.->|Implementa| BatchUC
+    GroupPort -.->|Implementa| AdminUC
     IngestUC -->|Instancia & Valida| ValueObjects
     IngestUC -->|Orquesta| DomainServices
-    IngestUC -->|Usa| LeadRepoPort
+    IngestUC -->|Usa| UoWPort
     IngestUC -->|Usa| DispatcherPort
-    RawSQLRepo -.->|Implementa| LeadRepoPort
+    AdminUC -->|Aplica| DomainServices
+    PostgresUoW -.->|Implementa| UoWPort
+    PostgresUoW -->|Agrupa| RawSQLRepo
     HttpxDisp -.->|Implementa| DispatcherPort
     PandasPars -.->|Implementa| ParserPort
+    SecurityAd -.->|Implementa| SecurityPort
 ```
 
 ---
@@ -125,35 +135,40 @@ sequenceDiagram
     participant UC as IngestLeadUseCase
     participant VO as Value Objects (Email, Money)
     participant SE as ScoringEngine
-    participant RE as RouterEngine
-    participant DB as RawSqlLeadRepository (DB)
-    participant WH as HttpxWebhookDispatcher
+    participant AE as AssignmentEngine
+    participant UoW as PostgresUnitOfWork
+    participant EV as EventPublisher
 
-    Client->>API: POST /api/v1/tenants/{tenant_id}/leads/ingest
+    Client->>API: POST /api/v1/intake/{tenant_id}/leads/ingest
     API->>UC: execute(IngestLeadCommand)
     UC->>VO: EmailAddress(email) + Money(budget)
     alt Email o Budget Inválido
         VO-->>UC: Lanza InvalidEmailException / InvalidBudgetException
         UC-->>API: LeadProcessedResult(status="FAILED", error="...")
-        API-->>Client: HTTP 422 / 400 Bad Request
+        API-->>Client: HTTP 400 Bad Request
     else Validaciones Exitosas
         VO-->>UC: Value Objects Válidos instanciados
+        UC->>UoW: abre transacción única
         UC->>SE: evaluate(lead, scoring_rules)
-        SE-->>UC: Retorna Score Delta Acumulado (+35 pts)
+        SE-->>UC: Score acumulado (+35 pts)
         UC->>UC: lead.qualify(threshold_qualified=30)
         alt Lead Estado == QUALIFIED
-            UC->>RE: select_agent(lead, routing_rules, agents)
-            RE-->>UC: Retorna Agente Seleccionado (LOWEST_LOAD)
-            UC->>UC: lead.assign_to_agent(agent.id)
+            UC->>UoW: reglas, asesores del tenant, grupos y carga derivada
+            UC->>AE: select_agent(lead, rules, agents, groups, loads)
+            Note over AE: Cascada por prioridad; excluye asesores<br/>sin capacidad; el cursor rotatorio<br/>vive en la regla, no en memoria
+            AE-->>UC: Agente seleccionado o None
+            UC->>UoW: persiste el cursor si la regla rotó
         end
-        UC->>DB: save(lead) [Raw SQL INSERT INTO leads]
-        DB-->>UC: Lead Persistido
-        UC->>WH: dispatch(target_url, secret_token, payload)
-        WH-->>UC: Webhook Entregado (Firma HMAC OK)
+        UC->>UoW: save(lead) [Raw SQL] y commit
+        UC->>EV: publish(LeadProcessedEvent)
         UC-->>API: LeadProcessedResult(status="ASSIGNED", score=35)
         API-->>Client: HTTP 201 Created JSON
     end
 ```
+
+> El `tenant_id` de esta ruta viaja en la URL y **el endpoint no exige credencial**: es un defecto
+> conocido, registrado en la sección 2.3 del spec, que cierra F2b con `LeadSource`. En el resto de
+> la API la organización se deriva siempre del token, nunca de la URL ni del cuerpo.
 
 ---
 
@@ -162,14 +177,16 @@ sequenceDiagram
 ```
 leads-hexa/
 ├── backend/                            # FastAPI + Python 3.12 (uv, pyproject.toml)
+│   ├── migrations/                     # SQL numerado, aplicado al arrancar
 │   ├── src/
-│   │   ├── domain/                     # NÚCLEO PURO (Value Objects, Entities, Domain Services)
+│   │   ├── domain/                     # NÚCLEO PURO (Value Objects, Entities, Services, Policies)
 │   │   ├── application/                # CASOS DE USO Y PUERTOS (Interfaces abc.ABC & DTOs)
-│   │   └── infrastructure/             # ADAPTADORES (FastAPI, Raw SQL, httpx, pandas)
+│   │   └── infrastructure/             # ADAPTADORES (FastAPI, Raw SQL, httpx, pandas, JWT)
 │   ├── tests/
-│   │   ├── unit/                       # Unit tests de Dominio y Aplicación
-│   │   ├── integration/                # Integration tests de Raw SQL y Parsers
-│   │   └── e2e/                        # Tests E2E de API y Flujo Completo
+│   │   ├── unit/                       # Dominio y aplicación, sin infraestructura
+│   │   ├── integration/                # Raw SQL y parsers contra PostgreSQL real
+│   │   ├── e2e/                        # API completa sobre TestClient
+│   │   └── architecture/               # Guardián de la regla de dependencias (AST)
 │   ├── Dockerfile
 │   └── pyproject.toml
 ├── frontend/                           # React 19 + TypeScript + Vite + Tailwind CSS
@@ -182,22 +199,34 @@ leads-hexa/
 │   ├── Dockerfile
 │   └── nginx.conf                      # SPA Server + Reverse Proxy Proxy Pass /api/v1
 ├── docs/
-│   └── diagrams/                       # Archivos .drawio nativos de diagramas
-│       ├── c4_context_container.drawio
-│       ├── hexagonal_architecture.drawio
-│       └── lead_processing_flow.drawio
+│   ├── specs/                          # Diseño del MVP: el qué y el porqué
+│   ├── plans/                          # Planes de implementación por fase
+│   ├── api/                            # Referencia de endpoints y errores
+│   └── diagrams/                       # .drawio nativos (⚠️ ver docs/diagrams/README.md)
 ├── docker-compose.yml                  # Orquestación completa (DB, Backend, Frontend)
 └── README.md
 ```
+
+### Por dónde empezar a leer
+
+| Si buscas… | Ve a |
+|---|---|
+| Qué hace el sistema y por qué está diseñado así | [docs/specs/](docs/specs/2026-08-07-lead-router-mvp-design.md) |
+| Qué se está construyendo ahora | [docs/plans/](docs/plans/) — el plan sin marca de cerrado |
+| Contratos HTTP, cuerpos y códigos de error | [docs/api/endpoints.md](docs/api/endpoints.md) |
 
 ---
 
 ## 🛠️ 3. Reglas Técnicas y Principios de Diseño
 
-1. **Invariantes en Value Objects**: Validaciones como la sintaxis del correo electrónico ([EmailAddress](file:///home/mdcast/Escritorio/PrivateProjects/arquitectura/leads-hexa/backend/src/domain/value_objects/email.py)) o presupuestos no negativos ([Money](file:///home/mdcast/Escritorio/PrivateProjects/arquitectura/leads-hexa/backend/src/domain/value_objects/money.py)) residen 100% dentro del constructor del Value Object. Cero validaciones duras en la capa de servicios.
-2. **Consultas Raw SQL Directas**: Se prohíbe el uso de ORMs como SQLAlchemy. La persistencia en [RawSqlLeadRepository](file:///home/mdcast/Escritorio/PrivateProjects/arquitectura/leads-hexa/backend/src/infrastructure/adapters/output/persistence/raw_sql_lead_repository.py) se realiza mediante consultas SQL puras con marcadores de posición parametrizados (`?`).
-3. **Mappers Hexagonales en Frontend**: La capa de presentación y los hooks de React jamás consumen DTOs de infraestructura en bruto. [LeadMapper](file:///home/mdcast/Escritorio/PrivateProjects/arquitectura/leads-hexa/frontend/src/application/mappers/lead.mapper.ts) transforma respuestas `snake_case` a modelos de dominio `camelCase`.
-4. **Contenedor DI en Lifespan**: FastAPI inicializa conexiones y contenedores de casos de uso en el ciclo de vida `lifespan` de [main.py](file:///home/mdcast/Escritorio/PrivateProjects/arquitectura/leads-hexa/backend/src/infrastructure/main.py), inyectándolos en `app.state`.
+1. **Invariantes en Value Objects**: Validaciones como la sintaxis del correo electrónico ([EmailAddress](backend/src/domain/value_objects/email.py)) o presupuestos no negativos ([Money](backend/src/domain/value_objects/money.py)) residen 100% dentro del constructor del Value Object. Cero validaciones duras en la capa de servicios.
+2. **Consultas Raw SQL Directas**: Se prohíbe el uso de ORMs como SQLAlchemy. La persistencia en [RawSqlLeadRepository](backend/src/infrastructure/adapters/output/persistence/raw_sql_lead_repository.py) se realiza mediante SQL puro con los marcadores parametrizados de psycopg 3 (`%s`).
+3. **Regla de dependencias verificada por test**: `tests/architecture/` analiza el AST del código y falla si `domain/` importa algo fuera de la biblioteca estándar o si `application/` importa de `infrastructure/`. Es un guardián ejecutable, no una convención escrita.
+4. **La organización se deriva del token**: el `tenant_id` sale siempre del JWT a través de `RequestContext`, nunca de la URL ni del cuerpo. El `ADMIN` de plataforma no alcanza dato operativo alguno: son dos planos disjuntos.
+5. **Unit of Work**: cada caso de uso que escribe abre una transacción única sobre [PostgresUnitOfWork](backend/src/infrastructure/adapters/output/persistence/postgres_unit_of_work.py), que agrupa los repositorios y confirma o revierte en bloque.
+6. **Migraciones versionadas**: ficheros SQL numerados en [backend/migrations/](backend/migrations/), aplicados al arrancar por un runner propio que registra lo ejecutado en `schema_migrations`. Sin Alembic, que arrastraría SQLAlchemy.
+7. **Mappers Hexagonales en Frontend**: La capa de presentación y los hooks de React jamás consumen DTOs de infraestructura en bruto. [LeadMapper](frontend/src/application/mappers/lead.mapper.ts) transforma respuestas `snake_case` a modelos de dominio `camelCase`.
+8. **Contenedor DI en Lifespan**: FastAPI inicializa conexiones y contenedores de casos de uso en el ciclo de vida `lifespan` de [main.py](backend/src/infrastructure/main.py), inyectándolos en `app.state`.
 
 ---
 
@@ -240,12 +269,15 @@ Sin infraestructura (dominio y casos de uso, sin variables de entorno):
 cd backend && uv run pytest -m unit
 ```
 
-Suite completa (125 tests: unit, integration, e2e y architecture) dentro de
+Suite completa (256 tests: unit, integration, e2e y architecture) dentro de
 Docker, que es la única forma reproducible de ejecutarla porque requiere
 `DATABASE_URL` apuntando a un PostgreSQL real:
 ```bash
-docker compose --profile test run --rm backend-test
+docker compose --profile test run --rm --build backend-test
 ```
+
+> **El `--build` no es opcional.** Sin él, Docker reutiliza la imagen en caché y ejecuta código
+> viejo: la suite pasa en verde sin haber probado tus cambios.
 
 El puerto 5433 del host publica el PostgreSQL del compose. Sirve para
 ejecutar la suite completa desde fuera del contenedor exportando
