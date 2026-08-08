@@ -12,7 +12,7 @@ _TENANT = uuid.uuid4()
 
 def _lead(status: LeadStatus = LeadStatus.QUALIFIED, tenant_id: Optional[uuid.UUID] = None) -> Lead:
     return Lead.create(
-        tenant_id=tenant_id or _TENANT, first_name="Ana", last_name="Diaz",
+        tenant_id=tenant_id or _TENANT, source_id=uuid.uuid4(), first_name="Ana", last_name="Diaz",
         email="ana@x.test", company="C", budget=100, industry="tech", status=status,
     )
 

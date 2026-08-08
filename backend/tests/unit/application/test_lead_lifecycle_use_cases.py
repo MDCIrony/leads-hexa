@@ -21,7 +21,7 @@ _OTHER = uuid.uuid4()
 
 def _lead(tenant_id: uuid.UUID = _TENANT, status: LeadStatus = LeadStatus.UNASSIGNED) -> Lead:
     return Lead.create(
-        tenant_id=tenant_id, first_name="Ana", last_name="Diaz", email="ana@x.test",
+        tenant_id=tenant_id, source_id=uuid.uuid4(), first_name="Ana", last_name="Diaz", email="ana@x.test",
         company="Acme", budget=1000, industry="tech", status=status,
     )
 

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class IngestLeadCommand:
     tenant_id: UUID
+    source_id: UUID
     first_name: str
     last_name: str
     email: str

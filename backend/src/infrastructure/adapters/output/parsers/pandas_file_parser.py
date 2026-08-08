@@ -8,7 +8,9 @@ from application.dtos.commands import IngestLeadCommand
 KNOWN_FIELDS = {"first_name", "last_name", "email", "company", "budget", "industry", "phone"}
 
 class PandasFileParser(FileParserPort):
-    def parse_leads_file(self, file_content: bytes, filename: str, tenant_id: UUID) -> List[IngestLeadCommand]:
+    def parse_leads_file(
+        self, file_content: bytes, filename: str, tenant_id: UUID, source_id: UUID
+    ) -> List[IngestLeadCommand]:
         buffer = io.BytesIO(file_content)
         if filename.endswith(".xlsx") or filename.endswith(".xls"):
             df = pd.read_excel(buffer)
@@ -37,6 +39,7 @@ class PandasFileParser(FileParserPort):
             commands.append(
                 IngestLeadCommand(
                     tenant_id=tenant_id,
+                    source_id=source_id,
                     first_name=first_name,
                     last_name=last_name,
                     email=email,

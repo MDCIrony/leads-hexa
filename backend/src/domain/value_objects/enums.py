@@ -45,3 +45,13 @@ class AgentMatchMode(str, Enum):
 
     ANY = "ANY"
     ONLY = "ONLY"
+
+class LeadSourceKind(str, Enum):
+    """How a lead reaches the system.
+
+    WEBHOOK is declared here and implemented in F3b: the enum value costs one
+    line and avoids reopening the type when the adapter lands."""
+
+    MANUAL_FORM = "MANUAL_FORM"
+    FILE_UPLOAD = "FILE_UPLOAD"
+    WEBHOOK = "WEBHOOK"

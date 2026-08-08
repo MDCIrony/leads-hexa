@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from infrastructure.main import app
 from application.ports.output.token_service_port import TokenClaims
 from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
-from domain.value_objects.enums import AgentRole
+from domain.value_objects.enums import AgentRole, LeadSourceKind
 
 
 def _manager_auth_headers(tenant_id: str) -> dict:
@@ -33,6 +33,29 @@ def _manager_auth_headers(tenant_id: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _seed_tenant_with_sources(tenant_id: str) -> None:
+    """leads.tenant_id and leads.source_id are now real foreign keys, and the
+    intake router resolves the source itself (migration 005), so every ingest
+    test needs a persisted tenant with its two default sources instead of a
+    bare UUID that merely looks like one."""
+    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+    from domain.entities.lead_source import LeadSource
+
+    db = app.state.container.database
+    uow = PostgresUnitOfWork(db)
+    with uow:
+        uow.connection.execute(
+            "INSERT INTO tenants (id, name, slug, created_at) VALUES (%s, %s, %s, now())",
+            (tenant_id, "Acme", f"acme-{tenant_id}"),
+        )
+        uow.sources.save(
+            LeadSource.create(tenant_id=tenant_id, name="Formulario manual", kind=LeadSourceKind.MANUAL_FORM)
+        )
+        uow.sources.save(
+            LeadSource.create(tenant_id=tenant_id, name="Carga de fichero", kind=LeadSourceKind.FILE_UPLOAD)
+        )
+
+
 def test_ingest_lead_endpoint_success():
     tenant_id = str(uuid.uuid4())
     payload = {
@@ -47,6 +70,10 @@ def test_ingest_lead_endpoint_success():
     }
 
     with TestClient(app) as client:
+        # The connection pool only exists inside the TestClient lifespan
+        # (opened on FastAPI startup, closed on shutdown), so seeding must
+        # happen after entering this block, not before it.
+        _seed_tenant_with_sources(tenant_id)
         response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
         assert response.status_code == 201
         data = response.json()
@@ -66,6 +93,7 @@ def test_ingest_lead_endpoint_invalid_email_validation():
     }
 
     with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
         response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
         assert response.status_code == 422
 
@@ -80,6 +108,7 @@ def test_batch_upload_endpoint():
     files = {"file": ("leads.csv", csv_content, "text/csv")}
 
     with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
         response = client.post(f"/api/v1/intake/{tenant_id}/leads/batch-upload", files=files)
         assert response.status_code == 200
         data = response.json()
@@ -99,6 +128,7 @@ def test_batch_upload_reports_failed_rows_without_losing_the_valid_ones():
     files = {"file": ("leads.csv", csv_content, "text/csv")}
 
     with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
         response = client.post(f"/api/v1/intake/{tenant_id}/leads/batch-upload", files=files)
         assert response.status_code == 200
         data = response.json()
@@ -131,6 +161,7 @@ def test_list_leads_by_tenant_endpoint():
     }
 
     with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
 
@@ -154,6 +185,7 @@ def test_list_leads_pagination_has_more_flag():
     }
 
     with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         for i in range(3):
             client.post(
@@ -191,6 +223,7 @@ def test_ingest_lead_endpoint_negative_budget_returns_400():
     }
 
     with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
         response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
         assert response.status_code == 400
         data = response.json()

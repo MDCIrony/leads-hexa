@@ -85,6 +85,7 @@ def test_ingest_lead_use_case_successful_flow():
 
     cmd = IngestLeadCommand(
         tenant_id=tenant_id,
+        source_id=uuid.uuid4(),
         first_name="Maria",
         last_name="Gomez",
         email="mgomez@techcorp.com",
@@ -113,6 +114,7 @@ def test_ingest_lead_use_case_invalid_email_error():
 
     cmd = IngestLeadCommand(
         tenant_id=tenant_id,
+        source_id=uuid.uuid4(),
         first_name="Bad",
         last_name="User",
         email="invalid-email-format",
@@ -152,6 +154,7 @@ def test_rollback_on_persistence_error():
 
     command = IngestLeadCommand(
         tenant_id=uuid.uuid4(),
+        source_id=uuid.uuid4(),
         first_name="Test",
         last_name="User",
         email="test@user.com",

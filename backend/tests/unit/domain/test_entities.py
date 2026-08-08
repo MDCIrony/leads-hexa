@@ -13,6 +13,7 @@ from domain.value_objects.enums import AgentRole
 def test_lead_entity_lifecycle():
     lead = Lead.create(
         tenant_id=uuid.uuid4(),
+        source_id=uuid.uuid4(),
         first_name="Maria",
         last_name="Gomez",
         email="mgomez@techcorp.com",
@@ -146,7 +147,7 @@ class TestLeadLifecycleFields:
 
     def test_a_fresh_lead_carries_no_assignment_trace(self):
         lead = Lead.create(
-            tenant_id=uuid.uuid4(), first_name="Ana", last_name="Diaz",
+            tenant_id=uuid.uuid4(), source_id=uuid.uuid4(), first_name="Ana", last_name="Diaz",
             email="ana@x.test", company="C", budget=100, industry="tech",
         )
         assert lead.assigned_at is None

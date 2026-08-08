@@ -20,6 +20,7 @@ def _lead(score: int) -> Lead:
     # only a qualified (or previously unassigned) lead may enter.
     return Lead.create(
         tenant_id=_TENANT,
+        source_id=uuid.uuid4(),
         first_name="Laura",
         last_name="Diaz",
         email="laura@example.com",

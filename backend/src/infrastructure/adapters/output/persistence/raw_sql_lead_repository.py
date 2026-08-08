@@ -25,12 +25,13 @@ class RawSqlLeadRepository(LeadRepositoryPort):
 
         sql = """
         INSERT INTO leads (
-            id, tenant_id, first_name, last_name, email, company, budget, industry,
+            id, tenant_id, source_id, first_name, last_name, email, company, budget, industry,
             custom_attributes, phone, score, status, assigned_agent_id, created_at,
             assigned_at, discard_reason, updated_at, score_breakdown
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             tenant_id = EXCLUDED.tenant_id,
+            source_id = EXCLUDED.source_id,
             first_name = EXCLUDED.first_name,
             last_name = EXCLUDED.last_name,
             email = EXCLUDED.email,
@@ -53,6 +54,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             (
                 lead.id.value,
                 lead.tenant_id.value,
+                lead.source_id.value,
                 lead.first_name,
                 lead.last_name,
                 str(lead.email),
@@ -78,6 +80,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         return Lead.create(
             lead_id=row["id"],
             tenant_id=row["tenant_id"],
+            source_id=row["source_id"],
             first_name=row["first_name"],
             last_name=row["last_name"],
             email=row["email"],

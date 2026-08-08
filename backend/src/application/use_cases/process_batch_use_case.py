@@ -14,8 +14,10 @@ class ProcessBatchUseCase(ProcessBatchInputPort):
         self.file_parser = file_parser
         self.ingest_lead_use_case = ingest_lead_use_case
 
-    def execute(self, file_content: bytes, filename: str, tenant_id: UUID) -> BatchProcessResult:
-        commands = self.file_parser.parse_leads_file(file_content, filename, tenant_id)
+    def execute(
+        self, file_content: bytes, filename: str, tenant_id: UUID, source_id: UUID
+    ) -> BatchProcessResult:
+        commands = self.file_parser.parse_leads_file(file_content, filename, tenant_id, source_id)
         results = []
         successful = 0
         failed_rows = []

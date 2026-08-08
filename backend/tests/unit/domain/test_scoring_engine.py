@@ -11,7 +11,7 @@ _TENANT = uuid.uuid4()
 
 def _lead(**overrides: Any) -> Lead:
     base = dict(
-        tenant_id=_TENANT, first_name="Ana", last_name="Diaz", email="ana@x.test",
+        tenant_id=_TENANT, source_id=uuid.uuid4(), first_name="Ana", last_name="Diaz", email="ana@x.test",
         company="Acme", budget=1000, industry="tech",
     )
     base.update(overrides)

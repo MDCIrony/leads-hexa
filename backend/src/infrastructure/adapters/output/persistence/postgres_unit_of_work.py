@@ -10,6 +10,7 @@ from infrastructure.adapters.output.persistence.raw_sql_rule_repository import R
 from infrastructure.adapters.output.persistence.raw_sql_agent_repository import RawSqlAgentRepository
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
 from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import RawSqlTenantRepository
+from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import RawSqlLeadSourceRepository
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):
@@ -33,6 +34,7 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.agents = RawSqlAgentRepository(self.connection)
         self.tenants = RawSqlTenantRepository(self.connection)
         self.groups = RawSqlSalesGroupRepository(self.connection)
+        self.sources = RawSqlLeadSourceRepository(self.connection)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

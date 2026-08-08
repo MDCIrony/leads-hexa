@@ -4,9 +4,12 @@ from fastapi.responses import JSONResponse
 from application.dtos.commands import IngestLeadCommand
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
+from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from domain.value_objects.enums import LeadSourceKind
 from infrastructure.adapters.input.api.dependencies import (
     get_ingest_lead_use_case,
     get_process_batch_use_case,
+    get_uow,
 )
 
 from infrastructure.adapters.input.api.schemas import (
@@ -25,9 +28,16 @@ def ingest_lead(
     tenant_id: UUID,
     request: IngestLeadRequest,
     use_case: IngestLeadInputPort = Depends(get_ingest_lead_use_case),
+    uow: UnitOfWorkPort = Depends(get_uow),
 ):
+    # Resolved here only until T5 moves this into the use case itself; every
+    # tenant gets a MANUAL_FORM source automatically at creation (CreateTenantUseCase).
+    with uow:
+        source = uow.sources.get_by_kind(tenant_id, LeadSourceKind.MANUAL_FORM)
+
     command = IngestLeadCommand(
         tenant_id=tenant_id,
+        source_id=source.id.value,
         first_name=request.first_name,
         last_name=request.last_name,
         email=request.email,
@@ -72,12 +82,17 @@ async def batch_upload(
     tenant_id: UUID,
     file: UploadFile = File(...),
     use_case: ProcessBatchInputPort = Depends(get_process_batch_use_case),
+    uow: UnitOfWorkPort = Depends(get_uow),
 ):
+    with uow:
+        source = uow.sources.get_by_kind(tenant_id, LeadSourceKind.FILE_UPLOAD)
+
     content = await file.read()
     result = use_case.execute(
         file_content=content,
         filename=file.filename or "leads.csv",
         tenant_id=tenant_id,
+        source_id=source.id.value,
     )
     return BatchProcessResponse(
         job_id=result.job_id,

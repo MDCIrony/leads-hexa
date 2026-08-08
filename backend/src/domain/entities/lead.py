@@ -8,6 +8,7 @@ from domain.exceptions import DomainException
 from domain.value_objects.email import EmailAddress
 from domain.value_objects.money import Money
 from domain.value_objects.lead_id import LeadId
+from domain.value_objects.lead_source_id import LeadSourceId
 from domain.value_objects.tenant_id import TenantId
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.score import Score
@@ -18,6 +19,7 @@ from domain.value_objects.enums import LeadStatus
 class Lead:
     id: LeadId
     tenant_id: TenantId
+    source_id: LeadSourceId
     first_name: str
     last_name: str
     email: EmailAddress
@@ -42,6 +44,7 @@ class Lead:
     def create(
         cls,
         tenant_id: Union[str, UUID, TenantId],
+        source_id: Union[str, UUID, LeadSourceId],
         first_name: str,
         last_name: str,
         email: Union[str, EmailAddress],
@@ -62,6 +65,7 @@ class Lead:
     ) -> "Lead":
         """Factory method que encapsula la construcción de Value Objects e invariantes del Lead."""
         tenant_id_vo = tenant_id if isinstance(tenant_id, TenantId) else TenantId(tenant_id)
+        source_id_vo = source_id if isinstance(source_id, LeadSourceId) else LeadSourceId(source_id)
         email_vo = email if isinstance(email, EmailAddress) else EmailAddress(email)
         budget_vo = budget if isinstance(budget, Money) else Money(budget)
         lead_id_vo = lead_id if isinstance(lead_id, LeadId) else LeadId(lead_id)
@@ -85,6 +89,7 @@ class Lead:
         return cls(
             id=lead_id_vo,
             tenant_id=tenant_id_vo,
+            source_id=source_id_vo,
             first_name=first_name,
             last_name=last_name,
             email=email_vo,

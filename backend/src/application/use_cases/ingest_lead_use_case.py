@@ -37,6 +37,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
         try:
             lead = Lead.create(
                 tenant_id=command.tenant_id,
+                source_id=command.source_id,
                 first_name=command.first_name,
                 last_name=command.last_name,
                 email=command.email,

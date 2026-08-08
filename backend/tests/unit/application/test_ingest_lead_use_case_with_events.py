@@ -28,6 +28,7 @@ def test_ingest_lead_publishes_event() -> None:
 
     command = IngestLeadCommand(
         tenant_id=tenant_id_val,
+        source_id=uuid.uuid4(),
         first_name="Jane",
         last_name="Doe",
         email="jane@example.com",

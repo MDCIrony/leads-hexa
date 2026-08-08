@@ -8,7 +8,8 @@ Juan,Perez,jperez@smallbiz.es,SmallBiz Local,800,Retail,10
 """
     parser = PandasFileParser()
     tenant_id = uuid.uuid4()
-    commands = parser.parse_leads_file(csv_content, "leads.csv", tenant_id)
+    source_id = uuid.uuid4()
+    commands = parser.parse_leads_file(csv_content, "leads.csv", tenant_id, source_id)
 
     assert len(commands) == 2
     assert commands[0].first_name == "Maria"
