@@ -44,6 +44,8 @@ def test_raw_sql_lead_repository_lifecycle():
 
 
 def _lead_for_load_test(tenant_id: uuid.UUID, email: str) -> Lead:
+    # QUALIFIED, not the NEW default: assign_to below requires a lead that is
+    # actually assignable, and every caller of this helper assigns it.
     return Lead.create(
         tenant_id=tenant_id,
         first_name="Laura",
@@ -52,6 +54,7 @@ def _lead_for_load_test(tenant_id: uuid.UUID, email: str) -> Lead:
         company="Globex",
         budget=1000,
         industry="Tech",
+        status=LeadStatus.QUALIFIED,
     )
 
 
@@ -66,18 +69,21 @@ def test_active_load_by_agent_counts_only_currently_assigned_leads(test_db):
 
         for i in range(3):
             lead = _lead_for_load_test(tenant_id, f"ana{i}@example.com")
-            lead.assign_to_agent(ana)
+            lead.assign_to(ana, lead.tenant_id)
             repo.save(lead)
 
         lead = _lead_for_load_test(tenant_id, "beto@example.com")
-        lead.assign_to_agent(beto)
+        lead.assign_to(beto, lead.tenant_id)
         repo.save(lead)
 
         unassigned = _lead_for_load_test(tenant_id, "unassigned@example.com")
         repo.save(unassigned)
 
+        # Simulates a lead disqualified after assignment: assigned_agent_id
+        # stays set while status moves away from ASSIGNED, which is exactly
+        # the case active_load_by_agent must not be fooled by.
         disqualified = _lead_for_load_test(tenant_id, "disqualified@example.com")
-        disqualified.assign_to_agent(ana)
+        disqualified.assign_to(ana, disqualified.tenant_id)
         disqualified.status = LeadStatus.DISQUALIFIED
         repo.save(disqualified)
 

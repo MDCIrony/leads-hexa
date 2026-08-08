@@ -32,7 +32,7 @@ def test_lead_entity_lifecycle():
     assert lead.status == LeadStatus.QUALIFIED
 
     agent_id = AgentId()
-    lead.assign_to_agent(agent_id)
+    lead.assign_to(agent_id, lead.tenant_id)
     assert lead.status == LeadStatus.ASSIGNED
     assert lead.assigned_agent_id == agent_id
 

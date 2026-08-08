@@ -105,5 +105,8 @@ class AssignmentEngine:
             # way on every run.
             selected = min(candidates, key=lambda a: (loads.get(a.id.value, 0), str(a.id)))
 
-        lead.assign_to_agent(selected.id)
+        # The engine only ever reaches agents of the lead's own organization,
+        # so passing the lead's tenant satisfies the entity's cross-tenant
+        # invariant without widening the engine's signature.
+        lead.assign_to(selected.id, lead.tenant_id)
         return selected

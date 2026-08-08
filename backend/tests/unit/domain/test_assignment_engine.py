@@ -8,7 +8,7 @@ from domain.entities.lead import Lead
 from domain.entities.rule import AssignmentRule
 from domain.entities.sales_group import SalesGroup
 from domain.services.assignment_engine import AssignmentEngine
-from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
+from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, LeadStatus
 
 _TENANT = uuid.uuid4()
 
@@ -16,6 +16,8 @@ _TENANT = uuid.uuid4()
 def _lead(score: int) -> Lead:
     # Score is a frozen value object (domain/value_objects/score.py), so it
     # cannot be mutated in place after construction; pass the score in.
+    # QUALIFIED because the engine now hands off to Lead.assign_to, which
+    # only a qualified (or previously unassigned) lead may enter.
     return Lead.create(
         tenant_id=_TENANT,
         first_name="Laura",
@@ -25,6 +27,7 @@ def _lead(score: int) -> Lead:
         budget=1000,
         industry="Tech",
         score=score,
+        status=LeadStatus.QUALIFIED,
     )
 
 
