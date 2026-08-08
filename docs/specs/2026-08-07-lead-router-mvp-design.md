@@ -779,9 +779,9 @@ payload crudo (formulario · fichero · webhook)
                     └─ el gestor descarta → DISCARDED
 ```
 
-**Transaccionalidad.** El `IntakeRecord` y el `Lead` se persisten en la misma transacción. Los eventos se publican **después** del commit, de modo que un fallo al notificar no deshaga un lead ya guardado — el problema inverso al actual, donde el publicador se invoca dentro del flujo y una excepción en un manejador hace fallar una ingesta ya confirmada.
+**Transaccionalidad.** F2b persistía el `IntakeRecord` y el `Lead` en la misma transacción, y eso resultó ser el defecto que [F2d](2026-08-08-f2d-recepcion-y-procesamiento-design.md) corrige: recibir y procesar ocurren ahora en transacciones distintas, de modo que ningún fallo al interpretar un payload pueda borrar la constancia de haberlo recibido. Los eventos se publican **después** del commit, de modo que un fallo al notificar no deshaga un lead ya guardado.
 
-**Carga masiva.** Cada fila genera su propio `IntakeRecord`, todos compartiendo `batch_id`. La respuesta resume el lote y la bandeja de entrada permite revisar fila a fila lo que falló. Hoy el `job_id` que devuelve el endpoint no se persiste en ninguna parte, así que el resultado de una carga es irrecuperable en cuanto se cierra la pantalla.
+**Carga masiva.** Cada fila genera su propio `IntakeRecord`, todas compartiendo el `job_id` del `IntakeJob` que agrupa la operación. El endpoint responde `202` con ese identificador antes de parsear el fichero, y la bandeja de entrada permite revisar fila a fila lo que falló. El trabajo se persiste, así que el resultado de una carga sigue siendo consultable después de cerrar la pantalla, y uno interrumpido se relanza.
 
 ---
 
@@ -1155,7 +1155,7 @@ Modelado en el dominio, sin adaptador implementado. El diseño deja los puntos d
 | Ciclo comercial del lead | — | Estados `CONTACTED`, `WON`, `LOST` y las acciones del asesor sobre sus leads |
 | Métricas e informes | — | Agregados de conversión, tiempo de respuesta y rendimiento por asesor |
 | Refresh token y cierre de sesión | — | El token actual dura sesenta minutos sin renovación ni revocación |
-| Carga masiva asíncrona | — | Hoy el procesamiento es síncrono dentro de la petición HTTP |
+| Colas y trabajadores externos | La carga masiva ya es asíncrona desde F2d, con el trabajo de fondo del propio framework | Un job atascado se relanza a mano; no hay reintento automático ni proceso separado |
 
 Los diagramas de `docs/diagrams/` quedarán desactualizados con este diseño y deben regenerarse en formato draw.io al cerrar F1.
 
