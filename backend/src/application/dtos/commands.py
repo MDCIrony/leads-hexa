@@ -56,7 +56,9 @@ class FailedRow:
     row_number: int
     email: str
     error: str
-    error_code: str
+    # A row can fail without a domain error code — an unexpected parse failure
+    # carries a message but no stable code for the client to branch on.
+    error_code: Optional[str] = None
 
 
 @dataclass(frozen=True)

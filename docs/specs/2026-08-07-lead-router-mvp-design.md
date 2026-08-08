@@ -699,6 +699,17 @@ El `RequestContext` se construye **una vez** por petición y se pasa a los casos
 
 Estas reglas viven en `AuthorizationPolicy`, en el dominio. Las dependencias de FastAPI se limitan a construir el contexto e invocar la política.
 
+> **Hueco de diseño detectado al implementar F0 — pendiente de resolver en F1.**
+>
+> Un `ADMIN` de plataforma tiene `tenant_id = None`. Al derivar la organización del token (decisión D2), ese administrador **no tiene forma de expresar sobre qué organización quiere operar**, así que las filas de la matriz que le conceden ver leads o gestionar reglas no son alcanzables.
+>
+> Las dos salidas posibles:
+>
+> 1. **Impersonación explícita:** los endpoints de gestión aceptan un `?tenant_id=` que **sólo** el `ADMIN` puede usar. Conserva la matriz tal cual, a cambio de reintroducir un identificador de organización controlado por el cliente —justo lo que D2 eliminó—, aunque ahora restringido a un único rol.
+> 2. **Separación de planos:** el `ADMIN` gestiona organizaciones y sus gestores, pero no accede a datos operativos. Más seguro y más simple, y obliga a corregir la matriz de permisos.
+>
+> La segunda es la recomendada: un superadministrador que no puede leer los leads de sus clientes es una propiedad deseable, no una carencia.
+
 ### 9.3 Arranque del sistema
 
 Se conserva la regla de bootstrap, corregida: si no existe ningún usuario, la primera llamada a `POST /api/v1/agents` crea un `ADMIN` sin exigir autenticación. Se corrige la condición de carrera actual, en la que la comprobación y la creación ocurren en transacciones distintas y varias peticiones simultáneas producirían varios administradores. Se resuelve con un índice único parcial sobre el rol `ADMIN`.
