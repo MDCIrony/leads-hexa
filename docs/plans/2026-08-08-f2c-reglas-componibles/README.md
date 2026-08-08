@@ -22,9 +22,15 @@ junto al fichero de la tarea, no en lugar de él.
 |---|---|---|---|
 | 1 | [El esquema y `Criterion`](01-criterion-y-esquema.md) | Nada | ✅ `4f8f47b` |
 | 2 | [La puntuación compone condiciones](02-puntuacion-componible.md) | Tests de `ScoringRule` y del CRUD | ✅ `e84da77` |
-| 3 | [La etapa de viabilidad](03-viabilidad.md) | Nada, aditiva | ⏳ **en curso** |
-| 4 | [Reparto por condiciones y retirada del umbral](04-reparto-y-umbral.md) | Tests del motor de asignación y de `qualify` | ⏳ |
-| 5 | [Harness y cierre](05-harness-y-cierre.md) | — | ⏳ |
+| 3 | [La etapa de viabilidad](03-viabilidad.md) | Nada, aditiva | ✅ `5a44810` |
+| 4 | [Reparto por condiciones y retirada del umbral](04-reparto-y-umbral.md) | Tests del motor de asignación y de `qualify` | ✅ `ccc6a4f` |
+| 5 | [Harness y cierre](05-harness-y-cierre.md) | — | ✅ `2b830f0` |
+
+**Fase cerrada el 2026-08-08.** 462 tests, guardián 4/4, harness con 105 comprobaciones, migraciones
+reejecutadas desde volumen vacío. Un desvío del plan: **`verify-e2e.sh` nunca llegó a ponerse rojo**
+al retirar el umbral, porque ningún lead del harness anota menos de 40 y ninguna sección crea reglas
+de asignación, así que el corte de 30 no decidía nada observable. El Paso 1 de la Tarea 5 no tuvo
+nada que reparar.
 
 ### Reparto en tres despachos
 

@@ -44,6 +44,19 @@ uso ya confirmó — y ése es justo el punto: notificar no puede deshacer un le
 | **N2** | **El mensaje se compone al crear el aviso y se guarda hecho.** Componerlo al leer obligaría a cargar el lead de cada notificación y rompería la vista cuando el lead ya no exista |
 | **N3** | **Sólo se crean los cuatro eventos que tienen consumidor.** Un evento que nadie escucha es una clase y un test que mantener para nada |
 
+## El fallo que este repositorio comete una y otra vez
+
+Un campo nuevo llega hasta el borde y **el adaptador lo tira**. Ha pasado ya cuatro veces: `email` se
+serializaba como la cadena `"None"`, `source_id` no salía en la respuesta del lead, `intake_record_id`
+tampoco, y `disqualification_reason` se quedó fuera de `LeadDetailResponse` hasta que un test lo
+necesitó.
+
+Ninguna lo cazó la suite: los tests comprueban códigos de estado y almacenamiento, casi nunca el
+cuerpo completo de la respuesta.
+
+**Al terminar cada tarea de esta fase, comprueba que todo campo nuevo aparece en la respuesta HTTP**,
+no sólo en la entidad y en la tabla. Si un test no lo lee de vuelta por `GET`, no está probado.
+
 ## La migración es la 008
 
 F2c ocupa la `007`. Esta fase escribe `008_notifications.sql`, y es la **única** migración de la
