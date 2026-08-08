@@ -1,9 +1,11 @@
 import os
-from typing import Generator, Callable, Optional
+from typing import Generator, Optional
 from uuid import UUID
 from fastapi import Request, Depends
 from fastapi.security import OAuth2PasswordBearer
+from application.dtos.context import RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from application.ports.output.token_service_port import TokenServicePort
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
@@ -24,8 +26,8 @@ from application.use_cases.rule_use_cases import CreateScoringRuleUseCase, GetSc
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import LoginUseCase
 from domain.entities.agent import Agent
-from domain.exceptions import UnauthorizedException, ForbiddenException
-from domain.value_objects.enums import AgentRole
+from domain.exceptions import UnauthorizedException
+from domain.policies.authorization_policy import AuthorizationPolicy
 from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
 from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 
@@ -79,11 +81,13 @@ _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 _optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
-def get_current_agent(
-    token: str = Depends(_oauth2_scheme),
-    uow: UnitOfWorkPort = Depends(get_uow),
-) -> Agent:
-    claims = JwtTokenService(secret=os.environ["JWT_SECRET"]).verify(token)
+def get_token_service() -> TokenServicePort:
+    return JwtTokenService(secret=os.environ["JWT_SECRET"])
+
+
+def resolve_current_agent(token: str, uow: UnitOfWorkPort, token_service: TokenServicePort) -> Agent:
+    """Pure function so it can be tested without FastAPI's dependency machinery."""
+    claims = token_service.verify(token)
 
     with uow:
         agent = uow.agents.get_by_id(UUID(claims.agent_id))
@@ -93,47 +97,41 @@ def get_current_agent(
     return agent
 
 
+def get_current_agent(
+    token: str = Depends(_oauth2_scheme),
+    uow: UnitOfWorkPort = Depends(get_uow),
+    token_service: TokenServicePort = Depends(get_token_service),
+) -> Agent:
+    return resolve_current_agent(token=token, uow=uow, token_service=token_service)
+
+
 def get_optional_current_agent(
     token: Optional[str] = Depends(_optional_oauth2_scheme),
     uow: UnitOfWorkPort = Depends(get_uow),
+    token_service: TokenServicePort = Depends(get_token_service),
 ) -> Optional[Agent]:
     if not token:
         return None
     try:
-        return get_current_agent(token=token, uow=uow)
+        return resolve_current_agent(token=token, uow=uow, token_service=token_service)
     except UnauthorizedException:
         return None
 
 
-def require_role(*allowed_roles: AgentRole) -> Callable[..., Agent]:
-    def dependency(current_agent: Agent = Depends(get_current_agent)) -> Agent:
-        if current_agent.role not in allowed_roles:
-            raise ForbiddenException(f"Role {current_agent.role.value} is not permitted to perform this action")
-        return current_agent
-    return dependency
+def build_request_context(current_agent: Agent) -> RequestContext:
+    """The organization always comes from the verified identity, never from the
+    request path or body."""
+    tenant_id = UUID(str(current_agent.tenant_id)) if current_agent.tenant_id else None
+    return RequestContext(actor=current_agent, tenant_id=tenant_id)
 
 
-def verify_tenant_access(
-    tenant_id: UUID,
-    current_agent: Agent = Depends(get_current_agent),
-) -> Agent:
-    if current_agent.role != AgentRole.ADMIN:
-        if current_agent.tenant_id is None or str(current_agent.tenant_id) != str(tenant_id):
-            raise ForbiddenException("You do not have access to this tenant's data")
-    return current_agent
+def get_request_context(current_agent: Agent = Depends(get_current_agent)) -> RequestContext:
+    return build_request_context(current_agent=current_agent)
 
 
-def require_role_and_tenant(*allowed_roles: AgentRole) -> Callable[..., Agent]:
-    role_checker = require_role(*allowed_roles)
-
-    def dependency(
-        tenant_id: UUID,
-        current_agent: Agent = Depends(role_checker),
-    ) -> Agent:
-        if current_agent.role != AgentRole.ADMIN:
-            if current_agent.tenant_id is None or str(current_agent.tenant_id) != str(tenant_id):
-                raise ForbiddenException("You do not have access to this tenant's data")
-        return current_agent
-
-    return dependency
+def require_organization_manager(
+    context: RequestContext = Depends(get_request_context),
+) -> RequestContext:
+    AuthorizationPolicy.ensure_can_manage_organization(context.actor)
+    return context
 

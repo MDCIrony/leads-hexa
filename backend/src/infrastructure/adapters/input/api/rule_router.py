@@ -1,18 +1,16 @@
-from uuid import UUID
 from typing import List
 from fastapi import APIRouter, Depends, status
 from application.dtos.commands import CreateScoringRuleCommand, CreateRoutingRuleCommand
+from application.dtos.context import RequestContext
 from application.dtos.queries import GetRulesQuery
 from application.ports.input.rule_use_case_ports import (
     CreateScoringRuleInputPort, GetScoringRulesInputPort,
     CreateRoutingRuleInputPort, GetRoutingRulesInputPort
 )
-from domain.entities.agent import Agent
-from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
     get_create_scoring_rule_use_case, get_get_scoring_rules_use_case,
     get_create_routing_rule_use_case, get_get_routing_rules_use_case,
-    require_role_and_tenant,
+    require_organization_manager,
 )
 from infrastructure.adapters.input.api.schemas import (
     ScoringRuleCreate, ScoringRuleResponse,
@@ -23,13 +21,12 @@ router = APIRouter()
 
 @router.post("/scoring", response_model=ScoringRuleResponse, status_code=status.HTTP_201_CREATED)
 def create_scoring_rule(
-    tenant_id: UUID,
     request: ScoringRuleCreate,
     use_case: CreateScoringRuleInputPort = Depends(get_create_scoring_rule_use_case),
-    current_agent: Agent = Depends(require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)),
+    context: RequestContext = Depends(require_organization_manager),
 ):
     command = CreateScoringRuleCommand(
-        tenant_id=tenant_id,
+        tenant_id=context.tenant_id,
         name=request.name,
         field=request.field,
         operator=request.operator.value if hasattr(request.operator, 'value') else str(request.operator),
@@ -48,11 +45,10 @@ def create_scoring_rule(
 
 @router.get("/scoring", response_model=List[ScoringRuleResponse], status_code=status.HTTP_200_OK)
 def list_scoring_rules(
-    tenant_id: UUID,
     use_case: GetScoringRulesInputPort = Depends(get_get_scoring_rules_use_case),
-    current_agent: Agent = Depends(require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)),
+    context: RequestContext = Depends(require_organization_manager),
 ):
-    query = GetRulesQuery(tenant_id=tenant_id)
+    query = GetRulesQuery(tenant_id=context.tenant_id)
     rules = use_case.execute(query)
     return [
         ScoringRuleResponse(
@@ -68,13 +64,12 @@ def list_scoring_rules(
 
 @router.post("/routing", response_model=RoutingRuleResponse, status_code=status.HTTP_201_CREATED)
 def create_routing_rule(
-    tenant_id: UUID,
     request: RoutingRuleCreate,
     use_case: CreateRoutingRuleInputPort = Depends(get_create_routing_rule_use_case),
-    current_agent: Agent = Depends(require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)),
+    context: RequestContext = Depends(require_organization_manager),
 ):
     command = CreateRoutingRuleCommand(
-        tenant_id=tenant_id,
+        tenant_id=context.tenant_id,
         min_score=request.min_score,
         target_team=request.target_team,
         assignment_strategy=request.assignment_strategy,
@@ -91,11 +86,10 @@ def create_routing_rule(
 
 @router.get("/routing", response_model=List[RoutingRuleResponse], status_code=status.HTTP_200_OK)
 def list_routing_rules(
-    tenant_id: UUID,
     use_case: GetRoutingRulesInputPort = Depends(get_get_routing_rules_use_case),
-    current_agent: Agent = Depends(require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)),
+    context: RequestContext = Depends(require_organization_manager),
 ):
-    query = GetRulesQuery(tenant_id=tenant_id)
+    query = GetRulesQuery(tenant_id=context.tenant_id)
     rules = use_case.execute(query)
     return [
         RoutingRuleResponse(
@@ -107,4 +101,3 @@ def list_routing_rules(
         )
         for r in rules
     ]
-

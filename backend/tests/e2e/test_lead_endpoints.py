@@ -9,31 +9,30 @@ from infrastructure.adapters.output.security.jwt_token_service import JwtTokenSe
 from domain.value_objects.enums import AgentRole
 
 
-def _get_auth_headers() -> dict:
+def _manager_auth_headers(tenant_id: str) -> dict:
+    """`list_leads` now scopes to the caller's own tenant, taken from the
+    verified token, so listing a given tenant's leads requires a Manager
+    persisted for that tenant rather than a tenant-less Admin."""
     from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
     from domain.entities.agent import Agent
 
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
     db = app.state.db
     uow = PostgresUnitOfWork(db)
+    manager = Agent.create(
+        name="Manager",
+        email=f"manager_{uuid.uuid4().hex[:6]}@test.com",
+        team="Sales",
+        role=AgentRole.MANAGER,
+        tenant_id=tenant_id,
+    )
     with uow:
-        active_agents = uow.agents.list_active()
-        if active_agents:
-            admin_agent = active_agents[0]
-            admin_agent.role = AgentRole.ADMIN
-            uow.agents.save(admin_agent)
-            admin_token = token_service.issue(TokenClaims(agent_id=str(admin_agent.id), role="ADMIN", tenant_id=None))
-            return {"Authorization": f"Bearer {admin_token}"}
-        else:
-            agent = Agent.create(
-                name="Admin",
-                email=f"admin_{uuid.uuid4().hex[:6]}@test.com",
-                team="Admin",
-                role=AgentRole.ADMIN,
-            )
-            uow.agents.save(agent)
-            admin_token = token_service.issue(TokenClaims(agent_id=str(agent.id), role="ADMIN", tenant_id=None))
-            return {"Authorization": f"Bearer {admin_token}"}
+        uow.agents.save(manager)
+
+    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
+    token = token_service.issue(
+        TokenClaims(agent_id=str(manager.id), role="MANAGER", tenant_id=str(tenant_id))
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_ingest_lead_endpoint_success():
@@ -50,7 +49,7 @@ def test_ingest_lead_endpoint_success():
     }
 
     with TestClient(app) as client:
-        response = client.post(f"/api/v1/tenants/{tenant_id}/leads/ingest", json=payload)
+        response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
         assert response.status_code == 201
         data = response.json()
         assert "lead_id" in data
@@ -69,7 +68,7 @@ def test_ingest_lead_endpoint_invalid_email_validation():
     }
 
     with TestClient(app) as client:
-        response = client.post(f"/api/v1/tenants/{tenant_id}/leads/ingest", json=payload)
+        response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
         assert response.status_code == 422
 
 def test_batch_upload_endpoint():
@@ -83,7 +82,7 @@ def test_batch_upload_endpoint():
     files = {"file": ("leads.csv", csv_content, "text/csv")}
 
     with TestClient(app) as client:
-        response = client.post(f"/api/v1/tenants/{tenant_id}/leads/batch-upload", files=files)
+        response = client.post(f"/api/v1/intake/{tenant_id}/leads/batch-upload", files=files)
         assert response.status_code == 200
         data = response.json()
         assert "job_id" in data
@@ -102,10 +101,10 @@ def test_list_leads_by_tenant_endpoint():
     }
 
     with TestClient(app) as client:
-        headers = _get_auth_headers()
-        client.post(f"/api/v1/tenants/{tenant_id}/leads/ingest", json=payload)
+        headers = _manager_auth_headers(tenant_id)
+        client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
 
-        response = client.get(f"/api/v1/tenants/{tenant_id}/leads", headers=headers)
+        response = client.get("/api/v1/leads", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, dict)
@@ -125,10 +124,10 @@ def test_list_leads_pagination_has_more_flag():
     }
 
     with TestClient(app) as client:
-        headers = _get_auth_headers()
+        headers = _manager_auth_headers(tenant_id)
         for i in range(3):
             client.post(
-                f"/api/v1/tenants/{tenant_id}/leads/ingest",
+                f"/api/v1/intake/{tenant_id}/leads/ingest",
                 json={
                     **base_payload,
                     "first_name": f"Lead{i}",
@@ -137,14 +136,14 @@ def test_list_leads_pagination_has_more_flag():
                 },
             )
 
-        response = client.get(f"/api/v1/tenants/{tenant_id}/leads?limit=2&offset=0", headers=headers)
+        response = client.get("/api/v1/leads?limit=2&offset=0", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 3
         assert len(data["items"]) == 2
         assert data["has_more"] is True
 
-        response = client.get(f"/api/v1/tenants/{tenant_id}/leads?limit=2&offset=2", headers=headers)
+        response = client.get("/api/v1/leads?limit=2&offset=2", headers=headers)
         data = response.json()
         assert len(data["items"]) == 1
         assert data["has_more"] is False
@@ -162,7 +161,7 @@ def test_ingest_lead_endpoint_negative_budget_returns_400():
     }
 
     with TestClient(app) as client:
-        response = client.post(f"/api/v1/tenants/{tenant_id}/leads/ingest", json=payload)
+        response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
         assert response.status_code == 400
         data = response.json()
         assert data["error"] is True

@@ -12,6 +12,7 @@ from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFile
 from application.handlers.webhook_event_handler import WebhookEventHandler
 from domain.events.lead_events import LeadProcessedEvent
 from infrastructure.adapters.input.api.lead_router import router as lead_router
+from infrastructure.adapters.input.api.intake_router import router as intake_router
 from infrastructure.adapters.input.api.rule_router import router as rule_router
 from infrastructure.adapters.input.api.agent_router import router as agent_router
 from infrastructure.adapters.input.api.auth_router import router as auth_router
@@ -72,7 +73,8 @@ app.add_middleware(
 )
 
 # Include Routers
-app.include_router(lead_router, prefix="/api/v1/tenants/{tenant_id}/leads", tags=["Leads"])
-app.include_router(rule_router, prefix="/api/v1/tenants/{tenant_id}/rules", tags=["Rules"])
+app.include_router(lead_router, prefix="/api/v1/leads", tags=["Leads"])
+app.include_router(intake_router, prefix="/api/v1/intake/{tenant_id}/leads", tags=["Intake"])
+app.include_router(rule_router, prefix="/api/v1/rules", tags=["Rules"])
 app.include_router(agent_router, prefix="/api/v1/agents", tags=["Agents"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])

@@ -1,127 +1,91 @@
-import os
-import uuid
-import pytest
+from uuid import uuid4
 
-os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
+import pytest
 
 from application.ports.output.token_service_port import TokenClaims
 from domain.entities.agent import Agent
-from domain.exceptions import UnauthorizedException, ForbiddenException
+from domain.exceptions import ForbiddenException, UnauthorizedException
 from domain.value_objects.enums import AgentRole
-from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from infrastructure.adapters.input.api.dependencies import (
-    get_current_agent,
-    require_role,
-    verify_tenant_access,
-    require_role_and_tenant,
+    build_request_context,
+    resolve_current_agent,
 )
+from tests.unit.mocks.fake_token_service import FakeTokenService
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
+from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
+from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
+_TENANT_A = uuid4()
 
-def _uow_with_agent(role=AgentRole.AGENT, is_active=True, tenant_id=None):
+
+def _uow_with(agent: Agent) -> InMemoryUnitOfWork:
     repo = InMemoryAgentRepository()
-    agent = Agent.create("Test", "t@test.com", "Sales", role=role, is_active=is_active, tenant_id=tenant_id)
     repo.save(agent)
-    uow = InMemoryUnitOfWork(agents=repo)
-    return uow, agent
+    return InMemoryUnitOfWork(InMemoryLeadRepository(), InMemoryRuleRepository(), repo)
 
 
-def _issue_token(agent_id: str, role: str, tenant_id=None) -> str:
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    return token_service.issue(TokenClaims(agent_id=agent_id, role=role, tenant_id=tenant_id))
+def _token_for(agent: Agent) -> str:
+    return FakeTokenService().issue(
+        TokenClaims(
+            agent_id=str(agent.id),
+            role=agent.role.value,
+            tenant_id=str(agent.tenant_id) if agent.tenant_id else None,
+        )
+    )
 
 
-def test_get_current_agent_returns_the_agent_for_a_valid_token():
-    uow, agent = _uow_with_agent(role=AgentRole.MANAGER)
-    token = _issue_token(agent_id=str(agent.id), role="MANAGER")
-    resolved = get_current_agent(token=token, uow=uow)
+def test_valid_token_resolves_the_agent():
+    agent = Agent.create("M", "m@test.com", "Sales", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
+    resolved = resolve_current_agent(
+        token=_token_for(agent), uow=_uow_with(agent), token_service=FakeTokenService()
+    )
     assert str(resolved.id) == str(agent.id)
 
 
-def test_get_current_agent_rejects_an_invalid_token():
-    uow, _ = _uow_with_agent()
+def test_malformed_token_is_unauthorized():
+    agent = Agent.create("M", "m@test.com", "Sales", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
     with pytest.raises(UnauthorizedException):
-        get_current_agent(token="not-a-real-token", uow=uow)
+        resolve_current_agent(
+            token="garbage", uow=_uow_with(agent), token_service=FakeTokenService()
+        )
 
 
-def test_get_current_agent_rejects_an_inactive_agent():
-    uow, agent = _uow_with_agent(is_active=False)
-    token = _issue_token(agent_id=str(agent.id), role="AGENT")
+def test_deactivated_agent_is_unauthorized_even_with_a_valid_token():
+    """Identity is revalidated against the database on every request, so
+    deactivating an account cuts an outstanding token immediately."""
+    agent = Agent.create(
+        "M", "m@test.com", "Sales", role=AgentRole.MANAGER, tenant_id=_TENANT_A, is_active=False
+    )
     with pytest.raises(UnauthorizedException):
-        get_current_agent(token=token, uow=uow)
+        resolve_current_agent(
+            token=_token_for(agent), uow=_uow_with(agent), token_service=FakeTokenService()
+        )
 
 
-def test_require_role_allows_a_permitted_role():
-    _, agent = _uow_with_agent(role=AgentRole.ADMIN)
-    dependency = require_role(AgentRole.ADMIN, AgentRole.MANAGER)
-    assert dependency(current_agent=agent) is agent
+def test_context_carries_the_agent_own_tenant():
+    agent = Agent.create("M", "m@test.com", "Sales", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
+    context = build_request_context(current_agent=agent)
+    assert context.actor is agent
+    assert str(context.tenant_id) == str(_TENANT_A)
 
 
-def test_require_role_rejects_a_non_permitted_role():
-    _, agent = _uow_with_agent(role=AgentRole.AGENT)
-    dependency = require_role(AgentRole.ADMIN, AgentRole.MANAGER)
+def test_platform_admin_context_has_no_tenant():
+    admin = Agent.create("A", "a@test.com", "Platform", role=AgentRole.ADMIN, tenant_id=None)
+    assert build_request_context(current_agent=admin).tenant_id is None
+
+
+def test_sales_agent_is_refused_organization_management():
+    from infrastructure.adapters.input.api.dependencies import require_organization_manager
+
+    sales = Agent.create("S", "s@test.com", "Sales", role=AgentRole.AGENT, tenant_id=_TENANT_A)
     with pytest.raises(ForbiddenException):
-        dependency(current_agent=agent)
+        require_organization_manager(context=build_request_context(current_agent=sales))
 
 
-def test_verify_tenant_access_matching_tenant_allows():
-    tenant_id = uuid.uuid4()
-    _, agent = _uow_with_agent(role=AgentRole.AGENT, tenant_id=tenant_id)
-    resolved = verify_tenant_access(tenant_id=tenant_id, current_agent=agent)
-    assert resolved is agent
+def test_manager_is_allowed_organization_management():
+    from infrastructure.adapters.input.api.dependencies import require_organization_manager
 
-
-def test_verify_tenant_access_mismatched_tenant_raises_forbidden():
-    tenant_id = uuid.uuid4()
-    other_tenant_id = uuid.uuid4()
-    _, agent = _uow_with_agent(role=AgentRole.AGENT, tenant_id=tenant_id)
-    with pytest.raises(ForbiddenException) as exc_info:
-        verify_tenant_access(tenant_id=other_tenant_id, current_agent=agent)
-    assert "do not have access to this tenant's data" in str(exc_info.value)
-
-
-def test_verify_tenant_access_admin_allowed_for_any_tenant():
-    admin_tenant_id = uuid.uuid4()
-    other_tenant_id = uuid.uuid4()
-    _, admin_agent = _uow_with_agent(role=AgentRole.ADMIN, tenant_id=admin_tenant_id)
-    resolved = verify_tenant_access(tenant_id=other_tenant_id, current_agent=admin_agent)
-    assert resolved is admin_agent
-
-
-def test_require_role_and_tenant_matching_role_and_tenant_allows():
-    tenant_id = uuid.uuid4()
-    _, agent = _uow_with_agent(role=AgentRole.MANAGER, tenant_id=tenant_id)
-    dependency = require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
-    resolved = dependency(tenant_id=tenant_id, current_agent=agent)
-    assert resolved is agent
-
-
-def test_require_role_and_tenant_mismatched_tenant_raises_forbidden():
-    tenant_id = uuid.uuid4()
-    other_tenant_id = uuid.uuid4()
-    _, agent = _uow_with_agent(role=AgentRole.MANAGER, tenant_id=tenant_id)
-    dependency = require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
-    with pytest.raises(ForbiddenException) as exc_info:
-        dependency(tenant_id=other_tenant_id, current_agent=agent)
-    assert "do not have access to this tenant's data" in str(exc_info.value)
-
-
-def test_require_role_and_tenant_admin_allowed_for_any_tenant():
-    other_tenant_id = uuid.uuid4()
-    _, admin_agent = _uow_with_agent(role=AgentRole.ADMIN, tenant_id=None)
-    dependency = require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
-    resolved = dependency(tenant_id=other_tenant_id, current_agent=admin_agent)
-    assert resolved is admin_agent
-
-
-def test_require_role_and_tenant_wrong_role_rejected_before_checking_tenant():
-    tenant_id = uuid.uuid4()
-    _, agent = _uow_with_agent(role=AgentRole.AGENT, tenant_id=tenant_id)
-    require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)
-    role_checker = require_role(AgentRole.ADMIN, AgentRole.MANAGER)
-    with pytest.raises(ForbiddenException) as exc_info:
-        role_checker(current_agent=agent)
-    assert "Role AGENT is not permitted" in str(exc_info.value)
-
-
+    manager = Agent.create("M", "m@test.com", "Sales", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
+    context = build_request_context(current_agent=manager)
+    assert require_organization_manager(context=context) is context

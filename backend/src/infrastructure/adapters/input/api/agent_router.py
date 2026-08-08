@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import List, Optional
+from typing import Optional
 from fastapi import APIRouter, Depends, status
 
 from application.dtos.commands import CreateAgentCommand
@@ -9,7 +9,8 @@ from application.ports.input.agent_use_case_ports import (
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent
-from domain.exceptions import ForbiddenException, UnauthorizedException
+from domain.exceptions import UnauthorizedException
+from domain.policies.authorization_policy import AuthorizationPolicy
 from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
     get_create_agent_use_case, get_get_agents_use_case, get_get_agent_use_case,
@@ -33,18 +34,6 @@ def _to_response(agent: Agent) -> AgentResponse:
     )
 
 
-def _authorize_agent_creation(request: AgentCreate, current_agent: Optional[Agent]) -> None:
-    if current_agent is None:
-        raise UnauthorizedException("Authentication required to create an agent")
-    if current_agent.role not in (AgentRole.ADMIN, AgentRole.MANAGER):
-        raise ForbiddenException("Only Admin or Manager can create agents")
-    if request.role == AgentRole.ADMIN and current_agent.role != AgentRole.ADMIN:
-        raise ForbiddenException("Only an Admin can create another Admin")
-    if current_agent.role == AgentRole.MANAGER:
-        if request.tenant_id is None or str(request.tenant_id) != str(current_agent.tenant_id):
-            raise ForbiddenException("A Manager can only create agents within their own tenant")
-
-
 @router.post("", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/", response_model=AgentResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_agent(
@@ -59,7 +48,11 @@ def create_agent(
     if is_bootstrap:
         forced_role = AgentRole.ADMIN
     else:
-        _authorize_agent_creation(request, current_agent)
+        if current_agent is None:
+            raise UnauthorizedException("Authentication required to create an agent")
+        AuthorizationPolicy.ensure_can_create_agent_with_role(current_agent, request.role)
+        if current_agent.role != AgentRole.ADMIN:
+            AuthorizationPolicy.ensure_can_access_tenant(current_agent, request.tenant_id)
         forced_role = request.role
 
     command = CreateAgentCommand(

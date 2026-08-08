@@ -6,7 +6,48 @@ from fastapi.testclient import TestClient
 from infrastructure.main import app
 from application.ports.output.token_service_port import TokenClaims
 from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
-from domain.value_objects.enums import AgentRole
+
+
+def _bootstrap_admin_headers(client: TestClient) -> dict:
+    """The agents table is empty at the start of every e2e test (see
+    clean_tables), so the first unauthenticated POST always rides the
+    bootstrap rule and becomes Admin."""
+    resp = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Bootstrap Admin",
+            "email": f"admin_{uuid.uuid4().hex[:6]}@test.com",
+            "team": "HQ",
+            "password": "bootstrap-pass-123",
+        },
+    )
+    assert resp.status_code == 201
+    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
+    token = token_service.issue(TokenClaims(agent_id=resp.json()["id"], role="ADMIN", tenant_id=None))
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _manager_headers_for(client: TestClient, admin_headers: dict, tenant_id: str) -> dict:
+    """Rules and lead listing scope to the caller's own tenant (from the
+    token), so driving a tenant's routing flow now requires a Manager
+    persisted for that tenant rather than the tenant-less bootstrap Admin."""
+    resp = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Org Manager",
+            "email": f"manager_{uuid.uuid4().hex[:6]}@test.com",
+            "team": "Sales",
+            "password": "manager-pass-123",
+            "role": "MANAGER",
+            "tenant_id": tenant_id,
+        },
+        headers=admin_headers,
+    )
+    assert resp.status_code == 201
+    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
+    token = token_service.issue(TokenClaims(agent_id=resp.json()["id"], role="MANAGER", tenant_id=tenant_id))
+    return {"Authorization": f"Bearer {token}"}
+
 
 def test_full_system_lead_routing_flow_e2e():
     """
@@ -20,8 +61,10 @@ def test_full_system_lead_routing_flow_e2e():
     tenant_id = str(uuid.uuid4())
 
     with TestClient(app) as client:
+        admin_headers = _bootstrap_admin_headers(client)
+        headers = _manager_headers_for(client, admin_headers, tenant_id)
+
         # 1. Crear agente
-        headers = {}
         agent_payload = {
             "name": "Carlos Lopez",
             "email": "clopez@sales.com",
@@ -29,35 +72,16 @@ def test_full_system_lead_routing_flow_e2e():
             "active_leads_count": 0,
             "is_active": True,
             "password": "test-password-123",
+            "tenant_id": tenant_id,
         }
         agent_resp = client.post("/api/v1/agents", json=agent_payload, headers=headers)
-        if agent_resp.status_code == 401:
-            from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-            db = app.state.db
-            uow = PostgresUnitOfWork(db)
-            with uow:
-                active_agents = uow.agents.list_active()
-                if active_agents:
-                    admin_agent = active_agents[0]
-                    admin_agent.role = AgentRole.ADMIN
-                    uow.agents.save(admin_agent)
-                    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-                    admin_token = token_service.issue(TokenClaims(agent_id=str(admin_agent.id), role="ADMIN", tenant_id=None))
-                    headers = {"Authorization": f"Bearer {admin_token}"}
-                    agent_resp = client.post("/api/v1/agents", json=agent_payload, headers=headers)
-
         assert agent_resp.status_code == 201
         agent_data = agent_resp.json()
         agent_id = agent_data["id"]
 
-        if not headers:
-            token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-            admin_token = token_service.issue(TokenClaims(agent_id=agent_id, role="ADMIN", tenant_id=None))
-            headers = {"Authorization": f"Bearer {admin_token}"}
-
         # 2. Crear regla de scoring
         scoring_resp = client.post(
-            f"/api/v1/tenants/{tenant_id}/rules/scoring",
+            "/api/v1/rules/scoring",
             json={
                 "name": "High Budget Bonus",
                 "field": "budget",
@@ -71,7 +95,7 @@ def test_full_system_lead_routing_flow_e2e():
 
         # 3. Crear regla de routing
         routing_resp = client.post(
-            f"/api/v1/tenants/{tenant_id}/rules/routing",
+            "/api/v1/rules/routing",
             json={
                 "min_score": 30,
                 "target_team": "Sales",
@@ -85,7 +109,7 @@ def test_full_system_lead_routing_flow_e2e():
 
         # 4. Ingestar Lead
         ingest_resp = client.post(
-            f"/api/v1/tenants/{tenant_id}/leads/ingest",
+            f"/api/v1/intake/{tenant_id}/leads/ingest",
             json={
                 "first_name": "Maria",
                 "last_name": "Gomez",
@@ -107,4 +131,3 @@ def test_full_system_lead_routing_flow_e2e():
         # 6. Verificar actualización de agente
         updated_agent = client.get(f"/api/v1/agents/{agent_id}", headers=headers).json()
         assert updated_agent["active_leads_count"] == 1
-
