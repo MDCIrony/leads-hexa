@@ -1,7 +1,8 @@
 import uuid
 from unittest.mock import Mock
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
+from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
 from application.dtos.commands import IngestLeadCommand
+from domain.entities.intake_record import IntakeRecord
 from domain.events.lead_events import LeadProcessedEvent
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
@@ -38,8 +39,11 @@ def test_ingest_lead_publishes_event() -> None:
         industry="Tech",
         custom_attributes={},
     )
+    existing = uow.intake_records.save(
+        IntakeRecord.create(tenant_id=command.tenant_id, source_id=command.source_id, payload=payload_of(command))
+    )
 
-    result = use_case.execute(command)
+    result = use_case.execute(command, existing_record=existing)
 
     assert result.error is None
     assert mock_event_publisher.publish.call_count == 1

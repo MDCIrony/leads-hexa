@@ -57,25 +57,13 @@ class IngestLeadUseCase(IngestLeadInputPort):
             )
         return source.id.value
 
-    def execute(
-        self,
-        command: IngestLeadCommand,
-        existing_record: Optional[IntakeRecord] = None,
-    ) -> LeadProcessedResult:
+    def execute(self, command: IngestLeadCommand, existing_record: IntakeRecord) -> LeadProcessedResult:
         assigned_agent = None
         with self.uow:
-            # Promotion reuses the row the manager is correcting instead of
-            # opening another one: the inbox should show one attempt per
-            # payload, not one per retry. First-time ingestion has no such
-            # row yet, so it persists a new one before Lead.create is
-            # attempted — a payload that fails validation must not vanish.
-            record = existing_record or self.uow.intake_records.save(
-                IntakeRecord.create(
-                    tenant_id=command.tenant_id,
-                    source_id=command.source_id,
-                    payload=payload_of(command),
-                )
-            )
+            # The record always exists by now: ReceiveIntakeUseCase (or the
+            # batch pipeline) persisted it on arrival, so this use case only
+            # ever marks what already landed — it no longer creates rows.
+            record = existing_record
 
             try:
                 lead = Lead.create(

@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
-from application.dtos.commands import BatchProcessResult
 
 class ProcessBatchInputPort(ABC):
     @abstractmethod
-    def execute(self, file_content: bytes, filename: str, tenant_id: UUID) -> BatchProcessResult:
+    def execute(self, tenant_id: UUID, job_id: UUID, file_content: bytes, filename: str) -> None:
         pass

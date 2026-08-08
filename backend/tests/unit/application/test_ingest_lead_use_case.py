@@ -1,7 +1,8 @@
 import uuid
 from application.dtos.commands import IngestLeadCommand
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
+from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
 from domain.entities import Agent, AssignmentRule, ScoringRule, SalesGroup
+from domain.entities.intake_record import IntakeRecord
 from domain.value_objects import Operator, AssignmentStrategy
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
@@ -94,8 +95,11 @@ def test_ingest_lead_use_case_successful_flow():
         industry="Technology",
         custom_attributes={"employee_count": 150},
     )
+    existing = uow.intake_records.save(
+        IntakeRecord.create(tenant_id=cmd.tenant_id, source_id=cmd.source_id, payload=payload_of(cmd))
+    )
 
-    result = use_case.execute(cmd)
+    result = use_case.execute(cmd, existing_record=existing)
 
     assert result.status == "ASSIGNED"
     assert result.score == 35
@@ -122,8 +126,11 @@ def test_ingest_lead_use_case_invalid_email_error():
         budget=5000.0,
         industry="Tech",
     )
+    existing = uow.intake_records.save(
+        IntakeRecord.create(tenant_id=cmd.tenant_id, source_id=cmd.source_id, payload=payload_of(cmd))
+    )
 
-    result = use_case.execute(cmd)
+    result = use_case.execute(cmd, existing_record=existing)
 
     # T4: a rejected payload is not lost. It lands as a REJECTED
     # IntakeRecord instead of the retired LeadStatus.FAILED.
@@ -167,10 +174,13 @@ def test_rollback_on_persistence_error():
         custom_attributes={},
         phone="123456789",
     )
+    existing = IntakeRecord.create(
+        tenant_id=command.tenant_id, source_id=command.source_id, payload=payload_of(command)
+    )
 
     # Act & Assert
     with pytest.raises(Exception, match="Database failure"):
-        use_case.execute(command)
+        use_case.execute(command, existing_record=existing)
 
     # El UnitOfWorkPort debió hacer rollback
     mock_uow.rollback.assert_called_once()

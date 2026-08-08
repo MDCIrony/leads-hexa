@@ -1,46 +1,53 @@
-import uuid
 from uuid import UUID
+
+from application.ports.input.intake_phase_use_case_ports import ProcessIntakeJobInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
-from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.output.file_parser_port import FileParserPort
-from application.dtos.commands import BatchProcessResult, FailedRow
-from domain.value_objects.enums import LeadSourceKind
+from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from application.use_cases.ingest_lead_use_case import payload_of
+from domain.entities.intake_record import IntakeRecord
+from domain.exceptions import DomainException
+
 
 class ProcessBatchUseCase(ProcessBatchInputPort):
     def __init__(
         self,
+        uow: UnitOfWorkPort,
         file_parser: FileParserPort,
-        ingest_lead_use_case: IngestLeadInputPort,
+        process_job: ProcessIntakeJobInputPort,
     ) -> None:
+        self.uow = uow
         self.file_parser = file_parser
-        self.ingest_lead_use_case = ingest_lead_use_case
+        self.process_job = process_job
 
-    def execute(self, file_content: bytes, filename: str, tenant_id: UUID) -> BatchProcessResult:
-        source_id = self.ingest_lead_use_case.resolve_source_id(tenant_id, LeadSourceKind.FILE_UPLOAD)
-        commands = self.file_parser.parse_leads_file(file_content, filename, tenant_id, source_id)
-        results = []
-        successful = 0
-        failed_rows = []
+    def execute(self, tenant_id: UUID, job_id: UUID, file_content: bytes, filename: str) -> None:
+        with self.uow:
+            job = self.uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
+            if job is None:
+                raise DomainException("The intake job does not exist", error_code="INTAKE_JOB_NOT_FOUND")
+            source_id = job.source_id.value
 
-        for idx, cmd in enumerate(commands, start=1):
-            res = self.ingest_lead_use_case.execute(cmd)
-            results.append(res)
-            if res.error:
-                failed_rows.append(
-                    FailedRow(
-                        row_number=idx,
-                        email=cmd.email,
-                        error=res.error,
-                        error_code=res.error_code,
-                        intake_record_id=res.intake_record_id,
-                    )
-                )
-            else:
-                successful += 1
+        try:
+            commands = self.file_parser.parse_leads_file(file_content, filename, tenant_id, source_id)
+        except Exception:
+            # An unreadable file is a job that never got to start, not one with
+            # failed items: there are no rows to record or to reprocess.
+            with self.uow:
+                job = self.uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
+                job.fail()
+                self.uow.intake_jobs.save(job)
+            return
 
-        return BatchProcessResult(
-            job_id=str(uuid.uuid4()),
-            total_rows=len(commands),
-            successful_ingestions=successful,
-            failed_rows=failed_rows,
-        )
+        with self.uow:
+            job = self.uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
+            for command in commands:
+                self.uow.intake_records.save(IntakeRecord.create(
+                    tenant_id=tenant_id,
+                    source_id=source_id,
+                    job_id=job_id,
+                    payload=payload_of(command),
+                ))
+            job.set_total(len(commands))
+            self.uow.intake_jobs.save(job)
+
+        self.process_job.execute(tenant_id, job_id)

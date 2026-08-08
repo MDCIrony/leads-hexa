@@ -35,8 +35,6 @@ from infrastructure.adapters.input.api.schemas import (
     IntakeRecordResponse,
     IntakeRecordsPageResponse,
     LeadProcessedResponse,
-    BatchProcessResponse,
-    FailedRowResponse,
     PromoteIntakeRecordRequest,
 )
 
@@ -85,32 +83,30 @@ def ingest_lead(
         status=received.status,
     )
 
-@router.post("/leads/batch-upload", response_model=BatchProcessResponse, status_code=status.HTTP_200_OK)
+@router.post("/leads/batch-upload", response_model=IntakeAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
 async def batch_upload(
+    background: BackgroundTasks,
     file: UploadFile = File(...),
     context: RequestContext = Depends(require_organization_manager),
-    use_case: ProcessBatchInputPort = Depends(get_process_batch_use_case),
+    receive: ReceiveIntakeInputPort = Depends(get_receive_intake_use_case),
+    process_batch: ProcessBatchInputPort = Depends(get_process_batch_use_case),
 ):
+    # Read here, not inside the background task: the uploaded file closes
+    # when the request ends, and the task has not run yet by then.
     content = await file.read()
-    result = use_case.execute(
-        file_content=content,
-        filename=file.filename or "leads.csv",
+    received = receive.execute(ReceiveIntakeCommand(
         tenant_id=context.tenant_id,
+        kind=IntakeJobKind.BATCH.value,
+        payloads=[],
+    ))
+    background.add_task(
+        process_batch.execute,
+        context.tenant_id, UUID(received.job_id), content, file.filename or "leads.csv",
     )
-    return BatchProcessResponse(
-        job_id=result.job_id,
-        total_rows=result.total_rows,
-        successful_ingestions=result.successful_ingestions,
-        failed_rows=[
-            FailedRowResponse(
-                row_number=row.row_number,
-                email=row.email,
-                error=row.error,
-                error_code=row.error_code,
-                intake_record_id=row.intake_record_id,
-            )
-            for row in result.failed_rows
-        ],
+    return IntakeAcceptedResponse(
+        job_id=received.job_id,
+        record_ids=[],
+        status=received.status,
     )
 
 @router.get("/records", response_model=IntakeRecordsPageResponse, status_code=status.HTTP_200_OK)

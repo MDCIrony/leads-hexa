@@ -87,17 +87,6 @@ def get_ingest_lead_use_case(
         engine=container.assignment_engine,
     )
 
-def get_process_batch_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> ProcessBatchInputPort:
-    ingest_lead_use_case = IngestLeadUseCase(
-        uow=uow,
-        event_publisher=container.event_publisher,
-        engine=container.assignment_engine,
-    )
-    return ProcessBatchUseCase(file_parser=container.file_parser, ingest_lead_use_case=ingest_lead_use_case)
-
 def get_get_intake_records_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeRecordsInputPort:
     return GetIntakeRecordsUseCase(uow=uow)
 
@@ -109,6 +98,15 @@ def get_process_intake_job_use_case(
     ingest: IngestLeadInputPort = Depends(get_ingest_lead_use_case),
 ) -> ProcessIntakeJobInputPort:
     return ProcessIntakeJobUseCase(uow=uow, ingest=ingest)
+
+# Defined after get_process_intake_job_use_case, not before: its own default
+# argument references that name, and Python resolves defaults at def-time.
+def get_process_batch_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+    process_job: ProcessIntakeJobInputPort = Depends(get_process_intake_job_use_case),
+) -> ProcessBatchInputPort:
+    return ProcessBatchUseCase(uow=uow, file_parser=container.file_parser, process_job=process_job)
 
 def get_promote_intake_record_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),

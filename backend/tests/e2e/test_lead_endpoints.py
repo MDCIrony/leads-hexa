@@ -120,11 +120,15 @@ def test_batch_upload_endpoint():
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
-        assert response.status_code == 200
+        assert response.status_code == 202
         data = response.json()
         assert "job_id" in data
-        assert data["total_rows"] == 2
-        assert data["successful_ingestions"] == 2
+
+        records = client.get(f"/api/v1/intake/records?job_id={data['job_id']}", headers=headers)
+        assert records.status_code == 200
+        items = records.json()["items"]
+        assert len(items) == 2
+        assert all(item["status"] == "PROMOTED" for item in items)
 
 def test_batch_upload_reports_failed_rows_without_losing_the_valid_ones():
     tenant_id = str(uuid.uuid4())
@@ -141,32 +145,30 @@ def test_batch_upload_reports_failed_rows_without_losing_the_valid_ones():
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
-        assert response.status_code == 200
+        assert response.status_code == 202
         data = response.json()
-        assert data["total_rows"] == 3
-        assert data["successful_ingestions"] == 2
-        assert len(data["failed_rows"]) == 1
 
-        failed = data["failed_rows"][0]
-        assert failed["row_number"] == 2
-        assert failed["email"] == "email-sin-arroba"
-        assert failed["error_code"] == "INVALID_EMAIL"
+        records = client.get(f"/api/v1/intake/records?job_id={data['job_id']}", headers=headers).json()
+        items = records["items"]
+        assert len(items) == 3
+
+        promoted = [item for item in items if item["status"] == "PROMOTED"]
+        rejected = [item for item in items if item["status"] == "REJECTED"]
+        assert len(promoted) == 2
+        assert len(rejected) == 1
 
         # The row must say WHERE it was kept, not just that it failed. Without
         # this the manager has to pair the response against the inbox by
         # matching contents, which is ambiguous as soon as two rows look alike.
-        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-        uow = PostgresUnitOfWork(app.state.container.database)
-        assert failed["intake_record_id"]
-        with uow:
-            record = uow.intake_records.get_by_id_and_tenant(
-                uuid.UUID(failed["intake_record_id"]), uuid.UUID(tenant_id)
-            )
-        assert record is not None
-        assert record.status.value == "REJECTED"
+        failed = rejected[0]
+        assert failed["payload"]["email"] == "email-sin-arroba"
+        assert failed["errors"][0]["error_code"] == "INVALID_EMAIL"
+        assert failed["id"]
 
         # A bad row must not drag the good ones down with it: only the 2
         # valid rows are actually persisted for this tenant.
+        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+        uow = PostgresUnitOfWork(app.state.container.database)
         with uow:
             persisted_count = uow.leads.count_by_tenant(uuid.UUID(tenant_id))
         assert persisted_count == 2

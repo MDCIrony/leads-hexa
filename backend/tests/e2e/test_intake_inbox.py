@@ -142,12 +142,65 @@ def test_mixed_batch_upload_leaves_one_promoted_and_one_rejected_in_the_inbox():
         headers = _manager_auth_headers(tenant_id)
 
         response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
-        assert response.status_code == 200
+        assert response.status_code == 202
+        data = response.json()
+        assert data["record_ids"] == []
 
-        promoted = client.get("/api/v1/intake/records?status=PROMOTED", headers=headers).json()
-        rejected = client.get("/api/v1/intake/records?status=REJECTED", headers=headers).json()
-        assert promoted["total"] == 1
-        assert rejected["total"] == 1
+        records = client.get(f"/api/v1/intake/records?job_id={data['job_id']}", headers=headers).json()
+        items = records["items"]
+        assert len(items) == 2
+        by_status = {item["status"]: item for item in items}
+        assert set(by_status) == {"PROMOTED", "REJECTED"}
+        assert by_status["PROMOTED"]["lead_id"]
+        assert by_status["REJECTED"]["errors"]
+
+
+def test_batch_upload_with_an_unreadable_file_fails_the_job_without_a_500():
+    tenant_id = str(uuid.uuid4())
+    files = {"file": ("leads.xlsx", b"not a real spreadsheet", "application/octet-stream")}
+
+    with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
+        headers = _manager_auth_headers(tenant_id)
+
+        response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        records = client.get(f"/api/v1/intake/records?job_id={job_id}", headers=headers).json()
+        assert records["items"] == []
+
+        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+        from domain.value_objects.enums import IntakeJobStatus
+        uow = PostgresUnitOfWork(app.state.container.database)
+        with uow:
+            job = uow.intake_jobs.get_by_id_and_tenant(uuid.UUID(job_id), uuid.UUID(tenant_id))
+        assert job.status == IntakeJobStatus.FAILED
+
+
+def test_batch_upload_with_only_a_header_completes_with_zero_items():
+    tenant_id = str(uuid.uuid4())
+    csv_content = "first_name,last_name,email,company,budget,industry\n".encode("utf-8")
+    files = {"file": ("leads.csv", csv_content, "text/csv")}
+
+    with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
+        headers = _manager_auth_headers(tenant_id)
+
+        response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
+        assert response.status_code == 202
+        job_id = response.json()["job_id"]
+
+        records = client.get(f"/api/v1/intake/records?job_id={job_id}", headers=headers).json()
+        assert records["items"] == []
+
+        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+        from domain.value_objects.enums import IntakeJobStatus
+        uow = PostgresUnitOfWork(app.state.container.database)
+        with uow:
+            job = uow.intake_jobs.get_by_id_and_tenant(uuid.UUID(job_id), uuid.UUID(tenant_id))
+        assert job.status == IntakeJobStatus.COMPLETED
+        assert job.total_items == 0
 
 
 def test_cross_organization_access_to_intake_records_is_rejected():

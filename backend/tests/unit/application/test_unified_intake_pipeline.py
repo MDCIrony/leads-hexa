@@ -4,9 +4,10 @@ from typing import List
 from application.dtos.commands import IngestLeadCommand
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
-from domain.entities.lead_source import LeadSource
-from domain.value_objects.enums import IntakeRecordStatus, LeadSourceKind
-from infrastructure.adapters.input.api.schemas import FailedRowResponse
+from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
+from domain.entities.intake_job import IntakeJob
+from domain.entities.intake_record import IntakeRecord
+from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus, IntakeRecordStatus
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
@@ -50,12 +51,22 @@ class _StubFileParser:
         return self._commands
 
 
+def _existing_record(uow: InMemoryUnitOfWork, command: IngestLeadCommand) -> IntakeRecord:
+    # F2d: IngestLeadUseCase no longer creates its own row — the caller
+    # always persists it first, the way ReceiveIntakeUseCase does.
+    return uow.intake_records.save(IntakeRecord.create(
+        tenant_id=command.tenant_id, source_id=command.source_id, payload={},
+    ))
+
+
 def test_valid_payload_promotes_the_intake_record_to_the_created_lead():
     tenant_id = uuid.uuid4()
     uow = _new_uow()
     use_case = IngestLeadUseCase(uow=uow)
+    command = _command(tenant_id=tenant_id)
+    existing = _existing_record(uow, command)
 
-    result = use_case.execute(_command(tenant_id=tenant_id))
+    result = use_case.execute(command, existing_record=existing)
 
     assert result.error is None
     assert result.lead_id != ""
@@ -69,8 +80,10 @@ def test_invalid_email_rejects_the_intake_record_without_creating_a_lead():
     tenant_id = uuid.uuid4()
     uow = _new_uow()
     use_case = IngestLeadUseCase(uow=uow)
+    command = _command(tenant_id=tenant_id, email="not-an-email")
+    existing = _existing_record(uow, command)
 
-    result = use_case.execute(_command(tenant_id=tenant_id, email="not-an-email"))
+    result = use_case.execute(command, existing_record=existing)
 
     assert result.lead_id == ""
     assert result.intake_record_id != ""
@@ -88,8 +101,10 @@ def test_payload_without_email_still_promotes_the_lead():
     tenant_id = uuid.uuid4()
     uow = _new_uow()
     use_case = IngestLeadUseCase(uow=uow)
+    command = _command(tenant_id=tenant_id, email=None)
+    existing = _existing_record(uow, command)
 
-    result = use_case.execute(_command(tenant_id=tenant_id, email=None))
+    result = use_case.execute(command, existing_record=existing)
 
     assert result.error is None
     assert result.lead_id != ""
@@ -98,68 +113,59 @@ def test_payload_without_email_still_promotes_the_lead():
     assert record.status == IntakeRecordStatus.PROMOTED
 
 
+def _batch_use_case(uow: InMemoryUnitOfWork, commands: List[IngestLeadCommand]) -> ProcessBatchUseCase:
+    # F2d: the batch pipeline no longer resolves its own source or returns a
+    # result — it materialises IntakeRecords and delegates phase 2 to
+    # ProcessIntakeJobUseCase, the same one the single-lead path uses.
+    process_job = ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow))
+    return ProcessBatchUseCase(uow=uow, file_parser=_StubFileParser(commands), process_job=process_job)
+
+
 def test_batch_upload_promotes_the_valid_row_and_rejects_the_invalid_one():
     tenant_id = uuid.uuid4()
     source_id = uuid.uuid4()
     uow = _new_uow()
-    # ProcessBatchUseCase now resolves FILE_UPLOAD's source_id itself.
-    uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="File upload", kind=LeadSourceKind.FILE_UPLOAD))
-    ingest_use_case = IngestLeadUseCase(uow=uow)
+    job = uow.intake_jobs.save(IntakeJob.create(tenant_id=tenant_id, source_id=source_id, kind=IntakeJobKind.BATCH))
 
     commands = [
         _command(tenant_id=tenant_id, source_id=source_id, email="valid@example.com"),
         _command(tenant_id=tenant_id, source_id=source_id, email="not-an-email"),
     ]
-    batch_use_case = ProcessBatchUseCase(
-        file_parser=_StubFileParser(commands),
-        ingest_lead_use_case=ingest_use_case,
+    _batch_use_case(uow, commands).execute(
+        tenant_id=tenant_id, job_id=job.id.value, file_content=b"irrelevant", filename="leads.csv",
     )
 
-    result = batch_use_case.execute(file_content=b"irrelevant", filename="leads.csv", tenant_id=tenant_id)
+    saved_job = uow.intake_jobs.get_by_id_and_tenant(job.id.value, tenant_id)
+    assert saved_job.status == IntakeJobStatus.COMPLETED
+    assert saved_job.succeeded == 1
+    assert saved_job.failed == 1
 
-    assert result.successful_ingestions == 1
-    assert len(result.failed_rows) == 1
-    assert result.failed_rows[0].intake_record_id != ""
-
-    records = uow.intake_records.list_by_tenant(tenant_id)
+    records = uow.intake_records.list_by_tenant(tenant_id, job_id=job.id.value)
     assert len(records) == 2
     statuses = {r.status for r in records}
     assert statuses == {IntakeRecordStatus.PROMOTED, IntakeRecordStatus.REJECTED}
 
 
-def test_batch_upload_failed_row_with_no_email_does_not_break_the_response_schema():
-    """Regression for the T4 Aviso 2 bug: FailedRow.email carried a bare
-    `str` while, since T2, a command's email can be None. The dataclass
-    swallowed None silently, but FailedRowResponse (a pydantic model) used
-    to raise ValidationError on it, turning a legitimate partial-success
-    batch upload into an HTTP 500."""
+def test_batch_row_with_no_email_is_rejected_without_crashing_the_run():
+    """Regression for the T4 Aviso 2 bug: a command's email can be None since
+    T2, and the row must still land as a REJECTED record instead of raising
+    partway through the run."""
     tenant_id = uuid.uuid4()
     source_id = uuid.uuid4()
     uow = _new_uow()
-    # ProcessBatchUseCase now resolves FILE_UPLOAD's source_id itself.
-    uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="File upload", kind=LeadSourceKind.FILE_UPLOAD))
-    ingest_use_case = IngestLeadUseCase(uow=uow)
+    job = uow.intake_jobs.save(IntakeJob.create(tenant_id=tenant_id, source_id=source_id, kind=IntakeJobKind.BATCH))
 
-    # Fails on budget, not email: proves the crash was about email being
-    # None, not about the row failing at all.
+    # Fails on budget, not email: proves the crash this guards against was
+    # about email being None, not about the row failing at all.
     commands = [_command(tenant_id=tenant_id, source_id=source_id, email=None, budget=-100.0)]
-    batch_use_case = ProcessBatchUseCase(
-        file_parser=_StubFileParser(commands),
-        ingest_lead_use_case=ingest_use_case,
+    _batch_use_case(uow, commands).execute(
+        tenant_id=tenant_id, job_id=job.id.value, file_content=b"irrelevant", filename="leads.csv",
     )
 
-    result = batch_use_case.execute(file_content=b"irrelevant", filename="leads.csv", tenant_id=tenant_id)
+    saved_job = uow.intake_jobs.get_by_id_and_tenant(job.id.value, tenant_id)
+    assert saved_job.status == IntakeJobStatus.COMPLETED
+    assert saved_job.failed == 1
 
-    assert len(result.failed_rows) == 1
-    failed = result.failed_rows[0]
-    assert failed.email is None
-    assert failed.error_code == "INVALID_BUDGET"
-
-    # This construction is the line that used to raise pydantic.ValidationError.
-    response = FailedRowResponse(
-        row_number=failed.row_number,
-        email=failed.email,
-        error=failed.error,
-        error_code=failed.error_code,
-    )
-    assert response.email is None
+    [record] = uow.intake_records.list_by_tenant(tenant_id, job_id=job.id.value)
+    assert record.status == IntakeRecordStatus.REJECTED
+    assert record.errors[0].error_code == "INVALID_BUDGET"

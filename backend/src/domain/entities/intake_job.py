@@ -53,9 +53,11 @@ class IntakeJob:
         self.status = IntakeJobStatus.PROCESSING
 
     def set_total(self, total: int) -> None:
-        # Only while PROCESSING and only once: a second call would mean the
-        # parsing step ran twice, which should never happen.
-        if self.status != IntakeJobStatus.PROCESSING or self.total_items is not None:
+        # PENDING is accepted too: a batch job materialises its records (and
+        # so learns its total) in the transaction right after reception,
+        # before ProcessIntakeJobUseCase ever calls start(). Still only once,
+        # and never once the job is terminal.
+        if self.status not in (IntakeJobStatus.PENDING, IntakeJobStatus.PROCESSING) or self.total_items is not None:
             raise DomainException(
                 "Cannot set the total for this intake job",
                 error_code="INVALID_JOB_TRANSITION",
