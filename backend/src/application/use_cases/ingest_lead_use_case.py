@@ -10,8 +10,10 @@ from domain.entities.intake_record import IntakeError, IntakeRecord
 from domain.entities.lead import Lead
 from domain.entities.sales_group import SalesGroup
 from domain.value_objects.enums import IntakeRecordStatus, LeadSourceKind, LeadStatus
+from domain.value_objects.score_breakdown import ScoreBreakdown
 from domain.services.assignment_engine import AssignmentEngine
 from domain.services.scoring_engine import ScoringEngine
+from domain.services.viability_engine import ViabilityEngine
 from domain.exceptions import DomainException
 from domain.events.lead_events import LeadProcessedEvent
 
@@ -36,6 +38,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
         self.uow = uow
         self.event_publisher = event_publisher
         self.scoring_engine = ScoringEngine()
+        self.viability_engine = ViabilityEngine()
         # The engine is stateless (the rotation cursor lives on the
         # persisted rule instead), so a private instance is exactly as
         # correct as a shared one; callers that do not care get one for free.
@@ -94,35 +97,44 @@ class IngestLeadUseCase(IngestLeadInputPort):
                     error_code=exc.error_code,
                 )
 
-            scoring_rules = self.uow.rules.get_scoring_rules_by_tenant(lead.tenant_id.value)
-            breakdown = self.scoring_engine.evaluate(lead, scoring_rules)
-            # The rules that produced a score can be edited or deleted later,
-            # so the lead keeps its own record to be able to explain itself.
-            lead.score_breakdown = breakdown.applied
-            lead.qualify(self.threshold_qualified, self.threshold_disqualified)
+            # Viability runs first and cuts the flow: scoring and routing
+            # something nobody can work is wasted work with a misleading result.
+            breakdown = ScoreBreakdown(applied=[], total=0)
+            breached = self.viability_engine.evaluate(
+                lead, self.uow.disqualification_rules.list_by_tenant(lead.tenant_id.value, limit=10_000)
+            )
+            if breached is not None:
+                lead.disqualify(breached.name)
+            else:
+                scoring_rules = self.uow.rules.get_scoring_rules_by_tenant(lead.tenant_id.value)
+                breakdown = self.scoring_engine.evaluate(lead, scoring_rules)
+                # The rules that produced a score can be edited or deleted
+                # later, so the lead keeps its own record to explain itself.
+                lead.score_breakdown = breakdown.applied
+                lead.qualify(self.threshold_qualified, self.threshold_disqualified)
 
-            if lead.status == LeadStatus.QUALIFIED:
-                assignment_rules = self.uow.rules.get_assignment_rules_by_tenant(lead.tenant_id.value)
-                available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
-                groups_by_id: Dict[UUID, SalesGroup] = {
-                    group.id.value: group
-                    for group in self.uow.groups.list_by_tenant(lead.tenant_id.value, limit=10_000)
-                }
-                loads = self.uow.leads.active_load_by_agent(lead.tenant_id.value)
+                if lead.status == LeadStatus.QUALIFIED:
+                    assignment_rules = self.uow.rules.get_assignment_rules_by_tenant(lead.tenant_id.value)
+                    available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
+                    groups_by_id: Dict[UUID, SalesGroup] = {
+                        group.id.value: group
+                        for group in self.uow.groups.list_by_tenant(lead.tenant_id.value, limit=10_000)
+                    }
+                    loads = self.uow.leads.active_load_by_agent(lead.tenant_id.value)
 
-                cursors_before = {rule.id: rule.rr_cursor for rule in assignment_rules}
-                assigned_agent = self.engine.select_agent(
-                    lead, assignment_rules, available_agents, groups_by_id, loads
-                )
-                if assigned_agent is None:
-                    # QUALIFIED and UNASSIGNED used to be indistinguishable, so
-                    # a lead nobody could take looked like one not yet routed.
-                    lead.leave_unassigned()
-                # Only the rule the engine actually used can have rotated;
-                # saving just that one avoids rewriting every rule per lead.
-                for rule in assignment_rules:
-                    if rule.rr_cursor != cursors_before[rule.id]:
-                        self.uow.rules.save_assignment_rule(lead.tenant_id.value, rule)
+                    cursors_before = {rule.id: rule.rr_cursor for rule in assignment_rules}
+                    assigned_agent = self.engine.select_agent(
+                        lead, assignment_rules, available_agents, groups_by_id, loads
+                    )
+                    if assigned_agent is None:
+                        # QUALIFIED and UNASSIGNED used to be indistinguishable,
+                        # so a lead nobody could take looked like one not yet routed.
+                        lead.leave_unassigned()
+                    # Only the rule the engine actually used can have rotated;
+                    # saving just that one avoids rewriting every rule per lead.
+                    for rule in assignment_rules:
+                        if rule.rr_cursor != cursors_before[rule.id]:
+                            self.uow.rules.save_assignment_rule(lead.tenant_id.value, rule)
 
             saved_lead = self.uow.leads.save(lead)
             record.promote(saved_lead.id)

@@ -37,6 +37,7 @@ class Lead:
     assigned_agent_id: Optional[AgentId] = None
     assigned_at: Optional[datetime] = None
     discard_reason: Optional[str] = None
+    disqualification_reason: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -60,6 +61,7 @@ class Lead:
         assigned_agent_id: Optional[Union[str, UUID, AgentId]] = None,
         assigned_at: Optional[datetime] = None,
         discard_reason: Optional[str] = None,
+        disqualification_reason: Optional[str] = None,
         updated_at: Optional[datetime] = None,
         created_at: Optional[Union[datetime, str]] = None,
     ) -> "Lead":
@@ -112,6 +114,7 @@ class Lead:
             assigned_agent_id=agent_id_vo,
             assigned_at=assigned_at,
             discard_reason=discard_reason,
+            disqualification_reason=disqualification_reason,
             updated_at=updated_at or datetime.now(timezone.utc),
             created_at=created_at_dt,
         )
@@ -124,6 +127,15 @@ class Lead:
             self.status = LeadStatus.QUALIFIED
         elif self.score.value < threshold_disqualified:
             self.status = LeadStatus.DISQUALIFIED
+
+    def disqualify(self, reason: str) -> None:
+        """A machine decision, carrying the rule's name as its reason.
+
+        Distinct from discard(), where a person looked at the lead and wrote
+        why. Merging them would cost the manager the only signal that tells a
+        badly written rule from a genuinely bad lead."""
+        self.status = LeadStatus.DISQUALIFIED
+        self.disqualification_reason = reason
 
     _ASSIGNABLE = (LeadStatus.QUALIFIED, LeadStatus.UNASSIGNED)
     _DISCARDABLE = (

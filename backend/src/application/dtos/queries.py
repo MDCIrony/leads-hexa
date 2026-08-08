@@ -48,6 +48,13 @@ class GetAssignmentRulesQuery:
 
 
 @dataclass(frozen=True)
+class GetDisqualificationRulesQuery:
+    tenant_id: UUID
+    limit: int = 100
+    offset: int = 0
+
+
+@dataclass(frozen=True)
 class GetMyLeadsQuery:
     tenant_id: UUID
     agent_id: UUID

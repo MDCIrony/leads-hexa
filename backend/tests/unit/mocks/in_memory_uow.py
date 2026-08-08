@@ -2,6 +2,9 @@ from typing import Dict, List, Optional
 from uuid import UUID
 
 from application.ports.output.agent_repository_port import AgentRepositoryPort
+from application.ports.output.disqualification_rule_repository_port import (
+    DisqualificationRuleRepositoryPort,
+)
 from application.ports.output.intake_job_repository_port import IntakeJobRepositoryPort
 from application.ports.output.intake_record_repository_port import IntakeRecordRepositoryPort
 from application.ports.output.lead_repository_port import LeadRepositoryPort
@@ -10,6 +13,7 @@ from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.tenant_repository_port import TenantRepositoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.enums import IntakeJobStatus, IntakeRecordStatus
@@ -105,6 +109,38 @@ class InMemoryIntakeJobRepository(IntakeJobRepositoryPort):
         )
 
 
+class InMemoryDisqualificationRuleRepository(DisqualificationRuleRepositoryPort):
+    """Kept inline (same convention as the two intake mocks above)."""
+
+    def __init__(self) -> None:
+        self._rules: Dict[UUID, DisqualificationRule] = {}
+
+    def save(self, rule: DisqualificationRule) -> DisqualificationRule:
+        self._rules[rule.id] = rule
+        return rule
+
+    def get_by_id_and_tenant(self, rule_id: UUID, tenant_id: UUID) -> Optional[DisqualificationRule]:
+        rule = self._rules.get(rule_id)
+        return rule if rule and rule.tenant_id == tenant_id else None
+
+    def list_by_tenant(
+        self, tenant_id: UUID, limit: int = 100, offset: int = 0
+    ) -> List[DisqualificationRule]:
+        items = [r for r in self._rules.values() if r.tenant_id == tenant_id]
+        items.sort(key=lambda r: (-r.priority, str(r.id)))
+        return items[offset : offset + limit]
+
+    def count_by_tenant(self, tenant_id: UUID) -> int:
+        return sum(1 for r in self._rules.values() if r.tenant_id == tenant_id)
+
+    def delete(self, rule_id: UUID, tenant_id: UUID) -> bool:
+        rule = self._rules.get(rule_id)
+        if rule and rule.tenant_id == tenant_id:
+            del self._rules[rule_id]
+            return True
+        return False
+
+
 class InMemoryUnitOfWork(UnitOfWorkPort):
     def __init__(
         self,
@@ -119,6 +155,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         sources: Optional[LeadSourceRepositoryPort] = None,
         intake_records: Optional[IntakeRecordRepositoryPort] = None,
         intake_jobs: Optional[IntakeJobRepositoryPort] = None,
+        disqualification_rules: Optional[DisqualificationRuleRepositoryPort] = None,
     ) -> None:
         # Defaulting to a fresh in-memory repo (instead of None) is what lets
         # a test that only cares about leads and agents write
@@ -131,6 +168,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.sources = sources or InMemoryLeadSourceRepository()
         self.intake_records = intake_records or InMemoryIntakeRecordRepository()
         self.intake_jobs = intake_jobs or InMemoryIntakeJobRepository()
+        self.disqualification_rules = disqualification_rules or InMemoryDisqualificationRuleRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self

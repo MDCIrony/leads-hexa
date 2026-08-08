@@ -19,6 +19,10 @@ from application.ports.input.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
     GetAssignmentRulesInputPort, GetScoringRulesInputPort, UpdateAssignmentRuleInputPort,
 )
+from application.ports.input.disqualification_rule_use_case_ports import (
+    CreateDisqualificationRuleInputPort, DeleteDisqualificationRuleInputPort,
+    GetDisqualificationRulesInputPort, UpdateDisqualificationRuleInputPort,
+)
 from application.ports.input.sales_group_use_case_ports import (
     CreateSalesGroupInputPort, DeleteSalesGroupInputPort, GetSalesGroupsInputPort,
     UpdateSalesGroupInputPort,
@@ -47,6 +51,10 @@ from application.use_cases.agent_use_cases import (
 from application.use_cases.rule_use_cases import (
     CreateAssignmentRuleUseCase, CreateScoringRuleUseCase, DeleteAssignmentRuleUseCase,
     GetAssignmentRulesUseCase, GetScoringRulesUseCase, UpdateAssignmentRuleUseCase,
+)
+from application.use_cases.disqualification_rule_use_cases import (
+    CreateDisqualificationRuleUseCase, DeleteDisqualificationRuleUseCase,
+    GetDisqualificationRulesUseCase, UpdateDisqualificationRuleUseCase,
 )
 from application.use_cases.sales_group_use_cases import (
     CreateSalesGroupUseCase, DeleteSalesGroupUseCase, GetSalesGroupsUseCase, UpdateSalesGroupUseCase,
@@ -175,6 +183,26 @@ def get_update_assignment_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) 
 
 def get_delete_assignment_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteAssignmentRuleInputPort:
     return DeleteAssignmentRuleUseCase(uow=uow)
+
+def get_create_disqualification_rule_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+) -> CreateDisqualificationRuleInputPort:
+    return CreateDisqualificationRuleUseCase(uow=uow)
+
+def get_get_disqualification_rules_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+) -> GetDisqualificationRulesInputPort:
+    return GetDisqualificationRulesUseCase(uow=uow)
+
+def get_update_disqualification_rule_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+) -> UpdateDisqualificationRuleInputPort:
+    return UpdateDisqualificationRuleUseCase(uow=uow)
+
+def get_delete_disqualification_rule_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+) -> DeleteDisqualificationRuleInputPort:
+    return DeleteDisqualificationRuleUseCase(uow=uow)
 
 def get_create_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateSalesGroupInputPort:
     return CreateSalesGroupUseCase(uow=uow)

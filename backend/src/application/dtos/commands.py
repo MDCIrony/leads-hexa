@@ -4,6 +4,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from domain.entities.agent import Agent
+    from domain.entities.disqualification_rule import DisqualificationRule
     from domain.entities.intake_job import IntakeJob
     from domain.entities.intake_record import IntakeRecord
     from domain.entities.lead import Lead
@@ -125,6 +126,33 @@ class UpdateAssignmentRuleCommand:
     strategy: Optional[str] = None
     priority: Optional[int] = None
     is_active: Optional[bool] = None
+
+
+@dataclass(frozen=True)
+class CreateDisqualificationRuleCommand:
+    tenant_id: UUID
+    name: str
+    # Plain dicts, not Criterion: same convention as CreateScoringRuleCommand.
+    conditions: List[Dict[str, Any]]
+    priority: int = 0
+    is_active: bool = True
+
+
+@dataclass(frozen=True)
+class UpdateDisqualificationRuleCommand:
+    tenant_id: UUID
+    rule_id: UUID
+    # None-means-unchanged, same convention as every other PATCH command here.
+    name: Optional[str] = None
+    conditions: Optional[List[Dict[str, Any]]] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+@dataclass(frozen=True)
+class DisqualificationRulesPageResult:
+    items: List["DisqualificationRule"]
+    total: int
 
 
 @dataclass(frozen=True)

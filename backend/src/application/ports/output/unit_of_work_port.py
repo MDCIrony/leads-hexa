@@ -4,6 +4,7 @@ from typing import Any
 
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from application.ports.output.rule_repository_port import RuleRepositoryPort
+from application.ports.output.disqualification_rule_repository_port import DisqualificationRuleRepositoryPort
 from application.ports.output.agent_repository_port import AgentRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.tenant_repository_port import TenantRepositoryPort
@@ -14,6 +15,7 @@ from application.ports.output.intake_job_repository_port import IntakeJobReposit
 class UnitOfWorkPort(abc.ABC):
     leads: LeadRepositoryPort
     rules: RuleRepositoryPort
+    disqualification_rules: DisqualificationRuleRepositoryPort
     agents: AgentRepositoryPort
     tenants: TenantRepositoryPort
     groups: SalesGroupRepositoryPort

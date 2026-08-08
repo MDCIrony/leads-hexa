@@ -77,6 +77,7 @@ def _to_detail_response(lead: Lead) -> LeadDetailResponse:
         assigned_agent_id=str(lead.assigned_agent_id) if lead.assigned_agent_id else None,
         assigned_at=lead.assigned_at.isoformat() if lead.assigned_at else None,
         discard_reason=lead.discard_reason,
+        disqualification_reason=lead.disqualification_reason,
         created_at=lead.created_at.isoformat(),
     )
 

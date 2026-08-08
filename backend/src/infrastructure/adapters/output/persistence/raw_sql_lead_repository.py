@@ -27,8 +27,8 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         INSERT INTO leads (
             id, tenant_id, source_id, first_name, last_name, email, company, budget, industry,
             custom_attributes, phone, score, status, assigned_agent_id, created_at,
-            assigned_at, discard_reason, updated_at, score_breakdown
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            assigned_at, discard_reason, disqualification_reason, updated_at, score_breakdown
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             tenant_id = EXCLUDED.tenant_id,
             source_id = EXCLUDED.source_id,
@@ -46,6 +46,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             created_at = EXCLUDED.created_at,
             assigned_at = EXCLUDED.assigned_at,
             discard_reason = EXCLUDED.discard_reason,
+            disqualification_reason = EXCLUDED.disqualification_reason,
             updated_at = EXCLUDED.updated_at,
             score_breakdown = EXCLUDED.score_breakdown
         """
@@ -69,6 +70,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
                 lead.created_at,
                 lead.assigned_at,
                 lead.discard_reason,
+                lead.disqualification_reason,
                 lead.updated_at,
                 breakdown,
             ),
@@ -95,6 +97,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             created_at=row["created_at"],
             assigned_at=row["assigned_at"],
             discard_reason=row["discard_reason"],
+            disqualification_reason=row["disqualification_reason"],
             updated_at=row["updated_at"],
             score_breakdown=[
                 AppliedRule(

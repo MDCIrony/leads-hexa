@@ -7,6 +7,9 @@ from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
 from infrastructure.adapters.output.persistence.raw_sql_rule_repository import RawSqlRuleRepository
+from infrastructure.adapters.output.persistence.raw_sql_disqualification_rule_repository import (
+    RawSqlDisqualificationRuleRepository,
+)
 from infrastructure.adapters.output.persistence.raw_sql_agent_repository import RawSqlAgentRepository
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
 from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import RawSqlTenantRepository
@@ -33,6 +36,7 @@ class PostgresUnitOfWork(UnitOfWorkPort):
 
         self.leads = RawSqlLeadRepository(self.connection)
         self.rules = RawSqlRuleRepository(self.connection)
+        self.disqualification_rules = RawSqlDisqualificationRuleRepository(self.connection)
         self.agents = RawSqlAgentRepository(self.connection)
         self.tenants = RawSqlTenantRepository(self.connection)
         self.groups = RawSqlSalesGroupRepository(self.connection)

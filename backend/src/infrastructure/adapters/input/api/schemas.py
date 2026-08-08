@@ -93,6 +93,7 @@ class LeadDetailResponse(BaseModel):
     assigned_agent_id: Optional[str]
     assigned_at: Optional[str]
     discard_reason: Optional[str]
+    disqualification_reason: Optional[str] = None
     created_at: str
 
 class AssignLeadRequest(BaseModel):
@@ -182,6 +183,33 @@ class AssignmentRuleResponse(BaseModel):
 
 class PaginatedAssignmentRulesResponse(BaseModel):
     items: List[AssignmentRuleResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+# --- Disqualification Rule Schemas ---
+class DisqualificationRuleCreate(BaseModel):
+    name: str
+    conditions: List[CriterionSchema]
+    priority: int = 0
+    is_active: bool = True
+
+class DisqualificationRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    conditions: Optional[List[CriterionSchema]] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class DisqualificationRuleResponse(BaseModel):
+    id: str
+    name: str
+    conditions: List[CriterionSchema]
+    priority: int
+    is_active: bool
+
+class PaginatedDisqualificationRulesResponse(BaseModel):
+    items: List[DisqualificationRuleResponse]
     total: int
     limit: int
     offset: int
