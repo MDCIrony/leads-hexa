@@ -28,6 +28,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
       - JWT_SECRET=dev-secret-change-in-production
+      - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
+      - LOG_LEVEL=INFO
     depends_on:
       db:
         condition: service_healthy
@@ -46,7 +48,23 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+
+  backend-test:
+    profiles: ["test"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: test
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
+      - TEST_DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
+      - JWT_SECRET=test-secret-do-not-use-in-production
+    command: ["pytest", "-q"]
 
 volumes:
   pgdata:

@@ -212,7 +212,7 @@ leads-hexa/
 ```bash
 cd backend
 uv sync                     # Instalar dependencias
-uv run pytest               # Ejecutar suite completa de 23 tests (Unit, Integration, E2E)
+uv run pytest -m unit       # Tests de dominio y casos de uso, sin variables de entorno
 uv run uvicorn src.infrastructure.main:app --reload --port 8000
 ```
 
@@ -231,4 +231,24 @@ docker compose up --build -d
 ```
 Acceder a:
 - **Frontend SPA**: `http://localhost:80`
-- **Backend API Docs (Swagger UI)**: `http://localhost:8000/docs`
+- **Backend API Docs (Swagger UI)**: `http://localhost:8001/docs`
+
+### Ejecución de la Suite de Pruebas
+
+Sin infraestructura (dominio y casos de uso, sin variables de entorno):
+```bash
+cd backend && uv run pytest -m unit
+```
+
+Suite completa (125 tests: unit, integration, e2e y architecture) dentro de
+Docker, que es la única forma reproducible de ejecutarla porque requiere
+`DATABASE_URL` apuntando a un PostgreSQL real:
+```bash
+docker compose --profile test run --rm backend-test
+```
+
+El puerto 5433 del host publica el PostgreSQL del compose. Sirve para
+ejecutar la suite completa desde fuera del contenedor exportando
+`DATABASE_URL` y `TEST_DATABASE_URL` hacia `localhost:5433`. Si ya tienes un
+PostgreSQL local escuchando en ese puerto, cambia el mapeo en
+`docker-compose.yml`.

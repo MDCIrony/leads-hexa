@@ -29,4 +29,19 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 EXPOSE 8000
 
+# Runs as an unprivileged user: a compromised process should not have root
+# inside the container even though the container itself is still isolated.
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+
 CMD ["uvicorn", "infrastructure.main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "src"]
+
+# Stage 3: test runner, used by the `backend-test` compose profile.
+# Inherits from `builder` (already ran `COPY . .`), so src/, tests/, and
+# migrations/ are already present; only pytest itself is missing because the
+# builder installs with --no-dev.
+FROM builder AS test
+WORKDIR /app
+RUN uv sync --frozen
+ENV PATH="/app/.venv/bin:$PATH"
+CMD ["pytest", "-q"]
