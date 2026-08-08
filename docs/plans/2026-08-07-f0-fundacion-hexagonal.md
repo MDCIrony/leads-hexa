@@ -1,5 +1,15 @@
 # F0 — Fundación Hexagonal: Plan de Implementación
 
+> # ✅ FASE CERRADA — NO EJECUTAR
+>
+> Este plan **ya está implementado y verificado**. Se conserva como registro de lo que se hizo y por
+> qué, no como trabajo pendiente. Si eres un agente al que han encargado implementar algo, **este no
+> es tu plan**: busca en [docs/plans/](.) el que no lleva esta marca.
+>
+> El estado del código es posterior a este documento: fases más recientes cambiaron parte de lo que
+> aquí se describe. Para saber cómo está el sistema **hoy**, lee el
+> [spec del MVP](../specs/2026-08-07-lead-router-mvp-design.md), no este plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Establecer las fronteras arquitectónicas del backend —regla de dependencias efectiva, inversión de dependencias real, infraestructura de pruebas y arranque reproducible— para que las fases funcionales posteriores se construyan encima sin reescribirlas.

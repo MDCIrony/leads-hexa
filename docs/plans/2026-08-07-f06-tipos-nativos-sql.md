@@ -1,5 +1,15 @@
 # F0.6 — Tipos nativos de PostgreSQL: Plan de Implementación
 
+> # ✅ FASE CERRADA — NO EJECUTAR
+>
+> Este plan **ya está implementado y verificado** (4 commits, 9 ficheros). Se conserva como registro
+> de lo que se hizo y por qué, no como trabajo pendiente. Si eres un agente al que han encargado
+> implementar algo, **este no es tu plan**: busca en [docs/plans/](.) el que no lleva esta marca.
+>
+> El estado del código es posterior a este documento: fases más recientes cambiaron parte de lo que
+> aquí se describe. Para saber cómo está el sistema **hoy**, lee el
+> [spec del MVP](../specs/2026-08-07-lead-router-mvp-design.md), no este plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Que el esquema use los tipos que PostgreSQL ofrece —`UUID`, `TIMESTAMPTZ`, `NUMERIC`, `JSONB`, `BOOLEAN`— en lugar de guardarlo todo como `TEXT`, y que los repositorios dejen de traducir en cada lectura y cada escritura.

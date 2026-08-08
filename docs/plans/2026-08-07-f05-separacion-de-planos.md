@@ -1,5 +1,15 @@
 # F0.5 — Separación de planos: Plan de Implementación
 
+> # ✅ FASE CERRADA — NO EJECUTAR
+>
+> Este plan **ya está implementado y verificado** (9 commits, 41 ficheros). Se conserva como registro
+> de lo que se hizo y por qué, no como trabajo pendiente. Si eres un agente al que han encargado
+> implementar algo, **este no es tu plan**: busca en [docs/plans/](.) el que no lleva esta marca.
+>
+> El estado del código es posterior a este documento: fases más recientes cambiaron parte de lo que
+> aquí se describe. Para saber cómo está el sistema **hoy**, lee el
+> [spec del MVP](../specs/2026-08-07-lead-router-mvp-design.md), no este plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Separar el plano de plataforma del plano de organización, de modo que el administrador gestione organizaciones sin acceder a los datos de ninguna, y cerrar la última fuga cross-tenant que sigue abierta en los endpoints de asesores.

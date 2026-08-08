@@ -1,7 +1,8 @@
 # F0.5 — Separación de planos: diseño
 
 **Fecha:** 2026-08-07
-**Estado:** propuesto, pendiente de revisión
+**Estado:** ✅ **implementado y verificado.** Se conserva como registro de la decisión de diseño.
+El spec vigente del sistema es [el del MVP](2026-08-07-lead-router-mvp-design.md).
 **Ámbito:** backend
 **Depende de:** F0 (fundación hexagonal), cerrada
 **Precede a:** F1 (grupos y motor de asignación)

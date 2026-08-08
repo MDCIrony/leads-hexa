@@ -1,5 +1,15 @@
 # F1 — Grupos y asignación: Plan de Implementación
 
+> # ✅ FASE CERRADA — NO EJECUTAR
+>
+> Este plan **ya está implementado y verificado** (11 commits, 76 ficheros, +3290/−638). Se conserva
+> como registro de lo que se hizo y por qué, no como trabajo pendiente. Si eres un agente al que han
+> encargado implementar algo, **este no es tu plan**: busca en [docs/plans/](.) el que no lleva esta
+> marca.
+>
+> **Ojo si vienes buscando el modelo de datos:** la migración `003` que este plan describe ya está
+> aplicada. La numeración libre para la fase siguiente es la **`004`**.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Que un gestor pueda crear grupos de asesores con su política de reparto, definir reglas de asignación por banda de puntuación, y que un lead ingestado llegue al asesor correcto según cada estrategia — sin que ningún lead cruce jamás a otra organización.
