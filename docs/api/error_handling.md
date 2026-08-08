@@ -39,6 +39,13 @@ El código de estado de la columna derecha **no vive en la excepción**: lo deci
 | `InvalidCredentialsException` | `INVALID_CREDENTIALS` | `401 Unauthorized` | Intento de login con credenciales incorrectas. |
 | `UnauthorizedException` | `UNAUTHORIZED` | `401 Unauthorized` | Token JWT ausente, expirado, inválido o agente inactivo. |
 | `ForbiddenException` | `FORBIDDEN` | `403 Forbidden` | Rol o tenant insuficiente para realizar la acción solicitada. |
+| `DomainException` | `SOURCE_NOT_FOUND` | `404 Not Found` | El origen no existe en la organización, o la organización no tiene uno activo para ese canal. |
+| `DomainException` | `SOURCE_ALREADY_EXISTS` | `400 Bad Request` | Ya hay un origen con ese nombre en la organización. |
+| `DomainException` | `SOURCE_IN_USE` | `400 Bad Request` | El origen tiene leads asociados y no puede borrarse. |
+| `DomainException` | `INTAKE_RECORD_NOT_FOUND` | `404 Not Found` | El registro de la bandeja no existe en la organización. |
+| `DomainException` | `INVALID_INTAKE_TRANSITION` | `400 Bad Request` | Promover o descartar un registro ya `PROMOTED` o `DISCARDED`. |
+| `DomainException` | `INVALID_INTAKE_STATUS` | `400 Bad Request` | El filtro `status` de la bandeja no es un estado conocido. |
+| `DomainException` | `REJECTION_WITHOUT_ERRORS` | `400 Bad Request` | Rechazar un registro exige al menos un error de campo. |
 
 ---
 

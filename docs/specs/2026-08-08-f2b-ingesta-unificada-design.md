@@ -1,6 +1,6 @@
 # F2b — Ingesta unificada: diseño
 
-**Estado:** propuesto. Sucede a F2a, cerrada y verificada.
+**Estado:** implementado. Sucede a F2a, cerrada y verificada.
 
 **Objetivo en una frase:** que nada de lo que entra se pierda, y que nadie ingeste sin credencial.
 

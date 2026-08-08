@@ -54,6 +54,8 @@ Definidos en [`src/application/ports/input/`](../../backend/src/application/port
 - **`CreateScoringRuleInputPort` / `GetScoringRulesInputPort`**: Creación y consulta de reglas de scoring.
 - **`CreateAssignmentRuleInputPort` / `GetAssignmentRulesInputPort` / `UpdateAssignmentRuleInputPort` / `DeleteAssignmentRuleInputPort`**: CRUD de reglas de asignación (banda de puntuación, grupo/asesores destino, prioridad, estrategia).
 - **`CreateSalesGroupInputPort` / `GetSalesGroupsInputPort` / `UpdateSalesGroupInputPort` / `DeleteSalesGroupInputPort`**: CRUD de grupos de ventas.
+- **`PromoteIntakeRecordInputPort` / `DiscardIntakeRecordInputPort` / `GetIntakeRecordsInputPort`**: Bandeja de entrada de ingesta — corrige y promueve un registro rechazado, lo descarta, o lo lista filtrando por estado.
+- **`CreateLeadSourceInputPort` / `GetLeadSourcesInputPort` / `UpdateLeadSourceInputPort` / `DeleteLeadSourceInputPort`**: CRUD de orígenes de leads (`LeadSource`).
 - **`LoginInputPort`**: Autenticación de agentes y generación de JWT.
 - **`CreateTenantInputPort` / `GetTenantsInputPort` / `UpdateTenantInputPort`**: Alta, listado y edición de organizaciones (plano de plataforma).
 
@@ -115,15 +117,15 @@ Devuelve la identidad del agente autenticado. Es lo que el frontend necesita par
 
 ---
 
-### 2. Ingesta de Lead (`POST /api/v1/intake/{tenant_id}/leads/ingest`)
+### 2. Ingesta de Lead (`POST /api/v1/intake/leads/ingest`)
 
-Recibe un comando de ingesta de lead, evalúa reglas de scoring y de asignación, asigna un agente y emite eventos de dominio.
+Recibe un comando de ingesta de lead, evalúa reglas de scoring y de asignación, asigna un agente y emite eventos de dominio. Persiste el payload como `IntakeRecord` **antes** de intentar interpretarlo: si la interpretación falla, el dato no se pierde, queda en la bandeja de entrada (sección 6).
 
-> **Sin autenticación.** Hoy este endpoint no exige credencial alguna y toma la organización del `tenant_id` de la URL: cualquiera que conozca ese UUID puede inyectar leads. Está registrado como defecto en la sección 2.3 del spec del MVP y se cierra en F2, cuando `LeadSource` introduzca fuentes con secreto propio.
+> **Desde F2b, exige credencial.** El endpoint ya no toma la organización de la URL: la deriva del token, como el resto de la API. Cierra el defecto registrado en la sección 2.3 del spec del MVP.
 
-- **Autenticación**: Ninguna por diseño (endpoint de ingesta pública).
-- **Path Parameters**: `tenant_id` (UUID).
-- **Request Body** ([`IngestLeadRequest`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `require_organization_manager`. Sólo `MANAGER`. La organización sale del token; un `tenant_id` en el cuerpo se ignora.
+- **Request Body** ([`IngestLeadRequest`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). `email` es opcional desde F2b: el value object valida el **formato** cuando hay valor, pero la organización decide si exige la presencia mediante sus propias reglas.
 ```json
 {
   "first_name": "Maria",
@@ -146,26 +148,29 @@ Recibe un comando de ingesta de lead, evalúa reglas de scoring y de asignación
   "applied_rules_count": 2,
   "webhook_dispatched": true,
   "error": null,
-  "error_code": null
+  "error_code": null,
+  "intake_record_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
 }
 ```
-- **Response Error (400 Bad Request)** (si falla la validación de dominio a nivel de fila):
+- **Response Error (400 Bad Request)** (si falla la validación de dominio a nivel de fila). El `IntakeRecord` **sí queda persistido** como `REJECTED` — `intake_record_id` es la vía para localizarlo y corregirlo en la bandeja (sección 6):
 ```json
 {
   "error": true,
   "error_code": "INVALID_EMAIL",
-  "message": "Formato de correo electrónico inválido"
+  "message": "Formato de correo electrónico inválido",
+  "intake_record_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
 }
 ```
+- **Errores**: `401 Unauthorized`; `403 Forbidden` (un `AGENT` no ingesta); `400 Bad Request` (validación de dominio a nivel de fila, ver arriba).
 
 ---
 
-### 3. Carga Masiva de Leads (`POST /api/v1/intake/{tenant_id}/leads/batch-upload`)
+### 3. Carga Masiva de Leads (`POST /api/v1/intake/leads/batch-upload`)
 
-Procesa un archivo CSV o Excel para la ingesta masiva de leads de un tenant.
+Procesa un archivo CSV o Excel para la ingesta masiva de leads de la organización del gestor autenticado, fila a fila por el mismo pipeline que la ingesta individual (sección 2): la fila que falla no se pierde, queda como su propio `IntakeRecord` en la bandeja.
 
-- **Autenticación**: Ninguna por diseño (endpoint público de ingesta masiva).
-- **Path Parameters**: `tenant_id` (UUID).
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `require_organization_manager`. Sólo `MANAGER`.
 - **Form Data**: `file` (`UploadFile`, Multipart/form-data).
 - **Response (200 OK)** ([`BatchProcessResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
@@ -178,11 +183,13 @@ Procesa un archivo CSV o Excel para la ingesta masiva de leads de un tenant.
       "row_number": 3,
       "email": "invalid-email",
       "error": "Formato de correo electrónico inválido",
-      "error_code": "INVALID_EMAIL"
+      "error_code": "INVALID_EMAIL",
+      "intake_record_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
     }
   ]
 }
 ```
+- **Errores**: `401 Unauthorized`; `403 Forbidden`.
 
 ---
 
@@ -298,6 +305,132 @@ Descarta el lead con un motivo obligatorio.
 ```
 - **Response (200 OK)** ([`LeadDetailResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)) con `status: "DISCARDED"` y `discard_reason` con el motivo enviado.
 - **Errores**: `404 Not Found` (`LEAD_NOT_FOUND`); `400 Bad Request` (`DISCARD_WITHOUT_REASON` si el motivo llega vacío).
+
+---
+
+### 6. Bandeja de Entrada (`/api/v1/intake/records`)
+
+Todo payload que llega a la ingesta (sección 2 y 3) se persiste como `IntakeRecord` **antes** de intentar interpretarlo, así que nada de lo que no valida se pierde: queda aquí, con el motivo exacto del fallo, para que el gestor lo corrija y lo reintente o lo descarte.
+
+#### `GET /api/v1/intake/records`
+Lista los registros de ingesta de la organización, paginados.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Query Parameters**: `status` (opcional: `PENDING` · `PROMOTED` · `REJECTED` · `DISCARDED`), `limit` (int, default=100), `offset` (int, default=0).
+- **Response (200 OK)** ([`IntakeRecordsPageResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "items": [
+    {
+      "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "source_id": "22222222-2222-2222-2222-222222222222",
+      "status": "REJECTED",
+      "payload": {"first_name": "Jane", "last_name": "Doe", "email": "jane@@example.com", "company": "Acme", "industry": "Tech", "budget": 3000},
+      "errors": [
+        {"field": "email", "message": "Formato de correo electrónico inválido", "received_value": "jane@@example.com", "error_code": "INVALID_EMAIL"}
+      ],
+      "received_at": "2026-08-08T10:00:00+00:00",
+      "processed_at": "2026-08-08T10:00:00+00:00",
+      "lead_id": null
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false
+}
+```
+- **Errores**: `401 Unauthorized`; `403 Forbidden`.
+
+#### `POST /api/v1/intake/records/{record_id}/promote`
+Reintenta un registro con el `payload` corregido. Si valida, genera el lead y marca el registro como `PROMOTED` reutilizando la misma fila — nunca añade una segunda.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `record_id` (UUID).
+- **Request Body** ([`PromoteIntakeRecordRequest`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "payload": {"first_name": "Jane", "last_name": "Doe", "email": "jane@example.com", "company": "Acme", "industry": "Tech", "budget": 3000}
+}
+```
+- **Response (200 OK)** ([`LeadProcessedResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): misma forma que la ingesta individual (sección 2).
+- **Response Error (400 Bad Request)**: si el payload corregido sigue sin validar, el registro permanece `REJECTED` con los nuevos errores; misma forma que el error de la sección 2.
+- **Errores**: `404 Not Found` (`INTAKE_RECORD_NOT_FOUND` si no existe o pertenece a otra organización); `400 Bad Request` (`INVALID_INTAKE_TRANSITION` si el registro no está en un estado promovible — por ejemplo, ya `PROMOTED` —, o el `error_code` de dominio si el payload corregido sigue sin validar).
+
+#### `POST /api/v1/intake/records/{record_id}/discard`
+Descarta el registro: el gestor decide no recuperarlo.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `record_id` (UUID).
+- **Response**: `204 No Content`.
+- **Errores**: `404 Not Found` (`INTAKE_RECORD_NOT_FOUND`); `400 Bad Request` (`INVALID_INTAKE_TRANSITION` si ya está `PROMOTED`).
+
+---
+
+### 7. Orígenes de Leads (`/api/v1/sources`)
+
+`LeadSource` es la entidad que responde «¿de dónde vienen mis leads?»: cada lead ingerido lleva el `source_id` de la fuente por la que entró. Al crear una organización nacen automáticamente dos fuentes, `MANUAL_FORM` y `FILE_UPLOAD`, que son las que usan el formulario individual y la carga de ficheros.
+
+#### `POST /api/v1/sources`
+Crea una fuente en la organización del gestor autenticado.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Request Body** ([`LeadSourceCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "name": "Facebook Lead Ads — Campaña Verano",
+  "kind": "MANUAL_FORM",
+  "field_mapping": {}
+}
+```
+- **Response (201 Created)** ([`LeadSourceResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "id": "22222222-2222-2222-2222-222222222222",
+  "name": "Facebook Lead Ads — Campaña Verano",
+  "kind": "MANUAL_FORM",
+  "field_mapping": {},
+  "is_active": true,
+  "created_at": "2026-08-08T10:00:00+00:00"
+}
+```
+- **Errores**: `400 Bad Request` (`SOURCE_ALREADY_EXISTS` si ya existe una fuente con ese nombre en la organización; el mismo nombre sí se acepta en otra organización).
+
+#### `GET /api/v1/sources`
+Lista las fuentes de la organización, paginadas.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Query Parameters**: `limit` (int, default=100), `offset` (int, default=0).
+- **Response (200 OK)** ([`PaginatedSourcesResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): misma forma que las demás listas paginadas.
+
+#### `PATCH /api/v1/sources/{source_id}`
+Actualiza nombre, mapeo de campos o estado de una fuente. Todos los campos son opcionales.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `source_id` (UUID).
+- **Request Body** ([`LeadSourceUpdate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "is_active": false
+}
+```
+- **Response (200 OK)** ([`LeadSourceResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)).
+- **Errores**: `404 Not Found` (`SOURCE_NOT_FOUND` si no existe o pertenece a otra organización).
+
+#### `DELETE /api/v1/sources/{source_id}`
+Borra la fuente, sólo si ningún lead la referencia.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `source_id` (UUID).
+- **Response**: `204 No Content`.
+- **Errores**: `404 Not Found` (`SOURCE_NOT_FOUND`); `400 Bad Request` (`SOURCE_IN_USE` si tiene leads asociados — no se borra en silencio la trazabilidad de esos leads).
 
 ---
 

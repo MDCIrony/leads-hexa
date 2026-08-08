@@ -188,8 +188,90 @@ verify_f2a() {
   check "un asesor no descarta" 403 "$(code "$r")"
 }
 
+# ------------------------------------------------------------------- F2b ---
+# Unified intake: nothing that comes in is lost, and nobody ingests without
+# a credential. LeadSource, IntakeRecord, and the inbox that lets a manager
+# correct and promote what didn't parse.
+
+verify_f2b() {
+  local r rec src total lead
+  section "F2b · la ingesta exige credencial"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H 'Content-Type: application/json' \
+    -d '{"first_name":"X","last_name":"Y","email":"x@y.test","company":"Acme","industry":"Tech","budget":1000}')
+  check "sin credencial no se ingesta" 401 "$(code "$r")"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $TOKEN_1" -H 'Content-Type: application/json' \
+    -d '{"first_name":"X","last_name":"Y","email":"x@y.test","company":"Acme","industry":"Tech","budget":1000}')
+  check "un asesor no ingesta" 403 "$(code "$r")"
+
+  section "F2b · los orígenes de la organización"
+
+  r=$(req "$API/sources" -H "Authorization: Bearer $MGR_A")
+  check "la organización nace con sus dos orígenes" 2 "$(body "$r" | f 'd["total"]')"
+  src=$(body "$r" | f '[s["id"] for s in d["items"] if s["kind"] == "MANUAL_FORM"][0]')
+
+  section "F2b · un lead sin correo no se pierde"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Sin","last_name":"Correo","company":"Acme","industry":"Tech","budget":2000}')
+  check "un lead sin correo se acepta" 201 "$(code "$r")"
+  lead=$(body "$r" | f 'd["lead_id"]')
+  rec=$(body "$r" | f 'd["intake_record_id"]')
+
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "el correo ausente llega como null" "" "$(body "$r" | f 'd.get("email") or ""')"
+
+  r=$(req "$API/intake/records" -H "Authorization: Bearer $MGR_A")
+  check "lleva el source_id del formulario manual" "$src" "$(body "$r" | f 'next(i for i in d["items"] if i["id"] == "'"$rec"'")["source_id"]')"
+
+  section "F2b · lo que no se puede interpretar queda en la bandeja"
+
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Jane","last_name":"Bad","email":"jane@@example.com","company":"Acme","industry":"Tech","budget":3000}')
+  check "correo mal formado no se ingesta" 400 "$(code "$r")"
+  check "pero deja un registro de ingesta" True "$(body "$r" | f 'bool(d.get("intake_record_id"))')"
+  rec=$(body "$r" | f 'd["intake_record_id"]')
+
+  r=$(req "$API/intake/records?status=REJECTED" -H "Authorization: Bearer $MGR_A")
+  check "aparece en la bandeja de rechazados" True "$(body "$r" | f 'any(i["id"] == "'"$rec"'" for i in d["items"])')"
+  check "con el error de campo email" email "$(body "$r" | f 'next(i for i in d["items"] if i["id"] == "'"$rec"'")["errors"][0]["field"]')"
+
+  r=$(req "$API/intake/records" -H "Authorization: Bearer $MGR_A")
+  total=$(body "$r" | f 'd["total"]')
+
+  r=$(req -X POST "$API/intake/records/$rec/promote" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"payload":{"first_name":"Jane","last_name":"Bad","email":"jane@example.com","company":"Acme","industry":"Tech","budget":3000}}')
+  check "promoverlo con el correo corregido" 200 "$(code "$r")"
+  lead=$(body "$r" | f 'd["lead_id"]')
+
+  r=$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")
+  check "el lead promovido existe" 200 "$(code "$r")"
+
+  r=$(req "$API/intake/records" -H "Authorization: Bearer $MGR_A")
+  check "promover no duplica la fila" "$total" "$(body "$r" | f 'd["total"]')"
+
+  section "F2b · formulario y carga masiva por el mismo pipeline"
+
+  printf 'first_name,last_name,email,company,industry,budget\nBuena,Fila,ok-%s@x.test,Acme,Tech,5000\nMala,Fila,mala@@x.test,Acme,Tech,5000\n' \
+    "$STAMP" > /tmp/leads-$STAMP.csv
+  r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" \
+    -F "file=@/tmp/leads-$STAMP.csv")
+  check "la fila buena entra" 1 "$(body "$r" | f 'd["successful_ingestions"]')"
+  check "la fila mala no se pierde" 1 "$(body "$r" | f 'len(d["failed_rows"])')"
+  check "la fila mala deja registro" True "$(body "$r" | f 'bool(d["failed_rows"][0].get("intake_record_id"))')"
+  rm -f /tmp/leads-$STAMP.csv
+
+  section "F2b · aislamiento y protección de los orígenes"
+
+  r=$(req -X PATCH "$API/sources/$src" -H "Authorization: Bearer $MGR_B" -H 'Content-Type: application/json' -d '{"is_active":false}')
+  check "un origen de otra organización" 404 "$(code "$r")"
+
+  r=$(req -X DELETE "$API/sources/$src" -H "Authorization: Bearer $MGR_A")
+  check "borrar un origen con leads" SOURCE_IN_USE "$(body "$r" | f 'd.get("error_code")')"
+}
+
 # ---------------------------------------------------------------- next up ---
-# verify_f2b()  ingesta unificada: nada se pierde, nadie ingesta sin credencial
 # verify_f2c()  reglas componibles: descalificación con motivo, reparto por canal
 
 # ------------------------------------------------------------------- main ---
@@ -207,6 +289,7 @@ fi
 
 bootstrap
 verify_f2a
+verify_f2b
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then
