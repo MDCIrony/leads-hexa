@@ -780,6 +780,16 @@ POST   /api/v1/leads/{id}/assign       🆕 asignación manual
 POST   /api/v1/leads/{id}/discard      🆕 descarte con motivo
 ```
 
+`GET /api/v1/leads` quedó restringido al gestor en F0.5: devuelve la cartera completa de la
+organización, y pertenecer a ella no basta para leer la de los compañeros. El asesor recibe hoy
+`403`, sin ninguna vista alternativa hasta que F2 entregue `/leads/mine`. Ese endpoint no es, por
+tanto, una comodidad de la interfaz: es el único acceso del asesor a sus propios leads, y **la
+fase no puede darse por cerrada sin él**. Se prefirió cerrar el endpoint del gestor y añadir uno
+nuevo, en vez de que `/leads` devolviese cosas distintas según quién preguntase: así la
+autorización vive en el borde —una dependencia por endpoint, como en `/agents`— en lugar de
+convertirse en una rama de rol dentro de `GetLeadsUseCase`, y el `total` de la paginación
+conserva un único significado.
+
 ### Bandeja de entrada — todo nuevo
 ```
 GET    /api/v1/intake                  🆕 filtros: status, batch_id, source_id

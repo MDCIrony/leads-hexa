@@ -2,10 +2,9 @@ from fastapi import APIRouter, Depends, status
 from application.dtos.context import RequestContext
 from application.dtos.queries import GetLeadsQuery
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
-from domain.policies.authorization_policy import AuthorizationPolicy
 from infrastructure.adapters.input.api.dependencies import (
     get_get_leads_use_case,
-    get_request_context,
+    require_organization_manager,
 )
 
 from infrastructure.adapters.input.api.schemas import (
@@ -20,13 +19,13 @@ router = APIRouter()
 def list_leads(
     limit: int = 100,
     offset: int = 0,
-    context: RequestContext = Depends(get_request_context),
+    # Manager-only, and deliberately not "authenticated org member": this
+    # endpoint returns the whole organization's pipeline, so a sales agent
+    # reaching it would read its colleagues' leads. The agent's own view is
+    # GET /leads/mine, a separate endpoint rather than a role branch in here.
+    context: RequestContext = Depends(require_organization_manager),
     use_case: GetLeadsInputPort = Depends(get_get_leads_use_case),
 ) -> PaginatedLeadsResponse:
-    # get_request_context only proves authentication, not organization
-    # membership: a platform Admin has tenant_id=None and must not reach this
-    # operational endpoint just because it never checks the plane.
-    AuthorizationPolicy.ensure_can_access_tenant(context.actor, context.tenant_id)
     query = GetLeadsQuery(tenant_id=context.tenant_id, limit=limit, offset=offset)
     page = use_case.execute(query)
     items = [

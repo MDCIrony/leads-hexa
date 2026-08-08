@@ -30,9 +30,11 @@ Desde F0.5 el `ADMIN` y el resto de roles operan en planos disjuntos. Ninguna op
    - Puede crear agentes (`MANAGER` o `AGENT`) dentro de su propia organización. No puede crear otros `ADMIN`; el único nace del bootstrap.
    - Único rol que puede listar y consultar asesores (`GET /api/v1/agents`, `GET /api/v1/agents/{id}`), siempre acotado a su organización.
    - Puede gestionar y consultar reglas de scoring/routing y leads de su organización.
+   - Único rol que puede listar los leads de la organización (`GET /api/v1/leads`).
 3. **`AGENT`**:
    - Usuario estándar de operaciones comerciales, acotado a su organización.
    - **No** puede listar asesores (`403`); consulta su propia identidad por [`GET /api/v1/auth/me`](#get-apiv1authme).
+   - **No** puede listar los leads de la organización (`403` en `GET /api/v1/leads`): ese endpoint devuelve la cartera completa, y pertenecer a la organización no basta para leer la de los compañeros. Su vista propia será `GET /api/v1/leads/mine`, pendiente de F2.
    - **No** puede crear agentes ni administrar reglas ni organizaciones.
 
 ### Aislamiento por Tenant (Tenant Scoping)

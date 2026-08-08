@@ -118,6 +118,36 @@ def test_sales_agent_cannot_list_agents_but_knows_who_it_is():
         assert me.json()["tenant_name"] == "Acme Corp"
 
 
+def test_sales_agent_cannot_read_the_whole_organization_pipeline():
+    """GET /leads is the manager's view of every lead in the organization.
+
+    Belonging to the organization is not enough to read it: a sales agent
+    would see its colleagues' leads. Its own view is GET /leads/mine, which
+    arrives in F2. Asserted here so nobody relaxes the guard back to plain
+    authentication, which is exactly how the platform Admin once slipped in."""
+    with TestClient(app) as client:
+        admin_token = _bootstrap_admin(client)
+        _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
+        ana = {"Authorization": f"Bearer {_login(client, 'ana@acme.test', 'manager-pass-123')}"}
+
+        created = client.post(
+            "/api/v1/agents",
+            json={
+                "name": "Sales Person",
+                "email": "sales@acme.test",
+                "team": "Sales",
+                "password": "sales-pass-123",
+                "role": "AGENT",
+            },
+            headers=ana,
+        )
+        assert created.status_code == 201
+
+        sales = {"Authorization": f"Bearer {_login(client, 'sales@acme.test', 'sales-pass-123')}"}
+        assert client.get("/api/v1/leads", headers=sales).status_code == 403
+        assert client.get("/api/v1/leads", headers=ana).status_code == 200
+
+
 def test_identity_of_the_platform_admin_has_no_organization():
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
