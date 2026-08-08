@@ -57,19 +57,20 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
         )
         assert second_resp.status_code == 401
 
-        # 5. The admin token can create a Manager for a specific tenant.
-        tenant_id = str(uuid.uuid4())
+        # 5. The Admin plane creates an organization together with its first
+        # Manager — the Admin itself has no tenant_id, so it can no longer
+        # create an agent directly, in any organization.
         manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
-        manager_resp = client.post(
-            "/api/v1/agents",
+        tenant_resp = client.post(
+            "/api/v1/tenants",
             json={
-                "name": "Manager", "email": manager_email, "team": "Sales",
-                "password": "manager-pass-123", "role": "MANAGER", "tenant_id": tenant_id,
+                "name": f"Org {uuid.uuid4().hex[:6]}",
+                "manager": {"name": "Manager", "email": manager_email, "password": "manager-pass-123"},
             },
             headers=admin_headers,
         )
-        assert manager_resp.status_code == 201
-        assert manager_resp.json()["role"] == "MANAGER"
+        assert tenant_resp.status_code == 201
+        assert tenant_resp.json()["manager"]["role"] == "MANAGER"
 
         manager_login_resp = client.post(
             "/api/v1/auth/login",
@@ -93,17 +94,16 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
         # request that can even express it. What remains checkable is the
         # guarantee that actually matters: data stays scoped to the caller's
         # own organization, taken from their token.
-        other_tenant_id = str(uuid.uuid4())
         other_manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
-        other_manager_resp = client.post(
-            "/api/v1/agents",
+        other_tenant_resp = client.post(
+            "/api/v1/tenants",
             json={
-                "name": "Other Manager", "email": other_manager_email, "team": "Sales",
-                "password": "manager-pass-123", "role": "MANAGER", "tenant_id": other_tenant_id,
+                "name": f"Other Org {uuid.uuid4().hex[:6]}",
+                "manager": {"name": "Other Manager", "email": other_manager_email, "password": "manager-pass-123"},
             },
             headers=admin_headers,
         )
-        assert other_manager_resp.status_code == 201
+        assert other_tenant_resp.status_code == 201
         other_manager_login_resp = client.post(
             "/api/v1/auth/login",
             data={"username": other_manager_email, "password": "manager-pass-123"},
@@ -115,11 +115,14 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
         assert other_rules_resp.json() == []
 
         # 8. An AGENT-role token (default role) is forbidden from creating any rule.
+        # Only a Manager may create agents, always inside its own
+        # organization, so the plain agent comes from the first Manager
+        # rather than the (now agent-less) Admin.
         agent_email = f"agent_{uuid.uuid4().hex[:6]}@test.com"
         agent_resp = client.post(
             "/api/v1/agents",
-            json={"name": "Plain Agent", "email": agent_email, "team": "Sales", "password": "agent-pass-123", "tenant_id": tenant_id},
-            headers=admin_headers,
+            json={"name": "Plain Agent", "email": agent_email, "team": "Sales", "password": "agent-pass-123"},
+            headers=manager_headers,
         )
         assert agent_resp.status_code == 201
         agent_login_resp = client.post("/api/v1/auth/login", data={"username": agent_email, "password": "agent-pass-123"})

@@ -50,9 +50,50 @@ def _get_auth_headers(client: TestClient) -> dict:
     return {"Authorization": f"Bearer {admin_token}"}
 
 
+def _manager_auth_headers(client: TestClient) -> dict:
+    """`list_agents` and `get_agent` are scoped to the caller's organization
+    (§7.3), so exercising them now requires a real Manager created through
+    the platform plane rather than the all-reaching Admin `_get_auth_headers`
+    used to provide.
+    """
+    bootstrap_resp = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Platform Admin",
+            "email": f"admin_{uuid.uuid4().hex[:6]}@test.com",
+            "team": "HQ",
+            "password": "admin-pass-123",
+        },
+    )
+    assert bootstrap_resp.status_code == 201
+    admin_login = client.post(
+        "/api/v1/auth/login",
+        data={"username": bootstrap_resp.json()["email"], "password": "admin-pass-123"},
+    )
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+
+    manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
+    tenant_resp = client.post(
+        "/api/v1/tenants",
+        json={
+            "name": f"Org {uuid.uuid4().hex[:6]}",
+            "manager": {"name": "Manager", "email": manager_email, "password": "manager-pass-123"},
+        },
+        headers=admin_headers,
+    )
+    assert tenant_resp.status_code == 201
+
+    manager_login = client.post(
+        "/api/v1/auth/login",
+        data={"username": manager_email, "password": "manager-pass-123"},
+    )
+    assert manager_login.status_code == 200
+    return {"Authorization": f"Bearer {manager_login.json()['access_token']}"}
+
+
 def test_get_agent_not_found_returns_domain_error_shape():
     with TestClient(app) as client:
-        headers = _get_auth_headers(client)
+        headers = _manager_auth_headers(client)
         response = client.get(f"/api/v1/agents/{uuid.uuid4()}", headers=headers)
         assert response.status_code == 404
         data = response.json()
@@ -74,7 +115,7 @@ def test_create_agent_rejects_malformed_email():
 
 def test_list_agents_returns_pagination_metadata():
     with TestClient(app) as client:
-        headers = _get_auth_headers(client)
+        headers = _manager_auth_headers(client)
         team = f"team-{uuid.uuid4()}"
         for i in range(3):
             client.post(

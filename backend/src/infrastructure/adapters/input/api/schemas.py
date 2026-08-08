@@ -109,7 +109,8 @@ class AgentCreate(BaseModel):
     is_active: bool = True
     password: str
     role: AgentRole = AgentRole.AGENT
-    tenant_id: Optional[UUID] = None
+    # No tenant_id: the organization is always the caller's own, taken from
+    # the authenticated context, never from the request body.
 
     @field_validator("email")
     @classmethod
@@ -133,7 +134,53 @@ class PaginatedAgentsResponse(BaseModel):
     offset: int
     has_more: bool
 
+# --- Tenant Schemas ---
+class TenantManagerCreate(BaseModel):
+    name: str
+    email: str
+    password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _validate_email_format(v)
+
+class TenantCreate(BaseModel):
+    name: str
+    manager: TenantManagerCreate
+
+class TenantUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class TenantResponse(BaseModel):
+    id: str
+    name: str
+    slug: str
+    is_active: bool
+    created_at: str
+    # Both are absent on some responses by design: the list view aggregates
+    # a count without identities (no manager), the create view has no
+    # meaningful count yet for a just-created organization.
+    agent_count: Optional[int] = None
+    manager: Optional[AgentResponse] = None
+
+class PaginatedTenantsResponse(BaseModel):
+    items: List[TenantResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
 # --- Auth Schemas ---
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+class CurrentUserResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str
+    tenant_id: Optional[str] = None
+    tenant_name: Optional[str] = None

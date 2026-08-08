@@ -22,6 +22,10 @@ from application.use_cases.agent_use_cases import CreateAgentUseCase, GetAgentsU
 from application.use_cases.rule_use_cases import CreateScoringRuleUseCase, GetScoringRulesUseCase, CreateRoutingRuleUseCase, GetRoutingRulesUseCase
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import LoginUseCase
+from application.ports.input.tenant_use_case_ports import (
+    CreateTenantInputPort, GetTenantsInputPort, UpdateTenantInputPort
+)
+from application.use_cases.tenant_use_cases import CreateTenantUseCase, GetTenantsUseCase, UpdateTenantUseCase
 from domain.entities.agent import Agent
 from domain.exceptions import UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
@@ -94,6 +98,18 @@ def get_login_use_case(
         token_service=container.token_service,
     )
 
+def get_create_tenant_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> CreateTenantInputPort:
+    return CreateTenantUseCase(uow=uow, password_hasher=container.password_hasher)
+
+def get_get_tenants_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetTenantsInputPort:
+    return GetTenantsUseCase(uow=uow)
+
+def get_update_tenant_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateTenantInputPort:
+    return UpdateTenantUseCase(uow=uow)
+
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 _optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
@@ -147,4 +163,11 @@ def require_organization_manager(
     context: RequestContext = Depends(get_request_context),
 ) -> RequestContext:
     AuthorizationPolicy.ensure_can_manage_organization(context.actor)
+    return context
+
+
+def require_platform_admin(
+    context: RequestContext = Depends(get_request_context),
+) -> RequestContext:
+    AuthorizationPolicy.ensure_can_manage_platform(context.actor)
     return context

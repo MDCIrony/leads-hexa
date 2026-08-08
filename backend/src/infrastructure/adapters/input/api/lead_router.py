@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, status
 from application.dtos.context import RequestContext
 from application.dtos.queries import GetLeadsQuery
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
+from domain.policies.authorization_policy import AuthorizationPolicy
 from infrastructure.adapters.input.api.dependencies import (
     get_get_leads_use_case,
     get_request_context,
@@ -22,6 +23,10 @@ def list_leads(
     context: RequestContext = Depends(get_request_context),
     use_case: GetLeadsInputPort = Depends(get_get_leads_use_case),
 ) -> PaginatedLeadsResponse:
+    # get_request_context only proves authentication, not organization
+    # membership: a platform Admin has tenant_id=None and must not reach this
+    # operational endpoint just because it never checks the plane.
+    AuthorizationPolicy.ensure_can_access_tenant(context.actor, context.tenant_id)
     query = GetLeadsQuery(tenant_id=context.tenant_id, limit=limit, offset=offset)
     page = use_case.execute(query)
     items = [

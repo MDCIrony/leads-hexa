@@ -1,5 +1,6 @@
 import os
 import uuid
+from typing import Tuple
 os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
 # `infrastructure.main` reads Settings at module level (for CORS), so
 # DATABASE_URL must exist by import time, not just by app startup.
@@ -30,26 +31,31 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _manager_headers_for(client: TestClient, admin_headers: dict, tenant_id: str) -> dict:
+def _create_tenant_and_manager_headers(client: TestClient, admin_headers: dict) -> Tuple[str, dict]:
     """Rules and lead listing scope to the caller's own tenant (from the
-    token), so driving a tenant's routing flow now requires a Manager
-    persisted for that tenant rather than the tenant-less bootstrap Admin."""
+    token), so driving a tenant's routing flow now requires a real
+    organization created through the platform plane, with a Manager
+    persisted for it, rather than a made-up tenant_id and the tenant-less
+    bootstrap Admin."""
+    manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
     resp = client.post(
-        "/api/v1/agents",
+        "/api/v1/tenants",
         json={
-            "name": "Org Manager",
-            "email": f"manager_{uuid.uuid4().hex[:6]}@test.com",
-            "team": "Sales",
-            "password": "manager-pass-123",
-            "role": "MANAGER",
-            "tenant_id": tenant_id,
+            "name": f"Org {uuid.uuid4().hex[:6]}",
+            "manager": {"name": "Org Manager", "email": manager_email, "password": "manager-pass-123"},
         },
         headers=admin_headers,
     )
     assert resp.status_code == 201
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    token = token_service.issue(TokenClaims(agent_id=resp.json()["id"], role="MANAGER", tenant_id=tenant_id))
-    return {"Authorization": f"Bearer {token}"}
+    tenant_id = resp.json()["id"]
+
+    login_resp = client.post(
+        "/api/v1/auth/login",
+        data={"username": manager_email, "password": "manager-pass-123"},
+    )
+    assert login_resp.status_code == 200
+    headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+    return tenant_id, headers
 
 
 def test_full_system_lead_routing_flow_e2e():
@@ -61,11 +67,9 @@ def test_full_system_lead_routing_flow_e2e():
     4. Ingesta un Lead con budget 15000.
     5. Verifica que el lead resulte ASSIGNED con score 35 y asignado al agente.
     """
-    tenant_id = str(uuid.uuid4())
-
     with TestClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
-        headers = _manager_headers_for(client, admin_headers, tenant_id)
+        tenant_id, headers = _create_tenant_and_manager_headers(client, admin_headers)
 
         # 1. Crear agente
         agent_payload = {
@@ -75,7 +79,6 @@ def test_full_system_lead_routing_flow_e2e():
             "active_leads_count": 0,
             "is_active": True,
             "password": "test-password-123",
-            "tenant_id": tenant_id,
         }
         agent_resp = client.post("/api/v1/agents", json=agent_payload, headers=headers)
         assert agent_resp.status_code == 201

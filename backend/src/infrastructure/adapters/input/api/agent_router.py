@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, status
 
 from application.dtos.commands import CreateAgentCommand
+from application.dtos.context import RequestContext
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
 from application.ports.input.agent_use_case_ports import (
     CreateAgentInputPort, GetAgentsInputPort, GetAgentInputPort
@@ -14,7 +15,7 @@ from domain.policies.authorization_policy import AuthorizationPolicy
 from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
     get_create_agent_use_case, get_get_agents_use_case, get_get_agent_use_case,
-    get_current_agent, get_optional_current_agent, get_uow,
+    build_request_context, get_optional_current_agent, get_uow, require_organization_manager,
 )
 from infrastructure.adapters.input.api.schemas import AgentCreate, AgentResponse, PaginatedAgentsResponse
 
@@ -47,12 +48,14 @@ def create_agent(
 
     if is_bootstrap:
         forced_role = AgentRole.ADMIN
+        tenant_id = None
     else:
         if current_agent is None:
             raise UnauthorizedException("Authentication required to create an agent")
         AuthorizationPolicy.ensure_can_create_agent_with_role(current_agent, request.role)
-        if current_agent.role != AgentRole.ADMIN:
-            AuthorizationPolicy.ensure_can_access_tenant(current_agent, request.tenant_id)
+        # The organization is always the caller's own: there is no tenant_id
+        # left in the request for a Manager to target another one with.
+        tenant_id = build_request_context(current_agent).tenant_id
         forced_role = request.role
 
     command = CreateAgentCommand(
@@ -63,7 +66,7 @@ def create_agent(
         is_active=request.is_active,
         password=request.password,
         role=forced_role.value if hasattr(forced_role, "value") else str(forced_role),
-        tenant_id=request.tenant_id,
+        tenant_id=tenant_id,
     )
     return _to_response(use_case.execute(command))
 
@@ -75,9 +78,9 @@ def list_agents(
     limit: int = 100,
     offset: int = 0,
     use_case: GetAgentsInputPort = Depends(get_get_agents_use_case),
-    current_agent: Agent = Depends(get_current_agent),
+    context: RequestContext = Depends(require_organization_manager),
 ):
-    query = GetAgentsQuery(team=team, limit=limit, offset=offset)
+    query = GetAgentsQuery(tenant_id=context.tenant_id, team=team, limit=limit, offset=offset)
     page = use_case.execute(query)
     items = [_to_response(a) for a in page.items]
     return PaginatedAgentsResponse(
@@ -93,9 +96,9 @@ def list_agents(
 def get_agent(
     agent_id: UUID,
     use_case: GetAgentInputPort = Depends(get_get_agent_use_case),
-    current_agent: Agent = Depends(get_current_agent),
+    context: RequestContext = Depends(require_organization_manager),
 ):
-    query = GetAgentQuery(agent_id=agent_id)
+    query = GetAgentQuery(agent_id=agent_id, tenant_id=context.tenant_id)
     agent = use_case.execute(query)
     return _to_response(agent)
 
