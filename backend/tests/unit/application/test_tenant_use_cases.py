@@ -133,7 +133,7 @@ class TestUpdateTenant:
 
         agent = uow.agents.save(
             Agent.create(
-                "Ana", "ana@acme.test", "Sales", role=AgentRole.MANAGER, tenant_id=tenant.id.value
+                "Ana", "ana@acme.test", role=AgentRole.MANAGER, tenant_id=tenant.id.value
             )
         )
         UpdateTenantUseCase(uow=uow).execute(
@@ -152,7 +152,6 @@ class TestUpdateTenant:
                 Agent.create(
                     f"Agent {index:03d}",
                     f"agent{index}@big.test",
-                    "Sales",
                     tenant_id=tenant.id.value,
                 )
             )

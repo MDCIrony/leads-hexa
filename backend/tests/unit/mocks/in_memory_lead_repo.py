@@ -2,6 +2,7 @@ from typing import List, Optional, Dict
 from uuid import UUID
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from domain.entities.lead import Lead
+from domain.value_objects.enums import LeadStatus
 
 class InMemoryLeadRepository(LeadRepositoryPort):
     def __init__(self) -> None:
@@ -20,3 +21,15 @@ class InMemoryLeadRepository(LeadRepositoryPort):
 
     def count_by_tenant(self, tenant_id: UUID) -> int:
         return len([l for l in self.leads.values() if l.tenant_id.value == tenant_id])
+
+    def active_load_by_agent(self, tenant_id: UUID) -> Dict[UUID, int]:
+        loads: Dict[UUID, int] = {}
+        for lead in self.leads.values():
+            if (
+                lead.tenant_id.value == tenant_id
+                and lead.status == LeadStatus.ASSIGNED
+                and lead.assigned_agent_id is not None
+            ):
+                agent_id = lead.assigned_agent_id.value
+                loads[agent_id] = loads.get(agent_id, 0) + 1
+        return loads

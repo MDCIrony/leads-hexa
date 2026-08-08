@@ -3,19 +3,36 @@ from uuid import uuid4
 
 from application.dtos.commands import (
     CreateAgentCommand,
-    CreateRoutingRuleCommand,
+    CreateAssignmentRuleCommand,
+    CreateSalesGroupCommand,
     CreateScoringRuleCommand,
+    UpdateAgentCommand,
+    UpdateAssignmentRuleCommand,
+    UpdateSalesGroupCommand,
 )
-from application.dtos.queries import GetAgentQuery, GetAgentsQuery, GetLeadsQuery, GetRulesQuery
+from application.dtos.queries import (
+    GetAgentQuery,
+    GetAgentsQuery,
+    GetAssignmentRulesQuery,
+    GetLeadsQuery,
+    GetRulesQuery,
+    GetSalesGroupsQuery,
+)
 
 _ALL_DTOS = (
     CreateAgentCommand,
     CreateScoringRuleCommand,
-    CreateRoutingRuleCommand,
+    CreateAssignmentRuleCommand,
+    CreateSalesGroupCommand,
+    UpdateAgentCommand,
+    UpdateAssignmentRuleCommand,
+    UpdateSalesGroupCommand,
     GetLeadsQuery,
     GetAgentsQuery,
     GetAgentQuery,
     GetRulesQuery,
+    GetAssignmentRulesQuery,
+    GetSalesGroupsQuery,
 )
 
 
@@ -29,10 +46,9 @@ def test_create_agent_command_keeps_its_field_names_and_defaults():
     command = CreateAgentCommand(
         name="Carlos Lopez",
         email="clopez@sales.com",
-        team="Sales",
         password="s3cret",
     )
-    assert command.active_leads_count == 0
+    assert command.group_id is None
     assert command.is_active is True
     assert command.role == "AGENT"
     assert command.tenant_id is None

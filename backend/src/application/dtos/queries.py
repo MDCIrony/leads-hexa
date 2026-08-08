@@ -13,7 +13,7 @@ class GetLeadsQuery:
 @dataclass(frozen=True)
 class GetAgentsQuery:
     tenant_id: UUID
-    team: Optional[str] = None
+    group_id: Optional[UUID] = None
     limit: int = 100
     offset: int = 0
 
@@ -33,3 +33,15 @@ class GetRulesQuery:
 class GetTenantsQuery:
     limit: int = 100
     offset: int = 0
+
+
+@dataclass(frozen=True)
+class GetSalesGroupsQuery:
+    tenant_id: UUID
+    limit: int = 100
+    offset: int = 0
+
+
+@dataclass(frozen=True)
+class GetAssignmentRulesQuery:
+    tenant_id: UUID

@@ -29,7 +29,6 @@ def _build_use_case(
     agent = Agent.create(
         "Test Agent",
         email,
-        "Sales",
         role=role,
         hashed_password=hasher.hash(password),
         is_active=is_active,

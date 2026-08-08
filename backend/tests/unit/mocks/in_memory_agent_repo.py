@@ -7,19 +7,18 @@ class InMemoryAgentRepository(AgentRepositoryPort):
     def __init__(self) -> None:
         self.agents: Dict[UUID, Agent] = {}
 
-    def get_available_agents(self, tenant_id: UUID, team: Optional[str] = None) -> List[Agent]:
+    def _filter_by_group(self, agents: List[Agent], group_id: Optional[UUID]) -> List[Agent]:
+        if not group_id:
+            return agents
+        return [a for a in agents if a.group_id and a.group_id.value == group_id]
+
+    def get_available_agents(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> List[Agent]:
         agents = [
             a
             for a in self.agents.values()
             if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
         ]
-        if team:
-            agents = [a for a in agents if a.team == team]
-        return agents
-
-    def update_active_count(self, agent_id: UUID, new_count: int) -> None:
-        if agent_id in self.agents:
-            self.agents[agent_id].active_leads_count = new_count
+        return self._filter_by_group(agents, group_id)
 
     def save(self, agent: Agent) -> Agent:
         self.agents[agent.id.value] = agent
@@ -28,17 +27,14 @@ class InMemoryAgentRepository(AgentRepositoryPort):
     def get_by_id(self, agent_id: UUID) -> Optional[Agent]:
         return self.agents.get(agent_id)
 
-    def list_active(self, team: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
+    def list_active(self, group_id: Optional[UUID] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
         agents = [a for a in self.agents.values() if a.is_active]
-        if team:
-            agents = [a for a in agents if a.team == team]
+        agents = self._filter_by_group(agents, group_id)
         return agents[offset:offset + limit]
 
-    def count_active(self, team: Optional[str] = None) -> int:
+    def count_active(self, group_id: Optional[UUID] = None) -> int:
         agents = [a for a in self.agents.values() if a.is_active]
-        if team:
-            agents = [a for a in agents if a.team == team]
-        return len(agents)
+        return len(self._filter_by_group(agents, group_id))
 
     def get_by_email(self, email: str) -> Optional[Agent]:
         return next((a for a in self.agents.values() if a.email == email), None)
@@ -47,27 +43,24 @@ class InMemoryAgentRepository(AgentRepositoryPort):
         return len(self.agents)
 
     def list_by_tenant(
-        self, tenant_id: UUID, team: Optional[str] = None, limit: int = 100, offset: int = 0
+        self, tenant_id: UUID, group_id: Optional[UUID] = None, limit: int = 100, offset: int = 0
     ) -> List[Agent]:
         agents = [
             a
             for a in self.agents.values()
             if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
         ]
-        if team:
-            agents = [a for a in agents if a.team == team]
+        agents = self._filter_by_group(agents, group_id)
         agents.sort(key=lambda a: (a.name, str(a.id)))
         return agents[offset : offset + limit]
 
-    def count_by_tenant(self, tenant_id: UUID, team: Optional[str] = None) -> int:
+    def count_by_tenant(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> int:
         agents = [
             a
             for a in self.agents.values()
             if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
         ]
-        if team:
-            agents = [a for a in agents if a.team == team]
-        return len(agents)
+        return len(self._filter_by_group(agents, group_id))
 
     def get_by_id_and_tenant(self, agent_id: UUID, tenant_id: UUID) -> Optional[Agent]:
         agent = self.agents.get(agent_id)

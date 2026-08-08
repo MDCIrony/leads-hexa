@@ -1,18 +1,15 @@
 from typing import List, Dict
 from uuid import UUID
 from application.ports.output.rule_repository_port import RuleRepositoryPort
-from domain.entities.rule import ScoringRule, RoutingRule
+from domain.entities.rule import AssignmentRule, ScoringRule
 
 class InMemoryRuleRepository(RuleRepositoryPort):
     def __init__(self) -> None:
         self.scoring_rules: Dict[UUID, List[ScoringRule]] = {}
-        self.routing_rules: Dict[UUID, List[RoutingRule]] = {}
+        self.assignment_rules: Dict[UUID, AssignmentRule] = {}
 
     def get_scoring_rules_by_tenant(self, tenant_id: UUID) -> List[ScoringRule]:
         return self.scoring_rules.get(tenant_id, [])
-
-    def get_routing_rules_by_tenant(self, tenant_id: UUID) -> List[RoutingRule]:
-        return self.routing_rules.get(tenant_id, [])
 
     def save_scoring_rule(self, tenant_id: UUID, rule: ScoringRule) -> ScoringRule:
         if tenant_id not in self.scoring_rules:
@@ -20,8 +17,14 @@ class InMemoryRuleRepository(RuleRepositoryPort):
         self.scoring_rules[tenant_id].append(rule)
         return rule
 
-    def save_routing_rule(self, tenant_id: UUID, rule: RoutingRule) -> RoutingRule:
-        if tenant_id not in self.routing_rules:
-            self.routing_rules[tenant_id] = []
-        self.routing_rules[tenant_id].append(rule)
+    def get_assignment_rules_by_tenant(self, tenant_id: UUID) -> List[AssignmentRule]:
+        rules = [r for r in self.assignment_rules.values() if r.tenant_id == tenant_id]
+        # Mirrors RawSqlRuleRepository's ORDER BY priority DESC, id.
+        return sorted(rules, key=lambda r: (-r.priority, str(r.id)))
+
+    def save_assignment_rule(self, tenant_id: UUID, rule: AssignmentRule) -> AssignmentRule:
+        self.assignment_rules[rule.id] = rule
         return rule
+
+    def delete_assignment_rule(self, rule_id: UUID) -> None:
+        self.assignment_rules.pop(rule_id, None)

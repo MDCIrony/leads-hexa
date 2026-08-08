@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
-from application.dtos.commands import CreateAgentCommand, AgentsPageResult
+from application.dtos.commands import AgentsPageResult, CreateAgentCommand, UpdateAgentCommand
 from domain.entities.agent import Agent
 
 class GetAgentsInputPort(ABC):
@@ -17,4 +17,14 @@ class GetAgentInputPort(ABC):
 class CreateAgentInputPort(ABC):
     @abstractmethod
     def execute(self, command: CreateAgentCommand) -> Agent:
+        pass
+
+class UpdateAgentInputPort(ABC):
+    @abstractmethod
+    def execute(self, command: UpdateAgentCommand) -> Agent:
+        pass
+
+class DeactivateAgentInputPort(ABC):
+    @abstractmethod
+    def execute(self, query: GetAgentQuery) -> Agent:
         pass

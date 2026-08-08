@@ -47,7 +47,6 @@ class CreateTenantUseCase(CreateTenantInputPort):
                 Agent.create(
                     name=command.manager_name,
                     email=command.manager_email,
-                    team="Management",
                     role=AgentRole.MANAGER,
                     hashed_password=self.password_hasher.hash(command.manager_password),
                     tenant_id=tenant.id,
