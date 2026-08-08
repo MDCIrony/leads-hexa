@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -21,18 +20,18 @@ class RawSqlTenantRepository(TenantRepositoryPort):
                 is_active = EXCLUDED.is_active
             """,
             (
-                str(tenant.id),
+                tenant.id.value,
                 tenant.name,
                 tenant.slug,
-                1 if tenant.is_active else 0,
-                tenant.created_at.isoformat(),
+                tenant.is_active,
+                tenant.created_at,
             ),
         )
         return tenant
 
     def get_by_id(self, tenant_id: UUID) -> Optional[Tenant]:
         row = self.connection.execute(
-            "SELECT * FROM tenants WHERE id = %s", (str(tenant_id),)
+            "SELECT * FROM tenants WHERE id = %s", (tenant_id,)
         ).fetchone()
         return self._to_tenant(row) if row else None
 
@@ -57,8 +56,8 @@ class RawSqlTenantRepository(TenantRepositoryPort):
 
     def count_active_agents(self, tenant_id: UUID) -> int:
         row = self.connection.execute(
-            "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s AND is_active = 1",
-            (str(tenant_id),),
+            "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s AND is_active = TRUE",
+            (tenant_id,),
         ).fetchone()
         return int(row["count"])
 
@@ -68,6 +67,6 @@ class RawSqlTenantRepository(TenantRepositoryPort):
             name=row["name"],
             tenant_id=row["id"],
             slug=row["slug"],
-            is_active=bool(row["is_active"]),
-            created_at=datetime.fromisoformat(row["created_at"]),
+            is_active=row["is_active"],
+            created_at=row["created_at"],
         )

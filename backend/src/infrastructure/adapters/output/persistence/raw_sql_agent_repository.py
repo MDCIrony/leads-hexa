@@ -18,7 +18,7 @@ class RawSqlAgentRepository(AgentRepositoryPort):
             email=r["email"],
             team=r["team"],
             active_leads_count=r["active_leads_count"],
-            is_active=bool(r["is_active"]),
+            is_active=r["is_active"],
             role=r["role"],
             hashed_password=r["hashed_password"],
             tenant_id=r["tenant_id"],
@@ -27,17 +27,17 @@ class RawSqlAgentRepository(AgentRepositoryPort):
     def get_available_agents(self, team: Optional[str] = None) -> List[Agent]:
         if team:
             cursor = self.connection.execute(
-                "SELECT * FROM agents WHERE is_active = 1 AND team = %s", (team,)
+                "SELECT * FROM agents WHERE is_active = TRUE AND team = %s", (team,)
             )
         else:
-            cursor = self.connection.execute("SELECT * FROM agents WHERE is_active = 1")
+            cursor = self.connection.execute("SELECT * FROM agents WHERE is_active = TRUE")
         rows = cursor.fetchall()
         return [self._row_to_agent(r) for r in rows]
 
     def update_active_count(self, agent_id: UUID, new_count: int) -> None:
         self.connection.execute(
             "UPDATE agents SET active_leads_count = %s WHERE id = %s",
-            (new_count, str(agent_id)),
+            (new_count, agent_id),
         )
 
     def save(self, agent: Agent) -> Agent:
@@ -56,33 +56,33 @@ class RawSqlAgentRepository(AgentRepositoryPort):
                 tenant_id = EXCLUDED.tenant_id
             """,
             (
-                str(agent.id),
+                agent.id.value,
                 agent.name,
                 agent.email,
                 agent.team,
                 agent.active_leads_count,
-                1 if agent.is_active else 0,
+                agent.is_active,
                 agent.role.value,
                 agent.hashed_password,
-                str(agent.tenant_id) if agent.tenant_id else None,
+                agent.tenant_id.value if agent.tenant_id else None,
             ),
         )
         return agent
 
     def get_by_id(self, agent_id: UUID) -> Optional[Agent]:
-        cursor = self.connection.execute("SELECT * FROM agents WHERE id = %s", (str(agent_id),))
+        cursor = self.connection.execute("SELECT * FROM agents WHERE id = %s", (agent_id,))
         r = cursor.fetchone()
         return self._row_to_agent(r) if r else None
 
     def list_active(self, team: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
         if team:
             cursor = self.connection.execute(
-                "SELECT * FROM agents WHERE is_active = 1 AND team = %s ORDER BY id LIMIT %s OFFSET %s",
+                "SELECT * FROM agents WHERE is_active = TRUE AND team = %s ORDER BY id LIMIT %s OFFSET %s",
                 (team, limit, offset),
             )
         else:
             cursor = self.connection.execute(
-                "SELECT * FROM agents WHERE is_active = 1 ORDER BY id LIMIT %s OFFSET %s",
+                "SELECT * FROM agents WHERE is_active = TRUE ORDER BY id LIMIT %s OFFSET %s",
                 (limit, offset),
             )
         rows = cursor.fetchall()
@@ -91,12 +91,12 @@ class RawSqlAgentRepository(AgentRepositoryPort):
     def count_active(self, team: Optional[str] = None) -> int:
         if team:
             cursor = self.connection.execute(
-                "SELECT COUNT(*) AS count FROM agents WHERE is_active = 1 AND team = %s",
+                "SELECT COUNT(*) AS count FROM agents WHERE is_active = TRUE AND team = %s",
                 (team,),
             )
         else:
             cursor = self.connection.execute(
-                "SELECT COUNT(*) AS count FROM agents WHERE is_active = 1"
+                "SELECT COUNT(*) AS count FROM agents WHERE is_active = TRUE"
             )
         row = cursor.fetchone()
         return row["count"]
@@ -117,8 +117,8 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         limit: int = 100,
         offset: int = 0,
     ) -> List[Agent]:
-        sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = 1"
-        params: list = [str(tenant_id)]
+        sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = TRUE"
+        params: list = [tenant_id]
         if team:
             sql += " AND team = %s"
             params.append(team)
@@ -129,8 +129,8 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         return [self._row_to_agent(row) for row in rows]
 
     def count_by_tenant(self, tenant_id: UUID, team: Optional[str] = None) -> int:
-        sql = "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s AND is_active = 1"
-        params: list = [str(tenant_id)]
+        sql = "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s AND is_active = TRUE"
+        params: list = [tenant_id]
         if team:
             sql += " AND team = %s"
             params.append(team)
@@ -140,14 +140,14 @@ class RawSqlAgentRepository(AgentRepositoryPort):
     def get_by_id_and_tenant(self, agent_id: UUID, tenant_id: UUID) -> Optional[Agent]:
         row = self.connection.execute(
             "SELECT * FROM agents WHERE id = %s AND tenant_id = %s",
-            (str(agent_id), str(tenant_id)),
+            (agent_id, tenant_id),
         ).fetchone()
         return self._row_to_agent(row) if row else None
 
     def deactivate_all_by_tenant(self, tenant_id: UUID) -> int:
         cursor = self.connection.execute(
-            "UPDATE agents SET is_active = 0 WHERE tenant_id = %s AND is_active = 1",
-            (str(tenant_id),),
+            "UPDATE agents SET is_active = FALSE WHERE tenant_id = %s AND is_active = TRUE",
+            (tenant_id,),
         )
         return cursor.rowcount
 
@@ -158,4 +158,4 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         rows = self.connection.execute(
             "SELECT DISTINCT tenant_id FROM agents WHERE tenant_id IS NOT NULL"
         ).fetchall()
-        return [UUID(row["tenant_id"]) for row in rows]
+        return [row["tenant_id"] for row in rows]

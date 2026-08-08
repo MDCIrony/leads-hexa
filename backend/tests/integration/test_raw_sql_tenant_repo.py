@@ -89,10 +89,10 @@ def test_counts_only_active_agents_of_that_organization(test_db):
         other = repo.save(Tenant.create(name="Other Corp"))
         with test_db.get_connection(autocommit=True) as conn:
             for email, tid, active in (
-                ("a@acme.test", str(tenant.id), 1),
-                ("b@acme.test", str(tenant.id), 1),
-                ("c@acme.test", str(tenant.id), 0),
-                ("d@other.test", str(other.id), 1),
+                ("a@acme.test", str(tenant.id), True),
+                ("b@acme.test", str(tenant.id), True),
+                ("c@acme.test", str(tenant.id), False),
+                ("d@other.test", str(other.id), True),
             ):
                 conn.execute(
                     "INSERT INTO agents (id, name, email, team, active_leads_count,"

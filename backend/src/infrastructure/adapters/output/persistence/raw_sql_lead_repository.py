@@ -1,8 +1,8 @@
-import json
 from typing import List, Optional
 from uuid import UUID
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from domain.entities.lead import Lead
@@ -13,8 +13,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         self.connection = connection
 
     def save(self, lead: Lead) -> Lead:
-        custom_attrs_json = json.dumps(lead.custom_attributes)
-        assigned_agent_str = str(lead.assigned_agent_id) if lead.assigned_agent_id else None
+        assigned_agent_id = lead.assigned_agent_id.value if lead.assigned_agent_id else None
 
         sql = """
         INSERT INTO leads (
@@ -39,26 +38,26 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         self.connection.execute(
             sql,
             (
-                str(lead.id),
-                str(lead.tenant_id),
+                lead.id.value,
+                lead.tenant_id.value,
                 lead.first_name,
                 lead.last_name,
                 str(lead.email),
                 lead.company,
                 float(lead.budget),
                 lead.industry,
-                custom_attrs_json,
+                Jsonb(lead.custom_attributes),
                 lead.phone,
                 int(lead.score),
                 lead.status.value,
-                assigned_agent_str,
-                lead.created_at.isoformat(),
+                assigned_agent_id,
+                lead.created_at,
             ),
         )
         return lead
 
     def _row_to_lead(self, row) -> Lead:
-        custom_attrs = json.loads(row["custom_attributes"]) if row["custom_attributes"] else {}
+        custom_attrs = row["custom_attributes"]
         return Lead.create(
             lead_id=row["id"],
             tenant_id=row["tenant_id"],
@@ -77,7 +76,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         )
 
     def get_by_id(self, lead_id: UUID) -> Optional[Lead]:
-        cursor = self.connection.execute("SELECT * FROM leads WHERE id = %s", (str(lead_id),))
+        cursor = self.connection.execute("SELECT * FROM leads WHERE id = %s", (lead_id,))
         row = cursor.fetchone()
         if not row:
             return None
@@ -86,7 +85,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
     def list_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[Lead]:
         cursor = self.connection.execute(
             "SELECT * FROM leads WHERE tenant_id = %s LIMIT %s OFFSET %s",
-            (str(tenant_id), limit, offset),
+            (tenant_id, limit, offset),
         )
         rows = cursor.fetchall()
         return [self._row_to_lead(row) for row in rows]
@@ -94,7 +93,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
     def count_by_tenant(self, tenant_id: UUID) -> int:
         cursor = self.connection.execute(
             "SELECT COUNT(*) AS count FROM leads WHERE tenant_id = %s",
-            (str(tenant_id),),
+            (tenant_id,),
         )
         row = cursor.fetchone()
         return int(row["count"]) if row else 0

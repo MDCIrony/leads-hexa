@@ -13,7 +13,7 @@ def test_creates_one_organization_per_orphan_tenant_id(test_db):
             conn.execute(
                 "INSERT INTO agents (id, name, email, team, active_leads_count,"
                 " is_active, role, tenant_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (str(uuid4()), "X", email, "Sales", 0, 1, "AGENT", str(tid)),
+                (str(uuid4()), "X", email, "Sales", 0, True, "AGENT", str(tid)),
             )
 
     created = sync_tenants(PostgresUnitOfWork(test_db))
@@ -30,7 +30,7 @@ def test_is_idempotent(test_db):
         conn.execute(
             "INSERT INTO agents (id, name, email, team, active_leads_count,"
             " is_active, role, tenant_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-            (str(uuid4()), "X", "a@x.test", "Sales", 0, 1, "AGENT", str(orphan)),
+            (str(uuid4()), "X", "a@x.test", "Sales", 0, True, "AGENT", str(orphan)),
         )
 
     assert len(sync_tenants(PostgresUnitOfWork(test_db))) == 1
@@ -44,6 +44,6 @@ def test_ignores_the_platform_admin(test_db):
         conn.execute(
             "INSERT INTO agents (id, name, email, team, active_leads_count,"
             " is_active, role, tenant_id) VALUES (%s,%s,%s,%s,%s,%s,%s,NULL)",
-            (str(uuid4()), "Admin", "admin@p.test", "HQ", 0, 1, AgentRole.ADMIN.value),
+            (str(uuid4()), "Admin", "admin@p.test", "HQ", 0, True, AgentRole.ADMIN.value),
         )
     assert sync_tenants(PostgresUnitOfWork(test_db)) == []
