@@ -21,6 +21,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Explicit: without it, `docker build` targets the last stage in the
+      # Dockerfile, which became `test` once that stage was appended for the
+      # backend-test service, and this service would silently run pytest
+      # instead of serving the API.
+      target: runner
     ports:
       # 8001 on the host: 8000 is a common default and is often already taken.
       # Inside the compose network the API still listens on 8000.
