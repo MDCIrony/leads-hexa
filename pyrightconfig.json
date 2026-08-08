@@ -1,0 +1,7 @@
+{
+  "include": ["backend/src", "backend/tests", "backend/conftest.py"],
+  "extraPaths": ["backend/src"],
+  "venvPath": "backend",
+  "venv": ".venv",
+  "reportMissingImports": "error"
+}

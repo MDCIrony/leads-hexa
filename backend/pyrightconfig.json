@@ -1,7 +1,0 @@
-{
-  "include": ["src", "tests", "conftest.py"],
-  "extraPaths": ["src"],
-  "venvPath": ".",
-  "venv": ".venv",
-  "reportMissingImports": "error"
-}
