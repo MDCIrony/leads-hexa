@@ -24,8 +24,8 @@ lugar de él.
 | 2 | [El correo deja de ser obligatorio](02-correo-opcional.md) | ✅ `91f4807` |
 | 3 | [`IntakeRecord` e `IntakeError`](03-intake-record.md) | ✅ `6d24369` |
 | 4 | [El pipeline unificado y la retirada de `FAILED`](04-pipeline-unificado.md) | ✅ `0be1127` |
-| 5a | [La organización sale del token](05a-autenticacion.md) | ⏳ **siguiente** |
-| 5b | [CRUD de orígenes](05b-crud-origenes.md) | ⏳ |
+| 5a | [La organización sale del token](05a-autenticacion.md) | ✅ `b34a534`, `34e84aa` |
+| 5b | [CRUD de orígenes](05b-crud-origenes.md) | ⏳ **siguiente** |
 | 5c | [La bandeja de entrada](05c-bandeja.md) | ⏳ |
 | 6 | [Harness y cierre](06-harness-y-cierre.md) | ⏳ |
 
@@ -80,13 +80,20 @@ docker compose --profile test run --rm backend-test pytest -q tests/unit
 # Unitarios sin variables de entorno (deben pasar fuera de Docker)
 cd backend && uv run pytest -m unit -q
 
-# Verificación de negocio (~3 s)
+# Verificación de negocio (~3 s). El contenedor monta el código pero NO recarga:
+# sin el restart, el harness valida la versión anterior y engaña.
+docker compose restart backend && sleep 3
 ./scripts/verify-e2e.sh
 ```
 
 `tests/conftest.py` **no se toca**: fija `DATABASE_URL` y `JWT_SECRET` una sola vez y trunca leyendo
 las tablas del catálogo, así que una tabla nueva entra sola. No declares variables de entorno en
 ningún fichero de test.
+
+Dentro de `verify-e2e.sh`, `bootstrap` exporta las variables sobre las que se construye todo lo
+demás: `ADMIN_TOKEN`, `TENANT_A`, `MGR_A`, `AGENT_1`, `AGENT_2`, `TOKEN_1`, `TOKEN_2` (los dos
+asesores de A), `MGR_B` y `AGENT_B`. Los helpers son `req`, `code`, `body`, `f`, `check` y `section`.
+Se **amplía, nunca se reescribe**: cada fase añade su `verify_fN` y la llama desde `main`.
 
 ## Criterio de aceptación de la fase
 
@@ -95,10 +102,10 @@ Del spec §10, con dónde se comprueba cada uno:
 | # | Criterio | Dónde |
 |---|---|---|
 | 1 | Un payload sin correo genera un lead que existe y es visible | `verify_f2b` 4 |
-| 2 | Un payload ininterpretable queda en la bandeja con el detalle, y el gestor lo corrige y lo promueve | `verify_f2b` 5-7, `test_intake_inbox.py` |
+| 2 | Un payload ininterpretable queda en la bandeja con el detalle, y el gestor lo corrige y lo promueve | `verify_f2b` 6-9, `test_intake_inbox.py` |
 | 3 | Una petición de ingesta sin credencial es rechazada | `verify_f2b` 1-2, `test_intake_authentication.py` |
-| 4 | Formulario y carga masiva recorren el mismo pipeline | `verify_f2b` 8, `test_unified_intake_pipeline.py` |
-| 5 | El gestor responde «¿de dónde vienen mis leads?» | `verify_f2b` 3 y 10 |
+| 4 | Formulario y carga masiva recorren el mismo pipeline | `verify_f2b` 10, `test_unified_intake_pipeline.py` |
+| 5 | El gestor responde «¿de dónde vienen mis leads?» | `verify_f2b` 3, 5, 11-12 |
 | 6 | Suite en verde sin banderas, guardián 4/4, `pytest -m unit` sin variables de entorno | Validación de cierre |
 
 ## Lo que esta fase NO hace
