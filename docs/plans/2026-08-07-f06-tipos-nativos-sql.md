@@ -90,7 +90,10 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
     name TEXT NOT NULL,
     field TEXT NOT NULL,
     operator TEXT NOT NULL,
-    value TEXT NOT NULL,
+    -- JSONB, like custom_attributes: the value a rule compares against is a
+    -- scalar whose type is decided per row, and encoding JSON into TEXT would
+    -- hide that from the database.
+    value JSONB NOT NULL,
     score_delta INTEGER NOT NULL
 );
 
@@ -154,11 +157,12 @@ Luego, con el backend aún sin arrancar, aplicar las migraciones desde el host:
 cd backend
 export DATABASE_URL=postgresql://postgres:postgrespassword@localhost:5433/leads_db
 uv run python -c "
-import sys; sys.path.insert(0,'src')
+import sys; from pathlib import Path
+sys.path.insert(0,'src')
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
-from infrastructure.adapters.output.persistence.migration_runner import run_migrations
+from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
 db = RawSqlDatabase(dsn='postgresql://postgres:postgrespassword@localhost:5433/leads_db')
-run_migrations(db)
+MigrationRunner(db, Path('migrations')).apply_pending()
 db.close()
 "
 ```
