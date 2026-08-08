@@ -1,12 +1,11 @@
 import uuid
-from domain.entities import Lead, Agent, ScoringRule, RoutingRule, WebhookConfig
+from domain.entities import Lead, Agent, ScoringRule, WebhookConfig
 from domain.value_objects import (
     LeadId,
     TenantId,
     AgentId,
     LeadStatus,
     Operator,
-    AssignmentStrategy,
     WebhookEventType,
 )
 from domain.value_objects.enums import AgentRole
@@ -41,10 +40,8 @@ def test_agent_entity_creation():
     agent = Agent.create(
         name="Carlos Lopez",
         email="clopez@sales.com",
-        active_leads_count=2,
     )
     assert agent.is_active is True
-    assert agent.active_leads_count == 2
     assert agent.name == "Carlos Lopez"
     assert isinstance(agent.id, AgentId)
 
@@ -105,20 +102,6 @@ def test_scoring_rule_entity_creation():
     )
     assert rule.score_delta == 25
     assert rule.operator == Operator.GREATER_THAN
-    assert isinstance(rule.id, uuid.UUID)
-
-def test_routing_rule_entity_creation():
-    agent_id = uuid.uuid4()
-    rule = RoutingRule.create(
-        min_score=30,
-        target_team="Sales",
-        assignment_strategy="LOWEST_LOAD",
-        target_agent_ids=[str(agent_id)],
-        rule_id=str(uuid.uuid4()),
-    )
-    assert rule.min_score == 30
-    assert rule.assignment_strategy == AssignmentStrategy.LOWEST_LOAD
-    assert rule.target_agent_ids == [agent_id]
     assert isinstance(rule.id, uuid.UUID)
 
 def test_webhook_config_entity_creation():

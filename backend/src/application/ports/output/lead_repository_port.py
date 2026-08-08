@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 from domain.entities.lead import Lead
 
@@ -19,3 +19,7 @@ class LeadRepositoryPort(ABC):
     @abstractmethod
     def count_by_tenant(self, tenant_id: UUID) -> int:
         pass
+
+    @abstractmethod
+    def active_load_by_agent(self, tenant_id: UUID) -> Dict[UUID, int]:
+        """Return how many active leads each agent of this organization holds."""

@@ -28,9 +28,10 @@ _DEFAULT_TEST_DSN = "postgresql://postgres:postgrespassword@localhost:5433/leads
 _TABLES = (
     "leads",
     "scoring_rules",
-    "routing_rules",
+    "assignment_rules",
     "agents",
     "webhook_configs",
+    "sales_groups",
     "tenants",
 )
 

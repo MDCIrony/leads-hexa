@@ -95,9 +95,9 @@ def test_counts_only_active_agents_of_that_organization(test_db):
                 ("d@other.test", str(other.id), True),
             ):
                 conn.execute(
-                    "INSERT INTO agents (id, name, email, team, active_leads_count,"
-                    " is_active, role, tenant_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                    (str(uuid4()), "X", email, "Sales", 0, active, "AGENT", tid),
+                    "INSERT INTO agents (id, name, email, is_active, role, tenant_id)"
+                    " VALUES (%s,%s,%s,%s,%s,%s)",
+                    (str(uuid4()), "X", email, active, "AGENT", tid),
                 )
         assert repo.count_active_agents(tenant.id.value) == 2
     finally:

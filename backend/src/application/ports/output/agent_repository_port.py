@@ -5,16 +5,12 @@ from domain.entities.agent import Agent
 
 class AgentRepositoryPort(ABC):
     @abstractmethod
-    def get_available_agents(self, tenant_id: UUID, team: Optional[str] = None) -> List[Agent]:
+    def get_available_agents(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> List[Agent]:
         """Return the active agents of this organization eligible for assignment.
 
         tenant_id is required and comes first: an optional organization filter
         is one forgotten argument away from routing a lead into someone else's
         company."""
-
-    @abstractmethod
-    def update_active_count(self, agent_id: UUID, new_count: int) -> None:
-        pass
 
     @abstractmethod
     def save(self, agent: Agent) -> Agent:
@@ -25,11 +21,11 @@ class AgentRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    def list_active(self, team: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
+    def list_active(self, group_id: Optional[UUID] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
         pass
 
     @abstractmethod
-    def count_active(self, team: Optional[str] = None) -> int:
+    def count_active(self, group_id: Optional[UUID] = None) -> int:
         pass
 
     @abstractmethod
@@ -47,14 +43,14 @@ class AgentRepositoryPort(ABC):
     def list_by_tenant(
         self,
         tenant_id: UUID,
-        team: Optional[str] = None,
+        group_id: Optional[UUID] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Agent]:
         """Return a page of active agents of this organization."""
 
     @abstractmethod
-    def count_by_tenant(self, tenant_id: UUID, team: Optional[str] = None) -> int:
+    def count_by_tenant(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> int:
         """Return how many active agents this organization has."""
 
     @abstractmethod

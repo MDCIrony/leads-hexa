@@ -1,9 +1,17 @@
 from uuid import uuid4
 
 from domain.entities.agent import Agent
+from domain.entities.sales_group import SalesGroup
+from domain.entities.tenant import Tenant
 from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.output.persistence.raw_sql_agent_repository import (
     RawSqlAgentRepository,
+)
+from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
+    RawSqlSalesGroupRepository,
+)
+from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import (
+    RawSqlTenantRepository,
 )
 
 _TENANT_A = uuid4()
@@ -14,10 +22,12 @@ def _seed(test_db):
     ctx = test_db.get_connection(autocommit=True)
     conn = ctx.__enter__()
     repo = RawSqlAgentRepository(conn)
-    repo.save(Agent.create("A One", "a1@a.test", "Sales", role=AgentRole.AGENT, tenant_id=_TENANT_A))
-    repo.save(Agent.create("A Two", "a2@a.test", "Sales", role=AgentRole.AGENT, tenant_id=_TENANT_A))
+    # No group_id: these three tests are about tenant scoping, not group
+    # membership, and agents.group_id is optional.
+    repo.save(Agent.create("A One", "a1@a.test", role=AgentRole.AGENT, tenant_id=_TENANT_A))
+    repo.save(Agent.create("A Two", "a2@a.test", role=AgentRole.AGENT, tenant_id=_TENANT_A))
     b = repo.save(
-        Agent.create("B One", "b1@b.test", "Sales", role=AgentRole.AGENT, tenant_id=_TENANT_B)
+        Agent.create("B One", "b1@b.test", role=AgentRole.AGENT, tenant_id=_TENANT_B)
     )
     return repo, ctx, b
 
@@ -52,15 +62,25 @@ def test_reading_an_agent_of_another_organization_returns_nothing(test_db):
         ctx.__exit__(None, None, None)
 
 
-def test_team_filter_composes_with_the_organization_filter(test_db):
-    repo, ctx, _ = _seed(test_db)
+def test_group_filter_composes_with_the_organization_filter(test_db):
+    """team used to be a free-form string; group_id is now a real foreign
+    key, so exercising the filter needs an actual sales_groups row."""
+    ctx = test_db.get_connection(autocommit=True)
+    conn = ctx.__enter__()
     try:
-        repo.save(
-            Agent.create("A Three", "a3@a.test", "Support", role=AgentRole.AGENT, tenant_id=_TENANT_A)
-        )
-        assert len(repo.list_by_tenant(_TENANT_A, team="Sales")) == 2
-        assert len(repo.list_by_tenant(_TENANT_A, team="Support")) == 1
-        assert repo.count_by_tenant(_TENANT_A, team="Support") == 1
+        tenant = RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+        group_repo = RawSqlSalesGroupRepository(conn)
+        sales = group_repo.save(SalesGroup.create(tenant_id=tenant.id.value, name="Sales"))
+        support = group_repo.save(SalesGroup.create(tenant_id=tenant.id.value, name="Support"))
+
+        repo = RawSqlAgentRepository(conn)
+        repo.save(Agent.create("A One", "a1@a.test", sales.id.value, role=AgentRole.AGENT, tenant_id=tenant.id.value))
+        repo.save(Agent.create("A Two", "a2@a.test", sales.id.value, role=AgentRole.AGENT, tenant_id=tenant.id.value))
+        repo.save(Agent.create("A Three", "a3@a.test", support.id.value, role=AgentRole.AGENT, tenant_id=tenant.id.value))
+
+        assert len(repo.list_by_tenant(tenant.id.value, group_id=sales.id.value)) == 2
+        assert len(repo.list_by_tenant(tenant.id.value, group_id=support.id.value)) == 1
+        assert repo.count_by_tenant(tenant.id.value, group_id=support.id.value) == 1
     finally:
         ctx.__exit__(None, None, None)
 

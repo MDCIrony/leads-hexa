@@ -40,4 +40,7 @@ def test_creates_the_expected_tables(test_db):
             "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
         ).fetchall()
     names = {row["table_name"] for row in rows}
-    assert {"leads", "scoring_rules", "routing_rules", "agents", "webhook_configs"} <= names
+    assert {
+        "leads", "scoring_rules", "agents", "webhook_configs",
+        "sales_groups", "assignment_rules",
+    } <= names

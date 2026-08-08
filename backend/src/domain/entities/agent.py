@@ -14,7 +14,6 @@ class Agent:
     name: str
     email: str
     group_id: Optional[GroupId] = None
-    active_leads_count: int = 0
     is_active: bool = True
     role: AgentRole = AgentRole.AGENT
     hashed_password: Optional[str] = None
@@ -26,7 +25,6 @@ class Agent:
         name: str,
         email: str,
         group_id: Optional[Union[str, UUID, GroupId]] = None,
-        active_leads_count: int = 0,
         is_active: bool = True,
         agent_id: Optional[Union[str, UUID, AgentId]] = None,
         role: Union[str, AgentRole] = AgentRole.AGENT,
@@ -54,7 +52,6 @@ class Agent:
             name=name,
             email=email,
             group_id=gid,
-            active_leads_count=active_leads_count,
             is_active=is_active,
             role=agent_role,
             hashed_password=hashed_password,

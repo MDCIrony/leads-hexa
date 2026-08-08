@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
 import psycopg
@@ -6,6 +6,7 @@ from psycopg.types.json import Jsonb
 
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from domain.entities.lead import Lead
+from domain.value_objects.enums import LeadStatus
 
 
 class RawSqlLeadRepository(LeadRepositoryPort):
@@ -97,3 +98,22 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         )
         row = cursor.fetchone()
         return int(row["count"]) if row else 0
+
+    def active_load_by_agent(self, tenant_id: UUID) -> Dict[UUID, int]:
+        """Return how many active leads each agent of this organization holds.
+
+        Derived on read rather than kept in a counter column: a counter that
+        is only ever incremented drifts from reality on the first lead that
+        gets discarded or reassigned."""
+        rows = self.connection.execute(
+            """
+            SELECT assigned_agent_id, COUNT(*) AS load
+            FROM leads
+            WHERE tenant_id = %s
+              AND assigned_agent_id IS NOT NULL
+              AND status = %s
+            GROUP BY assigned_agent_id
+            """,
+            (tenant_id, LeadStatus.ASSIGNED.value),
+        ).fetchall()
+        return {row["assigned_agent_id"]: int(row["load"]) for row in rows}

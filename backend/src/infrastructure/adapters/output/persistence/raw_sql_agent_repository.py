@@ -16,40 +16,32 @@ class RawSqlAgentRepository(AgentRepositoryPort):
             agent_id=r["id"],
             name=r["name"],
             email=r["email"],
-            team=r["team"],
-            active_leads_count=r["active_leads_count"],
+            group_id=r["group_id"],
             is_active=r["is_active"],
             role=r["role"],
             hashed_password=r["hashed_password"],
             tenant_id=r["tenant_id"],
         )
 
-    def get_available_agents(self, tenant_id: UUID, team: Optional[str] = None) -> List[Agent]:
+    def get_available_agents(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> List[Agent]:
         sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = TRUE"
         params: list = [tenant_id]
-        if team:
-            sql += " AND team = %s"
-            params.append(team)
+        if group_id:
+            sql += " AND group_id = %s"
+            params.append(group_id)
         sql += " ORDER BY name, id"
         rows = self.connection.execute(sql, tuple(params)).fetchall()
         return [self._row_to_agent(r) for r in rows]
 
-    def update_active_count(self, agent_id: UUID, new_count: int) -> None:
-        self.connection.execute(
-            "UPDATE agents SET active_leads_count = %s WHERE id = %s",
-            (new_count, agent_id),
-        )
-
     def save(self, agent: Agent) -> Agent:
         self.connection.execute(
             """
-            INSERT INTO agents (id, name, email, team, active_leads_count, is_active, role, hashed_password, tenant_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO agents (id, name, email, group_id, is_active, role, hashed_password, tenant_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 email = EXCLUDED.email,
-                team = EXCLUDED.team,
-                active_leads_count = EXCLUDED.active_leads_count,
+                group_id = EXCLUDED.group_id,
                 is_active = EXCLUDED.is_active,
                 role = EXCLUDED.role,
                 hashed_password = EXCLUDED.hashed_password,
@@ -59,8 +51,7 @@ class RawSqlAgentRepository(AgentRepositoryPort):
                 agent.id.value,
                 agent.name,
                 agent.email,
-                agent.team,
-                agent.active_leads_count,
+                agent.group_id.value if agent.group_id else None,
                 agent.is_active,
                 agent.role.value,
                 agent.hashed_password,
@@ -74,11 +65,11 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         r = cursor.fetchone()
         return self._row_to_agent(r) if r else None
 
-    def list_active(self, team: Optional[str] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
-        if team:
+    def list_active(self, group_id: Optional[UUID] = None, limit: int = 100, offset: int = 0) -> List[Agent]:
+        if group_id:
             cursor = self.connection.execute(
-                "SELECT * FROM agents WHERE is_active = TRUE AND team = %s ORDER BY id LIMIT %s OFFSET %s",
-                (team, limit, offset),
+                "SELECT * FROM agents WHERE is_active = TRUE AND group_id = %s ORDER BY id LIMIT %s OFFSET %s",
+                (group_id, limit, offset),
             )
         else:
             cursor = self.connection.execute(
@@ -88,11 +79,11 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         rows = cursor.fetchall()
         return [self._row_to_agent(r) for r in rows]
 
-    def count_active(self, team: Optional[str] = None) -> int:
-        if team:
+    def count_active(self, group_id: Optional[UUID] = None) -> int:
+        if group_id:
             cursor = self.connection.execute(
-                "SELECT COUNT(*) AS count FROM agents WHERE is_active = TRUE AND team = %s",
-                (team,),
+                "SELECT COUNT(*) AS count FROM agents WHERE is_active = TRUE AND group_id = %s",
+                (group_id,),
             )
         else:
             cursor = self.connection.execute(
@@ -113,27 +104,27 @@ class RawSqlAgentRepository(AgentRepositoryPort):
     def list_by_tenant(
         self,
         tenant_id: UUID,
-        team: Optional[str] = None,
+        group_id: Optional[UUID] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Agent]:
         sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = TRUE"
         params: list = [tenant_id]
-        if team:
-            sql += " AND team = %s"
-            params.append(team)
+        if group_id:
+            sql += " AND group_id = %s"
+            params.append(group_id)
         # Explicit ordering: without it a page can repeat or skip rows.
         sql += " ORDER BY name, id LIMIT %s OFFSET %s"
         params.extend([limit, offset])
         rows = self.connection.execute(sql, tuple(params)).fetchall()
         return [self._row_to_agent(row) for row in rows]
 
-    def count_by_tenant(self, tenant_id: UUID, team: Optional[str] = None) -> int:
+    def count_by_tenant(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> int:
         sql = "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s AND is_active = TRUE"
         params: list = [tenant_id]
-        if team:
-            sql += " AND team = %s"
-            params.append(team)
+        if group_id:
+            sql += " AND group_id = %s"
+            params.append(group_id)
         row = self.connection.execute(sql, tuple(params)).fetchone()
         return int(row["count"])
 
