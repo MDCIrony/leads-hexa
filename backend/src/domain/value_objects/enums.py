@@ -31,3 +31,13 @@ class AgentRole(str, Enum):
     ADMIN = "ADMIN"
     MANAGER = "MANAGER"
     AGENT = "AGENT"
+
+class AgentMatchMode(str, Enum):
+    """How a rule combines its target group with its named agents.
+
+    ANY is the default because the alternative silently drops a named agent
+    that happens to belong to a different group — the caller asked for that
+    person explicitly, so excluding them is never what they meant."""
+
+    ANY = "ANY"
+    ONLY = "ONLY"
