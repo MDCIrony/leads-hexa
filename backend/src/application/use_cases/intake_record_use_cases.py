@@ -44,9 +44,12 @@ class GetIntakeRecordsUseCase(GetIntakeRecordsInputPort):
                 )
         with self.uow:
             items = self.uow.intake_records.list_by_tenant(
-                query.tenant_id, status=status, limit=query.limit, offset=query.offset
+                query.tenant_id, status=status, job_id=query.job_id,
+                limit=query.limit, offset=query.offset,
             )
-            total = self.uow.intake_records.count_by_tenant(query.tenant_id, status=status)
+            total = self.uow.intake_records.count_by_tenant(
+                query.tenant_id, status=status, job_id=query.job_id,
+            )
         return IntakeRecordsPageResult(items=items, total=total)
 
 

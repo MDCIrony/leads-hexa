@@ -6,6 +6,9 @@ from application.dtos.context import RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.ports.output.token_service_port import TokenServicePort
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
+from application.ports.input.intake_phase_use_case_ports import (
+    ProcessIntakeJobInputPort, ReceiveIntakeInputPort,
+)
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
 from application.ports.input.agent_use_case_ports import (
@@ -32,6 +35,8 @@ from application.ports.input.intake_record_use_case_ports import (
 )
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
+from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
+from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
 from application.use_cases.agent_use_cases import (
     CreateAgentUseCase, DeactivateAgentUseCase, GetAgentsUseCase, GetAgentUseCase, UpdateAgentUseCase,
@@ -95,6 +100,15 @@ def get_process_batch_use_case(
 
 def get_get_intake_records_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeRecordsInputPort:
     return GetIntakeRecordsUseCase(uow=uow)
+
+def get_receive_intake_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> ReceiveIntakeInputPort:
+    return ReceiveIntakeUseCase(uow=uow)
+
+def get_process_intake_job_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    ingest: IngestLeadInputPort = Depends(get_ingest_lead_use_case),
+) -> ProcessIntakeJobInputPort:
+    return ProcessIntakeJobUseCase(uow=uow, ingest=ingest)
 
 def get_promote_intake_record_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),

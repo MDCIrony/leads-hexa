@@ -73,7 +73,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 IntakeRecord.create(
                     tenant_id=command.tenant_id,
                     source_id=command.source_id,
-                    payload=self._payload_of(command),
+                    payload=payload_of(command),
                 )
             )
 
@@ -162,28 +162,49 @@ class IngestLeadUseCase(IngestLeadInputPort):
         )
 
     @staticmethod
-    def _payload_of(command: IngestLeadCommand) -> Dict[str, Any]:
-        """Snapshot the raw command into a JSONB-serializable dict.
-
-        Must not raise on a malformed value (e.g. a non-numeric budget): this
-        runs before Lead.create, so it cannot re-run the validation that is
-        about to happen and reject something the domain hasn't judged yet."""
-        budget = command.budget
-        return {
-            "tenant_id": str(command.tenant_id),
-            "source_id": str(command.source_id),
-            "first_name": command.first_name,
-            "last_name": command.last_name,
-            "company": command.company,
-            "budget": float(budget) if isinstance(budget, Decimal) else budget,
-            "industry": command.industry,
-            "custom_attributes": command.custom_attributes,
-            "phone": command.phone,
-            "email": command.email,
-        }
-
-    @staticmethod
     def _field_of(exc: DomainException) -> str:
         # Falls back to "_record" (the payload as a whole) for any error code
         # not in the map above, rather than guessing a field that isn't real.
         return _FIELD_BY_ERROR_CODE.get(exc.error_code, "_record")
+
+
+def payload_of(command: IngestLeadCommand) -> Dict[str, Any]:
+    """Snapshot the raw command into a JSONB-serializable dict.
+
+    Must not raise on a malformed value (e.g. a non-numeric budget): this
+    runs before Lead.create, so it cannot re-run the validation that is
+    about to happen and reject something the domain hasn't judged yet."""
+    budget = command.budget
+    return {
+        "tenant_id": str(command.tenant_id),
+        "source_id": str(command.source_id),
+        "first_name": command.first_name,
+        "last_name": command.last_name,
+        "company": command.company,
+        "budget": float(budget) if isinstance(budget, Decimal) else budget,
+        "industry": command.industry,
+        "custom_attributes": command.custom_attributes,
+        "phone": command.phone,
+        "email": command.email,
+    }
+
+
+def command_from_record(record: IntakeRecord) -> IngestLeadCommand:
+    """Rebuild the command from what was stored, without re-validating it.
+
+    tenant_id and source_id come from the record, never from the payload: the
+    organization is the one that was authenticated at reception (C4), and the
+    payload is untrusted input that happens to carry a copy of both."""
+    payload = record.payload or {}
+    return IngestLeadCommand(
+        tenant_id=record.tenant_id.value,
+        source_id=record.source_id.value,
+        first_name=payload.get("first_name"),
+        last_name=payload.get("last_name"),
+        company=payload.get("company"),
+        budget=payload.get("budget"),
+        industry=payload.get("industry"),
+        custom_attributes=payload.get("custom_attributes") or {},
+        phone=payload.get("phone"),
+        email=payload.get("email"),
+    )

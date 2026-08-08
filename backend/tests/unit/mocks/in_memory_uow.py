@@ -39,22 +39,32 @@ class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
         self,
         tenant_id: UUID,
         status: Optional[IntakeRecordStatus] = None,
+        job_id: Optional[UUID] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[IntakeRecord]:
         matches = [
             r
             for r in self._records.values()
-            if r.tenant_id.value == tenant_id and (status is None or r.status == status)
+            if r.tenant_id.value == tenant_id
+            and (status is None or r.status == status)
+            and (job_id is None or (r.job_id is not None and r.job_id.value == job_id))
         ]
         matches.sort(key=lambda r: r.received_at)
         return matches[offset : offset + limit]
 
-    def count_by_tenant(self, tenant_id: UUID, status: Optional[IntakeRecordStatus] = None) -> int:
+    def count_by_tenant(
+        self,
+        tenant_id: UUID,
+        status: Optional[IntakeRecordStatus] = None,
+        job_id: Optional[UUID] = None,
+    ) -> int:
         return sum(
             1
             for r in self._records.values()
-            if r.tenant_id.value == tenant_id and (status is None or r.status == status)
+            if r.tenant_id.value == tenant_id
+            and (status is None or r.status == status)
+            and (job_id is None or (r.job_id is not None and r.job_id.value == job_id))
         )
 
 

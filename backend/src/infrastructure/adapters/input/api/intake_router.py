@@ -142,12 +142,15 @@ async def batch_upload(
 @router.get("/records", response_model=IntakeRecordsPageResponse, status_code=status.HTTP_200_OK)
 def list_intake_records(
     status: Optional[str] = None,
+    job_id: Optional[UUID] = None,
     limit: int = 100,
     offset: int = 0,
     context: RequestContext = Depends(require_organization_manager),
     use_case: GetIntakeRecordsInputPort = Depends(get_get_intake_records_use_case),
 ):
-    query = GetIntakeRecordsQuery(tenant_id=context.tenant_id, status=status, limit=limit, offset=offset)
+    query = GetIntakeRecordsQuery(
+        tenant_id=context.tenant_id, status=status, job_id=job_id, limit=limit, offset=offset,
+    )
     page = use_case.execute(query)
     items = [_to_record_response(record) for record in page.items]
     return IntakeRecordsPageResponse(

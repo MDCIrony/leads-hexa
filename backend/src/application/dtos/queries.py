@@ -72,5 +72,6 @@ class GetLeadSourcesQuery:
 class GetIntakeRecordsQuery:
     tenant_id: UUID
     status: Optional[str] = None
+    job_id: Optional[UUID] = None
     limit: int = 100
     offset: int = 0

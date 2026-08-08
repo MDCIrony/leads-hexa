@@ -18,9 +18,15 @@ class IntakeRecordRepositoryPort(abc.ABC):
         self,
         tenant_id: UUID,
         status: Optional[IntakeRecordStatus] = None,
+        job_id: Optional[UUID] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[IntakeRecord]: ...
 
     @abc.abstractmethod
-    def count_by_tenant(self, tenant_id: UUID, status: Optional[IntakeRecordStatus] = None) -> int: ...
+    def count_by_tenant(
+        self,
+        tenant_id: UUID,
+        status: Optional[IntakeRecordStatus] = None,
+        job_id: Optional[UUID] = None,
+    ) -> int: ...

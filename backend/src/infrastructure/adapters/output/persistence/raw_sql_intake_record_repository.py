@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID, uuid4
 
 import psycopg
@@ -72,34 +72,41 @@ class RawSqlIntakeRecordRepository(IntakeRecordRepositoryPort):
         self,
         tenant_id: UUID,
         status: Optional[IntakeRecordStatus] = None,
+        job_id: Optional[UUID] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[IntakeRecord]:
+        # Built up rather than fully duplicated per filter combination: two
+        # independent optional filters would otherwise mean four near-identical
+        # query strings. Values still travel exclusively through %s markers.
+        query = "SELECT * FROM intake_records WHERE tenant_id = %s"
+        params: List[Any] = [tenant_id]
         if status is not None:
-            rows = self.connection.execute(
-                "SELECT * FROM intake_records WHERE tenant_id = %s AND status = %s "
-                "ORDER BY received_at, id LIMIT %s OFFSET %s",
-                (tenant_id, status.value, limit, offset),
-            ).fetchall()
-        else:
-            rows = self.connection.execute(
-                "SELECT * FROM intake_records WHERE tenant_id = %s "
-                "ORDER BY received_at, id LIMIT %s OFFSET %s",
-                (tenant_id, limit, offset),
-            ).fetchall()
+            query += " AND status = %s"
+            params.append(status.value)
+        if job_id is not None:
+            query += " AND job_id = %s"
+            params.append(job_id)
+        query += " ORDER BY received_at, id LIMIT %s OFFSET %s"
+        params += [limit, offset]
+        rows = self.connection.execute(query, params).fetchall()
         return [self._row_to_record(row) for row in rows]
 
-    def count_by_tenant(self, tenant_id: UUID, status: Optional[IntakeRecordStatus] = None) -> int:
+    def count_by_tenant(
+        self,
+        tenant_id: UUID,
+        status: Optional[IntakeRecordStatus] = None,
+        job_id: Optional[UUID] = None,
+    ) -> int:
+        query = "SELECT COUNT(*) AS count FROM intake_records WHERE tenant_id = %s"
+        params: List[Any] = [tenant_id]
         if status is not None:
-            row = self.connection.execute(
-                "SELECT COUNT(*) AS count FROM intake_records WHERE tenant_id = %s AND status = %s",
-                (tenant_id, status.value),
-            ).fetchone()
-        else:
-            row = self.connection.execute(
-                "SELECT COUNT(*) AS count FROM intake_records WHERE tenant_id = %s",
-                (tenant_id,),
-            ).fetchone()
+            query += " AND status = %s"
+            params.append(status.value)
+        if job_id is not None:
+            query += " AND job_id = %s"
+            params.append(job_id)
+        row = self.connection.execute(query, params).fetchone()
         return row["count"]
 
     def _row_to_record(self, row) -> IntakeRecord:
