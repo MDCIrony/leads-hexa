@@ -214,8 +214,8 @@ Y `create_scoring_rule` construye el comando con:
         conditions=[c.model_dump() for c in request.conditions],
 ```
 
-`model_dump()` deja el operador como su valor plano, que es justo lo que `Criterion.from_dict`
-espera.
+`model_dump()` conserva la instancia de `Operator`, no su cadena. Da igual: `Criterion.create` hace
+`Operator(operator)` y `Operator` hereda de `str`, así que ambas formas se resuelven al mismo valor.
 
 ## Paso 5: el doble in-memory deduplica
 
@@ -275,8 +275,11 @@ cd backend && uv run pytest -m unit -q
 cd .. && ./scripts/verify-e2e.sh
 ```
 
-`verify-e2e.sh` **debe seguir verde**: no crea reglas de puntuación por HTTP. Si se pone rojo,
-revisa qué comprobación toca reglas y dilo en tu respuesta.
+**`verify-e2e.sh` se pondrá rojo, y hay que arreglarlo aquí mismo.** Su sección
+«F2a · reglas de puntuación» crea reglas por HTTP con el contrato viejo y lee `d["value"]` de la
+respuesta: catorce comprobaciones caen en cascada. Adapta **sólo** la construcción del cuerpo y la
+lectura —`(d.get("conditions") or [{}])[0].get("value")`, siguiendo el idiom que el script ya usa—;
+ninguna aserción cambia.
 
 ```bash
 git commit -m "feat(domain): let a scoring rule demand several conditions at once"

@@ -28,6 +28,11 @@ Sólo las comprobaciones que dependían del umbral fijo. El patrón: un lead que
 o caía a `DISQUALIFIED` por puntuación ahora sale `QUALIFIED` y, sin regla de asignación que lo
 cubra, `UNASSIGNED`.
 
+**El cuerpo de las peticiones ya está bien.** La Tarea 2 pasó la sección «F2a · reglas de puntuación»
+al contrato de `conditions` y arregló su lectura. Lo que queda por tocar aquí son **estados
+esperados**, no formas de petición: si te encuentras reescribiendo un `curl`, te has pasado de
+alcance.
+
 **No cambies lo que cada comprobación afirma sobre el negocio** —el score, el desglose, el asesor
 asignado, el aislamiento entre organizaciones—, sólo el estado esperado donde el umbral lo decidía.
 

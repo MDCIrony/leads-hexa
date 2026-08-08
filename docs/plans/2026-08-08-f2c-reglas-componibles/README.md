@@ -20,9 +20,9 @@ junto al fichero de la tarea, no en lugar de él.
 
 | # | Tarea | Rompe | Estado |
 |---|---|---|---|
-| 1 | [El esquema y `Criterion`](01-criterion-y-esquema.md) | Nada | ⏳ **siguiente** |
-| 2 | [La puntuación compone condiciones](02-puntuacion-componible.md) | Tests de `ScoringRule` y del CRUD | ⏳ |
-| 3 | [La etapa de viabilidad](03-viabilidad.md) | Nada, aditiva | ⏳ |
+| 1 | [El esquema y `Criterion`](01-criterion-y-esquema.md) | Nada | ✅ `4f8f47b` |
+| 2 | [La puntuación compone condiciones](02-puntuacion-componible.md) | Tests de `ScoringRule` y del CRUD | ✅ `e84da77` |
+| 3 | [La etapa de viabilidad](03-viabilidad.md) | Nada, aditiva | ⏳ **en curso** |
 | 4 | [Reparto por condiciones y retirada del umbral](04-reparto-y-umbral.md) | Tests del motor de asignación y de `qualify` | ⏳ |
 | 5 | [Harness y cierre](05-harness-y-cierre.md) | — | ⏳ |
 

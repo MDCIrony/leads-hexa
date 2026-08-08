@@ -160,11 +160,14 @@ cd backend && uv run pytest -m unit -q
 cd .. && ./scripts/verify-e2e.sh
 ```
 
-**`verify-e2e.sh` puede ponerse rojo aquí**, y es el único punto de la fase donde se espera: sus
-comprobaciones de puntuación asumen el umbral fijo de 30, así que un lead que antes quedaba `NEW` o
-`DISQUALIFIED` ahora sale `QUALIFIED` o `UNASSIGNED`. **No lo arregles**: lo reescribe la Tarea 5.
-Anota en tu respuesta la lista concreta de comprobaciones que fallan, con el valor esperado y el
-obtenido.
+**`verify-e2e.sh` puede ponerse rojo aquí**, y es el único punto de la fase donde se espera. Su
+sección «F2a · reglas de puntuación» —la Tarea 2 ya la pasó al contrato nuevo, así que el cuerpo de
+las peticiones está bien— comprueba **estados** que el umbral fijo de 30 decidía: un lead que antes
+quedaba `NEW` o `DISQUALIFIED` ahora sale `QUALIFIED` y, sin regla de asignación que lo cubra,
+`UNASSIGNED`.
+
+**No lo arregles**: lo reescribe la Tarea 5. Anota en tu respuesta la lista concreta de
+comprobaciones que fallan, con el valor esperado y el obtenido.
 
 ```bash
 git commit -m "feat(domain): route by attribute and let the manager own the score cut"
