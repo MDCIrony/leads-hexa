@@ -1,17 +1,27 @@
-from typing import Dict, Optional
+from decimal import Decimal
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.output.domain_event_publisher_port import DomainEventPublisherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.dtos.commands import IngestLeadCommand, LeadProcessedResult
+from domain.entities.intake_record import IntakeError, IntakeRecord
 from domain.entities.lead import Lead
 from domain.entities.sales_group import SalesGroup
-from domain.value_objects.enums import LeadStatus
+from domain.value_objects.enums import IntakeRecordStatus, LeadStatus
 from domain.services.assignment_engine import AssignmentEngine
 from domain.services.scoring_engine import ScoringEngine
 from domain.exceptions import DomainException
 from domain.events.lead_events import LeadProcessedEvent
+
+# Verified against domain/exceptions.py: these are the codes the entity's
+# value objects actually raise. Do not invent new ones.
+_FIELD_BY_ERROR_CODE = {
+    "INVALID_EMAIL": "email",
+    "INVALID_BUDGET": "budget",
+    "INVALID_UUID": "_record",
+}
 
 
 class IngestLeadUseCase(IngestLeadInputPort):
@@ -34,30 +44,48 @@ class IngestLeadUseCase(IngestLeadInputPort):
         self.threshold_disqualified = threshold_disqualified
 
     def execute(self, command: IngestLeadCommand) -> LeadProcessedResult:
-        try:
-            lead = Lead.create(
-                tenant_id=command.tenant_id,
-                source_id=command.source_id,
-                first_name=command.first_name,
-                last_name=command.last_name,
-                email=command.email,
-                company=command.company,
-                budget=command.budget,
-                industry=command.industry,
-                custom_attributes=command.custom_attributes,
-                phone=command.phone,
-            )
-        except DomainException as e:
-            return LeadProcessedResult(
-                lead_id="",
-                status=LeadStatus.FAILED.value,
-                score=0,
-                error=str(e),
-                error_code=e.error_code,
-            )
-
         assigned_agent = None
         with self.uow:
+            # Persisted before Lead.create is attempted: a payload that fails
+            # validation must not vanish. It lands in intake_records either
+            # way, so a manager can see and fix what came in malformed.
+            record = self.uow.intake_records.save(
+                IntakeRecord.create(
+                    tenant_id=command.tenant_id,
+                    source_id=command.source_id,
+                    payload=self._payload_of(command),
+                )
+            )
+
+            try:
+                lead = Lead.create(
+                    tenant_id=command.tenant_id,
+                    source_id=command.source_id,
+                    first_name=command.first_name,
+                    last_name=command.last_name,
+                    email=command.email,
+                    company=command.company,
+                    budget=command.budget,
+                    industry=command.industry,
+                    custom_attributes=command.custom_attributes,
+                    phone=command.phone,
+                )
+            except DomainException as exc:
+                record.reject([IntakeError(
+                    field=self._field_of(exc),
+                    message=str(exc),
+                    error_code=exc.error_code,
+                )])
+                self.uow.intake_records.save(record)
+                return LeadProcessedResult(
+                    lead_id="",
+                    intake_record_id=str(record.id),
+                    status=IntakeRecordStatus.REJECTED.value,
+                    score=0,
+                    error=str(exc),
+                    error_code=exc.error_code,
+                )
+
             scoring_rules = self.uow.rules.get_scoring_rules_by_tenant(lead.tenant_id.value)
             breakdown = self.scoring_engine.evaluate(lead, scoring_rules)
             # The rules that produced a score can be edited or deleted later,
@@ -89,6 +117,8 @@ class IngestLeadUseCase(IngestLeadInputPort):
                         self.uow.rules.save_assignment_rule(lead.tenant_id.value, rule)
 
             saved_lead = self.uow.leads.save(lead)
+            record.promote(saved_lead.id)
+            self.uow.intake_records.save(record)
 
         if self.event_publisher:
             event = LeadProcessedEvent(
@@ -103,9 +133,37 @@ class IngestLeadUseCase(IngestLeadInputPort):
 
         return LeadProcessedResult(
             lead_id=str(saved_lead.id),
+            intake_record_id=str(record.id),
             status=saved_lead.status.value,
             score=int(saved_lead.score),
             assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
             applied_rules_count=len(breakdown.applied),
             webhook_dispatched=True if self.event_publisher else False,
         )
+
+    @staticmethod
+    def _payload_of(command: IngestLeadCommand) -> Dict[str, Any]:
+        """Snapshot the raw command into a JSONB-serializable dict.
+
+        Must not raise on a malformed value (e.g. a non-numeric budget): this
+        runs before Lead.create, so it cannot re-run the validation that is
+        about to happen and reject something the domain hasn't judged yet."""
+        budget = command.budget
+        return {
+            "tenant_id": str(command.tenant_id),
+            "source_id": str(command.source_id),
+            "first_name": command.first_name,
+            "last_name": command.last_name,
+            "company": command.company,
+            "budget": float(budget) if isinstance(budget, Decimal) else budget,
+            "industry": command.industry,
+            "custom_attributes": command.custom_attributes,
+            "phone": command.phone,
+            "email": command.email,
+        }
+
+    @staticmethod
+    def _field_of(exc: DomainException) -> str:
+        # Falls back to "_record" (the payload as a whole) for any error code
+        # not in the map above, rather than guessing a field that isn't real.
+        return _FIELD_BY_ERROR_CODE.get(exc.error_code, "_record")

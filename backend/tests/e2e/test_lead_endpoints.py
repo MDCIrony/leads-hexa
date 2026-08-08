@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from infrastructure.main import app
 from application.ports.output.token_service_port import TokenClaims
 from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
-from domain.value_objects.enums import AgentRole, LeadSourceKind
+from domain.value_objects.enums import AgentRole, IntakeRecordStatus, LeadSourceKind
 
 
 def _manager_auth_headers(tenant_id: str) -> dict:
@@ -230,3 +230,16 @@ def test_ingest_lead_endpoint_negative_budget_returns_400():
         assert data["error"] is True
         assert data["error_code"] == "INVALID_BUDGET"
         assert "message" in data
+        assert data["intake_record_id"]
+
+        # The hinge of this phase: a payload that fails validation is still
+        # persisted, not lost — it lands as a REJECTED IntakeRecord instead
+        # of vanishing behind a 400.
+        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+        uow = PostgresUnitOfWork(app.state.container.database)
+        with uow:
+            record = uow.intake_records.get_by_id_and_tenant(
+                uuid.UUID(data["intake_record_id"]), uuid.UUID(tenant_id)
+            )
+        assert record is not None
+        assert record.status == IntakeRecordStatus.REJECTED

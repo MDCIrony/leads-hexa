@@ -5,7 +5,7 @@ from application.dtos.commands import IngestLeadCommand
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.value_objects.enums import LeadSourceKind
+from domain.value_objects.enums import IntakeRecordStatus, LeadSourceKind
 from infrastructure.adapters.input.api.dependencies import (
     get_ingest_lead_use_case,
     get_process_batch_use_case,
@@ -49,18 +49,23 @@ def ingest_lead(
     )
     result = use_case.execute(command)
 
-    if result.status == "FAILED":
+    if result.status == IntakeRecordStatus.REJECTED.value:
         # A row-level domain validation failure on the single-ingest path is a
-        # transport-level bad request, not a 201 "processed but rejected" body.
-        # The same use case is also called per-row from the batch upload path,
-        # where a FAILED result is a legitimate partial-success outcome — that
-        # path is untouched and keeps reading result.error/result.error_code directly.
+        # transport-level bad request, not a 201 "processed but rejected" body:
+        # the manager filling the form needs to see the failure immediately.
+        # The payload isn't lost either way — IngestLeadUseCase persists it as
+        # a REJECTED IntakeRecord before returning — so refusing to pretend
+        # success here costs nothing. The same use case is also called
+        # per-row from the batch upload path, where a REJECTED result is a
+        # legitimate partial-success outcome — that path is untouched and
+        # keeps reading result.error/result.error_code directly.
         return JSONResponse(
             status_code=400,
             content={
                 "error": True,
                 "error_code": result.error_code,
                 "message": result.error,
+                "intake_record_id": result.intake_record_id,
             },
         )
 

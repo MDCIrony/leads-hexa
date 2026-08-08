@@ -95,7 +95,11 @@ class DiscardLeadRequest(BaseModel):
 
 class FailedRowResponse(BaseModel):
     row_number: int
-    email: str
+    # Optional since T2: a missing email is valid data, not a parse failure,
+    # and a row can fail for an unrelated reason while missing one. A bare
+    # `str` here raised pydantic.ValidationError on such a row, turning a
+    # legitimate partial-success batch response into an HTTP 500.
+    email: Optional[str] = None
     error: str
     error_code: Optional[str] = None
 

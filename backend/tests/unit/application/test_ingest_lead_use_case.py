@@ -125,7 +125,10 @@ def test_ingest_lead_use_case_invalid_email_error():
 
     result = use_case.execute(cmd)
 
-    assert result.status == "FAILED"
+    # T4: a rejected payload is not lost. It lands as a REJECTED
+    # IntakeRecord instead of the retired LeadStatus.FAILED.
+    assert result.status == "REJECTED"
+    assert result.intake_record_id != ""
     assert result.error is not None
     assert "correo electrónico inválido" in result.error
     assert result.error_code == "INVALID_EMAIL"

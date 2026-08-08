@@ -27,7 +27,13 @@ class ProcessBatchUseCase(ProcessBatchInputPort):
             results.append(res)
             if res.error:
                 failed_rows.append(
-                    FailedRow(row_number=idx, email=cmd.email, error=res.error, error_code=res.error_code)
+                    FailedRow(
+                        row_number=idx,
+                        email=cmd.email,
+                        error=res.error,
+                        error_code=res.error_code,
+                        intake_record_id=res.intake_record_id,
+                    )
                 )
             else:
                 successful += 1

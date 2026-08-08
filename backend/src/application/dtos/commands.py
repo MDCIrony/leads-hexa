@@ -129,11 +129,16 @@ class UpdateAssignmentRuleCommand:
 @dataclass(frozen=True)
 class FailedRow:
     row_number: int
-    email: str
+    # Optional since T2: a lead without an email is valid, and a row can
+    # still fail for another reason (e.g. a bad budget) while missing one.
+    email: Optional[str]
     error: str
     # A row can fail without a domain error code — an unexpected parse failure
     # carries a message but no stable code for the client to branch on.
     error_code: Optional[str] = None
+    # What the failure is recoverable from: the manager fixes the payload
+    # sitting in this IntakeRecord instead of re-submitting the whole row.
+    intake_record_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -146,6 +151,9 @@ class LeadProcessedResult:
     webhook_dispatched: bool = False
     error: Optional[str] = None
     error_code: Optional[str] = None
+    # Always populated, success or rejection: the link from a result back to
+    # the payload that produced it.
+    intake_record_id: str = ""
 
 
 @dataclass(frozen=True)

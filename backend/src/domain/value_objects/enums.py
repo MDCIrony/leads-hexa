@@ -15,9 +15,6 @@ class LeadStatus(str, Enum):
     UNASSIGNED = "UNASSIGNED"
     ASSIGNED = "ASSIGNED"
     DISCARDED = "DISCARDED"
-    # Retired in F2b, when IntakeRecord captures what fails validation and a
-    # Lead stops being the place where a rejected payload lands.
-    FAILED = "FAILED"
 
 class AssignmentStrategy(str, Enum):
     ROUND_ROBIN = "ROUND_ROBIN"
