@@ -31,6 +31,7 @@ _TABLES = (
     "routing_rules",
     "agents",
     "webhook_configs",
+    "tenants",
 )
 
 

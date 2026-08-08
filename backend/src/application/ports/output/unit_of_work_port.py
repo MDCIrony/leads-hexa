@@ -5,11 +5,13 @@ from typing import Any
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.agent_repository_port import AgentRepositoryPort
+from application.ports.output.tenant_repository_port import TenantRepositoryPort
 
 class UnitOfWorkPort(abc.ABC):
     leads: LeadRepositoryPort
     rules: RuleRepositoryPort
     agents: AgentRepositoryPort
+    tenants: TenantRepositoryPort
 
     def __enter__(self) -> UnitOfWorkPort:
         return self
