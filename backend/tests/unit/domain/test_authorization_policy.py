@@ -17,8 +17,10 @@ def _agent(
     tenant_id: Optional[UUID] = None,
     agent_id: Optional[UUID] = None,
 ) -> Agent:
+    # No group: authorization turns on role and tenant alone, so leaving the
+    # agent ungrouped keeps these cases independent of the assignment model.
     return Agent.create(
-        "Someone", "someone@test.com", "Sales", role=role, tenant_id=tenant_id, agent_id=agent_id
+        "Someone", "someone@test.com", role=role, tenant_id=tenant_id, agent_id=agent_id
     )
 
 
