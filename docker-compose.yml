@@ -26,6 +26,13 @@ services:
       # backend-test service, and this service would silently run pytest
       # instead of serving the API.
       target: runner
+    # Source mounted read-only so a code change needs `restart`, not `--build`.
+    # Only src/ and migrations/: mounting /app would shadow the virtualenv the
+    # image builds at /app/.venv and nothing would import. Read-only because the
+    # container must never write back into the working tree.
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/migrations:/app/migrations:ro
     ports:
       # 8001 on the host: 8000 is a common default and is often already taken.
       # Inside the compose network the API still listens on 8000.
@@ -62,6 +69,13 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: test
+    # Same reasoning as `backend`, plus tests/. This is what makes `--build`
+    # unnecessary on every run: the suite executes the working tree as it is.
+    # Rebuild only when pyproject.toml or uv.lock change.
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/tests:/app/tests:ro
+      - ./backend/migrations:/app/migrations:ro
     depends_on:
       db:
         condition: service_healthy
@@ -69,6 +83,9 @@ services:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
       - TEST_DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
       - JWT_SECRET=test-secret-do-not-use-in-production
+      # The mounts are read-only, so bytecode cannot be cached anyway; saying so
+      # avoids a warning per module.
+      - PYTHONDONTWRITEBYTECODE=1
     command: ["pytest", "-q"]
 
 volumes:

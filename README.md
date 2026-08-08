@@ -271,15 +271,29 @@ Sin infraestructura (dominio y casos de uso, sin variables de entorno):
 cd backend && uv run pytest -m unit
 ```
 
-Suite completa (256 tests: unit, integration, e2e y architecture) dentro de
+Suite completa (309 tests: unit, integration, e2e y architecture) dentro de
 Docker, que es la única forma reproducible de ejecutarla porque requiere
 `DATABASE_URL` apuntando a un PostgreSQL real:
 ```bash
-docker compose --profile test run --rm --build backend-test
+docker compose --profile test run --rm backend-test
 ```
 
-> **El `--build` no es opcional.** Sin él, Docker reutiliza la imagen en caché y ejecuta código
-> viejo: la suite pasa en verde sin haber probado tus cambios.
+> `src/`, `tests/` y `migrations/` están montados en el contenedor, así que la suite ejecuta el
+> árbol de trabajo tal cual está. **Sólo hace falta `--build` cuando cambian `pyproject.toml` o
+> `uv.lock`**, porque el entorno virtual sí vive dentro de la imagen.
+
+### Verificación de negocio
+
+La suite prueba el código; este script prueba el **producto**, sobre HTTP real con tokens reales:
+
+```bash
+./scripts/verify-e2e.sh              # contra la pila levantada, ~3 s
+./scripts/verify-e2e.sh --reset      # recreando el volumen, al cerrar una fase
+```
+
+Cada ejecución usa identificadores propios, así que no necesita base limpia para dar una respuesta
+correcta. **Crece con cada fase:** se le añade una función `verify_fN` y se llama desde `main`. No se
+reescribe.
 
 El puerto 5433 del host publica el PostgreSQL del compose. Sirve para
 ejecutar la suite completa desde fuera del contenedor exportando
