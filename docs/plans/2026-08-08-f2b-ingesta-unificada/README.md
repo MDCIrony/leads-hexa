@@ -25,8 +25,8 @@ lugar de él.
 | 3 | [`IntakeRecord` e `IntakeError`](03-intake-record.md) | ✅ `6d24369` |
 | 4 | [El pipeline unificado y la retirada de `FAILED`](04-pipeline-unificado.md) | ✅ `0be1127` |
 | 5a | [La organización sale del token](05a-autenticacion.md) | ✅ `b34a534`, `34e84aa` |
-| 5b | [CRUD de orígenes](05b-crud-origenes.md) | ⏳ **siguiente** |
-| 5c | [La bandeja de entrada](05c-bandeja.md) | ⏳ |
+| 5b | [CRUD de orígenes](05b-crud-origenes.md) | ✅ `921ec8c` |
+| 5c | [La bandeja de entrada](05c-bandeja.md) | ⏳ **siguiente** |
 | 6 | [Harness y cierre](06-harness-y-cierre.md) | ⏳ |
 
 Trabajo previo, fuera de las tareas: `edba1cc` desacopla el harness del orden de importación,

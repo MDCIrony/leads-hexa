@@ -30,6 +30,7 @@ nada: la promoción no funciona sin él, y el motivo no es evidente desde el có
 | `backend/src/application/ports/input/ingest_lead_use_case_port.py` | El ABC sigue a su implementación |
 | `backend/src/application/dtos/commands.py` | `IntakeRecordsPageResult`, `PromoteIntakeRecordCommand` |
 | `backend/src/application/dtos/queries.py` | `GetIntakeRecordsQuery` |
+| `backend/src/infrastructure/adapters/input/api/exception_handlers.py` | Todo código de error nuevo necesita fila en `STATUS_BY_ERROR_CODE` |
 | `backend/src/infrastructure/adapters/input/api/intake_router.py` | Los tres endpoints nuevos |
 | `backend/src/infrastructure/adapters/input/api/schemas.py` | Los tres esquemas |
 | `backend/src/infrastructure/adapters/input/api/dependencies.py` | Tres proveedores |
@@ -199,6 +200,18 @@ En `intake_router.py`, junto a los de ingesta que 5a dejó autenticados. Mismas 
 `promote` devuelve `200` con el `LeadProcessedResponse` que ya existe si sale bien, y `400` con el
 mismo sobre de error que usa la ingesta (`error`, `error_code`, `message`, `intake_record_id`) si el
 payload corregido vuelve a fallar. `discard` devuelve `204`.
+
+**`exception_handlers.py` traduce los códigos de dominio a HTTP** con la tabla
+`STATUS_BY_ERROR_CODE`, y lo que no está en ella cae en `_DEFAULT_STATUS = 400`. Un
+`INTAKE_RECORD_NOT_FOUND` sin fila devolvería 400 en vez de 404 y rompería C5 en silencio, con el
+test del 404 fallando por un motivo que no está donde lo buscarías. Añade:
+
+```python
+    "INTAKE_RECORD_NOT_FOUND": 404,
+```
+
+`INVALID_INTAKE_TRANSITION` e `INVALID_INTAKE_STATUS` sí quieren 400, que es el valor por defecto:
+no los añadas.
 
 En `dependencies.py`, tres proveedores. El de promoción compone dos:
 

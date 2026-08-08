@@ -272,7 +272,7 @@ Sigue la forma de `test_agent_endpoints.py`: `TestClient(app)`, un gestor por or
 | Crear un origen | `201`, y aparece en el listado |
 | Crear con nombre repetido en la misma organización | `SOURCE_ALREADY_EXISTS`, y el listado no crece |
 | El mismo nombre en **otra** organización | `201`: la unicidad es por organización |
-| `GET`, `PATCH` y `DELETE` de un origen de otra organización | **404** en los tres |
+| `PATCH` y `DELETE` de un origen de otra organización | **404** en ambos. No hay `GET` de detalle: la superficie del Paso 7 sólo expone la colección |
 | `PATCH` con `is_active: false` y luego `true` | El campo cambia en ambos sentidos |
 | Borrar un origen sin leads | `204` |
 | Borrar un origen con un lead ingerido | `SOURCE_IN_USE`, no un 500 |
