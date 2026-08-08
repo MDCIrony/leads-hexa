@@ -1,10 +1,4 @@
-import os
 import uuid
-
-os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
-os.environ.setdefault(
-    "DATABASE_URL", "postgresql://postgres:postgrespassword@localhost:5433/leads_test"
-)
 
 from fastapi.testclient import TestClient
 

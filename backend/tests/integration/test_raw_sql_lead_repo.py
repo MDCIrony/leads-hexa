@@ -1,14 +1,10 @@
 import uuid
-from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
 from domain.entities.lead import Lead
 from domain.value_objects import LeadStatus
 
-def test_raw_sql_lead_repository_lifecycle():
-    db = RawSqlDatabase()
-    db.init_db()
-
-    with db.get_connection() as connection:
+def test_raw_sql_lead_repository_lifecycle(test_db):
+    with test_db.get_connection() as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
         lead_id = uuid.uuid4()

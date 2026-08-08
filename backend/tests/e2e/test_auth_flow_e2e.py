@@ -1,9 +1,4 @@
-import os
 import uuid
-os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
-# `infrastructure.main` reads Settings at module level (for CORS), so
-# DATABASE_URL must exist by import time, not just by app startup.
-os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgrespassword@localhost:5433/leads_test")
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
