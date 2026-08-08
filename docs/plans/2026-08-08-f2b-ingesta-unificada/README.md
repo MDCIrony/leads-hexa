@@ -80,9 +80,8 @@ docker compose --profile test run --rm backend-test pytest -q tests/unit
 # Unitarios sin variables de entorno (deben pasar fuera de Docker)
 cd backend && uv run pytest -m unit -q
 
-# Verificación de negocio (~3 s). El contenedor monta el código pero NO recarga:
-# sin el restart, el harness valida la versión anterior y engaña.
-docker compose restart backend && sleep 3
+# Verificación de negocio (~3 s). El contenedor recarga en caliente lo que
+# cambies en src/, así que no hace falta ni --build ni restart.
 ./scripts/verify-e2e.sh
 ```
 

@@ -22,11 +22,13 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       # Explicit: without it, `docker build` targets the last stage in the
-      # Dockerfile, which became `test` once that stage was appended for the
-      # backend-test service, and this service would silently run pytest
-      # instead of serving the API.
-      target: runner
-    # Source mounted read-only so a code change needs `restart`, not `--build`.
+      # Dockerfile, and this service would silently run pytest instead of
+      # serving the API. `dev` is `runner` plus a file watcher.
+      target: dev
+    # Source mounted read-only and hot-reloaded: a code change needs neither
+    # `--build` nor `restart`. Without the reload the container would keep
+    # serving whatever it loaded at startup, and verify-e2e.sh would pass
+    # against the previous version — a green run that proves nothing.
     # Only src/ and migrations/: mounting /app would shadow the virtualenv the
     # image builds at /app/.venv and nothing would import. Read-only because the
     # container must never write back into the working tree.

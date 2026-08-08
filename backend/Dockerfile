@@ -36,7 +36,23 @@ USER appuser
 
 CMD ["uvicorn", "infrastructure.main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "src"]
 
-# Stage 3: test runner, used by the `backend-test` compose profile.
+# Stage 3: development server, used by the `backend` compose service.
+# Inherits from `runner` rather than `builder` so development keeps the
+# unprivileged user and the slim image, and differs from production in exactly
+# one thing: the watcher. Production has nothing to watch — its source is baked
+# into the image, not mounted — so carrying watchfiles there would be dead weight.
+FROM runner AS dev
+USER root
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
+RUN uv pip install --python /app/.venv/bin/python watchfiles
+USER appuser
+# --reload-dir is explicit: the default watches the whole working directory,
+# which would also cover /app/migrations, where a change needs the process to
+# restart and re-run the migration, not to hot-reload the app.
+CMD ["uvicorn", "infrastructure.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--app-dir", "src", "--reload", "--reload-dir", "/app/src"]
+
+# Stage 4: test runner, used by the `backend-test` compose profile.
 # Inherits from `builder` (already ran `COPY . .`), so src/, tests/, and
 # migrations/ are already present; only pytest itself is missing because the
 # builder installs with --no-dev.

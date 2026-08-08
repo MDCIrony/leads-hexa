@@ -286,7 +286,6 @@ borra después el origen `MANUAL_FORM`.
 
 ```bash
 docker compose --profile test run --rm backend-test
-docker compose restart backend && sleep 3
 ./scripts/verify-e2e.sh
 git commit -m "feat(api): let the manager see and edit where leads come from"
 ```

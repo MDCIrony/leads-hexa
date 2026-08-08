@@ -271,7 +271,6 @@ Y aparte:
 ```bash
 docker compose --profile test run --rm backend-test
 cd backend && uv run pytest -m unit -q      # el dominio cambió: debe seguir verde sin base de datos
-cd .. && docker compose restart backend && sleep 3
-./scripts/verify-e2e.sh
+cd .. && ./scripts/verify-e2e.sh
 git commit -m "feat(api): open the manager's inbox over what could not be read"
 ```

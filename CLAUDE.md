@@ -5,8 +5,9 @@ arquitectura hexagonal.
 
 ## Validación
 
-Tres comandos. **Ninguno necesita `--build`**: el código y los tests van montados como volúmenes.
-Sólo se reconstruye si cambian `pyproject.toml` o `uv.lock`.
+Tres comandos. **Ninguno necesita `--build` ni `restart`**: el código y los tests van montados como
+volúmenes, y la API recarga en caliente lo que cambie en `src/`. Sólo se reconstruye si cambian
+`pyproject.toml`, `uv.lock` o el `Dockerfile`.
 
 ```bash
 docker compose --profile test run --rm backend-test    # suite completa     ~45 s
