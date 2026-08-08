@@ -37,7 +37,8 @@ campaña, y el síntoma aparece semanas después como "vinieron menos leads de l
 7. Migración `005`
 
 **No entra:** las reglas de descalificación que aprovechan el correo opcional (F2c), la
-deduplicación por identidad (sin fase), y el adaptador de webhook entrante (F3b).
+deduplicación por identidad ([fuera del alcance del MVP](../product/mejoras-futuras/01-identidad-del-contacto.md)),
+y el adaptador de webhook entrante (F3b).
 
 ## 3. Por qué el correo opcional cae en esta fase
 
@@ -84,8 +85,9 @@ acceso.
 ### Consecuencia para el futuro
 
 Si el correo puede faltar, **no puede ser la identidad del contacto**. La resolución de identidad
-—cuando llegue— necesitará una clave compuesta o un campo distinto. Registrado en
-[`docs/product/02 §6`](../product/02-el-modelo-de-decision.md).
+—cuando llegue— necesitará una clave compuesta o un campo distinto, elegido por cada organización.
+Queda fuera del alcance de este MVP y está desarrollado en
+[`docs/product/mejoras-futuras/01`](../product/mejoras-futuras/01-identidad-del-contacto.md).
 
 ## 4. `LeadSource` — el origen como entidad
 

@@ -25,6 +25,7 @@ párrafo sólo se entiende sabiendo Python, pertenece a `specs/`.
 | [01 — El problema y los conceptos](01-el-problema-y-los-conceptos.md) | **Esbozo** | Por qué existe la plataforma, los dos ejes de decisión, el vocabulario del sector y los casos de uso profesionales que la respaldan |
 | [02 — El modelo de decisión](02-el-modelo-de-decision.md) | **Esbozo** | Las tres decisiones y su naturaleza (binaria, continua, categórica), qué pasa cuando se confunden, el recorrido en tres etapas, la semántica de cada estado, cómo se componen las reglas y el lead que vuelve |
 | [03 — Dominio y organización](03-dominio-y-organizacion.md) | **Catálogo vivo** | Qué reglas son ciertas siempre y cuáles decide cada organización. La prueba para distinguirlas, el catálogo de ambos lados, las tres que están en el lado equivocado y los casos aún en discusión |
+| [Mejoras futuras](mejoras-futuras/) | **Fuera de alcance** | Capacidades que se discutieron y se decidieron para después, con lo que habría que resolver antes de construirlas |
 
 ## Por escribir
 
@@ -37,7 +38,6 @@ Ninguno de estos existe todavía. Se listan para fijar el alcance, no como prome
 | `06 — Recetario de reglas` | Configuraciones que resuelven casos reales: reparto por calidad, por canal, por carga, equipos de enriquecimiento | Condiciones por atributo en las reglas de asignación |
 | `07 — Glosario` | Lead, tenant, grupo, puntuación, banda, asignación, descarte, MQL/SQL, SDR/AE | — |
 | `08 — Preguntas frecuentes` | Por qué un lead no se asignó, por qué una regla no se cumple, qué significa cada estado | Uso real |
-| `09 — Identidad del contacto` | Deduplicación, histórico de intentos, rescate de descartados. Esbozado en el [02 §6](02-el-modelo-de-decision.md) | Fase propia, sin planificar |
 
 ## Cómo se escribe aquí
 

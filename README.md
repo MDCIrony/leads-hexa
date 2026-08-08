@@ -172,50 +172,18 @@ sequenceDiagram
 
 ---
 
-## 📁 2. Estructura del Monorepo
-
-```
-leads-hexa/
-├── backend/                            # FastAPI + Python 3.12 (uv, pyproject.toml)
-│   ├── migrations/                     # SQL numerado, aplicado al arrancar
-│   ├── src/
-│   │   ├── domain/                     # NÚCLEO PURO (Value Objects, Entities, Services, Policies)
-│   │   ├── application/                # CASOS DE USO Y PUERTOS (Interfaces abc.ABC & DTOs)
-│   │   └── infrastructure/             # ADAPTADORES (FastAPI, Raw SQL, httpx, pandas, JWT)
-│   ├── tests/
-│   │   ├── unit/                       # Dominio y aplicación, sin infraestructura
-│   │   ├── integration/                # Raw SQL y parsers contra PostgreSQL real
-│   │   ├── e2e/                        # API completa sobre TestClient
-│   │   └── architecture/               # Guardián de la regla de dependencias (AST)
-│   ├── Dockerfile
-│   └── pyproject.toml
-├── frontend/                           # React 19 + TypeScript + Vite + Tailwind CSS
-│   ├── src/
-│   │   ├── domain/                     # Modelos de Dominio Frontend
-│   │   ├── application/                # Mappers (DTO <-> Domain) & Services
-│   │   ├── infrastructure/             # DTOs REST & Axios API Client
-│   │   └── presentation/               # UI Components & Pages (Tailwind v4)
-│   ├── tests/                          # Tests unitarios con Vitest
-│   ├── Dockerfile
-│   └── nginx.conf                      # SPA Server + Reverse Proxy Proxy Pass /api/v1
-├── docs/
-│   ├── product/                        # Qué problema resuelve y cómo se usa (sin jerga técnica)
-│   ├── specs/                          # Diseño del MVP: el qué y el porqué
-│   ├── plans/                          # Planes de implementación por fase
-│   ├── api/                            # Referencia de endpoints y errores
-│   └── diagrams/                       # .drawio nativos (⚠️ ver docs/diagrams/README.md)
-├── docker-compose.yml                  # Orquestación completa (DB, Backend, Frontend)
-└── README.md
-```
-
-### Por dónde empezar a leer
+## 📁 2. Por dónde empezar a leer
 
 | Si buscas… | Ve a |
 |---|---|
 | Qué problema de negocio resuelve, en lenguaje llano | [docs/product/](docs/product/) |
-| Qué hace el sistema y por qué está diseñado así | [docs/specs/](docs/specs/2026-08-07-lead-router-mvp-design.md) |
-| Qué se está construyendo ahora | [docs/plans/](docs/plans/) — el plan sin marca de cerrado |
+| Qué se dejó **fuera** a propósito, y por qué | [docs/product/mejoras-futuras/](docs/product/mejoras-futuras/) |
 | Contratos HTTP, cuerpos y códigos de error | [docs/api/endpoints.md](docs/api/endpoints.md) |
+| Cómo se valida y cómo se reparte el trabajo | [CLAUDE.md](CLAUDE.md) |
+
+El backend y el frontend comparten la misma separación en capas —dominio, aplicación,
+infraestructura—, así que la estructura de carpetas se explica sola una vez entendido el diagrama
+hexagonal de arriba.
 
 ---
 

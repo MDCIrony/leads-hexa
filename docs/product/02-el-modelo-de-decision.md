@@ -172,33 +172,23 @@ abre la puerta, y por eso conviene tomarla bien aunque la interfaz tarde en lleg
 
 ---
 
-## 6. El lead que vuelve *(concepto de futuro, no implementado)*
+## 6. El lead que vuelve *(fuera del alcance de este MVP)*
 
 Un mismo contacto puede entrar **varias veces**: rellenó el formulario, no le llamaron, volvió a
-pedir información dos semanas después. Hoy la plataforma trataría cada entrada como un lead nuevo e
+pedir información dos semanas después. Hoy la plataforma trata cada entrada como un lead nuevo e
 independiente.
 
-Reconocer que es el mismo tiene un nombre en el sector: **deduplicación** o **resolución de
-identidad**, y es funcionalidad estándar en las plataformas comerciales.
+Reconocer que es el mismo se llama **deduplicación** o **resolución de identidad**, y no entra en
+esta entrega. La razón no es su tamaño: es que **el campo por el que dos entradas son «la misma
+persona» lo decide cada organización**, no la plataforma, así que la funcionalidad incluye su propia
+configuración.
 
-**Por qué da valor, más allá de no duplicar filas:**
+Está desarrollado en
+[Mejoras futuras · Identidad del contacto](mejoras-futuras/01-identidad-del-contacto.md): el valor
+que aporta, por qué el identificador es configurable y las dos decisiones que siguen abiertas.
 
-| Lo que se gana | Por qué importa |
-|---|---|
-| **La repetición es señal de intención** | Alguien que vuelve dos veces quiere algo. Un lead que insiste vale más que uno idéntico que entró una vez |
-| **Histórico de intentos de contacto** | El asesor sabe que ya se le llamó y no funcionó, en vez de repetir la misma llamada |
-| **Rescate de descartados** | Un contacto descalificado por falta de datos que vuelve **con** teléfono deja de estarlo. Sin identidad, esa segunda oportunidad se pierde |
-| **Métrica real de canal** | Si el mismo contacto entra por tres campañas, el recuento por canal miente hasta que se deduplican |
-
-**Lo que hay que decidir antes de construirlo**, y por lo que no entra en esta iteración:
-
-- **Qué campo es la identidad.** ¿Correo? ¿Teléfono? ¿Documento? Cada uno falla de una forma:
-  correos compartidos en una empresa, teléfonos reasignados, documentos que no siempre se piden.
-- **Qué hacer con coincidencias parciales.** Mismo teléfono, correo distinto: ¿es la misma persona
-  o un familiar?
-- **Cuánto tiempo se conserva un rechazado.** Es una decisión de protección de datos, no técnica.
-
-Ninguna de las tres es una pregunta de programación. Por eso es una fase propia y no un añadido.
+Aquí sólo importa retener una consecuencia del correo opcional (§1): **un campo que puede faltar no
+puede ser la identidad por sí solo**.
 
 ---
 

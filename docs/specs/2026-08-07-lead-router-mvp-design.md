@@ -1106,12 +1106,25 @@ Esto elimina también la fragilidad actual: los tests extremo a extremo comparte
 | **F0** — Fundación | Puertos de seguridad, DTOs sin framework, políticas de dominio, composition root, contexto de petición, excepciones sin HTTP, migraciones, pool, logging, `conftest.py`, marcadores, test de arquitectura | El test de arquitectura pasa; `pytest -m unit` verde sin base de datos; la suite completa verde con el compose levantado |
 | **F1** — Grupos y asignación | `Tenant`, `SalesGroup`, `AssignmentRule` renovada, motor de asignación corregido, carga derivada, CRUD completo de asesores, grupos y reglas | Un gestor crea grupos, asesores y reglas, y un lead ingestado se asigna al asesor correcto según cada estrategia |
 | **F2a** — Puntuación y ciclo de vida | Motor de puntuación corregido (§7.1) con desglose de reglas aplicadas, máquina de estados del lead, asignación manual, descarte, `/leads/mine` | ✅ Cerrada. Un lead sin asesor queda `UNASSIGNED` y se puede asignar a mano; el gestor ve qué reglas puntuaron |
-| **F2b** — Ingesta unificada | `LeadSource`, `IntakeRecord`, `IntakeError`, pipeline unificado, **cierre de la ingesta sin autenticar**, **correo opcional en el lead** ([diseño](2026-08-08-f2b-ingesta-unificada-design.md)) | Un lead mal formado queda en la bandeja con su error; el gestor lo corrige y se promueve; nadie ingesta sin credencial; nada de lo que entra se pierde |
-| **F2c** — Reglas componibles | `Criterion` extraído, condiciones múltiples por regla, operadores de vacío, `DisqualificationRule`, condiciones por atributo en el reparto, retirada del umbral fijo ([diseño](2026-08-08-f2c-reglas-componibles-design.md)) | El gestor escribe «sin teléfono y sin correo → descartar» y «los de este canal, a este equipo», y ambas se cumplen. Ningún criterio comercial queda en el código |
-| **F3a** — Notificaciones | `Notification`, manejadores de eventos, endpoints, contador de no leídas | El asesor recibe aviso al asignársele un lead; el gestor lo recibe ante un rechazo o un lead sin asignar |
+| **F2b** — Ingesta unificada | `LeadSource`, `IntakeRecord`, `IntakeError`, pipeline unificado, **cierre de la ingesta sin autenticar**, **correo opcional en el lead** ([diseño](2026-08-08-f2b-ingesta-unificada-design.md), [plan](../plans/2026-08-08-f2b-ingesta-unificada.md)) | 🔄 **En curso.** Hechos el motor (origen del lead, correo opcional, registro de ingesta, pipeline unificado, retirada de `FAILED`); pendiente toda la superficie de API: autenticación, CRUD de orígenes y bandeja |
+| **F2c** — Reglas componibles | `Criterion` extraído, condiciones múltiples por regla, operadores de vacío, `DisqualificationRule`, condiciones por atributo en el reparto, **retirada del umbral fijo** ([diseño](2026-08-08-f2c-reglas-componibles-design.md)) | El gestor escribe «sin teléfono y sin correo → descartar» y «los de este canal, a este equipo», y ambas se cumplen. Ningún criterio comercial queda en el código |
+| **F3a** — Notificaciones | `Notification`, manejadores de eventos, endpoints, contador de no leídas. Aquí se corrige que `webhook_dispatched` mienta (§2.2) | El asesor recibe aviso al asignársele un lead; el gestor lo recibe ante un rechazo o un lead sin asignar |
+| **F3b** — Webhook entrante | Adaptador de fuente externa autenticada por firma, sobre el contrato que F2b deja definido (§8) | Un sistema de terceros ingesta leads con el secreto de su origen, sin credencial de usuario |
 | **F4** — Frontend | Arquitectura (router, sesión, capa de datos, guards, tipos generados) y después las vistas de ambos paneles | Un gestor y un asesor completan sus recorridos contra el backend real, sin ningún dato simulado |
 
 Cada fase es entregable y demostrable por separado. La ordenación no es negociable: F0 establece las fronteras que el resto respeta, y hacerla al final significaría reescribir todo lo construido encima.
+
+### Fuera del alcance de este MVP
+
+Decidido conscientemente, no olvidado. Cada capacidad está desarrollada en
+[`docs/product/mejoras-futuras/`](../product/mejoras-futuras/) con el valor que aporta y lo que
+habría que resolver antes de construirla.
+
+| Capacidad | Por qué queda fuera |
+|---|---|
+| **Identidad del contacto** (deduplicación) | El campo que define «es la misma persona» lo elige cada organización, así que arrastra su propia configuración. Y quedan dos decisiones abiertas, una de protección de datos |
+| **Constructor visual de reglas** | El valor está en el modelo de composición, no en la interfaz. Con reglas componibles (F2c) el lienzo es una capa encima, no un rediseño |
+| **Rango acotado de puntuación** | Hoy la escala no tiene límites y nada impide una regla de ±9999. Catalogado en [`03 §6`](../product/03-dominio-y-organizacion.md) |
 
 **Estado real.** F0 se ejecutó en tres tramos: F0 (fundación), F0.5 (separación de los dos planos) y F0.6 (tipos nativos en SQL). F1 y **F2a** están cerradas y verificadas. La siguiente es **F2b**.
 
