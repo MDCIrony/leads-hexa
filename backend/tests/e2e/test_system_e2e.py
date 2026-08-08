@@ -109,7 +109,7 @@ def test_full_system_lead_routing_flow_e2e():
 
         # 4. Ingestar Lead
         ingest_resp = client.post(
-            f"/api/v1/intake/{tenant_id}/leads/ingest",
+            "/api/v1/intake/leads/ingest",
             json={
                 "first_name": "Maria",
                 "last_name": "Gomez",
@@ -119,6 +119,7 @@ def test_full_system_lead_routing_flow_e2e():
                 "industry": "Technology",
                 "custom_attributes": {"employee_count": 150},
             },
+            headers=headers,
         )
         assert ingest_resp.status_code == 201
         result = ingest_resp.json()

@@ -74,7 +74,8 @@ def test_ingest_lead_endpoint_success():
         # (opened on FastAPI startup, closed on shutdown), so seeding must
         # happen after entering this block, not before it.
         _seed_tenant_with_sources(tenant_id)
-        response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
+        headers = _manager_auth_headers(tenant_id)
+        response = client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
         assert response.status_code == 201
         data = response.json()
         assert "lead_id" in data
@@ -94,7 +95,8 @@ def test_ingest_lead_endpoint_invalid_email_validation():
 
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
-        response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
+        headers = _manager_auth_headers(tenant_id)
+        response = client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
         assert response.status_code == 422
 
 def test_batch_upload_endpoint():
@@ -109,7 +111,8 @@ def test_batch_upload_endpoint():
 
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
-        response = client.post(f"/api/v1/intake/{tenant_id}/leads/batch-upload", files=files)
+        headers = _manager_auth_headers(tenant_id)
+        response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert "job_id" in data
@@ -129,7 +132,8 @@ def test_batch_upload_reports_failed_rows_without_losing_the_valid_ones():
 
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
-        response = client.post(f"/api/v1/intake/{tenant_id}/leads/batch-upload", files=files)
+        headers = _manager_auth_headers(tenant_id)
+        response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["total_rows"] == 3
@@ -174,7 +178,7 @@ def test_list_leads_by_tenant_endpoint():
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
-        client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
+        client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
 
         response = client.get("/api/v1/leads", headers=headers)
         assert response.status_code == 200
@@ -200,13 +204,14 @@ def test_list_leads_pagination_has_more_flag():
         headers = _manager_auth_headers(tenant_id)
         for i in range(3):
             client.post(
-                f"/api/v1/intake/{tenant_id}/leads/ingest",
+                "/api/v1/intake/leads/ingest",
                 json={
                     **base_payload,
                     "first_name": f"Lead{i}",
                     "last_name": "Test",
                     "email": f"lead{i}@example.com",
                 },
+                headers=headers,
             )
 
         response = client.get("/api/v1/leads?limit=2&offset=0", headers=headers)
@@ -235,7 +240,8 @@ def test_ingest_lead_endpoint_negative_budget_returns_400():
 
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
-        response = client.post(f"/api/v1/intake/{tenant_id}/leads/ingest", json=payload)
+        headers = _manager_auth_headers(tenant_id)
+        response = client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
         assert response.status_code == 400
         data = response.json()
         assert data["error"] is True

@@ -4,7 +4,5 @@ from application.dtos.commands import BatchProcessResult
 
 class ProcessBatchInputPort(ABC):
     @abstractmethod
-    def execute(
-        self, file_content: bytes, filename: str, tenant_id: UUID, source_id: UUID
-    ) -> BatchProcessResult:
+    def execute(self, file_content: bytes, filename: str, tenant_id: UUID) -> BatchProcessResult:
         pass

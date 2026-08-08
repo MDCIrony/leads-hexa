@@ -4,6 +4,7 @@ from application.ports.input.process_batch_use_case_port import ProcessBatchInpu
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.output.file_parser_port import FileParserPort
 from application.dtos.commands import BatchProcessResult, FailedRow
+from domain.value_objects.enums import LeadSourceKind
 
 class ProcessBatchUseCase(ProcessBatchInputPort):
     def __init__(
@@ -14,9 +15,8 @@ class ProcessBatchUseCase(ProcessBatchInputPort):
         self.file_parser = file_parser
         self.ingest_lead_use_case = ingest_lead_use_case
 
-    def execute(
-        self, file_content: bytes, filename: str, tenant_id: UUID, source_id: UUID
-    ) -> BatchProcessResult:
+    def execute(self, file_content: bytes, filename: str, tenant_id: UUID) -> BatchProcessResult:
+        source_id = self.ingest_lead_use_case.resolve_source_id(tenant_id, LeadSourceKind.FILE_UPLOAD)
         commands = self.file_parser.parse_leads_file(file_content, filename, tenant_id, source_id)
         results = []
         successful = 0

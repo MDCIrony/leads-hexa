@@ -1,15 +1,14 @@
-from uuid import UUID
 from fastapi import APIRouter, Depends, File, UploadFile, status
 from fastapi.responses import JSONResponse
 from application.dtos.commands import IngestLeadCommand
+from application.dtos.context import RequestContext
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
-from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.value_objects.enums import IntakeRecordStatus, LeadSourceKind
 from infrastructure.adapters.input.api.dependencies import (
     get_ingest_lead_use_case,
     get_process_batch_use_case,
-    get_uow,
+    require_organization_manager,
 )
 
 from infrastructure.adapters.input.api.schemas import (
@@ -21,23 +20,16 @@ from infrastructure.adapters.input.api.schemas import (
 
 router = APIRouter()
 
-# Unauthenticated by design until F2 introduces LeadSource credentials.
-# Tracked in docs/specs/2026-08-07-lead-router-mvp-design.md §8.
 @router.post("/ingest", response_model=LeadProcessedResponse, status_code=status.HTTP_201_CREATED)
 def ingest_lead(
-    tenant_id: UUID,
     request: IngestLeadRequest,
+    context: RequestContext = Depends(require_organization_manager),
     use_case: IngestLeadInputPort = Depends(get_ingest_lead_use_case),
-    uow: UnitOfWorkPort = Depends(get_uow),
 ):
-    # Resolved here only until T5 moves this into the use case itself; every
-    # tenant gets a MANUAL_FORM source automatically at creation (CreateTenantUseCase).
-    with uow:
-        source = uow.sources.get_by_kind(tenant_id, LeadSourceKind.MANUAL_FORM)
-
+    source_id = use_case.resolve_source_id(context.tenant_id, LeadSourceKind.MANUAL_FORM)
     command = IngestLeadCommand(
-        tenant_id=tenant_id,
-        source_id=source.id.value,
+        tenant_id=context.tenant_id,
+        source_id=source_id,
         first_name=request.first_name,
         last_name=request.last_name,
         email=request.email,
@@ -81,24 +73,17 @@ def ingest_lead(
         intake_record_id=result.intake_record_id,
     )
 
-# Unauthenticated by design until F2 introduces LeadSource credentials.
-# Tracked in docs/specs/2026-08-07-lead-router-mvp-design.md §8.
 @router.post("/batch-upload", response_model=BatchProcessResponse, status_code=status.HTTP_200_OK)
 async def batch_upload(
-    tenant_id: UUID,
     file: UploadFile = File(...),
+    context: RequestContext = Depends(require_organization_manager),
     use_case: ProcessBatchInputPort = Depends(get_process_batch_use_case),
-    uow: UnitOfWorkPort = Depends(get_uow),
 ):
-    with uow:
-        source = uow.sources.get_by_kind(tenant_id, LeadSourceKind.FILE_UPLOAD)
-
     content = await file.read()
     result = use_case.execute(
         file_content=content,
         filename=file.filename or "leads.csv",
-        tenant_id=tenant_id,
-        source_id=source.id.value,
+        tenant_id=context.tenant_id,
     )
     return BatchProcessResponse(
         job_id=result.job_id,

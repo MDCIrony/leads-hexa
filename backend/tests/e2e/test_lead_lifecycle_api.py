@@ -78,9 +78,9 @@ def _create_agent(client: TestClient, manager_token: str) -> tuple[str, str]:
     return login.json()["access_token"], created.json()["id"]
 
 
-def _ingest_qualified_lead(client: TestClient, tenant_id: str) -> str:
+def _ingest_qualified_lead(client: TestClient, manager_token: str, tenant_id: str) -> str:
     ingested = client.post(
-        f"/api/v1/intake/{tenant_id}/leads/ingest",
+        "/api/v1/intake/leads/ingest",
         json={
             "first_name": "Lead",
             "last_name": uuid.uuid4().hex[:6],
@@ -89,6 +89,7 @@ def _ingest_qualified_lead(client: TestClient, tenant_id: str) -> str:
             "budget": 1000,
             "industry": "tech",
         },
+        headers={"Authorization": f"Bearer {manager_token}"},
     )
     assert ingested.status_code == 201, ingested.text
     assert ingested.json()["status"] == "UNASSIGNED", ingested.text
@@ -96,7 +97,7 @@ def _ingest_qualified_lead(client: TestClient, tenant_id: str) -> str:
 
 
 def _ingest_and_assign(client: TestClient, manager_token: str, tenant_id: str, agent_id: str) -> str:
-    lead_id = _ingest_qualified_lead(client, tenant_id)
+    lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
     assigned = client.post(
         f"/api/v1/leads/{lead_id}/assign",
         json={"agent_id": agent_id},
@@ -169,7 +170,7 @@ def test_a_manager_assigns_a_lead_by_hand(test_db):
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
         _, agent_id = _create_agent(client, manager_token)
-        lead_id = _ingest_qualified_lead(client, tenant_id)
+        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
@@ -191,7 +192,7 @@ def test_assigning_an_agent_of_another_organization_fails(test_db):
         manager_a, tenant_a = _create_org(client, admin_token)
         manager_b, _ = _create_org(client, admin_token)
         _, foreign_agent_id = _create_agent(client, manager_b)
-        lead_id = _ingest_qualified_lead(client, tenant_a)
+        lead_id = _ingest_qualified_lead(client, manager_a, tenant_a)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
@@ -208,7 +209,7 @@ def test_an_agent_cannot_assign(test_db):
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
         agent_token, agent_id = _create_agent(client, manager_token)
-        lead_id = _ingest_qualified_lead(client, tenant_id)
+        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
@@ -223,7 +224,7 @@ def test_a_manager_discards_with_a_reason(test_db):
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
-        lead_id = _ingest_qualified_lead(client, tenant_id)
+        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/discard",
@@ -240,7 +241,7 @@ def test_discarding_without_a_reason_is_refused(test_db):
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
-        lead_id = _ingest_qualified_lead(client, tenant_id)
+        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/discard",
@@ -256,7 +257,7 @@ def test_the_lead_detail_carries_the_applied_rule_breakdown(test_db):
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
-        lead_id = _ingest_qualified_lead(client, tenant_id)
+        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
 
         detail = client.get(
             f"/api/v1/leads/{lead_id}", headers={"Authorization": f"Bearer {manager_token}"}

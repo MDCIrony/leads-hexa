@@ -4,7 +4,8 @@ from typing import List
 from application.dtos.commands import IngestLeadCommand
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
-from domain.value_objects.enums import IntakeRecordStatus
+from domain.entities.lead_source import LeadSource
+from domain.value_objects.enums import IntakeRecordStatus, LeadSourceKind
 from infrastructure.adapters.input.api.schemas import FailedRowResponse
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
@@ -101,6 +102,8 @@ def test_batch_upload_promotes_the_valid_row_and_rejects_the_invalid_one():
     tenant_id = uuid.uuid4()
     source_id = uuid.uuid4()
     uow = _new_uow()
+    # ProcessBatchUseCase now resolves FILE_UPLOAD's source_id itself.
+    uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="File upload", kind=LeadSourceKind.FILE_UPLOAD))
     ingest_use_case = IngestLeadUseCase(uow=uow)
 
     commands = [
@@ -112,9 +115,7 @@ def test_batch_upload_promotes_the_valid_row_and_rejects_the_invalid_one():
         ingest_lead_use_case=ingest_use_case,
     )
 
-    result = batch_use_case.execute(
-        file_content=b"irrelevant", filename="leads.csv", tenant_id=tenant_id, source_id=source_id
-    )
+    result = batch_use_case.execute(file_content=b"irrelevant", filename="leads.csv", tenant_id=tenant_id)
 
     assert result.successful_ingestions == 1
     assert len(result.failed_rows) == 1
@@ -135,6 +136,8 @@ def test_batch_upload_failed_row_with_no_email_does_not_break_the_response_schem
     tenant_id = uuid.uuid4()
     source_id = uuid.uuid4()
     uow = _new_uow()
+    # ProcessBatchUseCase now resolves FILE_UPLOAD's source_id itself.
+    uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="File upload", kind=LeadSourceKind.FILE_UPLOAD))
     ingest_use_case = IngestLeadUseCase(uow=uow)
 
     # Fails on budget, not email: proves the crash was about email being
@@ -145,9 +148,7 @@ def test_batch_upload_failed_row_with_no_email_does_not_break_the_response_schem
         ingest_lead_use_case=ingest_use_case,
     )
 
-    result = batch_use_case.execute(
-        file_content=b"irrelevant", filename="leads.csv", tenant_id=tenant_id, source_id=source_id
-    )
+    result = batch_use_case.execute(file_content=b"irrelevant", filename="leads.csv", tenant_id=tenant_id)
 
     assert len(result.failed_rows) == 1
     failed = result.failed_rows[0]

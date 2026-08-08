@@ -137,7 +137,8 @@ verify_f2a() {
 
   section "F2a · ingesta sin regla de asignación"
 
-  r=$(req -X POST "$API/intake/$TENANT_A/leads/ingest" -H 'Content-Type: application/json' \
+  r=$(req -X POST "$API/intake/leads/ingest" -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $MGR_A" \
     -d '{"first_name":"Ana","last_name":"Diaz","email":"ana@lead.test","company":"Acme","industry":"Tech","budget":9000}')
   check "el lead entra" 201 "$(code "$r")"
   check "sin asesor queda UNASSIGNED" UNASSIGNED "$(body "$r" | f 'd.get("status")')"

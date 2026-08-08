@@ -9,7 +9,7 @@ from application.dtos.commands import IngestLeadCommand, LeadProcessedResult
 from domain.entities.intake_record import IntakeError, IntakeRecord
 from domain.entities.lead import Lead
 from domain.entities.sales_group import SalesGroup
-from domain.value_objects.enums import IntakeRecordStatus, LeadStatus
+from domain.value_objects.enums import IntakeRecordStatus, LeadSourceKind, LeadStatus
 from domain.services.assignment_engine import AssignmentEngine
 from domain.services.scoring_engine import ScoringEngine
 from domain.exceptions import DomainException
@@ -42,6 +42,20 @@ class IngestLeadUseCase(IngestLeadInputPort):
         self.engine = engine or AssignmentEngine()
         self.threshold_qualified = threshold_qualified
         self.threshold_disqualified = threshold_disqualified
+
+    def resolve_source_id(self, tenant_id: UUID, kind: LeadSourceKind) -> UUID:
+        """Looks up the tenant's active source for this channel. Every tenant
+        gets a MANUAL_FORM and a FILE_UPLOAD source at creation time
+        (CreateTenantUseCase), so a miss here means the catalog is missing an
+        entry, not that the caller sent a bad request."""
+        with self.uow:
+            source = self.uow.sources.get_by_kind(tenant_id, kind)
+        if source is None:
+            raise DomainException(
+                f"No active source of kind {kind.value} found for this organization",
+                error_code="SOURCE_NOT_FOUND",
+            )
+        return source.id.value
 
     def execute(self, command: IngestLeadCommand) -> LeadProcessedResult:
         assigned_agent = None

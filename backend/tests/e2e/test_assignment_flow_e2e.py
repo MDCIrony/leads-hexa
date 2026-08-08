@@ -133,7 +133,7 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
 
         def _ingest(budget: float) -> dict:
             resp = client.post(
-                f"/api/v1/intake/{tenant_id}/leads/ingest",
+                "/api/v1/intake/leads/ingest",
                 json={
                     "first_name": "Lead",
                     "last_name": "Test",
@@ -142,6 +142,7 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
                     "budget": budget,
                     "industry": "Tech",
                 },
+                headers=headers,
             )
             assert resp.status_code == 201, resp.text
             return resp.json()
