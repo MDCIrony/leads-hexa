@@ -71,7 +71,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 assigned_agent = None
                 if lead.status == LeadStatus.QUALIFIED:
                     routing_rules = self.uow.rules.get_routing_rules_by_tenant(lead.tenant_id.value)
-                    available_agents = self.uow.agents.get_available_agents()
+                    available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
                     assigned_agent = self.router_engine.select_agent(lead, routing_rules, available_agents)
                     if assigned_agent:
                         self.uow.agents.update_active_count(
@@ -92,7 +92,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
             assigned_agent = None
             if lead.status == LeadStatus.QUALIFIED and agent_repo:
                 routing_rules = rule_repo.get_routing_rules_by_tenant(lead.tenant_id.value) if rule_repo else []
-                available_agents = agent_repo.get_available_agents()
+                available_agents = agent_repo.get_available_agents(lead.tenant_id.value)
                 assigned_agent = self.router_engine.select_agent(lead, routing_rules, available_agents)
                 if assigned_agent:
                     agent_repo.update_active_count(

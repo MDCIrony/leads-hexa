@@ -5,8 +5,12 @@ from domain.entities.agent import Agent
 
 class AgentRepositoryPort(ABC):
     @abstractmethod
-    def get_available_agents(self, team: Optional[str] = None) -> List[Agent]:
-        pass
+    def get_available_agents(self, tenant_id: UUID, team: Optional[str] = None) -> List[Agent]:
+        """Return the active agents of this organization eligible for assignment.
+
+        tenant_id is required and comes first: an optional organization filter
+        is one forgotten argument away from routing a lead into someone else's
+        company."""
 
     @abstractmethod
     def update_active_count(self, agent_id: UUID, new_count: int) -> None:

@@ -24,14 +24,14 @@ class RawSqlAgentRepository(AgentRepositoryPort):
             tenant_id=r["tenant_id"],
         )
 
-    def get_available_agents(self, team: Optional[str] = None) -> List[Agent]:
+    def get_available_agents(self, tenant_id: UUID, team: Optional[str] = None) -> List[Agent]:
+        sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = TRUE"
+        params: list = [tenant_id]
         if team:
-            cursor = self.connection.execute(
-                "SELECT * FROM agents WHERE is_active = TRUE AND team = %s", (team,)
-            )
-        else:
-            cursor = self.connection.execute("SELECT * FROM agents WHERE is_active = TRUE")
-        rows = cursor.fetchall()
+            sql += " AND team = %s"
+            params.append(team)
+        sql += " ORDER BY name, id"
+        rows = self.connection.execute(sql, tuple(params)).fetchall()
         return [self._row_to_agent(r) for r in rows]
 
     def update_active_count(self, agent_id: UUID, new_count: int) -> None:

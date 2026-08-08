@@ -7,8 +7,12 @@ class InMemoryAgentRepository(AgentRepositoryPort):
     def __init__(self) -> None:
         self.agents: Dict[UUID, Agent] = {}
 
-    def get_available_agents(self, team: Optional[str] = None) -> List[Agent]:
-        agents = [a for a in self.agents.values() if a.is_active]
+    def get_available_agents(self, tenant_id: UUID, team: Optional[str] = None) -> List[Agent]:
+        agents = [
+            a
+            for a in self.agents.values()
+            if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
+        ]
         if team:
             agents = [a for a in agents if a.team == team]
         return agents

@@ -46,6 +46,7 @@ def test_ingest_lead_use_case_successful_flow():
         email="clopez@sales.com",
         team="Sales",
         active_leads_count=0,
+        tenant_id=tenant_id,
     )
     agent_repo.save(agent)
 
