@@ -17,9 +17,9 @@ class RawSqlIntakeRecordRepository(IntakeRecordRepositoryPort):
         self.connection.execute(
             """
             INSERT INTO intake_records (
-                id, tenant_id, source_id, payload, status, lead_id, received_at, processed_at
+                id, tenant_id, source_id, job_id, payload, status, lead_id, received_at, processed_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 payload = EXCLUDED.payload,
                 status = EXCLUDED.status,
@@ -30,6 +30,7 @@ class RawSqlIntakeRecordRepository(IntakeRecordRepositoryPort):
                 record.id.value,
                 record.tenant_id.value,
                 record.source_id.value,
+                record.job_id.value if record.job_id else None,
                 Jsonb(record.payload),
                 record.status.value,
                 record.lead_id.value if record.lead_id else None,
@@ -127,4 +128,5 @@ class RawSqlIntakeRecordRepository(IntakeRecordRepositoryPort):
             lead_id=row["lead_id"],
             received_at=row["received_at"],
             processed_at=row["processed_at"],
+            job_id=row["job_id"],
         )

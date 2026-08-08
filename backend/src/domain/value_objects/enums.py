@@ -60,3 +60,20 @@ class IntakeRecordStatus(str, Enum):
     PROMOTED = "PROMOTED"
     REJECTED = "REJECTED"
     DISCARDED = "DISCARDED"
+
+class IntakeJobKind(str, Enum):
+    SINGLE = "SINGLE"
+    BATCH = "BATCH"
+
+
+class IntakeJobStatus(str, Enum):
+    """How far along an ingestion operation is."""
+
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    # Terminal: no work left. NOT a claim that everything succeeded — a job with
+    # ten rejected items is COMPLETED with failed=10. "Finished" and "went well"
+    # are different questions and the counters answer the second one.
+    COMPLETED = "COMPLETED"
+    # The job could not even start: unreadable file, missing source.
+    FAILED = "FAILED"

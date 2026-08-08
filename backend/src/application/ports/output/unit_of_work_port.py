@@ -9,6 +9,7 @@ from application.ports.output.sales_group_repository_port import SalesGroupRepos
 from application.ports.output.tenant_repository_port import TenantRepositoryPort
 from application.ports.output.lead_source_repository_port import LeadSourceRepositoryPort
 from application.ports.output.intake_record_repository_port import IntakeRecordRepositoryPort
+from application.ports.output.intake_job_repository_port import IntakeJobRepositoryPort
 
 class UnitOfWorkPort(abc.ABC):
     leads: LeadRepositoryPort
@@ -18,6 +19,7 @@ class UnitOfWorkPort(abc.ABC):
     groups: SalesGroupRepositoryPort
     sources: LeadSourceRepositoryPort
     intake_records: IntakeRecordRepositoryPort
+    intake_jobs: IntakeJobRepositoryPort
 
     def __enter__(self) -> UnitOfWorkPort:
         return self

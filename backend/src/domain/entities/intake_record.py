@@ -5,6 +5,7 @@ from uuid import UUID
 
 from domain.exceptions import DomainException
 from domain.value_objects.enums import IntakeRecordStatus
+from domain.value_objects.intake_job_id import IntakeJobId
 from domain.value_objects.intake_record_id import IntakeRecordId
 from domain.value_objects.lead_id import LeadId
 from domain.value_objects.lead_source_id import LeadSourceId
@@ -36,6 +37,7 @@ class IntakeRecord:
     status: IntakeRecordStatus = IntakeRecordStatus.PENDING
     errors: List[IntakeError] = field(default_factory=list)
     lead_id: Optional[LeadId] = None
+    job_id: Optional[IntakeJobId] = None
     # Same idiom as Lead/LeadSource: a bare default would freeze at class-definition time.
     received_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     processed_at: Optional[datetime] = None
@@ -52,6 +54,7 @@ class IntakeRecord:
         lead_id: Optional[Union[str, UUID, LeadId]] = None,
         received_at: Optional[datetime] = None,
         processed_at: Optional[datetime] = None,
+        job_id: Optional[Union[str, UUID, IntakeJobId]] = None,
     ) -> "IntakeRecord":
         """Factory method that encapsulates Value Object construction."""
         return cls(
@@ -64,6 +67,7 @@ class IntakeRecord:
             lead_id=lead_id if (lead_id is None or isinstance(lead_id, LeadId)) else LeadId(lead_id),
             received_at=received_at or datetime.now(timezone.utc),
             processed_at=processed_at,
+            job_id=job_id if (job_id is None or isinstance(job_id, IntakeJobId)) else IntakeJobId(job_id),
         )
 
     def promote(self, lead_id: Union[str, UUID, LeadId]) -> None:

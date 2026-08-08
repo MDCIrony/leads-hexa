@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 from uuid import UUID
 
 from application.ports.output.agent_repository_port import AgentRepositoryPort
+from application.ports.output.intake_job_repository_port import IntakeJobRepositoryPort
 from application.ports.output.intake_record_repository_port import IntakeRecordRepositoryPort
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from application.ports.output.lead_source_repository_port import LeadSourceRepositoryPort
@@ -9,8 +10,9 @@ from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.tenant_repository_port import TenantRepositoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
-from domain.value_objects.enums import IntakeRecordStatus
+from domain.value_objects.enums import IntakeJobStatus, IntakeRecordStatus
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_lead_source_repo import InMemoryLeadSourceRepository
@@ -56,6 +58,43 @@ class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
         )
 
 
+class InMemoryIntakeJobRepository(IntakeJobRepositoryPort):
+    """Kept inline (same convention as InMemoryIntakeRecordRepository above)."""
+
+    def __init__(self) -> None:
+        self._jobs: Dict[UUID, IntakeJob] = {}
+
+    def save(self, job: IntakeJob) -> IntakeJob:
+        self._jobs[job.id.value] = job
+        return job
+
+    def get_by_id_and_tenant(self, job_id: UUID, tenant_id: UUID) -> Optional[IntakeJob]:
+        job = self._jobs.get(job_id)
+        return job if job and job.tenant_id.value == tenant_id else None
+
+    def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        status: Optional[IntakeJobStatus] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[IntakeJob]:
+        matches = [
+            j
+            for j in self._jobs.values()
+            if j.tenant_id.value == tenant_id and (status is None or j.status == status)
+        ]
+        matches.sort(key=lambda j: j.created_at)
+        return matches[offset : offset + limit]
+
+    def count_by_tenant(self, tenant_id: UUID, status: Optional[IntakeJobStatus] = None) -> int:
+        return sum(
+            1
+            for j in self._jobs.values()
+            if j.tenant_id.value == tenant_id and (status is None or j.status == status)
+        )
+
+
 class InMemoryUnitOfWork(UnitOfWorkPort):
     def __init__(
         self,
@@ -69,6 +108,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         groups: Optional[SalesGroupRepositoryPort] = None,
         sources: Optional[LeadSourceRepositoryPort] = None,
         intake_records: Optional[IntakeRecordRepositoryPort] = None,
+        intake_jobs: Optional[IntakeJobRepositoryPort] = None,
     ) -> None:
         # Defaulting to a fresh in-memory repo (instead of None) is what lets
         # a test that only cares about leads and agents write
@@ -80,6 +120,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.groups = groups or InMemorySalesGroupRepository()
         self.sources = sources or InMemoryLeadSourceRepository()
         self.intake_records = intake_records or InMemoryIntakeRecordRepository()
+        self.intake_jobs = intake_jobs or InMemoryIntakeJobRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self

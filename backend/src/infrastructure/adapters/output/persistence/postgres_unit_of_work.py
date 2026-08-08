@@ -12,6 +12,7 @@ from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository i
 from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import RawSqlTenantRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import RawSqlLeadSourceRepository
 from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import RawSqlIntakeRecordRepository
+from infrastructure.adapters.output.persistence.raw_sql_intake_job_repository import RawSqlIntakeJobRepository
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):
@@ -37,6 +38,7 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.groups = RawSqlSalesGroupRepository(self.connection)
         self.sources = RawSqlLeadSourceRepository(self.connection)
         self.intake_records = RawSqlIntakeRecordRepository(self.connection)
+        self.intake_jobs = RawSqlIntakeJobRepository(self.connection)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
