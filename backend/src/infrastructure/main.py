@@ -5,10 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
+from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import RawSqlWebhookRepository
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
+from application.handlers.notification_handler import NotificationHandler
 from application.handlers.webhook_event_handler import WebhookEventHandler
 from domain.events.lead_events import LeadProcessedEvent
+from domain.events.notification_events import IntakeRejected, LeadAssigned, LeadLeftUnassigned, LeadReassigned
 from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.intake_router import router as intake_router
 from infrastructure.adapters.input.api.rule_router import router as rule_router
@@ -42,6 +45,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
         )
         container.event_publisher.subscribe(LeadProcessedEvent, webhook_handler.handle_lead_processed)
+
+        notification_handler = NotificationHandler(uow_factory=lambda: PostgresUnitOfWork(container.database))
+        for event_type, handler in (
+            (LeadAssigned, notification_handler.handle_lead_assigned),
+            (LeadReassigned, notification_handler.handle_lead_reassigned),
+            (LeadLeftUnassigned, notification_handler.handle_lead_left_unassigned),
+            (IntakeRejected, notification_handler.handle_intake_rejected),
+        ):
+            container.event_publisher.subscribe(event_type, handler)
 
         app.state.container = container
         yield

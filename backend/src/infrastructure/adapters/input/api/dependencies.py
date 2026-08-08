@@ -228,8 +228,11 @@ def get_update_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> U
 def get_delete_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteLeadSourceInputPort:
     return DeleteLeadSourceUseCase(uow=uow)
 
-def get_assign_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> AssignLeadInputPort:
-    return AssignLeadUseCase(uow=uow)
+def get_assign_lead_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> AssignLeadInputPort:
+    return AssignLeadUseCase(uow=uow, event_publisher=container.event_publisher)
 
 def get_discard_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DiscardLeadInputPort:
     return DiscardLeadUseCase(uow=uow)

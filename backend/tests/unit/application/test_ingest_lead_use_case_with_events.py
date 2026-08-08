@@ -4,6 +4,7 @@ from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payloa
 from application.dtos.commands import IngestLeadCommand
 from domain.entities.intake_record import IntakeRecord
 from domain.events.lead_events import LeadProcessedEvent
+from domain.events.notification_events import LeadLeftUnassigned
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
@@ -46,7 +47,11 @@ def test_ingest_lead_publishes_event() -> None:
     result = use_case.execute(command, existing_record=existing)
 
     assert result.error is None
-    assert mock_event_publisher.publish.call_count == 1
-    event_arg = mock_event_publisher.publish.call_args[0][0]
-    assert isinstance(event_arg, LeadProcessedEvent)
-    assert event_arg.tenant_id == str(tenant_id_val)
+    # LeadProcessedEvent always, plus LeadLeftUnassigned (F3a): no rules and
+    # no available agent leaves the lead UNASSIGNED rather than routed.
+    assert mock_event_publisher.publish.call_count == 2
+    published = [call.args[0] for call in mock_event_publisher.publish.call_args_list]
+    assert isinstance(published[0], LeadProcessedEvent)
+    assert published[0].tenant_id == str(tenant_id_val)
+    assert isinstance(published[1], LeadLeftUnassigned)
+    assert published[1].tenant_id == str(tenant_id_val)

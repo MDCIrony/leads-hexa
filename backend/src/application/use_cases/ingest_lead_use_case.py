@@ -16,6 +16,7 @@ from domain.services.scoring_engine import ScoringEngine
 from domain.services.viability_engine import ViabilityEngine
 from domain.exceptions import DomainException
 from domain.events.lead_events import LeadProcessedEvent
+from domain.events.notification_events import IntakeRejected, LeadAssigned, LeadLeftUnassigned
 
 # Verified against domain/exceptions.py: these are the codes the entity's
 # value objects actually raise. Do not invent new ones.
@@ -58,6 +59,12 @@ class IngestLeadUseCase(IngestLeadInputPort):
 
     def execute(self, command: IngestLeadCommand, existing_record: IntakeRecord) -> LeadProcessedResult:
         assigned_agent = None
+        left_unassigned = False
+        # Set instead of returned from inside `with self.uow`: an early return
+        # there would publish IntakeRejected before the block commits, and a
+        # later rollback would leave the notice describing a rejection that
+        # never happened (N1).
+        rejection_result: Optional[LeadProcessedResult] = None
         with self.uow:
             # The record always exists by now: ReceiveIntakeUseCase (or the
             # batch pipeline) persisted it on arrival, so this use case only
@@ -84,7 +91,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
                     error_code=exc.error_code,
                 )])
                 self.uow.intake_records.save(record)
-                return LeadProcessedResult(
+                rejection_result = LeadProcessedResult(
                     lead_id="",
                     intake_record_id=str(record.id),
                     status=IntakeRecordStatus.REJECTED.value,
@@ -93,59 +100,80 @@ class IngestLeadUseCase(IngestLeadInputPort):
                     error_code=exc.error_code,
                 )
 
-            # Viability runs first and cuts the flow: scoring and routing
-            # something nobody can work is wasted work with a misleading result.
-            breakdown = ScoreBreakdown(applied=[], total=0)
-            breached = self.viability_engine.evaluate(
-                lead, self.uow.disqualification_rules.list_by_tenant(lead.tenant_id.value, limit=10_000)
-            )
-            if breached is not None:
-                lead.disqualify(breached.name)
-            else:
-                scoring_rules = self.uow.rules.get_scoring_rules_by_tenant(lead.tenant_id.value)
-                breakdown = self.scoring_engine.evaluate(lead, scoring_rules)
-                # The rules that produced a score can be edited or deleted
-                # later, so the lead keeps its own record to explain itself.
-                lead.score_breakdown = breakdown.applied
-                lead.qualify()
+            if rejection_result is None:
+                # Viability runs first and cuts the flow: scoring and routing
+                # something nobody can work is wasted work with a misleading result.
+                breakdown = ScoreBreakdown(applied=[], total=0)
+                breached = self.viability_engine.evaluate(
+                    lead, self.uow.disqualification_rules.list_by_tenant(lead.tenant_id.value, limit=10_000)
+                )
+                if breached is not None:
+                    lead.disqualify(breached.name)
+                else:
+                    scoring_rules = self.uow.rules.get_scoring_rules_by_tenant(lead.tenant_id.value)
+                    breakdown = self.scoring_engine.evaluate(lead, scoring_rules)
+                    # The rules that produced a score can be edited or deleted
+                    # later, so the lead keeps its own record to explain itself.
+                    lead.score_breakdown = breakdown.applied
+                    lead.qualify()
 
-                if lead.status == LeadStatus.QUALIFIED:
-                    assignment_rules = self.uow.rules.get_assignment_rules_by_tenant(lead.tenant_id.value)
-                    available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
-                    groups_by_id: Dict[UUID, SalesGroup] = {
-                        group.id.value: group
-                        for group in self.uow.groups.list_by_tenant(lead.tenant_id.value, limit=10_000)
-                    }
-                    loads = self.uow.leads.active_load_by_agent(lead.tenant_id.value)
+                    if lead.status == LeadStatus.QUALIFIED:
+                        assignment_rules = self.uow.rules.get_assignment_rules_by_tenant(lead.tenant_id.value)
+                        available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
+                        groups_by_id: Dict[UUID, SalesGroup] = {
+                            group.id.value: group
+                            for group in self.uow.groups.list_by_tenant(lead.tenant_id.value, limit=10_000)
+                        }
+                        loads = self.uow.leads.active_load_by_agent(lead.tenant_id.value)
 
-                    cursors_before = {rule.id: rule.rr_cursor for rule in assignment_rules}
-                    assigned_agent = self.engine.select_agent(
-                        lead, assignment_rules, available_agents, groups_by_id, loads
-                    )
-                    if assigned_agent is None:
-                        # QUALIFIED and UNASSIGNED used to be indistinguishable,
-                        # so a lead nobody could take looked like one not yet routed.
-                        lead.leave_unassigned()
-                    # Only the rule the engine actually used can have rotated;
-                    # saving just that one avoids rewriting every rule per lead.
-                    for rule in assignment_rules:
-                        if rule.rr_cursor != cursors_before[rule.id]:
-                            self.uow.rules.save_assignment_rule(lead.tenant_id.value, rule)
+                        cursors_before = {rule.id: rule.rr_cursor for rule in assignment_rules}
+                        assigned_agent = self.engine.select_agent(
+                            lead, assignment_rules, available_agents, groups_by_id, loads
+                        )
+                        if assigned_agent is None:
+                            # QUALIFIED and UNASSIGNED used to be indistinguishable,
+                            # so a lead nobody could take looked like one not yet routed.
+                            lead.leave_unassigned()
+                            left_unassigned = True
+                        # Only the rule the engine actually used can have rotated;
+                        # saving just that one avoids rewriting every rule per lead.
+                        for rule in assignment_rules:
+                            if rule.rr_cursor != cursors_before[rule.id]:
+                                self.uow.rules.save_assignment_rule(lead.tenant_id.value, rule)
 
-            saved_lead = self.uow.leads.save(lead)
-            record.promote(saved_lead.id)
-            self.uow.intake_records.save(record)
+                saved_lead = self.uow.leads.save(lead)
+                record.promote(saved_lead.id)
+                self.uow.intake_records.save(record)
+
+        if rejection_result is not None:
+            if self.event_publisher:
+                self.event_publisher.publish(IntakeRejected(
+                    tenant_id=str(record.tenant_id.value),
+                    intake_record_id=str(record.id),
+                    reason=rejection_result.error or "",
+                ))
+            return rejection_result
 
         if self.event_publisher:
-            event = LeadProcessedEvent(
+            self.event_publisher.publish(LeadProcessedEvent(
                 tenant_id=str(saved_lead.tenant_id.value),
                 lead_id=str(saved_lead.id),
                 email=str(saved_lead.email) if saved_lead.email else None,
                 score=int(saved_lead.score),
                 status=saved_lead.status,
                 assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
-            )
-            self.event_publisher.publish(event)
+            ))
+            if assigned_agent is not None:
+                self.event_publisher.publish(LeadAssigned(
+                    tenant_id=str(saved_lead.tenant_id.value),
+                    lead_id=str(saved_lead.id),
+                    agent_id=str(assigned_agent.id),
+                ))
+            elif left_unassigned:
+                self.event_publisher.publish(LeadLeftUnassigned(
+                    tenant_id=str(saved_lead.tenant_id.value),
+                    lead_id=str(saved_lead.id),
+                ))
 
         return LeadProcessedResult(
             lead_id=str(saved_lead.id),
