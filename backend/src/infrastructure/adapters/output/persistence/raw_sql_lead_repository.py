@@ -7,6 +7,7 @@ from psycopg.types.json import Jsonb
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from domain.entities.lead import Lead
 from domain.value_objects.enums import LeadStatus
+from domain.value_objects.score_breakdown import AppliedRule
 
 
 class RawSqlLeadRepository(LeadRepositoryPort):
@@ -15,12 +16,19 @@ class RawSqlLeadRepository(LeadRepositoryPort):
 
     def save(self, lead: Lead) -> Lead:
         assigned_agent_id = lead.assigned_agent_id.value if lead.assigned_agent_id else None
+        breakdown = Jsonb(
+            [
+                {"rule_id": str(a.rule_id), "name": a.name, "score_delta": a.score_delta}
+                for a in lead.score_breakdown
+            ]
+        )
 
         sql = """
         INSERT INTO leads (
             id, tenant_id, first_name, last_name, email, company, budget, industry,
-            custom_attributes, phone, score, status, assigned_agent_id, created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            custom_attributes, phone, score, status, assigned_agent_id, created_at,
+            assigned_at, discard_reason, updated_at, score_breakdown
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
             tenant_id = EXCLUDED.tenant_id,
             first_name = EXCLUDED.first_name,
@@ -34,7 +42,11 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             score = EXCLUDED.score,
             status = EXCLUDED.status,
             assigned_agent_id = EXCLUDED.assigned_agent_id,
-            created_at = EXCLUDED.created_at
+            created_at = EXCLUDED.created_at,
+            assigned_at = EXCLUDED.assigned_at,
+            discard_reason = EXCLUDED.discard_reason,
+            updated_at = EXCLUDED.updated_at,
+            score_breakdown = EXCLUDED.score_breakdown
         """
         self.connection.execute(
             sql,
@@ -53,6 +65,10 @@ class RawSqlLeadRepository(LeadRepositoryPort):
                 lead.status.value,
                 assigned_agent_id,
                 lead.created_at,
+                lead.assigned_at,
+                lead.discard_reason,
+                lead.updated_at,
+                breakdown,
             ),
         )
         return lead
@@ -74,6 +90,17 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             status=row["status"],
             assigned_agent_id=row["assigned_agent_id"],
             created_at=row["created_at"],
+            assigned_at=row["assigned_at"],
+            discard_reason=row["discard_reason"],
+            updated_at=row["updated_at"],
+            score_breakdown=[
+                AppliedRule(
+                    rule_id=UUID(entry["rule_id"]),
+                    name=entry["name"],
+                    score_delta=entry["score_delta"],
+                )
+                for entry in (row["score_breakdown"] or [])
+            ],
         )
 
     def get_by_id(self, lead_id: UUID) -> Optional[Lead]:
@@ -83,9 +110,15 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             return None
         return self._row_to_lead(row)
 
+    def get_by_id_and_tenant(self, lead_id: UUID, tenant_id: UUID) -> Optional[Lead]:
+        row = self.connection.execute(
+            "SELECT * FROM leads WHERE id = %s AND tenant_id = %s", (lead_id, tenant_id)
+        ).fetchone()
+        return self._row_to_lead(row) if row else None
+
     def list_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[Lead]:
         cursor = self.connection.execute(
-            "SELECT * FROM leads WHERE tenant_id = %s LIMIT %s OFFSET %s",
+            "SELECT * FROM leads WHERE tenant_id = %s ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
             (tenant_id, limit, offset),
         )
         rows = cursor.fetchall()
@@ -98,6 +131,26 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         )
         row = cursor.fetchone()
         return int(row["count"]) if row else 0
+
+    def list_by_agent(
+        self, tenant_id: UUID, agent_id: UUID, limit: int = 100, offset: int = 0
+    ) -> List[Lead]:
+        rows = self.connection.execute(
+            """
+            SELECT * FROM leads
+            WHERE tenant_id = %s AND assigned_agent_id = %s
+            ORDER BY created_at DESC, id LIMIT %s OFFSET %s
+            """,
+            (tenant_id, agent_id, limit, offset),
+        ).fetchall()
+        return [self._row_to_lead(row) for row in rows]
+
+    def count_by_agent(self, tenant_id: UUID, agent_id: UUID) -> int:
+        row = self.connection.execute(
+            "SELECT COUNT(*) AS count FROM leads WHERE tenant_id = %s AND assigned_agent_id = %s",
+            (tenant_id, agent_id),
+        ).fetchone()
+        return int(row["count"])
 
     def active_load_by_agent(self, tenant_id: UUID) -> Dict[UUID, int]:
         """Return how many active leads each agent of this organization holds.

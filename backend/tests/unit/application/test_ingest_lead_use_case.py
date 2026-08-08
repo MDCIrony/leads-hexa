@@ -24,6 +24,7 @@ def test_ingest_lead_use_case_successful_flow():
     rule_repo.save_scoring_rule(
         tenant_id,
         ScoringRule.create(
+            tenant_id=tenant_id,
             name="Tech Corp High Budget",
             field="budget",
             operator=Operator.GREATER_THAN,

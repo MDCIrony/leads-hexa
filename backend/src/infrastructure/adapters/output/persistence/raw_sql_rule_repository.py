@@ -21,12 +21,15 @@ class RawSqlRuleRepository(RuleRepositoryPort):
         for r in rows:
             rules.append(
                 ScoringRule.create(
+                    tenant_id=r["tenant_id"],
                     rule_id=r["id"],
                     name=r["name"],
                     field=r["field"],
                     operator=r["operator"],
                     value=r["value"],
                     score_delta=r["score_delta"],
+                    priority=r["priority"],
+                    is_active=r["is_active"],
                 )
             )
         return rules
@@ -41,15 +44,19 @@ class RawSqlRuleRepository(RuleRepositoryPort):
     def save_scoring_rule(self, tenant_id: UUID, rule: ScoringRule) -> ScoringRule:
         self.connection.execute(
             """
-            INSERT INTO scoring_rules (id, tenant_id, name, field, operator, value, score_delta)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO scoring_rules (
+                id, tenant_id, name, field, operator, value, score_delta, priority, is_active
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 tenant_id = EXCLUDED.tenant_id,
                 name = EXCLUDED.name,
                 field = EXCLUDED.field,
                 operator = EXCLUDED.operator,
                 value = EXCLUDED.value,
-                score_delta = EXCLUDED.score_delta
+                score_delta = EXCLUDED.score_delta,
+                priority = EXCLUDED.priority,
+                is_active = EXCLUDED.is_active
             """,
             (
                 rule.id,
@@ -59,6 +66,8 @@ class RawSqlRuleRepository(RuleRepositoryPort):
                 rule.operator.value,
                 Jsonb(rule.value),
                 rule.score_delta,
+                rule.priority,
+                rule.is_active,
             ),
         )
         return rule
