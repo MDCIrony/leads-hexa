@@ -59,6 +59,38 @@ class PaginatedLeadsResponse(BaseModel):
     offset: int
     has_more: bool
 
+class AppliedRuleResponse(BaseModel):
+    rule_id: str
+    name: str
+    score_delta: int
+
+class LeadDetailResponse(BaseModel):
+    id: str
+    tenant_id: str
+    first_name: str
+    last_name: str
+    email: str
+    company: str
+    budget: float
+    industry: str
+    custom_attributes: Dict[str, Any]
+    phone: Optional[str]
+    score: int
+    score_breakdown: List[AppliedRuleResponse]
+    status: str
+    assigned_agent_id: Optional[str]
+    assigned_at: Optional[str]
+    discard_reason: Optional[str]
+    created_at: str
+
+class AssignLeadRequest(BaseModel):
+    agent_id: UUID
+
+class DiscardLeadRequest(BaseModel):
+    # Empty-means-missing is validated by Lead.discard itself (DISCARD_WITHOUT_REASON),
+    # so an omitted field and an explicit "" reach the same domain error.
+    reason: str = ""
+
 class FailedRowResponse(BaseModel):
     row_number: int
     email: str

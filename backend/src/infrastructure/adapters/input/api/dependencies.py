@@ -20,6 +20,9 @@ from application.ports.input.sales_group_use_case_ports import (
     CreateSalesGroupInputPort, DeleteSalesGroupInputPort, GetSalesGroupsInputPort,
     UpdateSalesGroupInputPort,
 )
+from application.ports.input.lead_lifecycle_use_case_ports import (
+    AssignLeadInputPort, DiscardLeadInputPort, GetLeadInputPort, GetMyLeadsInputPort,
+)
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
@@ -32,6 +35,9 @@ from application.use_cases.rule_use_cases import (
 )
 from application.use_cases.sales_group_use_cases import (
     CreateSalesGroupUseCase, DeleteSalesGroupUseCase, GetSalesGroupsUseCase, UpdateSalesGroupUseCase,
+)
+from application.use_cases.lead_lifecycle_use_cases import (
+    AssignLeadUseCase, DiscardLeadUseCase, GetLeadUseCase, GetMyLeadsUseCase,
 )
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import LoginUseCase
@@ -125,6 +131,18 @@ def get_update_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> U
 def get_delete_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteSalesGroupInputPort:
     return DeleteSalesGroupUseCase(uow=uow)
 
+def get_assign_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> AssignLeadInputPort:
+    return AssignLeadUseCase(uow=uow)
+
+def get_discard_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DiscardLeadInputPort:
+    return DiscardLeadUseCase(uow=uow)
+
+def get_get_my_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetMyLeadsInputPort:
+    return GetMyLeadsUseCase(uow=uow)
+
+def get_get_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadInputPort:
+    return GetLeadUseCase(uow=uow)
+
 def get_login_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),
     container: Container = Depends(get_container),
@@ -207,4 +225,15 @@ def require_platform_admin(
     context: RequestContext = Depends(get_request_context),
 ) -> RequestContext:
     AuthorizationPolicy.ensure_can_manage_platform(context.actor)
+    return context
+
+
+def require_organization_member(
+    context: RequestContext = Depends(get_request_context),
+) -> RequestContext:
+    """Any member of an organization: manager or sales agent.
+
+    The platform admin has no tenant, so it is excluded by construction —
+    which is the point: it must not reach operational data."""
+    AuthorizationPolicy.ensure_can_access_tenant(context.actor, context.tenant_id)
     return context

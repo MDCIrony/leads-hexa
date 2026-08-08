@@ -34,7 +34,7 @@ Desde F0.5 el `ADMIN` y el resto de roles operan en planos disjuntos. Ninguna op
 3. **`AGENT`**:
    - Usuario estándar de operaciones comerciales, acotado a su organización.
    - **No** puede listar asesores (`403`); consulta su propia identidad por [`GET /api/v1/auth/me`](#get-apiv1authme).
-   - **No** puede listar los leads de la organización (`403` en `GET /api/v1/leads`): ese endpoint devuelve la cartera completa, y pertenecer a la organización no basta para leer la de los compañeros. Su vista propia será `GET /api/v1/leads/mine`, pendiente de F2.
+   - **No** puede listar los leads de la organización (`403` en `GET /api/v1/leads`): ese endpoint devuelve la cartera completa, y pertenecer a la organización no basta para leer la de los compañeros. Su vista propia es [`GET /api/v1/leads/mine`](#get-apiv1leadsmine), acotada a los leads que tiene asignados.
    - **No** puede crear agentes ni administrar reglas ni organizaciones.
 
 ### Aislamiento por Tenant (Tenant Scoping)
@@ -49,6 +49,7 @@ Definidos en [`src/application/ports/input/`](../../backend/src/application/port
 - **`IngestLeadInputPort`**: Procesa la ingesta de un lead individual.
 - **`ProcessBatchInputPort`**: Procesa la ingesta masiva de leads desde archivos CSV/Excel.
 - **`GetLeadsInputPort`**: Consulta leads paginados por tenant.
+- **`AssignLeadInputPort` / `DiscardLeadInputPort` / `GetMyLeadsInputPort` / `GetLeadInputPort`**: Ciclo de vida manual del lead — asignación/reasignación, descarte, la vista propia del asesor y el detalle con desglose de puntuación.
 - **`CreateAgentInputPort` / `GetAgentsInputPort` / `GetAgentInputPort` / `UpdateAgentInputPort` / `DeactivateAgentInputPort`**: Gestión y consulta de agentes comerciales.
 - **`CreateScoringRuleInputPort` / `GetScoringRulesInputPort`**: Creación y consulta de reglas de scoring.
 - **`CreateAssignmentRuleInputPort` / `GetAssignmentRulesInputPort` / `UpdateAssignmentRuleInputPort` / `DeleteAssignmentRuleInputPort`**: CRUD de reglas de asignación (banda de puntuación, grupo/asesores destino, prioridad, estrategia).
@@ -187,7 +188,7 @@ Procesa un archivo CSV o Excel para la ingesta masiva de leads de un tenant.
 
 ### 4. Listar Leads (`GET /api/v1/leads`)
 
-Consulta de leads paginados. La organización sale del token, nunca de la URL. **Sólo para el gestor:** este endpoint devuelve el flujo completo de la organización, así que un asesor que lo alcanzara leería los leads de sus compañeros. La vista del asesor es `GET /api/v1/leads/mine`, que F2 entrega.
+Consulta de leads paginados. La organización sale del token, nunca de la URL. **Sólo para el gestor:** este endpoint devuelve el flujo completo de la organización, así que un asesor que lo alcanzara leería los leads de sus compañeros. La vista del asesor es [`GET /api/v1/leads/mine`](#get-apiv1leadsmine), en la sección 5.
 
 - **Autenticación**: Requerida (`Bearer Token`).
 - **Permisos**: Requiere acceso al tenant vía `verify_tenant_access` (cualquier agente autenticado perteneciente a `tenant_id`, o un `ADMIN`).
@@ -224,7 +225,83 @@ Consulta de leads paginados. La organización sale del token, nunca de la URL. *
 
 ---
 
-### 5. Plano de Plataforma — Organizaciones (`/api/v1/tenants`)
+### 5. Ciclo de Vida del Lead (`/api/v1/leads`)
+
+Asignación manual, descarte y las dos vistas de detalle que completan el ciclo iniciado en la ingesta (sección 2). **Orden de declaración:** `GET /leads/mine` está registrado antes que `GET /leads/{lead_id}` porque FastAPI resuelve rutas en el orden en que se declaran — al revés, `mine` caería en la ruta paramétrica y fallaría al intentar interpretarlo como UUID.
+
+#### `GET /api/v1/leads/mine`
+Los leads asignados al agente autenticado. Es la única vía que tiene un `AGENT` hacia sus propios leads, ya que `GET /api/v1/leads` es sólo del gestor.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER` o `AGENT`, cualquiera con organización propia. Un `ADMIN` recibe `403 Forbidden`: no tiene `tenant_id`.
+- **Query Parameters**: `limit` (int, default=100), `offset` (int, default=0).
+- **Response (200 OK)** ([`PaginatedLeadsResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): misma forma que `GET /api/v1/leads`, acotada a los leads cuyo `assigned_agent_id` es el del llamante.
+
+#### `GET /api/v1/leads/{lead_id}`
+Detalle de un lead, incluido el desglose de las reglas de scoring que se le aplicaron.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER` alcanza cualquier lead de su organización; un `AGENT` sólo el suyo.
+- **Path Parameters**: `lead_id` (UUID).
+- **Response (200 OK)** ([`LeadDetailResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): añade `score_breakdown` (una entrada `{rule_id, name, score_delta}` por cada regla de scoring que se cumplió), `assigned_at` y `discard_reason` sobre los campos de `LeadResponse`.
+```json
+{
+  "id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  "first_name": "Maria",
+  "last_name": "Gomez",
+  "email": "mgomez@techcorp.com",
+  "company": "TechCorp",
+  "budget": 15000.0,
+  "industry": "Technology",
+  "custom_attributes": {"employee_count": 150},
+  "phone": "+573001234567",
+  "score": 50,
+  "score_breakdown": [
+    {"rule_id": "22222222-2222-2222-2222-222222222222", "name": "Tech leads", "score_delta": 50}
+  ],
+  "status": "UNASSIGNED",
+  "assigned_agent_id": null,
+  "assigned_at": null,
+  "discard_reason": null,
+  "created_at": "2026-08-05T10:00:00+00:00"
+}
+```
+- **Errores**: `404 Not Found` (`LEAD_NOT_FOUND`) si el identificador no existe, si pertenece a otra organización, o si un `AGENT` pide el detalle de un lead ajeno — nunca `403`, para no confirmarle que ese lead existe en su organización.
+
+#### `POST /api/v1/leads/{lead_id}/assign`
+Asigna el lead a un asesor a mano. Si el lead ya está `ASSIGNED`, reasigna: es la misma operación para el gestor sin importar el estado de partida, y la entidad decide internamente entre `assign_to` y `reassign_to`.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `lead_id` (UUID).
+- **Request Body** ([`AssignLeadRequest`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "agent_id": "11111111-1111-1111-1111-111111111111"
+}
+```
+- **Response (200 OK)** ([`LeadDetailResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)) con `status: "ASSIGNED"` y `assigned_at` no nulo.
+- **Errores**: `404 Not Found` (`LEAD_NOT_FOUND` o `AGENT_NOT_FOUND` si el lead o el asesor no existen o pertenecen a otra organización; el asesor se resuelve acotado a la organización del gestor, así que uno ajeno se lee como inexistente, nunca como `403`); `400 Bad Request` (`INVALID_LEAD_TRANSITION` si el lead está en un estado no asignable, como `DISCARDED`).
+
+#### `POST /api/v1/leads/{lead_id}/discard`
+Descarta el lead con un motivo obligatorio.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `lead_id` (UUID).
+- **Request Body** ([`DiscardLeadRequest`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "reason": "Presupuesto insuficiente"
+}
+```
+- **Response (200 OK)** ([`LeadDetailResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)) con `status: "DISCARDED"` y `discard_reason` con el motivo enviado.
+- **Errores**: `404 Not Found` (`LEAD_NOT_FOUND`); `400 Bad Request` (`DISCARD_WITHOUT_REASON` si el motivo llega vacío).
+
+---
+
+### 9. Plano de Plataforma — Organizaciones (`/api/v1/tenants`)
 
 Todos los endpoints de esta sección exigen `Depends(require_platform_admin)`: sólo un `ADMIN` los alcanza. Un `MANAGER` o `AGENT` recibe `403 Forbidden`.
 
@@ -321,7 +398,7 @@ Renombra y/o activa/desactiva una organización. Desactivarla (`is_active: false
 
 ---
 
-### 6. Gestión de Agentes (`/api/v1/agents`)
+### 10. Gestión de Agentes (`/api/v1/agents`)
 
 Restringido al plano de organización: un `ADMIN` recibe `403 Forbidden` en los tres endpoints.
 
@@ -427,7 +504,7 @@ Cambia el nombre y/o el grupo de un asesor.
 
 ---
 
-### 7. Grupos de Ventas (`/api/v1/groups`)
+### 11. Grupos de Ventas (`/api/v1/groups`)
 
 Un grupo agrupa asesores bajo una política de asignación compartida (estrategia por defecto, capacidad por asesor). Reemplaza al antiguo campo `team` de texto libre. Los cuatro endpoints exigen `Depends(require_organization_manager)`: un `ADMIN` o un `AGENT` reciben `403 Forbidden`.
 
@@ -488,7 +565,7 @@ Borra el grupo. Sus asesores **no** se borran: quedan sin grupo (`group_id: null
 
 ---
 
-### 8. Gestión de Reglas (`/api/v1/rules`)
+### 12. Gestión de Reglas (`/api/v1/rules`)
 
 Todos los endpoints de reglas exigen `Depends(require_organization_manager)`; el tenant sale siempre del token, nunca de la URL o del cuerpo.
 
