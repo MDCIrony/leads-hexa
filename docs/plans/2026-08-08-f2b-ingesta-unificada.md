@@ -831,15 +831,15 @@ def execute(self, command: IngestLeadCommand) -> LeadProcessedResult:
 corregir:
 
 ```python
+# Verified against domain/exceptions.py: these are the codes the entity's
+# value objects actually raise. Do not invent new ones.
 _FIELD_BY_ERROR_CODE = {
     "INVALID_EMAIL": "email",
-    "INVALID_MONEY": "budget",
+    "INVALID_BUDGET": "budget",
+    "INVALID_UUID": "_record",
 }
 # default: "_record" — the payload as a whole, when nothing narrower is known
 ```
-
-Comprueba los códigos reales en `src/domain/exceptions.py` antes de escribir el diccionario; si
-alguno no existe con ese nombre, usa el que haya y no inventes uno nuevo.
 
 ## Paso 3: la carga masiva recorre lo mismo
 
