@@ -13,6 +13,7 @@ from infrastructure.adapters.input.api.schemas import (
     IngestLeadRequest,
     LeadProcessedResponse,
     BatchProcessResponse,
+    FailedRowResponse,
 )
 
 router = APIRouter()
@@ -82,5 +83,13 @@ async def batch_upload(
         job_id=result.job_id,
         total_rows=result.total_rows,
         successful_ingestions=result.successful_ingestions,
-        failed_rows=result.failed_rows,
+        failed_rows=[
+            FailedRowResponse(
+                row_number=row.row_number,
+                email=row.email,
+                error=row.error,
+                error_code=row.error_code,
+            )
+            for row in result.failed_rows
+        ],
     )

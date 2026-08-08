@@ -89,6 +89,38 @@ def test_batch_upload_endpoint():
         assert data["total_rows"] == 2
         assert data["successful_ingestions"] == 2
 
+def test_batch_upload_reports_failed_rows_without_losing_the_valid_ones():
+    tenant_id = str(uuid.uuid4())
+    csv_content = (
+        "first_name,last_name,email,company,budget,industry\n"
+        "Ana,Silva,ana@company.com,CompanyA,20000,Finance\n"
+        "Mal,Formado,email-sin-arroba,CompanyB,10000,Retail\n"
+        "Luis,Perez,luis@company.com,CompanyC,10000,Retail\n"
+    ).encode("utf-8")
+
+    files = {"file": ("leads.csv", csv_content, "text/csv")}
+
+    with TestClient(app) as client:
+        response = client.post(f"/api/v1/intake/{tenant_id}/leads/batch-upload", files=files)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_rows"] == 3
+        assert data["successful_ingestions"] == 2
+        assert len(data["failed_rows"]) == 1
+
+        failed = data["failed_rows"][0]
+        assert failed["row_number"] == 2
+        assert failed["email"] == "email-sin-arroba"
+        assert failed["error_code"] == "INVALID_EMAIL"
+
+        # A bad row must not drag the good ones down with it: only the 2
+        # valid rows are actually persisted for this tenant.
+        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+        uow = PostgresUnitOfWork(app.state.db)
+        with uow:
+            persisted_count = uow.leads.count_by_tenant(uuid.UUID(tenant_id))
+        assert persisted_count == 2
+
 def test_list_leads_by_tenant_endpoint():
     tenant_id = str(uuid.uuid4())
     payload = {
