@@ -86,6 +86,7 @@ def _to_response(rule: AssignmentRule) -> AssignmentRuleResponse:
         priority=rule.priority,
         is_active=rule.is_active,
         rr_cursor=rule.rr_cursor,
+        conditions=[CriterionSchema(**c.as_dict()) for c in rule.conditions],
     )
 
 
@@ -105,6 +106,7 @@ def create_assignment_rule(
         agent_match_mode=request.agent_match_mode.value,
         strategy=request.strategy.value if request.strategy else None,
         priority=request.priority,
+        conditions=[c.model_dump() for c in request.conditions],
     )
     return _to_response(use_case.execute(command))
 
@@ -146,6 +148,7 @@ def update_assignment_rule(
         strategy=request.strategy.value if request.strategy else None,
         priority=request.priority,
         is_active=request.is_active,
+        conditions=[c.model_dump() for c in request.conditions] if request.conditions is not None else None,
     )
     return _to_response(use_case.execute(command))
 

@@ -32,8 +32,6 @@ class IngestLeadUseCase(IngestLeadInputPort):
         uow: UnitOfWorkPort,
         event_publisher: Optional[DomainEventPublisherPort] = None,
         engine: Optional[AssignmentEngine] = None,
-        threshold_qualified: int = 30,
-        threshold_disqualified: int = 0,
     ) -> None:
         self.uow = uow
         self.event_publisher = event_publisher
@@ -43,8 +41,6 @@ class IngestLeadUseCase(IngestLeadInputPort):
         # persisted rule instead), so a private instance is exactly as
         # correct as a shared one; callers that do not care get one for free.
         self.engine = engine or AssignmentEngine()
-        self.threshold_qualified = threshold_qualified
-        self.threshold_disqualified = threshold_disqualified
 
     def resolve_source_id(self, tenant_id: UUID, kind: LeadSourceKind) -> UUID:
         """Looks up the tenant's active source for this channel. Every tenant
@@ -111,7 +107,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 # The rules that produced a score can be edited or deleted
                 # later, so the lead keeps its own record to explain itself.
                 lead.score_breakdown = breakdown.applied
-                lead.qualify(self.threshold_qualified, self.threshold_disqualified)
+                lead.qualify()
 
                 if lead.status == LeadStatus.QUALIFIED:
                     assignment_rules = self.uow.rules.get_assignment_rules_by_tenant(lead.tenant_id.value)

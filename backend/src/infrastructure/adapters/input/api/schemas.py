@@ -156,6 +156,7 @@ class AssignmentRuleCreate(BaseModel):
     agent_match_mode: AgentMatchMode = AgentMatchMode.ANY
     strategy: Optional[AssignmentStrategy] = None
     priority: int = 0
+    conditions: List[CriterionSchema] = Field(default_factory=list)
 
 class AssignmentRuleUpdate(BaseModel):
     name: Optional[str] = None
@@ -167,6 +168,7 @@ class AssignmentRuleUpdate(BaseModel):
     strategy: Optional[AssignmentStrategy] = None
     priority: Optional[int] = None
     is_active: Optional[bool] = None
+    conditions: Optional[List[CriterionSchema]] = None
 
 class AssignmentRuleResponse(BaseModel):
     id: str
@@ -180,6 +182,7 @@ class AssignmentRuleResponse(BaseModel):
     priority: int
     is_active: bool
     rr_cursor: int
+    conditions: List[CriterionSchema]
 
 class PaginatedAssignmentRulesResponse(BaseModel):
     items: List[AssignmentRuleResponse]

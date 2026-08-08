@@ -2,10 +2,12 @@ import uuid
 
 import pytest
 
+from domain.entities.lead import Lead
 from domain.entities.rule import AssignmentRule
 from domain.entities.sales_group import SalesGroup
 from domain.exceptions import DomainException
-from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
+from domain.value_objects.criterion import Criterion
+from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, Operator
 
 _TENANT = uuid.uuid4()
 _GROUP = uuid.uuid4()
@@ -19,6 +21,21 @@ def _rule(**kwargs) -> AssignmentRule:
     }
     defaults.update(kwargs)
     return AssignmentRule.create(**defaults)
+
+
+def _lead(score: int = 50, **kwargs) -> Lead:
+    defaults = dict(
+        tenant_id=_TENANT,
+        source_id=uuid.uuid4(),
+        first_name="Laura",
+        last_name="Diaz",
+        company="Globex",
+        budget=1000,
+        industry="Tech",
+        score=score,
+    )
+    defaults.update(kwargs)
+    return Lead.create(**defaults)
 
 
 class TestScoreBand:
@@ -93,6 +110,37 @@ class TestStrategyResolution:
             tenant_id=_TENANT, name="Directa", target_agent_ids=[uuid.uuid4()]
         )
         assert rule.resolve_strategy(None) == AssignmentStrategy.LOWEST_LOAD
+
+
+class TestMatches:
+    """`matches` composes the band with the conditions; `matches_score`
+    alone stays covered by TestScoreBand above."""
+
+    def test_a_band_with_no_conditions_behaves_as_before(self):
+        rule = _rule(min_score=30)
+        assert rule.matches(_lead(score=50)) is True
+        assert rule.matches(_lead(score=10)) is False
+
+    def test_a_condition_the_lead_satisfies_applies(self):
+        rule = _rule(
+            min_score=30,
+            conditions=[Criterion.create(field="industry", operator=Operator.EQUALS, value="Tech")],
+        )
+        assert rule.matches(_lead(score=50, industry="Tech")) is True
+
+    def test_a_condition_the_lead_fails_blocks_it_even_inside_the_band(self):
+        rule = _rule(
+            min_score=30,
+            conditions=[Criterion.create(field="industry", operator=Operator.EQUALS, value="Tech")],
+        )
+        assert rule.matches(_lead(score=50, industry="Retail")) is False
+
+    def test_a_matching_condition_outside_the_band_does_not_apply(self):
+        rule = _rule(
+            min_score=80,
+            conditions=[Criterion.create(field="industry", operator=Operator.EQUALS, value="Tech")],
+        )
+        assert rule.matches(_lead(score=50, industry="Tech")) is False
 
 
 class TestRoundRobinCursor:

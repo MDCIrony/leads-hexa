@@ -122,11 +122,15 @@ class Lead:
     def apply_score(self, delta: int) -> None:
         self.score = self.score.add_points(delta)
 
-    def qualify(self, threshold_qualified: int, threshold_disqualified: int) -> None:
-        if self.score.value >= threshold_qualified:
-            self.status = LeadStatus.QUALIFIED
-        elif self.score.value < threshold_disqualified:
-            self.status = LeadStatus.DISQUALIFIED
+    def qualify(self) -> None:
+        """NEW → QUALIFIED, with no threshold of its own.
+
+        Viability already ruled out what cannot be worked, and the lowest band
+        of the assignment rules is now the only score cut — written by the
+        manager instead of frozen in the code. The old two-threshold version
+        had two branches for three ranges, so a lead in between changed to
+        nothing and stayed NEW forever."""
+        self.status = LeadStatus.QUALIFIED
 
     def disqualify(self, reason: str) -> None:
         """A machine decision, carrying the rule's name as its reason.

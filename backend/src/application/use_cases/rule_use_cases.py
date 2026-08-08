@@ -18,6 +18,7 @@ from application.ports.input.rule_use_case_ports import (
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.rule import AssignmentRule, ScoringRule
 from domain.exceptions import DomainException
+from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 
 
@@ -73,6 +74,7 @@ class CreateAssignmentRuleUseCase(CreateAssignmentRuleInputPort):
             agent_match_mode=command.agent_match_mode,
             strategy=command.strategy,
             priority=command.priority,
+            conditions=command.conditions,
         )
         with self.uow:
             return self.uow.rules.save_assignment_rule(command.tenant_id, rule)
@@ -112,6 +114,8 @@ class UpdateAssignmentRuleUseCase(UpdateAssignmentRuleInputPort):
                 rule.priority = command.priority
             if command.is_active is not None:
                 rule.is_active = command.is_active
+            if command.conditions is not None:
+                rule.conditions = [Criterion.from_dict(c) for c in command.conditions]
             # rr_cursor is never a command field, so a partial update leaves
             # an in-progress rotation exactly where it was.
             return self.uow.rules.save_assignment_rule(command.tenant_id, rule)

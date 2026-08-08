@@ -75,9 +75,9 @@ class RawSqlRuleRepository(RuleRepositoryPort):
             INSERT INTO assignment_rules (
                 id, tenant_id, name, min_score, max_score, target_group_id,
                 target_agent_ids, agent_match_mode, strategy, priority,
-                is_active, rr_cursor
+                is_active, rr_cursor, conditions
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 min_score = EXCLUDED.min_score,
@@ -88,7 +88,8 @@ class RawSqlRuleRepository(RuleRepositoryPort):
                 strategy = EXCLUDED.strategy,
                 priority = EXCLUDED.priority,
                 is_active = EXCLUDED.is_active,
-                rr_cursor = EXCLUDED.rr_cursor
+                rr_cursor = EXCLUDED.rr_cursor,
+                conditions = EXCLUDED.conditions
             """,
             (
                 rule.id,
@@ -103,6 +104,7 @@ class RawSqlRuleRepository(RuleRepositoryPort):
                 rule.priority,
                 rule.is_active,
                 rule.rr_cursor,
+                Jsonb([c.as_dict() for c in rule.conditions]),
             ),
         )
         return rule
@@ -127,4 +129,5 @@ class RawSqlRuleRepository(RuleRepositoryPort):
             priority=row["priority"],
             is_active=row["is_active"],
             rr_cursor=row["rr_cursor"],
+            conditions=row["conditions"] or [],
         )

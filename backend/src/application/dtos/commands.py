@@ -108,6 +108,8 @@ class CreateAssignmentRuleCommand:
     agent_match_mode: str = "ANY"
     strategy: Optional[str] = None
     priority: int = 0
+    # Plain dicts, not Criterion: same convention as CreateScoringRuleCommand.
+    conditions: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -126,6 +128,7 @@ class UpdateAssignmentRuleCommand:
     strategy: Optional[str] = None
     priority: Optional[int] = None
     is_active: Optional[bool] = None
+    conditions: Optional[List[Dict[str, Any]]] = None
 
 
 @dataclass(frozen=True)

@@ -83,7 +83,10 @@ def test_ingest_lead_endpoint_success():
         lead = client.get(f"/api/v1/leads/{record['lead_id']}", headers=headers)
         assert lead.status_code == 200
         data = lead.json()
-        assert data["status"] in ("NEW", "QUALIFIED", "DISQUALIFIED", "ASSIGNED")
+        # UNASSIGNED joined the set in F2c: this tenant has no assignment
+        # rule, and qualify() no longer has a threshold that could leave an
+        # ingested lead stuck at NEW (acceptance criterion 5).
+        assert data["status"] in ("NEW", "QUALIFIED", "DISQUALIFIED", "ASSIGNED", "UNASSIGNED")
         assert "score" in data
 
 def test_ingest_lead_endpoint_invalid_email_is_accepted_and_rejected_in_the_tray():

@@ -8,7 +8,8 @@ from domain.entities.lead import Lead
 from domain.entities.rule import AssignmentRule
 from domain.entities.sales_group import SalesGroup
 from domain.services.assignment_engine import AssignmentEngine
-from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, LeadStatus
+from domain.value_objects.criterion import Criterion
+from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, LeadStatus, Operator
 
 _TENANT = uuid.uuid4()
 
@@ -226,3 +227,44 @@ class TestStrategies:
 
         AssignmentEngine().select_agent(lead, [rule], [ana], _index([group]), {})
         assert lead.assigned_agent_id.value == ana.id.value
+
+
+class TestConditions:
+    def test_the_lead_of_that_channel_goes_to_the_conditioned_rule(self):
+        """Same band, two candidates: priority — not proximity in the list —
+        is what makes the more specific rule win deterministically."""
+        group_a, group_b = _group(), _group()
+        ana = _agent("Ana", group_a.id.value)
+        beto = _agent("Beto", group_b.id.value)
+        general = AssignmentRule.create(
+            tenant_id=_TENANT, name="General", target_group_id=group_a.id.value, priority=1,
+        )
+        referrals = AssignmentRule.create(
+            tenant_id=_TENANT, name="Referidos", target_group_id=group_b.id.value, priority=9,
+            conditions=[
+                Criterion.create(field="custom_attributes.channel", operator=Operator.EQUALS, value="referral")
+            ],
+        )
+        lead = _lead(50)
+        lead.custom_attributes["channel"] = "referral"
+
+        chosen = AssignmentEngine().select_agent(
+            lead, [general, referrals], [ana, beto], _index([group_a, group_b]), {}
+        )
+        assert chosen is beto
+
+    def test_no_matching_condition_leaves_the_lead_without_a_candidate(self):
+        group = _group()
+        ana = _agent("Ana", group.id.value)
+        rule = AssignmentRule.create(
+            tenant_id=_TENANT, name="Solo referidos", target_group_id=group.id.value,
+            conditions=[
+                Criterion.create(field="custom_attributes.channel", operator=Operator.EQUALS, value="referral")
+            ],
+        )
+        lead = _lead(50)
+        lead.custom_attributes["channel"] = "organic"
+
+        assert AssignmentEngine().select_agent(
+            lead, [rule], [ana], _index([group]), {}
+        ) is None

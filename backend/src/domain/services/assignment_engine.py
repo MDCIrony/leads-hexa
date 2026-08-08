@@ -23,7 +23,7 @@ class AssignmentEngine:
         groups: Dict[UUID, SalesGroup],
         loads: Dict[UUID, int],
     ) -> Optional[Agent]:
-        for rule in self._ordered_rules(rules, int(lead.score)):
+        for rule in self._ordered_rules(rules, lead):
             group = groups.get(rule.target_group_id) if rule.target_group_id else None
             candidates = self._candidates_for(rule, group, agents, groups, loads)
             if not candidates:
@@ -33,8 +33,8 @@ class AssignmentEngine:
         return None
 
     @staticmethod
-    def _ordered_rules(rules: List[AssignmentRule], score: int) -> List[AssignmentRule]:
-        applicable = [r for r in rules if r.is_active and r.matches_score(score)]
+    def _ordered_rules(rules: List[AssignmentRule], lead: Lead) -> List[AssignmentRule]:
+        applicable = [r for r in rules if r.is_active and r.matches(lead)]
         # The id breaks ties: without it, two rules of equal priority resolve
         # by whatever order the database returned them.
         return sorted(applicable, key=lambda r: (-r.priority, str(r.id)))

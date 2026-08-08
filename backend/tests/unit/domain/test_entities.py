@@ -32,13 +32,31 @@ def test_lead_entity_lifecycle():
     lead.apply_score(45)
     assert int(lead.score) == 45
 
-    lead.qualify(threshold_qualified=30, threshold_disqualified=0)
+    lead.qualify()
     assert lead.status == LeadStatus.QUALIFIED
 
     agent_id = AgentId()
     lead.assign_to(agent_id, lead.tenant_id)
     assert lead.status == LeadStatus.ASSIGNED
     assert lead.assigned_agent_id == agent_id
+
+def test_qualify_moves_a_low_score_lead_to_qualified_not_new():
+    """Acceptance criterion 5: qualify() has no threshold of its own anymore,
+    so nothing leaves a processed lead stuck in NEW."""
+    lead = Lead.create(
+        tenant_id=uuid.uuid4(),
+        source_id=uuid.uuid4(),
+        first_name="Bajo",
+        last_name="Puntaje",
+        company="TechCorp",
+        budget=100,
+        industry="tech",
+    )
+    lead.apply_score(5)
+
+    lead.qualify()
+
+    assert lead.status == LeadStatus.QUALIFIED
 
 def test_agent_entity_creation():
     agent = Agent.create(

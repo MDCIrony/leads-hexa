@@ -81,6 +81,9 @@ class AssignmentRule:
     priority: int = 0
     is_active: bool = True
     rr_cursor: int = 0
+    # Empty by default so every rule written before this phase keeps
+    # discriminating by band alone, with no data migration required.
+    conditions: List[Criterion] = field(default_factory=list)
 
     @classmethod
     def create(
@@ -96,6 +99,7 @@ class AssignmentRule:
         priority: int = 0,
         is_active: bool = True,
         rr_cursor: int = 0,
+        conditions: Optional[List[Union[Criterion, Dict[str, Any]]]] = None,
         rule_id: Optional[Union[str, UUID]] = None,
     ) -> "AssignmentRule":
         clean_name = (name or "").strip()
@@ -128,6 +132,7 @@ class AssignmentRule:
             priority=priority,
             is_active=is_active,
             rr_cursor=rr_cursor,
+            conditions=conditions,
             rule_id=rule_id,
         )
 
@@ -145,6 +150,7 @@ class AssignmentRule:
         priority: int = 0,
         is_active: bool = True,
         rr_cursor: int = 0,
+        conditions: Optional[List[Union[Criterion, Dict[str, Any]]]] = None,
         rule_id: Optional[Union[str, UUID]] = None,
     ) -> "AssignmentRule":
         """Rebuild a stored rule, applying no input validation.
@@ -155,6 +161,9 @@ class AssignmentRule:
         deletion would break every ingestion for the organization."""
         parsed_agent_ids = [UUID(str(i)) for i in target_agent_ids] if target_agent_ids else []
         parsed_group_id = UUID(str(target_group_id)) if target_group_id else None
+        parsed_conditions = [
+            c if isinstance(c, Criterion) else Criterion.from_dict(c) for c in conditions or []
+        ]
 
         mode = (
             agent_match_mode
@@ -182,12 +191,20 @@ class AssignmentRule:
             priority=priority,
             is_active=is_active,
             rr_cursor=rr_cursor,
+            conditions=parsed_conditions,
         )
 
     def matches_score(self, score: int) -> bool:
         if score < self.min_score:
             return False
         return self.max_score is None or score <= self.max_score
+
+    def matches(self, lead: "Lead") -> bool:
+        """Band and conditions, both required.
+
+        An empty condition list means the rule discriminates by score alone,
+        which is what every rule written before this phase does."""
+        return self.matches_score(int(lead.score)) and all_match(self.conditions, lead)
 
     def resolve_strategy(self, group: Optional["SalesGroup"]) -> AssignmentStrategy:
         """The rule's own strategy, or the group's, or the safe default."""
