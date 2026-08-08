@@ -1,13 +1,15 @@
 import uuid
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any
 
 import pytest
 
 from domain.entities.lead import Lead
 from domain.entities.rule import ScoringRule
 from domain.exceptions import DomainException
+from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator
+from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 
 _TENANT = uuid.uuid4()
 
@@ -23,8 +25,8 @@ def _lead(**overrides: Any) -> Lead:
 
 def _rule(field: str, operator: Operator, value: Any, delta: int = 10) -> ScoringRule:
     return ScoringRule.create(
-        tenant_id=_TENANT, name="R", field=field, operator=operator,
-        value=value, score_delta=delta,
+        tenant_id=_TENANT, name="R", score_delta=delta,
+        conditions=[Criterion.create(field=field, operator=operator, value=value)],
     )
 
 
@@ -88,3 +90,49 @@ class TestRuleState:
         with pytest.raises(DomainException) as exc:
             _rule("industry", Operator.IN, "tech")
         assert exc.value.error_code == "INVALID_RULE_VALUE"
+
+
+class TestMultipleConditions:
+    """What this task exists for: several conditions on one rule, ANDed."""
+
+    def test_a_rule_with_two_conditions_applies_when_both_hold(self):
+        rule = ScoringRule.create(
+            tenant_id=_TENANT, name="R", score_delta=10,
+            conditions=[
+                Criterion.create(field="industry", operator=Operator.EQUALS, value="tech"),
+                Criterion.create(field="budget", operator=Operator.GREATER_THAN, value=500),
+            ],
+        )
+        assert rule.matches(_lead()) is True
+
+    def test_a_rule_with_two_conditions_does_not_apply_when_only_one_holds(self):
+        rule = ScoringRule.create(
+            tenant_id=_TENANT, name="R", score_delta=10,
+            conditions=[
+                Criterion.create(field="industry", operator=Operator.EQUALS, value="tech"),
+                Criterion.create(field="budget", operator=Operator.GREATER_THAN, value=5000),
+            ],
+        )
+        assert rule.matches(_lead()) is False
+
+    def test_an_empty_condition_list_always_applies(self):
+        rule = ScoringRule.create(tenant_id=_TENANT, name="R", score_delta=10, conditions=[])
+        assert rule.matches(_lead()) is True
+
+
+class TestInMemoryRepository:
+    def test_saving_the_same_rule_twice_keeps_only_the_latest(self):
+        repo = InMemoryRuleRepository()
+        rule = _rule("industry", Operator.EQUALS, "tech")
+        repo.save_scoring_rule(_TENANT, rule)
+
+        updated = ScoringRule.create(
+            tenant_id=_TENANT, name="R", score_delta=20,
+            conditions=[Criterion.create(field="industry", operator=Operator.EQUALS, value="tech")],
+            rule_id=rule.id,
+        )
+        repo.save_scoring_rule(_TENANT, updated)
+
+        stored = repo.get_scoring_rules_by_tenant(_TENANT)
+        assert len(stored) == 1
+        assert stored[0].score_delta == 20

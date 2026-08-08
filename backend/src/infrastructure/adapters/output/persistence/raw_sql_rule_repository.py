@@ -24,9 +24,7 @@ class RawSqlRuleRepository(RuleRepositoryPort):
                     tenant_id=r["tenant_id"],
                     rule_id=r["id"],
                     name=r["name"],
-                    field=r["field"],
-                    operator=r["operator"],
-                    value=r["value"],
+                    conditions=r["conditions"] or [],
                     score_delta=r["score_delta"],
                     priority=r["priority"],
                     is_active=r["is_active"],
@@ -45,15 +43,13 @@ class RawSqlRuleRepository(RuleRepositoryPort):
         self.connection.execute(
             """
             INSERT INTO scoring_rules (
-                id, tenant_id, name, field, operator, value, score_delta, priority, is_active
+                id, tenant_id, name, conditions, score_delta, priority, is_active
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 tenant_id = EXCLUDED.tenant_id,
                 name = EXCLUDED.name,
-                field = EXCLUDED.field,
-                operator = EXCLUDED.operator,
-                value = EXCLUDED.value,
+                conditions = EXCLUDED.conditions,
                 score_delta = EXCLUDED.score_delta,
                 priority = EXCLUDED.priority,
                 is_active = EXCLUDED.is_active
@@ -62,9 +58,7 @@ class RawSqlRuleRepository(RuleRepositoryPort):
                 rule.id,
                 tenant_id,
                 rule.name,
-                rule.field,
-                rule.operator.value,
-                Jsonb(rule.value),
+                Jsonb([c.as_dict() for c in rule.conditions]),
                 rule.score_delta,
                 rule.priority,
                 rule.is_active,

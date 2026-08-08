@@ -10,6 +10,7 @@ from domain.value_objects import (
     Operator,
     WebhookEventType,
 )
+from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import AgentRole
 
 def test_lead_entity_lifecycle():
@@ -98,14 +99,12 @@ def test_scoring_rule_entity_creation():
     rule = ScoringRule.create(
         tenant_id=uuid.uuid4(),
         name="High Budget",
-        field="budget",
-        operator="GREATER_THAN",
-        value=10000,
+        conditions=[Criterion.create(field="budget", operator="GREATER_THAN", value=10000)],
         score_delta=25,
         rule_id=str(uuid.uuid4()),
     )
     assert rule.score_delta == 25
-    assert rule.operator == Operator.GREATER_THAN
+    assert rule.conditions[0].operator == Operator.GREATER_THAN
     assert isinstance(rule.id, uuid.UUID)
 
 def test_webhook_config_entity_creation():

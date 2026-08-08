@@ -124,11 +124,15 @@ class BatchProcessResponse(BaseModel):
     failed_rows: List[FailedRowResponse]
 
 # --- Rule Schemas ---
-class ScoringRuleCreate(BaseModel):
-    name: str
+class CriterionSchema(BaseModel):
     field: str
     operator: Operator
-    value: Any
+    # Optional because IS_EMPTY and IS_NOT_EMPTY ask about presence, not value.
+    value: Any = None
+
+class ScoringRuleCreate(BaseModel):
+    name: str
+    conditions: List[CriterionSchema]
     score_delta: int
     priority: int = 0
     is_active: bool = True
@@ -136,9 +140,7 @@ class ScoringRuleCreate(BaseModel):
 class ScoringRuleResponse(BaseModel):
     id: str
     name: str
-    field: str
-    operator: str
-    value: Any
+    conditions: List[CriterionSchema]
     score_delta: int
     priority: int
     is_active: bool

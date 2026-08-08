@@ -131,24 +131,24 @@ verify_f2a() {
   section "F2a · reglas de puntuación"
 
   r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
-    -d '{"name":"tech o saas","field":"industry","operator":"IN","value":["Tech","SaaS"],"score_delta":40,"priority":10}')
+    -d '{"name":"tech o saas","conditions":[{"field":"industry","operator":"IN","value":["Tech","SaaS"]}],"score_delta":40,"priority":10}')
   check "IN acepta una lista" 201 "$(code "$r")"
-  check "IN la almacena como lista, no como texto" "['Tech', 'SaaS']" "$(body "$r" | f 'd["value"]')"
+  check "IN la almacena como lista, no como texto" "['Tech', 'SaaS']" "$(body "$r" | f '(d.get("conditions") or [{}])[0].get("value")')"
 
   r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
-    -d '{"name":"presupuesto alto","field":"budget","operator":"GREATER_THAN","value":5000,"score_delta":25,"priority":5}')
-  check "GREATER_THAN conserva el número" 5000 "$(body "$r" | f 'd["value"]')"
+    -d '{"name":"presupuesto alto","conditions":[{"field":"budget","operator":"GREATER_THAN","value":5000}],"score_delta":25,"priority":5}')
+  check "GREATER_THAN conserva el número" 5000 "$(body "$r" | f '(d.get("conditions") or [{}])[0].get("value")')"
 
   r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
-    -d '{"name":"inactiva","field":"company","operator":"EQUALS","value":"Acme","score_delta":99,"is_active":false}')
+    -d '{"name":"inactiva","conditions":[{"field":"company","operator":"EQUALS","value":"Acme"}],"score_delta":99,"is_active":false}')
   check "regla inactiva se acepta" 201 "$(code "$r")"
 
   r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
-    -d '{"name":"no puntuable","field":"tenant_id","operator":"EQUALS","value":"x","score_delta":10}')
+    -d '{"name":"no puntuable","conditions":[{"field":"tenant_id","operator":"EQUALS","value":"x"}],"score_delta":10}')
   check "un campo interno no es puntuable" FIELD_NOT_SCORABLE "$(body "$r" | f 'd.get("error_code")')"
 
   r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
-    -d '{"name":"IN mal","field":"industry","operator":"IN","value":"Tech","score_delta":10}')
+    -d '{"name":"IN mal","conditions":[{"field":"industry","operator":"IN","value":"Tech"}],"score_delta":10}')
   check "IN exige una lista" INVALID_RULE_VALUE "$(body "$r" | f 'd.get("error_code")')"
 
   section "F2a · ingesta sin regla de asignación"

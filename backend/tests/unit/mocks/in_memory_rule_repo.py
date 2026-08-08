@@ -12,9 +12,14 @@ class InMemoryRuleRepository(RuleRepositoryPort):
         return self.scoring_rules.get(tenant_id, [])
 
     def save_scoring_rule(self, tenant_id: UUID, rule: ScoringRule) -> ScoringRule:
-        if tenant_id not in self.scoring_rules:
-            self.scoring_rules[tenant_id] = []
-        self.scoring_rules[tenant_id].append(rule)
+        # Mirrors the SQL adapter's ON CONFLICT (id) DO UPDATE: appending made
+        # a re-saved rule apply twice, which no real repository would do.
+        bucket = self.scoring_rules.setdefault(tenant_id, [])
+        for index, existing in enumerate(bucket):
+            if existing.id == rule.id:
+                bucket[index] = rule
+                return rule
+        bucket.append(rule)
         return rule
 
     def get_assignment_rules_by_tenant(self, tenant_id: UUID) -> List[AssignmentRule]:

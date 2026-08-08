@@ -18,7 +18,7 @@ from application.ports.input.rule_use_case_ports import (
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.rule import AssignmentRule, ScoringRule
 from domain.exceptions import DomainException
-from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, Operator
+from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 
 
 class GetScoringRulesUseCase(GetScoringRulesInputPort):
@@ -38,9 +38,7 @@ class CreateScoringRuleUseCase(CreateScoringRuleInputPort):
         rule = ScoringRule.create(
             tenant_id=command.tenant_id,
             name=command.name,
-            field=command.field,
-            operator=Operator(command.operator),
-            value=command.value,
+            conditions=command.conditions,
             score_delta=command.score_delta,
             priority=command.priority,
             is_active=command.is_active,

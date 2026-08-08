@@ -78,7 +78,11 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
         # tenant, taken from the token — there is no tenant_id left to pass.
         own_rule_resp = client.post(
             "/api/v1/rules/scoring",
-            json={"name": "Test Rule", "field": "budget", "operator": "GREATER_THAN", "value": 1000, "score_delta": 10},
+            json={
+                "name": "Test Rule",
+                "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 1000}],
+                "score_delta": 10,
+            },
             headers=manager_headers,
         )
         assert own_rule_resp.status_code == 201
@@ -124,7 +128,11 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
         agent_headers = {"Authorization": f"Bearer {agent_login_resp.json()['access_token']}"}
         agent_rule_resp = client.post(
             "/api/v1/rules/scoring",
-            json={"name": "Test Rule", "field": "budget", "operator": "GREATER_THAN", "value": 1000, "score_delta": 10},
+            json={
+                "name": "Test Rule",
+                "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 1000}],
+                "score_delta": 10,
+            },
             headers=agent_headers,
         )
         assert agent_rule_resp.status_code == 403

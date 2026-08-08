@@ -86,9 +86,7 @@ def test_full_system_lead_routing_flow_e2e():
             "/api/v1/rules/scoring",
             json={
                 "name": "High Budget Bonus",
-                "field": "budget",
-                "operator": "GREATER_THAN",
-                "value": 10000,
+                "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 10000}],
                 "score_delta": 35,
             },
             headers=headers,

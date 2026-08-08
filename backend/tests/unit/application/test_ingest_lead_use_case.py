@@ -4,6 +4,7 @@ from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payloa
 from domain.entities import Agent, AssignmentRule, ScoringRule, SalesGroup
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects import Operator, AssignmentStrategy
+from domain.value_objects.criterion import Criterion
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
@@ -27,9 +28,7 @@ def test_ingest_lead_use_case_successful_flow():
         ScoringRule.create(
             tenant_id=tenant_id,
             name="Tech Corp High Budget",
-            field="budget",
-            operator=Operator.GREATER_THAN,
-            value=10000,
+            conditions=[Criterion.create(field="budget", operator=Operator.GREATER_THAN, value=10000)],
             score_delta=35,
         ),
     )

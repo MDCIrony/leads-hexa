@@ -59,8 +59,9 @@ def test_a_list_valued_rule_survives_the_round_trip(test_db):
             "/api/v1/rules/scoring",
             headers={"Authorization": f"Bearer {manager_token}"},
             json={
-                "name": "Sectores objetivo", "field": "industry", "operator": "IN",
-                "value": ["tech", "finance"], "score_delta": 40,
+                "name": "Sectores objetivo",
+                "conditions": [{"field": "industry", "operator": "IN", "value": ["tech", "finance"]}],
+                "score_delta": 40,
             },
         )
         assert created.status_code == 201
@@ -69,7 +70,7 @@ def test_a_list_valued_rule_survives_the_round_trip(test_db):
             "/api/v1/rules/scoring", headers={"Authorization": f"Bearer {manager_token}"}
         )
         rule = next(r for r in listed.json() if r["name"] == "Sectores objetivo")
-        assert rule["value"] == ["tech", "finance"]
+        assert rule["conditions"][0]["value"] == ["tech", "finance"]
 
 
 def test_a_numeric_rule_keeps_its_number(test_db):
@@ -79,12 +80,13 @@ def test_a_numeric_rule_keeps_its_number(test_db):
             "/api/v1/rules/scoring",
             headers={"Authorization": f"Bearer {manager_token}"},
             json={
-                "name": "Presupuesto alto", "field": "budget", "operator": "GREATER_THAN",
-                "value": 5000, "score_delta": 30,
+                "name": "Presupuesto alto",
+                "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 5000}],
+                "score_delta": 30,
             },
         )
         assert created.status_code == 201
-        assert created.json()["value"] == 5000
+        assert created.json()["conditions"][0]["value"] == 5000
 
 
 def test_a_field_outside_the_allow_list_is_refused(test_db):
@@ -94,8 +96,9 @@ def test_a_field_outside_the_allow_list_is_refused(test_db):
             "/api/v1/rules/scoring",
             headers={"Authorization": f"Bearer {manager_token}"},
             json={
-                "name": "Fuga", "field": "tenant_id", "operator": "EQUALS",
-                "value": "x", "score_delta": 10,
+                "name": "Fuga",
+                "conditions": [{"field": "tenant_id", "operator": "EQUALS", "value": "x"}],
+                "score_delta": 10,
             },
         )
         assert refused.status_code == 400

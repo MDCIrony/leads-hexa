@@ -1,12 +1,12 @@
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import UUID
 
 from domain.exceptions import DomainException
-from domain.value_objects.criterion import Criterion
-from domain.value_objects.criterion import EVALUABLE_FIELDS as SCORABLE_FIELDS, _CUSTOM_PREFIX
-from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, Operator
+from domain.value_objects.criterion import Criterion, all_match
+from domain.value_objects.criterion import EVALUABLE_FIELDS as SCORABLE_FIELDS
+from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 
 if TYPE_CHECKING:
     # Only for the type hint in resolve_strategy: importing SalesGroup at
@@ -17,18 +17,16 @@ if TYPE_CHECKING:
 
 @dataclass
 class ScoringRule:
-    """A criterion that adds or subtracts points from a lead.
+    """A rule that adds or subtracts points when all its conditions hold.
 
-    The comparison lives here rather than in the engine: a rule that cannot
-    evaluate itself is an anaemic record, and the engine ended up owning
-    business semantics it had no business owning."""
+    Several conditions instead of one is what lets a manager write "high
+    budget AND target industry" as a single rule. Alternatives are separate
+    rules: there is no OR."""
 
     id: UUID
     tenant_id: UUID
     name: str
-    field: str
-    operator: Operator
-    value: Any
+    conditions: List[Criterion]
     score_delta: int
     priority: int = 0
     is_active: bool = True
@@ -38,51 +36,27 @@ class ScoringRule:
         cls,
         tenant_id: Union[str, UUID],
         name: str,
-        field: str,
-        operator: Union[Operator, str],
-        value: Any,
+        conditions: List[Union[Criterion, Dict[str, Any]]],
         score_delta: int,
         priority: int = 0,
         is_active: bool = True,
         rule_id: Optional[Union[str, UUID]] = None,
     ) -> "ScoringRule":
-        clean_field = (field or "").strip()
-        if not clean_field:
-            raise DomainException(
-                "El campo de la regla no puede estar vacío",
-                error_code="INVALID_RULE_FIELD",
-            )
-        if not clean_field.startswith(_CUSTOM_PREFIX) and clean_field not in SCORABLE_FIELDS:
-            raise DomainException(
-                f"El campo '{clean_field}' no es puntuable",
-                error_code="FIELD_NOT_SCORABLE",
-            )
-        op = Operator(operator) if isinstance(operator, str) else operator
-        if op == Operator.IN and not isinstance(value, (list, tuple)):
-            raise DomainException(
-                "El operador IN exige una lista de valores",
-                error_code="INVALID_RULE_VALUE",
-            )
+        # Accepts dicts so the SQL adapter can hand over what JSONB gave it
+        # without importing Criterion to rebuild each one.
+        parsed = [c if isinstance(c, Criterion) else Criterion.from_dict(c) for c in conditions]
         return cls(
             id=UUID(str(rule_id)) if rule_id else uuid.uuid4(),
             tenant_id=UUID(str(tenant_id)),
             name=name,
-            field=clean_field,
-            operator=op,
-            value=value,
+            conditions=parsed,
             score_delta=score_delta,
             priority=priority,
             is_active=is_active,
         )
 
     def matches(self, lead: "Lead") -> bool:
-        return self.as_criterion().matches(lead)
-
-    def as_criterion(self) -> Criterion:
-        # Uses the plain constructor, not create(): the field was already
-        # validated when the rule was built, and re-validating here would make
-        # a rule stored before the allow-list existed unreadable.
-        return Criterion(field=self.field, operator=self.operator, value=self.value)
+        return all_match(self.conditions, lead)
 
 
 @dataclass

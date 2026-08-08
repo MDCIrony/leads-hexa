@@ -52,11 +52,9 @@ class UpdateAgentCommand:
 class CreateScoringRuleCommand:
     tenant_id: UUID
     name: str
-    field: str
-    operator: str
-    # Any, not str: coercing here is what kept the IN operator from ever
-    # matching, since the engine needs the list the manager actually sent.
-    value: Any
+    # Plain dicts, not Criterion: the DTO stays a transport shape and the use
+    # case is where it becomes a domain object.
+    conditions: List[Dict[str, Any]]
     score_delta: int
     priority: int = 0
     is_active: bool = True

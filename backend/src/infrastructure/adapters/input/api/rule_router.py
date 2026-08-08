@@ -8,7 +8,7 @@ from application.ports.input.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
     GetAssignmentRulesInputPort, GetScoringRulesInputPort, UpdateAssignmentRuleInputPort,
 )
-from domain.entities.rule import AssignmentRule
+from domain.entities.rule import AssignmentRule, ScoringRule
 from infrastructure.adapters.input.api.dependencies import (
     get_create_scoring_rule_use_case, get_get_scoring_rules_use_case,
     get_create_assignment_rule_use_case, get_get_assignment_rules_use_case,
@@ -17,10 +17,22 @@ from infrastructure.adapters.input.api.dependencies import (
 )
 from infrastructure.adapters.input.api.schemas import (
     AssignmentRuleCreate, AssignmentRuleResponse, AssignmentRuleUpdate, PaginatedAssignmentRulesResponse,
-    ScoringRuleCreate, ScoringRuleResponse,
+    CriterionSchema, ScoringRuleCreate, ScoringRuleResponse,
 )
 
 router = APIRouter()
+
+
+def _to_scoring_response(rule: ScoringRule) -> ScoringRuleResponse:
+    return ScoringRuleResponse(
+        id=str(rule.id),
+        name=rule.name,
+        conditions=[CriterionSchema(**c.as_dict()) for c in rule.conditions],
+        score_delta=rule.score_delta,
+        priority=rule.priority,
+        is_active=rule.is_active,
+    )
+
 
 @router.post("/scoring", response_model=ScoringRuleResponse, status_code=status.HTTP_201_CREATED)
 def create_scoring_rule(
@@ -31,26 +43,13 @@ def create_scoring_rule(
     command = CreateScoringRuleCommand(
         tenant_id=context.tenant_id,
         name=request.name,
-        field=request.field,
-        operator=request.operator.value if hasattr(request.operator, 'value') else str(request.operator),
-        # Not str(request.value): the engine needs the type the manager sent
-        # (a list for IN, a number for GREATER_THAN), not its string form.
-        value=request.value,
+        conditions=[c.model_dump() for c in request.conditions],
         score_delta=request.score_delta,
         priority=request.priority,
         is_active=request.is_active,
     )
     saved = use_case.execute(command)
-    return ScoringRuleResponse(
-        id=str(saved.id),
-        name=saved.name,
-        field=saved.field,
-        operator=saved.operator.value,
-        value=saved.value,
-        score_delta=saved.score_delta,
-        priority=saved.priority,
-        is_active=saved.is_active,
-    )
+    return _to_scoring_response(saved)
 
 @router.get("/scoring", response_model=List[ScoringRuleResponse], status_code=status.HTTP_200_OK)
 def list_scoring_rules(
@@ -59,19 +58,7 @@ def list_scoring_rules(
 ):
     query = GetRulesQuery(tenant_id=context.tenant_id)
     rules = use_case.execute(query)
-    return [
-        ScoringRuleResponse(
-            id=str(r.id),
-            name=r.name,
-            field=r.field,
-            operator=r.operator.value,
-            value=r.value,
-            score_delta=r.score_delta,
-            priority=r.priority,
-            is_active=r.is_active,
-        )
-        for r in rules
-    ]
+    return [_to_scoring_response(r) for r in rules]
 
 
 def _to_response(rule: AssignmentRule) -> AssignmentRuleResponse:

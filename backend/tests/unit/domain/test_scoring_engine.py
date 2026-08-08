@@ -4,6 +4,7 @@ from typing import Any
 from domain.entities.lead import Lead
 from domain.entities.rule import ScoringRule
 from domain.services.scoring_engine import ScoringEngine
+from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator
 
 _TENANT = uuid.uuid4()
@@ -21,8 +22,8 @@ def _lead(**overrides: Any) -> Lead:
 def _rule(name: str, field: str, operator: Operator, value: Any, delta: int,
           priority: int = 0, is_active: bool = True) -> ScoringRule:
     return ScoringRule.create(
-        tenant_id=_TENANT, name=name, field=field, operator=operator,
-        value=value, score_delta=delta, priority=priority, is_active=is_active,
+        tenant_id=_TENANT, name=name, score_delta=delta, priority=priority, is_active=is_active,
+        conditions=[Criterion.create(field=field, operator=operator, value=value)],
     )
 
 

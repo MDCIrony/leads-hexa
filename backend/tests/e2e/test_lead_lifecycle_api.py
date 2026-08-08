@@ -52,9 +52,7 @@ def _create_org(client: TestClient, admin_token: str) -> tuple[str, str]:
         "/api/v1/rules/scoring",
         json={
             "name": "Tech leads",
-            "field": "industry",
-            "operator": "EQUALS",
-            "value": "tech",
+            "conditions": [{"field": "industry", "operator": "EQUALS", "value": "tech"}],
             "score_delta": 50,
         },
         headers={"Authorization": f"Bearer {manager_token}"},

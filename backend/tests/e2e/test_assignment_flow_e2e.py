@@ -125,8 +125,16 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
         # one at 40 (PYME) — both above the 30-point qualification floor,
         # both on a different side of the 70-point Enterprise threshold.
         for scoring_rule in (
-            {"name": "Base budget", "field": "budget", "operator": "GREATER_THAN", "value": 1000, "score_delta": 40},
-            {"name": "Big budget", "field": "budget", "operator": "GREATER_THAN", "value": 50000, "score_delta": 40},
+            {
+                "name": "Base budget",
+                "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 1000}],
+                "score_delta": 40,
+            },
+            {
+                "name": "Big budget",
+                "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 50000}],
+                "score_delta": 40,
+            },
         ):
             scoring_resp = client.post("/api/v1/rules/scoring", json=scoring_rule, headers=headers)
             assert scoring_resp.status_code == 201, scoring_resp.text
