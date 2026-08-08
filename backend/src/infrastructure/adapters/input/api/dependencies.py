@@ -40,6 +40,9 @@ from application.ports.input.intake_record_use_case_ports import (
 from application.ports.input.intake_job_use_case_ports import (
     GetIntakeJobInputPort, GetIntakeJobsInputPort, ReprocessIntakeJobInputPort,
 )
+from application.ports.input.notification_use_case_ports import (
+    GetNotificationsInputPort, MarkAllNotificationsReadInputPort, MarkNotificationReadInputPort,
+)
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
@@ -70,6 +73,9 @@ from application.use_cases.intake_record_use_cases import (
 )
 from application.use_cases.intake_job_use_cases import (
     GetIntakeJobUseCase, GetIntakeJobsUseCase, ReprocessIntakeJobUseCase,
+)
+from application.use_cases.notification_use_cases import (
+    GetNotificationsUseCase, MarkAllNotificationsReadUseCase, MarkNotificationReadUseCase,
 )
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import LoginUseCase
@@ -264,6 +270,19 @@ def get_get_tenants_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetTenan
 
 def get_update_tenant_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateTenantInputPort:
     return UpdateTenantUseCase(uow=uow)
+
+def get_get_notifications_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetNotificationsInputPort:
+    return GetNotificationsUseCase(uow=uow)
+
+def get_mark_notification_read_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+) -> MarkNotificationReadInputPort:
+    return MarkNotificationReadUseCase(uow=uow)
+
+def get_mark_all_notifications_read_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+) -> MarkAllNotificationsReadInputPort:
+    return MarkAllNotificationsReadUseCase(uow=uow)
 
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")

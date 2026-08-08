@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from domain.entities.intake_record import IntakeRecord
     from domain.entities.lead import Lead
     from domain.entities.lead_source import LeadSource
+    from domain.entities.notification import Notification
     from domain.entities.sales_group import SalesGroup
     from domain.entities.tenant import Tenant
 
@@ -314,3 +315,16 @@ class ReceiveIntakeResult:
 class IntakeJobsPageResult:
     items: List["IntakeJob"]
     total: int
+
+
+@dataclass(frozen=True)
+class NotificationsPageResult:
+    items: List["Notification"]
+    total: int
+    unread_count: int
+
+
+@dataclass(frozen=True)
+class MarkNotificationReadCommand:
+    recipient_id: UUID
+    notification_id: UUID

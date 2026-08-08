@@ -90,3 +90,11 @@ class GetIntakeJobsQuery:
     status: Optional[str] = None
     limit: int = 100
     offset: int = 0
+
+
+@dataclass(frozen=True)
+class GetNotificationsQuery:
+    recipient_id: UUID
+    unread_only: bool = False
+    limit: int = 100
+    offset: int = 0
