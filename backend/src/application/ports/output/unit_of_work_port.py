@@ -11,6 +11,7 @@ from application.ports.output.tenant_repository_port import TenantRepositoryPort
 from application.ports.output.lead_source_repository_port import LeadSourceRepositoryPort
 from application.ports.output.intake_record_repository_port import IntakeRecordRepositoryPort
 from application.ports.output.intake_job_repository_port import IntakeJobRepositoryPort
+from application.ports.output.notification_repository_port import NotificationRepositoryPort
 
 class UnitOfWorkPort(abc.ABC):
     leads: LeadRepositoryPort
@@ -22,6 +23,7 @@ class UnitOfWorkPort(abc.ABC):
     sources: LeadSourceRepositoryPort
     intake_records: IntakeRecordRepositoryPort
     intake_jobs: IntakeJobRepositoryPort
+    notifications: NotificationRepositoryPort
 
     def __enter__(self) -> UnitOfWorkPort:
         return self

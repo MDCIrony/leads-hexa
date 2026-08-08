@@ -70,6 +70,14 @@ class IntakeJobKind(str, Enum):
     BATCH = "BATCH"
 
 
+class NotificationKind(str, Enum):
+    """What happened. Drives the icon and the wording in the interface."""
+
+    LEAD_ASSIGNED = "LEAD_ASSIGNED"
+    LEAD_REASSIGNED = "LEAD_REASSIGNED"
+    LEAD_LEFT_UNASSIGNED = "LEAD_LEFT_UNASSIGNED"
+    INTAKE_REJECTED = "INTAKE_REJECTED"
+
 class IntakeJobStatus(str, Enum):
     """How far along an ingestion operation is."""
 

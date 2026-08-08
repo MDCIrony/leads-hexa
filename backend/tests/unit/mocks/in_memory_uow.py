@@ -9,6 +9,7 @@ from application.ports.output.intake_job_repository_port import IntakeJobReposit
 from application.ports.output.intake_record_repository_port import IntakeRecordRepositoryPort
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from application.ports.output.lead_source_repository_port import LeadSourceRepositoryPort
+from application.ports.output.notification_repository_port import NotificationRepositoryPort
 from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.tenant_repository_port import TenantRepositoryPort
@@ -16,6 +17,7 @@ from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
+from domain.entities.notification import Notification
 from domain.value_objects.enums import IntakeJobStatus, IntakeRecordStatus
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
@@ -141,6 +143,51 @@ class InMemoryDisqualificationRuleRepository(DisqualificationRuleRepositoryPort)
         return False
 
 
+class InMemoryNotificationRepository(NotificationRepositoryPort):
+    """Kept inline (same convention as the other mocks above)."""
+
+    def __init__(self) -> None:
+        self._notifications: Dict[UUID, Notification] = {}
+
+    def save(self, notification: Notification) -> Notification:
+        self._notifications[notification.id.value] = notification
+        return notification
+
+    def get_by_id_and_recipient(self, notification_id: UUID, recipient_id: UUID) -> Optional[Notification]:
+        notification = self._notifications.get(notification_id)
+        return notification if notification and notification.recipient_id.value == recipient_id else None
+
+    def list_by_recipient(
+        self,
+        recipient_id: UUID,
+        unread_only: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Notification]:
+        items = [
+            n
+            for n in self._notifications.values()
+            if n.recipient_id.value == recipient_id and (not unread_only or not n.is_read)
+        ]
+        items.sort(key=lambda n: n.created_at, reverse=True)
+        return items[offset : offset + limit]
+
+    def count_by_recipient(self, recipient_id: UUID, unread_only: bool = False) -> int:
+        return sum(
+            1
+            for n in self._notifications.values()
+            if n.recipient_id.value == recipient_id and (not unread_only or not n.is_read)
+        )
+
+    def mark_all_read(self, recipient_id: UUID) -> int:
+        count = 0
+        for n in self._notifications.values():
+            if n.recipient_id.value == recipient_id and not n.is_read:
+                n.mark_as_read()
+                count += 1
+        return count
+
+
 class InMemoryUnitOfWork(UnitOfWorkPort):
     def __init__(
         self,
@@ -156,6 +203,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         intake_records: Optional[IntakeRecordRepositoryPort] = None,
         intake_jobs: Optional[IntakeJobRepositoryPort] = None,
         disqualification_rules: Optional[DisqualificationRuleRepositoryPort] = None,
+        notifications: Optional[NotificationRepositoryPort] = None,
     ) -> None:
         # Defaulting to a fresh in-memory repo (instead of None) is what lets
         # a test that only cares about leads and agents write
@@ -169,6 +217,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.intake_records = intake_records or InMemoryIntakeRecordRepository()
         self.intake_jobs = intake_jobs or InMemoryIntakeJobRepository()
         self.disqualification_rules = disqualification_rules or InMemoryDisqualificationRuleRepository()
+        self.notifications = notifications or InMemoryNotificationRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self
