@@ -114,9 +114,11 @@ Devuelve la identidad del agente autenticado. Es lo que el frontend necesita par
 
 ---
 
-### 2. Ingesta de Lead (`POST /api/v1/tenants/{tenant_id}/leads/ingest`)
+### 2. Ingesta de Lead (`POST /api/v1/intake/{tenant_id}/leads/ingest`)
 
 Recibe un comando de ingesta de lead, evalúa reglas de scoring y de asignación, asigna un agente y emite eventos de dominio.
+
+> **Sin autenticación.** Hoy este endpoint no exige credencial alguna y toma la organización del `tenant_id` de la URL: cualquiera que conozca ese UUID puede inyectar leads. Está registrado como defecto en la sección 2.3 del spec del MVP y se cierra en F2, cuando `LeadSource` introduzca fuentes con secreto propio.
 
 - **Autenticación**: Ninguna por diseño (endpoint de ingesta pública).
 - **Path Parameters**: `tenant_id` (UUID).
@@ -157,7 +159,7 @@ Recibe un comando de ingesta de lead, evalúa reglas de scoring y de asignación
 
 ---
 
-### 3. Carga Masiva de Leads (`POST /api/v1/tenants/{tenant_id}/leads/batch-upload`)
+### 3. Carga Masiva de Leads (`POST /api/v1/intake/{tenant_id}/leads/batch-upload`)
 
 Procesa un archivo CSV o Excel para la ingesta masiva de leads de un tenant.
 
@@ -183,9 +185,9 @@ Procesa un archivo CSV o Excel para la ingesta masiva de leads de un tenant.
 
 ---
 
-### 4. Listar Leads (`GET /api/v1/tenants/{tenant_id}/leads`)
+### 4. Listar Leads (`GET /api/v1/leads`)
 
-Consulta de leads paginados pertenecientes a un tenant.
+Consulta de leads paginados. La organización sale del token, nunca de la URL. **Sólo para el gestor:** este endpoint devuelve el flujo completo de la organización, así que un asesor que lo alcanzara leería los leads de sus compañeros. La vista del asesor es `GET /api/v1/leads/mine`, que F2 entrega.
 
 - **Autenticación**: Requerida (`Bearer Token`).
 - **Permisos**: Requiere acceso al tenant vía `verify_tenant_access` (cualquier agente autenticado perteneciente a `tenant_id`, o un `ADMIN`).

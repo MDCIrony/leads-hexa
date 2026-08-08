@@ -52,24 +52,26 @@ Diagnóstico realizado sobre el código, no sobre la documentación. Evidencia e
 | `application/use_cases/agent_use_cases.py:10` | La aplicación importa `infrastructure.security.password_hasher.hash_password` |
 | `application/dtos/commands.py:46`, `queries.py:2` | Pydantic dentro de la capa de aplicación |
 | `adapters/input/api/agent_router.py:36-63` | El router accede directamente al repositorio (`uow.agents.count()`) e implementa reglas de negocio |
-| `domain/exceptions.py:3` | Códigos HTTP dentro del dominio (`status_code = 400`) |
-| `application/ports/input/*` | Los puertos de entrada devuelven entidades de dominio; el hash de contraseña llega hasta el DTO de respuesta |
+| `domain/exceptions.py:3` | Códigos HTTP dentro del dominio (`status_code = 400`) — ✅ **resuelto en F0**: la traducción vive en `exception_handlers.py` |
+| `application/ports/input/*` | Los puertos de entrada devuelven entidades de dominio; el hash de contraseña llega hasta el DTO de respuesta — ✅ **resuelto en F0.5** |
 
 ### 2.3 Defectos funcionales
 
-| Defecto | Causa |
-|---|---|
-| `ROUND_ROBIN` siempre elige el mismo agente | `RouterEngine` se instancia por request; el cursor vive en memoria de instancia |
-| `DIRECT_AGENT` no dirige a nadie | Devuelve `eligible_agents[0]`, idéntico al caso por defecto |
-| El operador `IN` nunca se cumple | `CreateScoringRuleCommand.value: str` fuerza cadena; el motor exige lista |
-| Ingesta individual y carga masiva sin autenticación | Cualquiera puede inyectar leads en cualquier tenant |
-| Fuga cross-tenant en la asignación | `get_available_agents()` no filtra por tenant |
-| Fuga cross-tenant en listados | `GET /agents` devuelve agentes de todas las organizaciones |
-| Paginación no determinista | `list_by_tenant` sin `ORDER BY` |
-| `active_leads_count` nunca decrece, con *lost update* | Read-modify-write sin atomicidad, y no hay cierre de leads |
-| Un lead con email inválido se pierde | Devuelve `FAILED` sin persistir nada |
-| `applied_rules_count` miente | Cuenta reglas consultadas, no aplicadas |
-| `webhook_dispatched` miente | Es `True` con sólo existir el publicador |
+Esta tabla describe el **punto de partida**, no el estado actual. La columna de estado dice qué queda vivo: no vuelvas a arreglar lo que ya está cerrado.
+
+| Defecto | Causa | Estado |
+|---|---|---|
+| `ROUND_ROBIN` siempre elige el mismo agente | `RouterEngine` se instancia por request; el cursor vive en memoria de instancia | ✅ F1 |
+| `DIRECT_AGENT` no dirige a nadie | Devuelve `eligible_agents[0]`, idéntico al caso por defecto | ✅ F1 |
+| Fuga cross-tenant en la asignación | `get_available_agents()` no filtra por tenant | ✅ F1 |
+| Fuga cross-tenant en listados | `GET /agents` devuelve agentes de todas las organizaciones | ✅ F0.5 |
+| `active_leads_count` nunca decrece, con *lost update* | Read-modify-write sin atomicidad, y no hay cierre de leads | ✅ F1 |
+| Paginación no determinista | `list_by_tenant` sin `ORDER BY` | ✅ F0.5 en asesores · ⏳ **F2a** en leads |
+| El operador `IN` nunca se cumple | `CreateScoringRuleCommand.value: str` fuerza cadena; el motor exige lista | ⏳ **F2a** |
+| `applied_rules_count` miente | Cuenta reglas consultadas, no aplicadas | ⏳ **F2a** |
+| Ingesta individual y carga masiva sin autenticación | Cualquiera puede inyectar leads en cualquier tenant | ⏳ **F2b** |
+| Un lead con email inválido se pierde | Devuelve `FAILED` sin persistir nada | ⏳ **F2b** |
+| `webhook_dispatched` miente | Es `True` con sólo existir el publicador | ⏳ F3a |
 
 ### 2.4 Deuda de infraestructura
 
@@ -843,12 +845,14 @@ Ficheros SQL numerados en `backend/migrations/`, aplicados al arrancar por un ru
 
 ```
 migrations/
-  001_initial_schema.sql
-  002_tenants_and_groups.sql
-  003_intake_and_sources.sql
-  004_notifications.sql
-  005_indexes_and_constraints.sql
+  001_baseline_schema.sql          F0    aplicada
+  002_tenants.sql                  F0.5  aplicada
+  003_groups_and_assignment.sql    F1    aplicada
+  004_intake_and_sources.sql       F2
+  005_notifications.sql            F3a
 ```
+
+Los nombres y la numeración son los reales, no una previsión: las tres primeras están aplicadas y registradas en `schema_migrations`. **La numeración disponible para F2 es la 004**, no la 003, que ocupan los grupos. Los índices y las claves foráneas no tienen migración propia: cada una los declara junto a las tablas que introduce.
 
 Sustituye al esquema actual, que se recrea en cada arranque desde una constante de Python y ha ido acumulando `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` de forma irreversible.
 
@@ -984,11 +988,15 @@ Esto elimina también la fragilidad actual: los tests extremo a extremo comparte
 |---|---|---|
 | **F0** — Fundación | Puertos de seguridad, DTOs sin framework, políticas de dominio, composition root, contexto de petición, excepciones sin HTTP, migraciones, pool, logging, `conftest.py`, marcadores, test de arquitectura | El test de arquitectura pasa; `pytest -m unit` verde sin base de datos; la suite completa verde con el compose levantado |
 | **F1** — Grupos y asignación | `Tenant`, `SalesGroup`, `AssignmentRule` renovada, motor de asignación corregido, carga derivada, CRUD completo de asesores, grupos y reglas | Un gestor crea grupos, asesores y reglas, y un lead ingestado se asigna al asesor correcto según cada estrategia |
-| **F2** — Ingesta y ciclo de vida | `LeadSource`, `IntakeRecord`, pipeline unificado, máquina de estados del lead, asignación manual, descarte, `/leads/mine` | Un lead mal formado queda en la bandeja con su error; el gestor lo corrige y se promueve; un lead sin asesor queda `UNASSIGNED` y se puede asignar a mano |
+| **F2** — Ingesta y ciclo de vida | `LeadSource`, `IntakeRecord`, pipeline unificado, **motor de puntuación corregido (§7.1) con desglose de reglas aplicadas**, **cierre de la ingesta sin autenticar**, máquina de estados del lead, asignación manual, descarte, `/leads/mine` | Un lead mal formado queda en la bandeja con su error; el gestor lo corrige y se promueve; un lead sin asesor queda `UNASSIGNED` y se puede asignar a mano; nadie ingesta sin credencial |
 | **F3a** — Notificaciones | `Notification`, manejadores de eventos, endpoints, contador de no leídas | El asesor recibe aviso al asignársele un lead; el gestor lo recibe ante un rechazo o un lead sin asignar |
 | **F4** — Frontend | Arquitectura (router, sesión, capa de datos, guards, tipos generados) y después las vistas de ambos paneles | Un gestor y un asesor completan sus recorridos contra el backend real, sin ningún dato simulado |
 
 Cada fase es entregable y demostrable por separado. La ordenación no es negociable: F0 establece las fronteras que el resto respeta, y hacerla al final significaría reescribir todo lo construido encima.
+
+**Estado real.** F0 se ejecutó en tres tramos: F0 (fundación), F0.5 (separación de los dos planos) y F0.6 (tipos nativos en SQL). F1 está cerrada y verificada. La siguiente es F2.
+
+**Por qué el motor de puntuación cae en F2.** Las correcciones de §7.1 no tenían fase asignada, y F2 no puede entregarse sin ellas: el pipeline de ingesta puntúa cada lead antes de asignarlo, la bandeja de entrada necesita el desglose de reglas aplicadas para explicar al gestor por qué un lead puntuó lo que puntuó, y `CreateScoringRuleCommand.value: str` mantiene roto el operador `IN` —una regla de puntuación que hoy no se cumple nunca—. Dejarlas fuera entregaría una ingesta que puntúa mal.
 
 ---
 
