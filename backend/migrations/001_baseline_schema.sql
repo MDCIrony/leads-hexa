@@ -23,7 +23,10 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
     name TEXT NOT NULL,
     field TEXT NOT NULL,
     operator TEXT NOT NULL,
-    value TEXT NOT NULL,
+    -- JSONB, like custom_attributes: the value a rule compares against is a
+    -- scalar whose type is decided per row, and encoding JSON into TEXT would
+    -- hide that from the database.
+    value JSONB NOT NULL,
     score_delta INTEGER NOT NULL
 );
 

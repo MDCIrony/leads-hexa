@@ -1,4 +1,3 @@
-import json
 from typing import List
 from uuid import UUID
 
@@ -14,10 +13,6 @@ class RawSqlRuleRepository(RuleRepositoryPort):
         self.connection = connection
 
     def get_scoring_rules_by_tenant(self, tenant_id: UUID) -> List[ScoringRule]:
-        # value stays TEXT+JSON-encoded, not JSONB: it holds whatever scalar
-        # type a rule compares against (str/int/bool), decided per row, which
-        # is exactly what json.dumps/loads are for, independent of this
-        # migration's id/date/attribute/flag scope.
         cursor = self.connection.execute(
             "SELECT * FROM scoring_rules WHERE tenant_id = %s", (tenant_id,)
         )
@@ -30,7 +25,7 @@ class RawSqlRuleRepository(RuleRepositoryPort):
                     name=r["name"],
                     field=r["field"],
                     operator=r["operator"],
-                    value=json.loads(r["value"]),
+                    value=r["value"],
                     score_delta=r["score_delta"],
                 )
             )
@@ -74,7 +69,7 @@ class RawSqlRuleRepository(RuleRepositoryPort):
                 rule.name,
                 rule.field,
                 rule.operator.value,
-                json.dumps(rule.value),
+                Jsonb(rule.value),
                 rule.score_delta,
             ),
         )
