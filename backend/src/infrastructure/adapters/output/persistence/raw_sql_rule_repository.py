@@ -109,7 +109,9 @@ class RawSqlRuleRepository(RuleRepositoryPort):
 
     @staticmethod
     def _to_assignment_rule(row) -> AssignmentRule:
-        return AssignmentRule.create(
+        # restore(), not create(): a rule whose group was deleted is a valid
+        # stored state, and create() would refuse to read it back.
+        return AssignmentRule.restore(
             rule_id=row["id"],
             tenant_id=row["tenant_id"],
             name=row["name"],

@@ -53,6 +53,15 @@ class TestTargets:
             AssignmentRule.create(tenant_id=_TENANT, name="Vacía")
         assert exc.value.error_code == "RULE_WITHOUT_TARGET"
 
+    def test_a_rule_orphaned_by_a_group_deletion_can_still_be_read_back(self):
+        """Deleting a group nulls target_group_id by design, so storage holds
+        rules with no target. If reading one raised, deleting a single group
+        would break every ingestion for that organization."""
+        rule = AssignmentRule.restore(tenant_id=_TENANT, name="Huérfana")
+
+        assert rule.target_group_id is None
+        assert rule.target_agent_ids == []
+
     def test_naming_agents_is_enough(self):
         rule = AssignmentRule.create(
             tenant_id=_TENANT, name="Directa", target_agent_ids=[uuid.uuid4()]
