@@ -22,12 +22,12 @@ class Lead:
     source_id: LeadSourceId
     first_name: str
     last_name: str
-    email: EmailAddress
     company: str
     budget: Money
     industry: str
     custom_attributes: Dict[str, Any] = field(default_factory=dict)
     phone: Optional[str] = None
+    email: Optional[EmailAddress] = None
     score: Score = field(default_factory=Score)
     # Stored on the lead, not recomputed from the rules: the rules that
     # produced a score can be edited or deleted afterwards, and the lead must
@@ -47,12 +47,12 @@ class Lead:
         source_id: Union[str, UUID, LeadSourceId],
         first_name: str,
         last_name: str,
-        email: Union[str, EmailAddress],
         company: str,
         budget: Union[int, float, str, Decimal, Money],
         industry: str,
         custom_attributes: Optional[Dict[str, Any]] = None,
         phone: Optional[str] = None,
+        email: Optional[Union[str, EmailAddress]] = None,
         lead_id: Optional[Union[str, UUID, LeadId]] = None,
         score: Union[int, Score] = 0,
         score_breakdown: Optional[List[AppliedRule]] = None,
@@ -66,7 +66,15 @@ class Lead:
         """Factory method que encapsula la construcción de Value Objects e invariantes del Lead."""
         tenant_id_vo = tenant_id if isinstance(tenant_id, TenantId) else TenantId(tenant_id)
         source_id_vo = source_id if isinstance(source_id, LeadSourceId) else LeadSourceId(source_id)
-        email_vo = email if isinstance(email, EmailAddress) else EmailAddress(email)
+        if email is None or email == "":
+            # An empty CSV cell and an unfilled form field mean the same
+            # thing: absence. Treating "" as invalid would raise
+            # InvalidEmailException over data nobody actually wrote.
+            email_vo = None
+        elif isinstance(email, EmailAddress):
+            email_vo = email
+        else:
+            email_vo = EmailAddress(email)
         budget_vo = budget if isinstance(budget, Money) else Money(budget)
         lead_id_vo = lead_id if isinstance(lead_id, LeadId) else LeadId(lead_id)
         score_vo = score if isinstance(score, Score) else Score(score)
@@ -92,12 +100,12 @@ class Lead:
             source_id=source_id_vo,
             first_name=first_name,
             last_name=last_name,
-            email=email_vo,
             company=company,
             budget=budget_vo,
             industry=industry,
             custom_attributes=custom_attributes or {},
             phone=phone,
+            email=email_vo,
             score=score_vo,
             score_breakdown=score_breakdown or [],
             status=status_vo,

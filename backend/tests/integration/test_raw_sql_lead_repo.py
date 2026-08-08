@@ -61,6 +61,35 @@ def test_raw_sql_lead_repository_lifecycle(test_db):
         assert len(tenant_leads) == 1
 
 
+def test_a_lead_without_an_email_round_trips_as_none(test_db):
+    """str(lead.email) used to turn a missing email into the literal string
+    "None" on save; this guards the fix at the persistence boundary."""
+    with test_db.get_connection() as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        lead_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        lead = Lead.create(
+            tenant_id=tenant_id,
+            source_id=source_id,
+            first_name="Luis",
+            last_name="Nogales",
+            email=None,
+            company="Acme",
+            budget=500,
+            industry="Retail",
+            lead_id=lead_id,
+        )
+
+        repo.save(lead)
+        connection.commit()
+
+        fetched = repo.get_by_id(lead_id)
+        assert fetched is not None
+        assert fetched.email is None
+
+
 def _lead_for_load_test(tenant_id: uuid.UUID, source_id: uuid.UUID, email: str) -> Lead:
     # QUALIFIED, not the NEW default: assign_to below requires a lead that is
     # actually assignable, and every caller of this helper assigns it.

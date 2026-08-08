@@ -15,12 +15,12 @@ class IngestLeadCommand:
     source_id: UUID
     first_name: str
     last_name: str
-    email: str
     company: str
     budget: float
     industry: str
     custom_attributes: Dict[str, Any] = field(default_factory=dict)
     phone: Optional[str] = None
+    email: Optional[str] = None
 
 
 @dataclass(frozen=True)

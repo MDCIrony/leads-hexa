@@ -10,7 +10,7 @@ class LeadProcessedEvent(DomainEvent):
 
     tenant_id: str
     lead_id: str
-    email: str
+    email: Optional[str] = None
     score: int
     status: LeadStatus
     assigned_agent_id: Optional[str] = None

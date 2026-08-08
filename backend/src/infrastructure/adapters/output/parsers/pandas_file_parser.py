@@ -25,7 +25,9 @@ class PandasFileParser(FileParserPort):
             row_dict = row.to_dict()
             first_name = str(row_dict.get("first_name", "")).strip()
             last_name = str(row_dict.get("last_name", "")).strip()
-            email = str(row_dict.get("email", "")).strip()
+            email = str(row_dict["email"]).strip() if "email" in row_dict and pd.notna(row_dict["email"]) else None
+            if email == "":
+                email = None
             company = str(row_dict.get("company", "")).strip()
             budget_val = float(row_dict.get("budget", 0))
             industry = str(row_dict.get("industry", "")).strip()

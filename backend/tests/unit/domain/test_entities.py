@@ -1,5 +1,7 @@
 import uuid
+import pytest
 from domain.entities import Lead, Agent, ScoringRule, WebhookConfig
+from domain.exceptions import InvalidEmailException
 from domain.value_objects import (
     LeadId,
     TenantId,
@@ -153,5 +155,25 @@ class TestLeadLifecycleFields:
         assert lead.assigned_at is None
         assert lead.discard_reason is None
         assert lead.updated_at is not None
+
+
+class TestLeadOptionalEmail:
+    def _base_kwargs(self):
+        return dict(
+            tenant_id=uuid.uuid4(), source_id=uuid.uuid4(), first_name="Ana", last_name="Diaz",
+            company="C", budget=100, industry="tech",
+        )
+
+    def test_a_lead_can_be_created_without_an_email(self):
+        lead = Lead.create(**self._base_kwargs(), email=None)
+        assert lead.email is None
+
+    def test_an_empty_email_string_is_treated_as_absent(self):
+        lead = Lead.create(**self._base_kwargs(), email="")
+        assert lead.email is None
+
+    def test_a_malformed_email_still_raises(self):
+        with pytest.raises(InvalidEmailException):
+            Lead.create(**self._base_kwargs(), email="no-es-correo")
 
 

@@ -94,7 +94,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
             event = LeadProcessedEvent(
                 tenant_id=str(saved_lead.tenant_id.value),
                 lead_id=str(saved_lead.id),
-                email=str(saved_lead.email),
+                email=str(saved_lead.email) if saved_lead.email else None,
                 score=int(saved_lead.score),
                 status=saved_lead.status,
                 assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,

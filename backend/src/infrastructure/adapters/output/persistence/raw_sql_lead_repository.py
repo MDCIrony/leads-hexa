@@ -57,7 +57,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
                 lead.source_id.value,
                 lead.first_name,
                 lead.last_name,
-                str(lead.email),
+                str(lead.email) if lead.email else None,
                 lead.company,
                 float(lead.budget),
                 lead.industry,

@@ -14,7 +14,7 @@ def _validate_email_format(value: str) -> str:
 class IngestLeadRequest(BaseModel):
     first_name: str
     last_name: str
-    email: str
+    email: Optional[str] = None
     company: str
     budget: float
     industry: str
@@ -23,7 +23,9 @@ class IngestLeadRequest(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def validate_email(cls, v: str) -> str:
+    def validate_email(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not v.strip():
+            return None
         return _validate_email_format(v)
 
 class LeadProcessedResponse(BaseModel):
@@ -41,7 +43,7 @@ class LeadResponse(BaseModel):
     tenant_id: str
     first_name: str
     last_name: str
-    email: str
+    email: Optional[str]
     company: str
     budget: float
     industry: str
@@ -69,7 +71,7 @@ class LeadDetailResponse(BaseModel):
     tenant_id: str
     first_name: str
     last_name: str
-    email: str
+    email: Optional[str]
     company: str
     budget: float
     industry: str
