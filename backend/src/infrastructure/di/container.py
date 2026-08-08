@@ -4,7 +4,7 @@ from application.ports.output.id_generator_port import IdGeneratorPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.token_service_port import TokenServicePort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.services.router_engine import RouterEngine
+from domain.services.assignment_engine import AssignmentEngine
 from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
@@ -34,9 +34,11 @@ class Container:
         )
         self._clock = SystemClock()
         self._id_generator = UuidGenerator()
-        # Built once and shared: its round-robin index must survive across
-        # requests, or every routing decision would land on the same agent.
-        self._assignment_engine = RouterEngine()
+        # The engine is stateless (the rotation cursor lives on the
+        # persisted rule instead of in memory), so it no longer needs to be
+        # a singleton for correctness; kept as one anyway since there is no
+        # reason not to.
+        self._assignment_engine = AssignmentEngine()
         self._file_parser = PandasFileParser()
         self._event_publisher = InMemoryEventPublisher()
 
@@ -65,7 +67,7 @@ class Container:
         return self._id_generator
 
     @property
-    def assignment_engine(self) -> RouterEngine:
+    def assignment_engine(self) -> AssignmentEngine:
         return self._assignment_engine
 
     @property

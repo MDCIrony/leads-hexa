@@ -47,10 +47,11 @@ class ScoringRule:
 class AssignmentRule:
     """Decides which agents may receive a lead of a given score.
 
-    Replaces RoutingRule. The differences are what made the old one
-    unusable: no name to show in an interface, no upper bound so bands could
-    not be expressed, no priority so ties resolved by whatever order the
-    database returned rows, and a rotation cursor living in memory."""
+    Replaces the free-form routing rule that came before it. The
+    differences are what made that one unusable: no name to show in an
+    interface, no upper bound so bands could not be expressed, no priority
+    so ties resolved by whatever order the database returned rows, and a
+    rotation cursor living in memory."""
 
     id: UUID
     tenant_id: UUID

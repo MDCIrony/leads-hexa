@@ -1,15 +1,15 @@
-from typing import Optional
+from typing import Dict, Optional
+from uuid import UUID
+
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
-from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.ports.output.lead_repository_port import LeadRepositoryPort
-from application.ports.output.rule_repository_port import RuleRepositoryPort
-from application.ports.output.agent_repository_port import AgentRepositoryPort
 from application.ports.output.domain_event_publisher_port import DomainEventPublisherPort
+from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.dtos.commands import IngestLeadCommand, LeadProcessedResult
 from domain.entities.lead import Lead
+from domain.entities.sales_group import SalesGroup
 from domain.value_objects.enums import LeadStatus
+from domain.services.assignment_engine import AssignmentEngine
 from domain.services.scoring_engine import ScoringEngine
-from domain.services.router_engine import RouterEngine
 from domain.exceptions import DomainException
 from domain.events.lead_events import LeadProcessedEvent
 
@@ -17,26 +17,19 @@ from domain.events.lead_events import LeadProcessedEvent
 class IngestLeadUseCase(IngestLeadInputPort):
     def __init__(
         self,
-        uow: Optional[UnitOfWorkPort] = None,
-        lead_repo: Optional[LeadRepositoryPort] = None,
-        rule_repo: Optional[RuleRepositoryPort] = None,
-        agent_repo: Optional[AgentRepositoryPort] = None,
+        uow: UnitOfWorkPort,
         event_publisher: Optional[DomainEventPublisherPort] = None,
-        router_engine: Optional[RouterEngine] = None,
+        engine: Optional[AssignmentEngine] = None,
         threshold_qualified: int = 30,
         threshold_disqualified: int = 0,
     ) -> None:
         self.uow = uow
-        self.lead_repo = lead_repo
-        self.rule_repo = rule_repo
-        self.agent_repo = agent_repo
         self.event_publisher = event_publisher
         self.scoring_engine = ScoringEngine()
-        # Round-robin state lives on the engine instance: the composition root
-        # injects one instance shared across requests, so the index keeps
-        # advancing; a caller that does not care (tests, ad-hoc scripts) gets
-        # a private one instead of being forced to wire it up.
-        self.router_engine = router_engine or RouterEngine()
+        # The engine is stateless (the rotation cursor lives on the
+        # persisted rule instead), so a private instance is exactly as
+        # correct as a shared one; callers that do not care get one for free.
+        self.engine = engine or AssignmentEngine()
         self.threshold_qualified = threshold_qualified
         self.threshold_disqualified = threshold_disqualified
 
@@ -62,45 +55,32 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 error_code=e.error_code,
             )
 
-        if self.uow:
-            with self.uow:
-                scoring_rules = self.uow.rules.get_scoring_rules_by_tenant(lead.tenant_id.value)
-                self.scoring_engine.evaluate(lead, scoring_rules)
-                lead.qualify(self.threshold_qualified, self.threshold_disqualified)
-
-                assigned_agent = None
-                if lead.status == LeadStatus.QUALIFIED:
-                    routing_rules = self.uow.rules.get_routing_rules_by_tenant(lead.tenant_id.value)
-                    available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
-                    assigned_agent = self.router_engine.select_agent(lead, routing_rules, available_agents)
-                    if assigned_agent:
-                        self.uow.agents.update_active_count(
-                            assigned_agent.id.value,
-                            assigned_agent.active_leads_count + 1
-                        )
-
-                saved_lead = self.uow.leads.save(lead)
-        else:
-            rule_repo = self.rule_repo
-            agent_repo = self.agent_repo
-            lead_repo = self.lead_repo
-
-            scoring_rules = rule_repo.get_scoring_rules_by_tenant(lead.tenant_id.value) if rule_repo else []
+        assigned_agent = None
+        with self.uow:
+            scoring_rules = self.uow.rules.get_scoring_rules_by_tenant(lead.tenant_id.value)
             self.scoring_engine.evaluate(lead, scoring_rules)
             lead.qualify(self.threshold_qualified, self.threshold_disqualified)
 
-            assigned_agent = None
-            if lead.status == LeadStatus.QUALIFIED and agent_repo:
-                routing_rules = rule_repo.get_routing_rules_by_tenant(lead.tenant_id.value) if rule_repo else []
-                available_agents = agent_repo.get_available_agents(lead.tenant_id.value)
-                assigned_agent = self.router_engine.select_agent(lead, routing_rules, available_agents)
-                if assigned_agent:
-                    agent_repo.update_active_count(
-                        assigned_agent.id.value,
-                        assigned_agent.active_leads_count + 1
-                    )
+            if lead.status == LeadStatus.QUALIFIED:
+                assignment_rules = self.uow.rules.get_assignment_rules_by_tenant(lead.tenant_id.value)
+                available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
+                groups_by_id: Dict[UUID, SalesGroup] = {
+                    group.id.value: group
+                    for group in self.uow.groups.list_by_tenant(lead.tenant_id.value, limit=10_000)
+                }
+                loads = self.uow.leads.active_load_by_agent(lead.tenant_id.value)
 
-            saved_lead = lead_repo.save(lead) if lead_repo else lead
+                cursors_before = {rule.id: rule.rr_cursor for rule in assignment_rules}
+                assigned_agent = self.engine.select_agent(
+                    lead, assignment_rules, available_agents, groups_by_id, loads
+                )
+                # Only the rule the engine actually used can have rotated;
+                # saving just that one avoids rewriting every rule per lead.
+                for rule in assignment_rules:
+                    if rule.rr_cursor != cursors_before[rule.id]:
+                        self.uow.rules.save_assignment_rule(lead.tenant_id.value, rule)
+
+            saved_lead = self.uow.leads.save(lead)
 
         if self.event_publisher:
             event = LeadProcessedEvent(

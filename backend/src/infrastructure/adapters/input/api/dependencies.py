@@ -9,17 +9,30 @@ from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPor
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
 from application.ports.input.agent_use_case_ports import (
-    CreateAgentInputPort, GetAgentsInputPort, GetAgentInputPort
+    CreateAgentInputPort, DeactivateAgentInputPort, GetAgentsInputPort, GetAgentInputPort,
+    UpdateAgentInputPort,
 )
 from application.ports.input.rule_use_case_ports import (
-    CreateScoringRuleInputPort, GetScoringRulesInputPort,
-    CreateRoutingRuleInputPort, GetRoutingRulesInputPort
+    CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
+    GetAssignmentRulesInputPort, GetScoringRulesInputPort, UpdateAssignmentRuleInputPort,
+)
+from application.ports.input.sales_group_use_case_ports import (
+    CreateSalesGroupInputPort, DeleteSalesGroupInputPort, GetSalesGroupsInputPort,
+    UpdateSalesGroupInputPort,
 )
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
-from application.use_cases.agent_use_cases import CreateAgentUseCase, GetAgentsUseCase, GetAgentUseCase
-from application.use_cases.rule_use_cases import CreateScoringRuleUseCase, GetScoringRulesUseCase, CreateRoutingRuleUseCase, GetRoutingRulesUseCase
+from application.use_cases.agent_use_cases import (
+    CreateAgentUseCase, DeactivateAgentUseCase, GetAgentsUseCase, GetAgentUseCase, UpdateAgentUseCase,
+)
+from application.use_cases.rule_use_cases import (
+    CreateAssignmentRuleUseCase, CreateScoringRuleUseCase, DeleteAssignmentRuleUseCase,
+    GetAssignmentRulesUseCase, GetScoringRulesUseCase, UpdateAssignmentRuleUseCase,
+)
+from application.use_cases.sales_group_use_cases import (
+    CreateSalesGroupUseCase, DeleteSalesGroupUseCase, GetSalesGroupsUseCase, UpdateSalesGroupUseCase,
+)
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import LoginUseCase
 from application.ports.input.tenant_use_case_ports import (
@@ -47,7 +60,7 @@ def get_ingest_lead_use_case(
     return IngestLeadUseCase(
         uow=uow,
         event_publisher=container.event_publisher,
-        router_engine=container.assignment_engine,
+        engine=container.assignment_engine,
     )
 
 def get_process_batch_use_case(
@@ -57,7 +70,7 @@ def get_process_batch_use_case(
     ingest_lead_use_case = IngestLeadUseCase(
         uow=uow,
         event_publisher=container.event_publisher,
-        router_engine=container.assignment_engine,
+        engine=container.assignment_engine,
     )
     return ProcessBatchUseCase(file_parser=container.file_parser, ingest_lead_use_case=ingest_lead_use_case)
 
@@ -76,17 +89,41 @@ def get_get_agents_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetAgents
 def get_get_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetAgentInputPort:
     return GetAgentUseCase(uow=uow)
 
+def get_update_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateAgentInputPort:
+    return UpdateAgentUseCase(uow=uow)
+
+def get_deactivate_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeactivateAgentInputPort:
+    return DeactivateAgentUseCase(uow=uow)
+
 def get_create_scoring_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateScoringRuleInputPort:
     return CreateScoringRuleUseCase(uow=uow)
 
 def get_get_scoring_rules_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetScoringRulesInputPort:
     return GetScoringRulesUseCase(uow=uow)
 
-def get_create_routing_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateRoutingRuleInputPort:
-    return CreateRoutingRuleUseCase(uow=uow)
+def get_create_assignment_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateAssignmentRuleInputPort:
+    return CreateAssignmentRuleUseCase(uow=uow)
 
-def get_get_routing_rules_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetRoutingRulesInputPort:
-    return GetRoutingRulesUseCase(uow=uow)
+def get_get_assignment_rules_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetAssignmentRulesInputPort:
+    return GetAssignmentRulesUseCase(uow=uow)
+
+def get_update_assignment_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateAssignmentRuleInputPort:
+    return UpdateAssignmentRuleUseCase(uow=uow)
+
+def get_delete_assignment_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteAssignmentRuleInputPort:
+    return DeleteAssignmentRuleUseCase(uow=uow)
+
+def get_create_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateSalesGroupInputPort:
+    return CreateSalesGroupUseCase(uow=uow)
+
+def get_get_sales_groups_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetSalesGroupsInputPort:
+    return GetSalesGroupsUseCase(uow=uow)
+
+def get_update_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateSalesGroupInputPort:
+    return UpdateSalesGroupUseCase(uow=uow)
+
+def get_delete_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteSalesGroupInputPort:
+    return DeleteSalesGroupUseCase(uow=uow)
 
 def get_login_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),

@@ -29,7 +29,7 @@ Desde F0.5 el `ADMIN` y el resto de roles operan en planos disjuntos. Ninguna op
    - Acotado siempre a su propio `tenant_id`, tomado del token, nunca del cuerpo de la petición.
    - Puede crear agentes (`MANAGER` o `AGENT`) dentro de su propia organización. No puede crear otros `ADMIN`; el único nace del bootstrap.
    - Único rol que puede listar y consultar asesores (`GET /api/v1/agents`, `GET /api/v1/agents/{id}`), siempre acotado a su organización.
-   - Puede gestionar y consultar reglas de scoring/routing y leads de su organización.
+   - Puede gestionar y consultar grupos, reglas de scoring/asignación y leads de su organización.
    - Único rol que puede listar los leads de la organización (`GET /api/v1/leads`).
 3. **`AGENT`**:
    - Usuario estándar de operaciones comerciales, acotado a su organización.
@@ -49,9 +49,10 @@ Definidos en [`src/application/ports/input/`](../../backend/src/application/port
 - **`IngestLeadInputPort`**: Procesa la ingesta de un lead individual.
 - **`ProcessBatchInputPort`**: Procesa la ingesta masiva de leads desde archivos CSV/Excel.
 - **`GetLeadsInputPort`**: Consulta leads paginados por tenant.
-- **`CreateAgentInputPort` / `GetAgentsInputPort` / `GetAgentInputPort`**: Gestión y consulta de agentes comerciales.
+- **`CreateAgentInputPort` / `GetAgentsInputPort` / `GetAgentInputPort` / `UpdateAgentInputPort` / `DeactivateAgentInputPort`**: Gestión y consulta de agentes comerciales.
 - **`CreateScoringRuleInputPort` / `GetScoringRulesInputPort`**: Creación y consulta de reglas de scoring.
-- **`CreateRoutingRuleInputPort` / `GetRoutingRulesInputPort`**: Creación y consulta de reglas de ruteo.
+- **`CreateAssignmentRuleInputPort` / `GetAssignmentRulesInputPort` / `UpdateAssignmentRuleInputPort` / `DeleteAssignmentRuleInputPort`**: CRUD de reglas de asignación (banda de puntuación, grupo/asesores destino, prioridad, estrategia).
+- **`CreateSalesGroupInputPort` / `GetSalesGroupsInputPort` / `UpdateSalesGroupInputPort` / `DeleteSalesGroupInputPort`**: CRUD de grupos de ventas.
 - **`LoginInputPort`**: Autenticación de agentes y generación de JWT.
 - **`CreateTenantInputPort` / `GetTenantsInputPort` / `UpdateTenantInputPort`**: Alta, listado y edición de organizaciones (plano de plataforma).
 
@@ -115,7 +116,7 @@ Devuelve la identidad del agente autenticado. Es lo que el frontend necesita par
 
 ### 2. Ingesta de Lead (`POST /api/v1/tenants/{tenant_id}/leads/ingest`)
 
-Recibe un comando de ingesta de lead, evalúa reglas de scoring y routing, asigna un agente y emite eventos de dominio.
+Recibe un comando de ingesta de lead, evalúa reglas de scoring y de asignación, asigna un agente y emite eventos de dominio.
 
 - **Autenticación**: Ninguna por diseño (endpoint de ingesta pública).
 - **Path Parameters**: `tenant_id` (UUID).
@@ -254,8 +255,7 @@ Crea una organización junto con su gestor inicial, en una sola transacción (de
     "id": "11111111-1111-1111-1111-111111111111",
     "name": "Ana Ruiz",
     "email": "ana@acme.test",
-    "team": "Management",
-    "active_leads_count": 0,
+    "group_id": null,
     "is_active": true,
     "role": "MANAGER",
     "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
@@ -328,13 +328,12 @@ Crea un nuevo agente de ventas.
 
 - **Autenticación**: Requerida (`Bearer Token`), excepto en estado Bootstrap (base de datos sin agentes: el primer agente creado es forzosamente `ADMIN`).
 - **Permisos**: `MANAGER`, y sólo dentro de su propia organización. No puede crear otros `ADMIN`; el único nace del bootstrap.
-- **Request Body** ([`AgentCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). Sin `tenant_id`: la organización es siempre la del gestor autenticado, tomada del contexto, nunca de la petición.
+- **Request Body** ([`AgentCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). Sin `tenant_id`: la organización es siempre la del gestor autenticado, tomada del contexto, nunca de la petición. `group_id` (UUID, opcional) reemplazó al antiguo `team` de F0: un string libre no se puede renombrar sin huérfanos y no permite expresar capacidad. `active_leads_count` desapareció por completo — la carga de un asesor se deriva de los leads que tiene realmente asignados (`GET /api/v1/leads` a través del propietario, o el campo interno `active_load_by_agent`), nunca de un contador de mano.
 ```json
 {
   "name": "Carlos Ruiz",
   "email": "cruiz@techcorp.com",
-  "team": "Sales",
-  "active_leads_count": 0,
+  "group_id": "22222222-2222-2222-2222-222222222222",
   "is_active": true,
   "password": "securepassword123",
   "role": "AGENT"
@@ -346,8 +345,7 @@ Crea un nuevo agente de ventas.
   "id": "11111111-1111-1111-1111-111111111111",
   "name": "Carlos Ruiz",
   "email": "cruiz@techcorp.com",
-  "team": "Sales",
-  "active_leads_count": 0,
+  "group_id": "22222222-2222-2222-2222-222222222222",
   "is_active": true,
   "role": "AGENT",
   "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
@@ -359,7 +357,7 @@ Obtiene la lista paginada de agentes comerciales de la propia organización. Cie
 
 - **Autenticación**: Requerida (`Bearer Token`).
 - **Permisos**: `MANAGER`. Un `AGENT` recibe `403 Forbidden`.
-- **Query Parameters**: `team` (string, opcional), `limit` (int, default=100), `offset` (int, default=0).
+- **Query Parameters**: `group_id` (UUID, opcional), `limit` (int, default=100), `offset` (int, default=0).
 - **Response (200 OK)** ([`PaginatedAgentsResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
 {
@@ -368,8 +366,7 @@ Obtiene la lista paginada de agentes comerciales de la propia organización. Cie
       "id": "11111111-1111-1111-1111-111111111111",
       "name": "Carlos Ruiz",
       "email": "cruiz@techcorp.com",
-      "team": "Sales",
-      "active_leads_count": 0,
+      "group_id": "22222222-2222-2222-2222-222222222222",
       "is_active": true,
       "role": "AGENT",
       "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
@@ -394,8 +391,7 @@ Obtiene el detalle de un agente por su UUID, sólo si pertenece a la propia orga
   "id": "11111111-1111-1111-1111-111111111111",
   "name": "Carlos Ruiz",
   "email": "cruiz@techcorp.com",
-  "team": "Sales",
-  "active_leads_count": 0,
+  "group_id": "22222222-2222-2222-2222-222222222222",
   "is_active": true,
   "role": "AGENT",
   "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
@@ -403,18 +399,102 @@ Obtiene el detalle de un agente por su UUID, sólo si pertenece a la propia orga
 ```
 - **Errores**: `404 Not Found` (`AGENT_NOT_FOUND`) tanto si el identificador no existe como si pertenece a otra organización — nunca `403`, para no confirmar con el código de estado que ese identificador existe en otro sitio.
 
----
-
-### 7. Gestión de Reglas (`/api/v1/tenants/{tenant_id}/rules`)
-
-Todos los endpoints de reglas están acotados por tenant y requieren la dependencia `require_role_and_tenant(AgentRole.ADMIN, AgentRole.MANAGER)`.
-
-#### `POST /api/v1/tenants/{tenant_id}/rules/scoring`
-Crea una regla de scoring para el tenant.
+#### `PATCH /api/v1/agents/{agent_id}`
+Cambia el nombre y/o el grupo de un asesor.
 
 - **Autenticación**: Requerida (`Bearer Token`).
-- **Permisos**: `ADMIN` o `MANAGER` perteneciente a `tenant_id`.
-- **Path Parameters**: `tenant_id` (UUID).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `agent_id` (UUID).
+- **Request Body** ([`AgentUpdate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): `name` y/o `group_id`, ambos opcionales.
+```json
+{
+  "group_id": "33333333-3333-3333-3333-333333333333"
+}
+```
+- **Response (200 OK)** ([`AgentResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)).
+- **Errores**: `404 Not Found` (`AGENT_NOT_FOUND` si el asesor no existe o es de otra organización; `GROUP_NOT_FOUND` si `group_id` no existe o pertenece a otra organización).
+
+#### `DELETE /api/v1/agents/{agent_id}`
+**Desactiva** al asesor; no lo borra. Los leads que ya tiene asignados siguen apuntando a su identificador, y borrar la fila los dejaría con una referencia rota. Un asesor desactivado deja de recibir asignaciones automáticas (`get_available_agents` sólo devuelve activos) pero su historial permanece legible.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `agent_id` (UUID).
+- **Response (200 OK)** ([`AgentResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)) con `is_active: false`.
+- **Errores**: `404 Not Found` (`AGENT_NOT_FOUND`).
+
+---
+
+### 7. Grupos de Ventas (`/api/v1/groups`)
+
+Un grupo agrupa asesores bajo una política de asignación compartida (estrategia por defecto, capacidad por asesor). Reemplaza al antiguo campo `team` de texto libre. Los cuatro endpoints exigen `Depends(require_organization_manager)`: un `ADMIN` o un `AGENT` reciben `403 Forbidden`.
+
+#### `POST /api/v1/groups`
+Crea un grupo en la organización del gestor autenticado.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Request Body** ([`SalesGroupCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "name": "Enterprise",
+  "description": "Cuentas grandes",
+  "default_strategy": "LOWEST_LOAD",
+  "capacity_per_agent": 5
+}
+```
+- **Response (201 Created)** ([`SalesGroupResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+```json
+{
+  "id": "22222222-2222-2222-2222-222222222222",
+  "name": "Enterprise",
+  "description": "Cuentas grandes",
+  "default_strategy": "LOWEST_LOAD",
+  "capacity_per_agent": 5,
+  "is_active": true,
+  "agent_count": null
+}
+```
+- **Errores**: `400 Bad Request` (`GROUP_ALREADY_EXISTS` si ya existe un grupo con ese nombre en la organización; el mismo nombre sí se acepta en otra organización).
+
+#### `GET /api/v1/groups`
+Lista los grupos de la organización, cada uno con el recuento de asesores que tiene actualmente.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Query Parameters**: `limit` (int, default=100), `offset` (int, default=0).
+- **Response (200 OK)** ([`PaginatedGroupsResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): igual forma que las demás listas paginadas, con `agent_count` poblado en cada elemento.
+
+#### `PATCH /api/v1/groups/{group_id}`
+Actualiza nombre, descripción, estrategia por defecto, capacidad o estado de un grupo. Desactivar un grupo (`is_active: false`) **no** desactiva a sus asesores — dejan de recibir asignaciones automáticas pero siguen pudiendo atender los leads que ya tienen; es la diferencia con desactivar una organización, que sí corta el acceso.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `group_id` (UUID).
+- **Request Body** ([`SalesGroupUpdate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): todos los campos opcionales; un campo ausente se deja sin cambios.
+- **Response (200 OK)** ([`SalesGroupResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)).
+- **Errores**: `404 Not Found` (`GROUP_NOT_FOUND` si el grupo no existe o pertenece a otra organización).
+
+#### `DELETE /api/v1/groups/{group_id}`
+Borra el grupo. Sus asesores **no** se borran: quedan sin grupo (`group_id: null`), tanto en Postgres (FK `ON DELETE SET NULL`, migración 003) como en el caso de prueba en memoria.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `group_id` (UUID).
+- **Response**: `204 No Content`.
+- **Errores**: `404 Not Found` (`GROUP_NOT_FOUND`).
+
+---
+
+### 8. Gestión de Reglas (`/api/v1/rules`)
+
+Todos los endpoints de reglas exigen `Depends(require_organization_manager)`; el tenant sale siempre del token, nunca de la URL o del cuerpo.
+
+#### `POST /api/v1/rules/scoring`
+Crea una regla de scoring para la organización del gestor autenticado.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
 - **Request Body** ([`ScoringRuleCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
 {
@@ -437,12 +517,11 @@ Crea una regla de scoring para el tenant.
 }
 ```
 
-#### `GET /api/v1/tenants/{tenant_id}/rules/scoring`
-Obtiene las reglas de scoring asociadas a un tenant.
+#### `GET /api/v1/rules/scoring`
+Obtiene las reglas de scoring de la organización del gestor autenticado.
 
 - **Autenticación**: Requerida (`Bearer Token`).
-- **Permisos**: `ADMIN` o `MANAGER` perteneciente a `tenant_id`.
-- **Path Parameters**: `tenant_id` (UUID).
+- **Permisos**: `MANAGER`.
 - **Response (200 OK)** (`List[`[`ScoringRuleResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)`]`):
 ```json
 [
@@ -457,53 +536,62 @@ Obtiene las reglas de scoring asociadas a un tenant.
 ]
 ```
 
-#### `POST /api/v1/tenants/{tenant_id}/rules/routing`
-Crea una regla de ruteo para el tenant.
+#### `POST /api/v1/rules/assignment`
+Crea una regla de asignación. Reemplaza a la antigua regla de ruteo: tiene nombre (mostrable en una interfaz), banda con techo (`max_score`, no sólo `min_score`), prioridad explícita para desempatar bandas solapadas, y un `rr_cursor` que persiste en base de datos en vez de vivir en memoria.
 
 - **Autenticación**: Requerida (`Bearer Token`).
-- **Permisos**: `ADMIN` o `MANAGER` perteneciente a `tenant_id`.
-- **Path Parameters**: `tenant_id` (UUID).
-- **Request Body** ([`RoutingRuleCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+- **Permisos**: `MANAGER`.
+- **Request Body** ([`AssignmentRuleCreate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)). La regla debe apuntar a un grupo (`target_group_id`), a asesores concretos (`target_agent_ids`) o a ambos; `agent_match_mode` decide si son la unión (`ANY`, por defecto) o la intersección (`ONLY`) con el grupo. `strategy` es opcional: si se omite, se usa la estrategia por defecto del grupo destino.
 ```json
 {
-  "min_score": 40,
-  "target_team": "Enterprise Sales",
-  "assignment_strategy": "ROUND_ROBIN",
-  "target_agent_ids": [
-    "11111111-1111-1111-1111-111111111111"
-  ]
+  "name": "Enterprise band",
+  "min_score": 70,
+  "max_score": 100,
+  "target_group_id": "22222222-2222-2222-2222-222222222222",
+  "agent_match_mode": "ANY",
+  "strategy": "ROUND_ROBIN",
+  "priority": 10
 }
 ```
-- **Response (201 Created)** ([`RoutingRuleResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
+- **Response (201 Created)** ([`AssignmentRuleResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)):
 ```json
 {
   "id": "33333333-3333-3333-3333-333333333333",
-  "min_score": 40,
-  "target_team": "Enterprise Sales",
-  "assignment_strategy": "ROUND_ROBIN",
-  "target_agent_ids": [
-    "11111111-1111-1111-1111-111111111111"
-  ]
+  "name": "Enterprise band",
+  "min_score": 70,
+  "max_score": 100,
+  "target_group_id": "22222222-2222-2222-2222-222222222222",
+  "target_agent_ids": [],
+  "agent_match_mode": "ANY",
+  "strategy": "ROUND_ROBIN",
+  "priority": 10,
+  "is_active": true,
+  "rr_cursor": 0
 }
 ```
 
-#### `GET /api/v1/tenants/{tenant_id}/rules/routing`
-Obtiene las reglas de ruteo asociadas a un tenant.
+#### `GET /api/v1/rules/assignment`
+Lista las reglas de asignación de la organización, ordenadas por prioridad descendente (la misma prioridad con la que el motor las evalúa).
 
 - **Autenticación**: Requerida (`Bearer Token`).
-- **Permisos**: `ADMIN` o `MANAGER` perteneciente a `tenant_id`.
-- **Path Parameters**: `tenant_id` (UUID).
-- **Response (200 OK)** (`List[`[`RoutingRuleResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)`]`):
-```json
-[
-  {
-    "id": "33333333-3333-3333-3333-333333333333",
-    "min_score": 40,
-    "target_team": "Enterprise Sales",
-    "assignment_strategy": "ROUND_ROBIN",
-    "target_agent_ids": [
-      "11111111-1111-1111-1111-111111111111"
-    ]
-  }
-]
-```
+- **Permisos**: `MANAGER`.
+- **Response (200 OK)** ([`PaginatedAssignmentRulesResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)): el motor carga todas las reglas en cada ingesta, así que esta lista no pagina de verdad — siempre es una única página con todo.
+
+#### `PATCH /api/v1/rules/assignment/{rule_id}`
+Actualiza una regla existente. Todos los campos son opcionales y se dejan sin cambios si se omiten; `rr_cursor` no es uno de ellos a propósito, así que una actualización parcial nunca reinicia una rotación en curso.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `rule_id` (UUID).
+- **Request Body** ([`AssignmentRuleUpdate`](../../backend/src/infrastructure/adapters/input/api/schemas.py)).
+- **Response (200 OK)** ([`AssignmentRuleResponse`](../../backend/src/infrastructure/adapters/input/api/schemas.py)).
+- **Errores**: `404 Not Found` (`ASSIGNMENT_RULE_NOT_FOUND` si la regla no existe o pertenece a otra organización).
+
+#### `DELETE /api/v1/rules/assignment/{rule_id}`
+Borra la regla. No toca a los asesores que nombraba ni a los que pertenecían a su grupo destino.
+
+- **Autenticación**: Requerida (`Bearer Token`).
+- **Permisos**: `MANAGER`.
+- **Path Parameters**: `rule_id` (UUID).
+- **Response**: `204 No Content`.
+- **Errores**: `404 Not Found` (`ASSIGNMENT_RULE_NOT_FOUND`).

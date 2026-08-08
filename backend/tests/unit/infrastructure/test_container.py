@@ -5,9 +5,10 @@ _SETTINGS = Settings(database_url="postgresql://u:p@host:5432/db", jwt_secret="a
 
 
 def test_stateless_adapters_are_shared_across_the_container_lifetime():
-    """A fresh instance on every access is exactly the bug this container
-    exists to prevent: RouterEngine's round-robin index would silently reset
-    on every request."""
+    """A fresh instance on every access would still be correct today (the
+    assignment engine keeps no state of its own), but every other adapter
+    listed here is shared for real reasons, so the container keeps treating
+    all of them the same way."""
     container = Container(_SETTINGS)
 
     assert container.assignment_engine is container.assignment_engine

@@ -116,27 +116,33 @@ def test_create_agent_rejects_malformed_email():
 def test_list_agents_returns_pagination_metadata():
     with TestClient(app) as client:
         headers = _manager_auth_headers(client)
-        team = f"team-{uuid.uuid4()}"
+        group_resp = client.post(
+            "/api/v1/groups",
+            json={"name": f"Group {uuid.uuid4().hex[:6]}"},
+            headers=headers,
+        )
+        assert group_resp.status_code == 201
+        group_id = group_resp.json()["id"]
         for i in range(3):
             client.post(
                 "/api/v1/agents",
                 json={
                     "name": f"Agent {i}",
                     "email": f"agent{i}_{uuid.uuid4().hex[:6]}@example.com",
-                    "team": team,
+                    "group_id": group_id,
                     "password": "password123",
                 },
                 headers=headers,
             )
 
-        response = client.get(f"/api/v1/agents?team={team}&limit=2&offset=0", headers=headers)
+        response = client.get(f"/api/v1/agents?group_id={group_id}&limit=2&offset=0", headers=headers)
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 3
         assert len(data["items"]) == 2
         assert data["has_more"] is True
 
-        response = client.get(f"/api/v1/agents?team={team}&limit=2&offset=2", headers=headers)
+        response = client.get(f"/api/v1/agents?group_id={group_id}&limit=2&offset=2", headers=headers)
         data = response.json()
         assert len(data["items"]) == 1
         assert data["has_more"] is False

@@ -13,6 +13,8 @@ _LOGGER = logging.getLogger(__name__)
 # Anything not listed is a client-side validation failure by default.
 STATUS_BY_ERROR_CODE: dict[str, int] = {
     "AGENT_NOT_FOUND": 404,
+    "GROUP_NOT_FOUND": 404,
+    "ASSIGNMENT_RULE_NOT_FOUND": 404,
     "INVALID_CREDENTIALS": 401,
     "UNAUTHORIZED": 401,
     "FORBIDDEN": 403,

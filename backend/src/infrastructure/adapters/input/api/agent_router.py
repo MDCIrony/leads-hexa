@@ -2,11 +2,12 @@ from uuid import UUID
 from typing import Optional
 from fastapi import APIRouter, Depends, status
 
-from application.dtos.commands import CreateAgentCommand
+from application.dtos.commands import CreateAgentCommand, UpdateAgentCommand
 from application.dtos.context import RequestContext
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
 from application.ports.input.agent_use_case_ports import (
-    CreateAgentInputPort, GetAgentsInputPort, GetAgentInputPort
+    CreateAgentInputPort, DeactivateAgentInputPort, GetAgentsInputPort, GetAgentInputPort,
+    UpdateAgentInputPort,
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent
@@ -14,10 +15,13 @@ from domain.exceptions import UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
 from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
-    get_create_agent_use_case, get_get_agents_use_case, get_get_agent_use_case,
+    get_create_agent_use_case, get_deactivate_agent_use_case, get_get_agents_use_case,
+    get_get_agent_use_case, get_update_agent_use_case,
     build_request_context, get_optional_current_agent, get_uow, require_organization_manager,
 )
-from infrastructure.adapters.input.api.schemas import AgentCreate, AgentResponse, PaginatedAgentsResponse
+from infrastructure.adapters.input.api.schemas import (
+    AgentCreate, AgentResponse, AgentUpdate, PaginatedAgentsResponse,
+)
 
 router = APIRouter()
 
@@ -27,8 +31,7 @@ def _to_response(agent: Agent) -> AgentResponse:
         id=str(agent.id),
         name=agent.name,
         email=agent.email,
-        team=agent.team,
-        active_leads_count=agent.active_leads_count,
+        group_id=str(agent.group_id) if agent.group_id else None,
         is_active=agent.is_active,
         role=agent.role.value if hasattr(agent.role, "value") else str(agent.role),
         tenant_id=str(agent.tenant_id) if agent.tenant_id else None,
@@ -61,8 +64,7 @@ def create_agent(
     command = CreateAgentCommand(
         name=request.name,
         email=request.email,
-        team=request.team,
-        active_leads_count=request.active_leads_count,
+        group_id=request.group_id,
         is_active=request.is_active,
         password=request.password,
         role=forced_role.value if hasattr(forced_role, "value") else str(forced_role),
@@ -74,13 +76,13 @@ def create_agent(
 @router.get("", response_model=PaginatedAgentsResponse, status_code=status.HTTP_200_OK)
 @router.get("/", response_model=PaginatedAgentsResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_agents(
-    team: Optional[str] = None,
+    group_id: Optional[UUID] = None,
     limit: int = 100,
     offset: int = 0,
     use_case: GetAgentsInputPort = Depends(get_get_agents_use_case),
     context: RequestContext = Depends(require_organization_manager),
 ):
-    query = GetAgentsQuery(tenant_id=context.tenant_id, team=team, limit=limit, offset=offset)
+    query = GetAgentsQuery(tenant_id=context.tenant_id, group_id=group_id, limit=limit, offset=offset)
     page = use_case.execute(query)
     items = [_to_response(a) for a in page.items]
     return PaginatedAgentsResponse(
@@ -102,3 +104,30 @@ def get_agent(
     agent = use_case.execute(query)
     return _to_response(agent)
 
+
+@router.patch("/{agent_id}", response_model=AgentResponse, status_code=status.HTTP_200_OK)
+def update_agent(
+    agent_id: UUID,
+    request: AgentUpdate,
+    use_case: UpdateAgentInputPort = Depends(get_update_agent_use_case),
+    context: RequestContext = Depends(require_organization_manager),
+):
+    command = UpdateAgentCommand(
+        tenant_id=context.tenant_id,
+        agent_id=agent_id,
+        name=request.name,
+        group_id=request.group_id,
+    )
+    return _to_response(use_case.execute(command))
+
+
+@router.delete("/{agent_id}", response_model=AgentResponse, status_code=status.HTTP_200_OK)
+def deactivate_agent(
+    agent_id: UUID,
+    use_case: DeactivateAgentInputPort = Depends(get_deactivate_agent_use_case),
+    context: RequestContext = Depends(require_organization_manager),
+):
+    # Deactivates rather than deletes: leads already assigned to this agent
+    # keep a valid reference, so the row must survive.
+    query = GetAgentQuery(agent_id=agent_id, tenant_id=context.tenant_id)
+    return _to_response(use_case.execute(query))

@@ -3,23 +3,24 @@ from unittest.mock import Mock
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.dtos.commands import IngestLeadCommand
 from domain.events.lead_events import LeadProcessedEvent
+from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
+from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
+from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
+from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
+from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 
 def test_ingest_lead_publishes_event() -> None:
-    mock_lead_repo = Mock()
-    mock_rule_repo = Mock()
-    mock_agent_repo = Mock()
+    uow = InMemoryUnitOfWork(
+        InMemoryLeadRepository(),
+        InMemoryRuleRepository(),
+        InMemoryAgentRepository(),
+        groups=InMemorySalesGroupRepository(),
+    )
     mock_event_publisher = Mock()
 
-    mock_rule_repo.get_scoring_rules_by_tenant.return_value = []
-    mock_rule_repo.get_routing_rules_by_tenant.return_value = []
-
-    mock_lead_repo.save.side_effect = lambda l: l
-
     use_case = IngestLeadUseCase(
-        lead_repo=mock_lead_repo,
-        rule_repo=mock_rule_repo,
-        agent_repo=mock_agent_repo,
+        uow=uow,
         event_publisher=mock_event_publisher,
     )
 

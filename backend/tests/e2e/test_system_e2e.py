@@ -63,7 +63,7 @@ def test_full_system_lead_routing_flow_e2e():
     Prueba E2E completa del sistema:
     1. Crea un agente disponible.
     2. Configura regla de scoring (+35 pts por budget > 10000).
-    3. Configura regla de routing (min_score: 30 -> asigna a equipo Sales).
+    3. Configura regla de asignación (min_score: 30 -> apunta directo al agente).
     4. Ingesta un Lead con budget 15000.
     5. Verifica que el lead resulte ASSIGNED con score 35 y asignado al agente.
     """
@@ -75,8 +75,6 @@ def test_full_system_lead_routing_flow_e2e():
         agent_payload = {
             "name": "Carlos Lopez",
             "email": "clopez@sales.com",
-            "team": "Sales",
-            "active_leads_count": 0,
             "is_active": True,
             "password": "test-password-123",
         }
@@ -99,18 +97,18 @@ def test_full_system_lead_routing_flow_e2e():
         )
         assert scoring_resp.status_code == 201
 
-        # 3. Crear regla de routing
-        routing_resp = client.post(
-            "/api/v1/rules/routing",
+        # 3. Crear regla de asignación (apunta directo al agente, sin grupo)
+        assignment_resp = client.post(
+            "/api/v1/rules/assignment",
             json={
+                "name": "Sales band",
                 "min_score": 30,
-                "target_team": "Sales",
-                "assignment_strategy": "LOWEST_LOAD",
+                "strategy": "LOWEST_LOAD",
                 "target_agent_ids": [agent_id],
             },
             headers=headers,
         )
-        assert routing_resp.status_code == 201
+        assert assignment_resp.status_code == 201
 
 
         # 4. Ingestar Lead
@@ -134,6 +132,8 @@ def test_full_system_lead_routing_flow_e2e():
         assert result["score"] == 35
         assert result["assigned_agent_id"] == agent_id
 
-        # 6. Verificar actualización de agente
+        # 6. El agente sigue existiendo y activo; su carga ya no se expone en
+        # el propio agente (active_leads_count desapareció), se deriva de sus
+        # leads asignados — cubierto por la aserción anterior.
         updated_agent = client.get(f"/api/v1/agents/{agent_id}", headers=headers).json()
-        assert updated_agent["active_leads_count"] == 1
+        assert updated_agent["is_active"] is True

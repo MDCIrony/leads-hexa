@@ -24,7 +24,6 @@ def _manager_auth_headers(tenant_id: str) -> dict:
     manager = Agent.create(
         name="Manager",
         email=f"manager_{uuid.uuid4().hex[:6]}@test.com",
-        team="Sales",
         role=AgentRole.MANAGER,
         tenant_id=tenant_id,
     )

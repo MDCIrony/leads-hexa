@@ -1,11 +1,12 @@
 import uuid
 from application.dtos.commands import IngestLeadCommand
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
-from domain.entities import ScoringRule, RoutingRule, Agent
+from domain.entities import Agent, AssignmentRule, ScoringRule, SalesGroup
 from domain.value_objects import Operator, AssignmentStrategy
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
+from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
 from tests.unit.mocks.in_memory_webhook_dispatcher import InMemoryWebhookDispatcher
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 import pytest
@@ -16,6 +17,7 @@ def test_ingest_lead_use_case_successful_flow():
     lead_repo = InMemoryLeadRepository()
     rule_repo = InMemoryRuleRepository()
     agent_repo = InMemoryAgentRepository()
+    group_repo = InMemorySalesGroupRepository()
     webhook_dispatcher = InMemoryWebhookDispatcher()
 
     # Pre-cargar regla de scoring (+35 pts)
@@ -30,25 +32,27 @@ def test_ingest_lead_use_case_successful_flow():
         ),
     )
 
-    # Pre-cargar regla de routing
-    rule_repo.save_routing_rule(
-        tenant_id,
-        RoutingRule.create(
-            min_score=30,
-            target_team="Sales",
-            assignment_strategy=AssignmentStrategy.LOWEST_LOAD,
-        ),
-    )
-
-    # Pre-cargar agente disponible
+    # Pre-cargar grupo y agente disponible
+    group = group_repo.save(SalesGroup.create(tenant_id=tenant_id, name="Sales"))
     agent = Agent.create(
         name="Carlos Lopez",
         email="clopez@sales.com",
-        team="Sales",
-        active_leads_count=0,
+        group_id=group.id.value,
         tenant_id=tenant_id,
     )
     agent_repo.save(agent)
+
+    # Pre-cargar regla de asignación
+    rule_repo.save_assignment_rule(
+        tenant_id,
+        AssignmentRule.create(
+            tenant_id=tenant_id,
+            name="Sales band",
+            min_score=30,
+            target_group_id=group.id.value,
+            strategy=AssignmentStrategy.LOWEST_LOAD,
+        ),
+    )
 
     from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
     from application.handlers.webhook_event_handler import WebhookEventHandler
@@ -72,7 +76,7 @@ def test_ingest_lead_use_case_successful_flow():
     )
     event_publisher.subscribe(LeadProcessedEvent, webhook_handler.handle_lead_processed)
 
-    uow = InMemoryUnitOfWork(lead_repo, rule_repo, agent_repo)
+    uow = InMemoryUnitOfWork(lead_repo, rule_repo, agent_repo, groups=group_repo)
     use_case = IngestLeadUseCase(
         uow=uow,
         event_publisher=event_publisher,
@@ -99,7 +103,9 @@ def test_ingest_lead_use_case_successful_flow():
 
 def test_ingest_lead_use_case_invalid_email_error():
     tenant_id = uuid.uuid4()
-    uow = InMemoryUnitOfWork(InMemoryLeadRepository(), InMemoryRuleRepository(), InMemoryAgentRepository())
+    uow = InMemoryUnitOfWork(
+        InMemoryLeadRepository(), InMemoryRuleRepository(), InMemoryAgentRepository()
+    )
     use_case = IngestLeadUseCase(
         uow=uow,
     )
@@ -133,9 +139,11 @@ def test_rollback_on_persistence_error():
         return False
     mock_uow.__exit__.side_effect = mock_exit
     mock_uow.rules.get_scoring_rules_by_tenant.return_value = []
-    mock_uow.rules.get_routing_rules_by_tenant.return_value = []
+    mock_uow.rules.get_assignment_rules_by_tenant.return_value = []
     mock_uow.agents.get_available_agents.return_value = []
-    
+    mock_uow.groups.list_by_tenant.return_value = []
+    mock_uow.leads.active_load_by_agent.return_value = {}
+
     # Simular que al intentar guardar el Lead se lanza un error
     mock_uow.leads.save.side_effect = Exception("Database failure")
 

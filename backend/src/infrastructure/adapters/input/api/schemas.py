@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Any, Dict, List, Optional
 from uuid import UUID
-from domain.value_objects.enums import Operator, AssignmentStrategy, AgentRole
+from domain.value_objects.enums import AgentMatchMode, Operator, AssignmentStrategy, AgentRole
 
 
 def _validate_email_format(value: str) -> str:
@@ -87,25 +87,85 @@ class ScoringRuleResponse(BaseModel):
     value: Any
     score_delta: int
 
-class RoutingRuleCreate(BaseModel):
-    min_score: int
-    target_team: str
-    assignment_strategy: AssignmentStrategy
+# --- Assignment Rule Schemas ---
+class AssignmentRuleCreate(BaseModel):
+    name: str
+    min_score: int = 0
+    max_score: Optional[int] = None
+    target_group_id: Optional[UUID] = None
     target_agent_ids: List[UUID] = Field(default_factory=list)
+    agent_match_mode: AgentMatchMode = AgentMatchMode.ANY
+    strategy: Optional[AssignmentStrategy] = None
+    priority: int = 0
 
-class RoutingRuleResponse(BaseModel):
+class AssignmentRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    min_score: Optional[int] = None
+    max_score: Optional[int] = None
+    target_group_id: Optional[UUID] = None
+    target_agent_ids: Optional[List[UUID]] = None
+    agent_match_mode: Optional[AgentMatchMode] = None
+    strategy: Optional[AssignmentStrategy] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class AssignmentRuleResponse(BaseModel):
     id: str
+    name: str
     min_score: int
-    target_team: str
-    assignment_strategy: str
+    max_score: Optional[int] = None
+    target_group_id: Optional[str] = None
     target_agent_ids: List[str]
+    agent_match_mode: str
+    strategy: Optional[str] = None
+    priority: int
+    is_active: bool
+    rr_cursor: int
+
+class PaginatedAssignmentRulesResponse(BaseModel):
+    items: List[AssignmentRuleResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+# --- Sales Group Schemas ---
+class SalesGroupCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    default_strategy: AssignmentStrategy = AssignmentStrategy.LOWEST_LOAD
+    capacity_per_agent: Optional[int] = None
+
+class SalesGroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    default_strategy: Optional[AssignmentStrategy] = None
+    capacity_per_agent: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class SalesGroupResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    default_strategy: str
+    capacity_per_agent: Optional[int] = None
+    is_active: bool
+    # Absent (None) on a create response, populated on a list response —
+    # same convention as TenantResponse.agent_count.
+    agent_count: Optional[int] = None
+
+class PaginatedGroupsResponse(BaseModel):
+    items: List[SalesGroupResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 # --- Agent Schemas ---
 class AgentCreate(BaseModel):
     name: str
     email: str
-    team: str
-    active_leads_count: int = 0
+    group_id: Optional[UUID] = None
     is_active: bool = True
     password: str
     role: AgentRole = AgentRole.AGENT
@@ -117,12 +177,15 @@ class AgentCreate(BaseModel):
     def validate_email(cls, v: str) -> str:
         return _validate_email_format(v)
 
+class AgentUpdate(BaseModel):
+    name: Optional[str] = None
+    group_id: Optional[UUID] = None
+
 class AgentResponse(BaseModel):
     id: str
     name: str
     email: str
-    team: str
-    active_leads_count: int
+    group_id: Optional[str] = None
     is_active: bool
     role: str
     tenant_id: Optional[str] = None
