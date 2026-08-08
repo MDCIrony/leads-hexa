@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 from domain.exceptions import DomainException
@@ -11,6 +11,7 @@ from domain.value_objects.lead_id import LeadId
 from domain.value_objects.tenant_id import TenantId
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.score import Score
+from domain.value_objects.score_breakdown import AppliedRule
 from domain.value_objects.enums import LeadStatus
 
 @dataclass
@@ -26,6 +27,10 @@ class Lead:
     custom_attributes: Dict[str, Any] = field(default_factory=dict)
     phone: Optional[str] = None
     score: Score = field(default_factory=Score)
+    # Stored on the lead, not recomputed from the rules: the rules that
+    # produced a score can be edited or deleted afterwards, and the lead must
+    # still be able to explain itself.
+    score_breakdown: List[AppliedRule] = field(default_factory=list)
     status: LeadStatus = LeadStatus.NEW
     assigned_agent_id: Optional[AgentId] = None
     assigned_at: Optional[datetime] = None
@@ -47,6 +52,7 @@ class Lead:
         phone: Optional[str] = None,
         lead_id: Optional[Union[str, UUID, LeadId]] = None,
         score: Union[int, Score] = 0,
+        score_breakdown: Optional[List[AppliedRule]] = None,
         status: Union[str, LeadStatus] = LeadStatus.NEW,
         assigned_agent_id: Optional[Union[str, UUID, AgentId]] = None,
         assigned_at: Optional[datetime] = None,
@@ -88,6 +94,7 @@ class Lead:
             custom_attributes=custom_attributes or {},
             phone=phone,
             score=score_vo,
+            score_breakdown=score_breakdown or [],
             status=status_vo,
             assigned_agent_id=agent_id_vo,
             assigned_at=assigned_at,
