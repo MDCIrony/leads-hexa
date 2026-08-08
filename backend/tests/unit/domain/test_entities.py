@@ -138,3 +138,18 @@ class TestAgentGroupMembership:
         assert agent.group_id.value == group_id
 
 
+class TestLeadLifecycleFields:
+    def test_the_new_statuses_exist(self):
+        assert LeadStatus.UNASSIGNED.value == "UNASSIGNED"
+        assert LeadStatus.DISCARDED.value == "DISCARDED"
+
+    def test_a_fresh_lead_carries_no_assignment_trace(self):
+        lead = Lead.create(
+            tenant_id=uuid.uuid4(), first_name="Ana", last_name="Diaz",
+            email="ana@x.test", company="C", budget=100, industry="tech",
+        )
+        assert lead.assigned_at is None
+        assert lead.discard_reason is None
+        assert lead.updated_at is not None
+
+

@@ -27,7 +27,10 @@ class Lead:
     score: Score = field(default_factory=Score)
     status: LeadStatus = LeadStatus.NEW
     assigned_agent_id: Optional[AgentId] = None
+    assigned_at: Optional[datetime] = None
+    discard_reason: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @classmethod
     def create(
@@ -45,6 +48,9 @@ class Lead:
         score: Union[int, Score] = 0,
         status: Union[str, LeadStatus] = LeadStatus.NEW,
         assigned_agent_id: Optional[Union[str, UUID, AgentId]] = None,
+        assigned_at: Optional[datetime] = None,
+        discard_reason: Optional[str] = None,
+        updated_at: Optional[datetime] = None,
         created_at: Optional[Union[datetime, str]] = None,
     ) -> "Lead":
         """Factory method que encapsula la construcción de Value Objects e invariantes del Lead."""
@@ -83,6 +89,9 @@ class Lead:
             score=score_vo,
             status=status_vo,
             assigned_agent_id=agent_id_vo,
+            assigned_at=assigned_at,
+            discard_reason=discard_reason,
+            updated_at=updated_at or datetime.now(timezone.utc),
             created_at=created_at_dt,
         )
 
