@@ -3,6 +3,27 @@
 MVP docente de enrutamiento de leads. Backend FastAPI, frontend React, PostgreSQL con SQL crudo,
 arquitectura hexagonal.
 
+## La documentación es la fuente
+
+Vive en `docs/`, como subproyecto MkDocs Material, y se levanta con `docker compose up -d docs` en
+<http://localhost:8002>. El fuente está en `docs/content/`.
+
+| Antes de… | Lee |
+|---|---|
+| Tocar una capa o mover una responsabilidad | `docs/content/arquitectura/` |
+| Cambiar el comportamiento de un módulo | `docs/content/modulos/` |
+| Discutir por qué algo está hecho así | `docs/content/decisiones/` — 21 ADRs |
+| Proponer una capacidad nueva | `docs/content/roadmap/` |
+| Escribir un endpoint | `docs/content/desarrollo/api-referencia.md` |
+
+**Una decisión de arquitectura nueva se documenta como ADR** en `docs/content/decisiones/`, con su
+contexto, sus alternativas y sus consecuencias, y se añade al `nav` de `docs/mkdocs.yml`. Un cambio
+que contradiga un ADR vigente no se aplica en silencio: se sustituye el ADR y se marca el anterior
+como sustituido.
+
+Las carpetas `docs/specs/` y `docs/plans/` **ya no existen**. Su contenido vive destilado en las
+secciones de arriba; lo que era instrucción de ejecución se retiró a propósito.
+
 ## Validación
 
 Tres comandos. **Ninguno necesita `--build` ni `restart`**: el código y los tests van montados como
@@ -50,9 +71,9 @@ que terminó, y el harness dice si es verdad.
 El trabajo se ejecuta por tareas, una por subagente, cada una con su commit. Sin estas reglas un
 ejecutor gasta la mayor parte de su presupuesto leyendo antes de escribir una línea.
 
-1. **El plan es la fuente de requisitos.** El subagente no explora el repositorio para entender qué
-   hacer. Si el plan no cuadra con el código, eso *es* un hallazgo: se aplica con criterio y se
-   reporta.
+1. **El encargo es la fuente de requisitos**, y lleva dentro lo que hay que construir. El subagente
+   no explora el repositorio para entender *qué* hacer, sólo para ver *cómo* encaja. Si el encargo no
+   cuadra con el código, eso *es* un hallazgo: se aplica con criterio y se reporta.
 2. **Lista cerrada de ficheros** en cada despacho, separando los que modifica de los que sólo lee
    como patrón. Abrir uno fuera de la lista sin motivo es un fallo de la tarea.
 3. **Excepción reactiva, y sólo reactiva.** Si un test falla en un fichero no listado, o falta un
@@ -82,6 +103,6 @@ Romper cualquiera es un defecto, no una preferencia de estilo.
 
 Es un MVP con finalidad docente acotada. Varias capacidades que parecen faltar —deduplicación de
 contactos, constructor visual de reglas, rango acotado de puntuación— se discutieron y se dejaron
-fuera **a propósito**, y están documentadas con su razón en la documentación de producto.
+fuera **a propósito**, cada una con su razón escrita en `docs/content/roadmap/`.
 
 Antes de proponer una de ellas como si fuera un olvido, conviene mirar ahí.
