@@ -24,3 +24,6 @@ __pycache__/
 
 # Template with placeholder values only; it documents the required vars, unlike the real .env above.
 !.env.example
+
+# MkDocs build output. The site is generated, never committed.
+docs/site/

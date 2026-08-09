@@ -1,0 +1,158 @@
+site_name: Lead Router
+site_description: Enrutamiento y autoasignación de leads comerciales. Arquitectura hexagonal sobre FastAPI y PostgreSQL.
+site_author: Equipo Lead Router
+docs_dir: content
+
+# Nested under docs/ rather than at the repo root: the documentation is a
+# subproject with its own dependencies, and content/ avoids the docs/docs/ path
+# that MkDocs defaults to.
+
+theme:
+  name: material
+  language: es
+  icon:
+    logo: material/call-split
+    repo: fontawesome/brands/git-alt
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Cambiar a modo oscuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Cambiar a modo claro
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Enlace a esta sección
+  - pymdownx.details
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  # Mermaid renders natively through superfences: no external script tag, no
+  # CDN, and the diagram source stays in the Markdown where it can be diffed.
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search:
+      lang: es
+
+extra:
+  social:
+    - icon: fontawesome/brands/git-alt
+      link: https://github.com
+      name: Repositorio
+
+nav:
+  - Inicio: index.md
+
+  - Visión:
+      - vision/index.md
+      - El problema: vision/el-problema.md
+      - El modelo de decisión: vision/modelo-de-decision.md
+      - Qué decide cada organización: vision/dominio-y-organizacion.md
+      - Glosario: vision/glosario.md
+
+  - Arquitectura:
+      - arquitectura/index.md
+      - "C4 · Contexto": arquitectura/c4-contexto.md
+      - "C4 · Contenedores": arquitectura/c4-contenedores.md
+      - "C4 · Componentes": arquitectura/c4-componentes.md
+      - Modelo de datos: arquitectura/modelo-de-datos.md
+      - El recorrido de un lead: arquitectura/recorrido-de-un-lead.md
+
+  - Decisiones:
+      - decisiones/index.md
+      - "ADR-0001 · Arquitectura hexagonal": decisiones/0001-arquitectura-hexagonal.md
+      - "ADR-0002 · SQL crudo sin ORM": decisiones/0002-sql-crudo-sin-orm.md
+      - "ADR-0003 · Dos planos disjuntos": decisiones/0003-dos-planos-disjuntos.md
+      - "ADR-0004 · La organización sale del token": decisiones/0004-organizacion-desde-el-token.md
+      - "ADR-0005 · 404 en vez de 403": decisiones/0005-404-en-vez-de-403.md
+      - "ADR-0006 · Migraciones idempotentes": decisiones/0006-migraciones-idempotentes.md
+      - "ADR-0007 · Tipos nativos de SQL": decisiones/0007-tipos-nativos-de-sql.md
+      - "ADR-0008 · El correo del lead es opcional": decisiones/0008-correo-opcional.md
+      - "ADR-0009 · Registrar antes de interpretar": decisiones/0009-registrar-antes-de-interpretar.md
+      - "ADR-0010 · Recepción y procesamiento separados": decisiones/0010-recepcion-y-procesamiento-separados.md
+      - "ADR-0011 · Una gramática de condiciones": decisiones/0011-gramatica-de-condiciones.md
+      - "ADR-0012 · Y dentro, O entre": decisiones/0012-y-dentro-o-entre.md
+      - "ADR-0013 · Condiciones en JSONB": decisiones/0013-condiciones-en-jsonb.md
+      - "ADR-0014 · Retirada del umbral fijo": decisiones/0014-retirada-del-umbral-fijo.md
+      - "ADR-0015 · Notificaciones por sondeo": decisiones/0015-notificaciones-por-sondeo.md
+      - "ADR-0016 · Sólo eventos con consumidor": decisiones/0016-solo-eventos-con-consumidor.md
+      - "ADR-0017 · Retirada de webhook_dispatched": decisiones/0017-retirada-de-webhook-dispatched.md
+      - "ADR-0018 · DTOs sin framework": decisiones/0018-dtos-sin-framework.md
+      - "ADR-0019 · Trabajo de fondo en proceso": decisiones/0019-trabajo-de-fondo-en-proceso.md
+      - "ADR-0020 · Eventos desde la aplicación": decisiones/0020-eventos-desde-la-aplicacion.md
+      - "ADR-0021 · Texto explicativo compuesto al escribir": decisiones/0021-texto-explicativo-compuesto-al-escribir.md
+
+  - Módulos:
+      - modulos/index.md
+      - Ingesta: modulos/ingesta.md
+      - Reglas y motores: modulos/reglas.md
+      - Asignación: modulos/asignacion.md
+      - Notificaciones: modulos/notificaciones.md
+      - Identidad y acceso: modulos/identidad-y-acceso.md
+      - Organizaciones: modulos/organizaciones.md
+
+  - Desarrollo:
+      - desarrollo/index.md
+      - Puesta en marcha: desarrollo/puesta-en-marcha.md
+      - Validación: desarrollo/validacion.md
+      - Convenciones: desarrollo/convenciones.md
+      - Cómo contribuir: desarrollo/contribuir.md
+      - "API · Referencia": desarrollo/api-referencia.md
+      - "API · Errores": desarrollo/api-errores.md
+
+  - Hoja de ruta:
+      - roadmap/index.md
+      - Frontend: roadmap/frontend.md
+      - Webhook entrante: roadmap/webhook-entrante.md
+      - Identidad del contacto: roadmap/identidad-del-contacto.md
+      - La definición del lead: roadmap/definicion-del-lead.md
+      - Deuda técnica: roadmap/deuda-tecnica.md
+
+  - Otros:
+      - otros/index.md
+      - Dónde se valida lo que entra: otros/donde-se-valida-lo-que-entra.md

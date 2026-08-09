@@ -65,6 +65,21 @@ services:
       backend:
         condition: service_healthy
 
+  docs:
+    build:
+      context: ./docs
+      dockerfile: Dockerfile
+    # Content mounted, config baked in: writing a page shows up on save without
+    # rebuilding. Read-only because the site generator must never write back
+    # into the working tree.
+    volumes:
+      - ./docs/content:/docs/content:ro
+    ports:
+      # 8002: 8000 and 8001 are taken by the API's container and host ports.
+      - "8002:8000"
+    # No dependency on db or backend: documentation must be readable when the
+    # product does not start, which is exactly when it is needed most.
+
   backend-test:
     profiles: ["test"]
     build:

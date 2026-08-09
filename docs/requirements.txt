@@ -1,0 +1,4 @@
+# Pinned so a rebuild months from now renders the same site.
+mkdocs-material==9.5.49
+mkdocs==1.6.1
+pymdown-extensions==10.14
