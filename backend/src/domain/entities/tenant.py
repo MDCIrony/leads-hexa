@@ -62,7 +62,10 @@ class Tenant:
         self.is_active = False
 
     def rename(self, name: str) -> None:
-        # The slug deliberately stays put: it is what other records reference.
+        # The slug deliberately stays put. Nothing references it by foreign key
+        # — every table points at tenant_id — but it is the stable, readable
+        # handle an organization gets quoted in URLs and integrations, and a
+        # display name changing must not invalidate those.
         self.name = _require_name(name)
 
 

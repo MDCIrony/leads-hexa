@@ -68,8 +68,9 @@ BEGIN
 END $$;
 
 -- Contactability is an organization's rule, not an invariant of the data: a
--- lead with no email must be able to exist and be disqualified by a rule
--- (F2c), not be destroyed on arrival. See docs/product/03.
+-- lead with no email must be able to exist and be disqualified by a rule,
+-- not be destroyed on arrival.
+-- See docs/content/decisiones/0008-correo-opcional.md
 ALTER TABLE leads ALTER COLUMN email DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_lead_sources_tenant ON lead_sources (tenant_id);
