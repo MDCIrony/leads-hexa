@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:api": "openapi-typescript http://localhost:8001/openapi.json -o src/infrastructure/api/schema.d.ts"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -23,6 +24,7 @@
     "vite": "^6.0.0",
     "tailwindcss": "^4.0.0",
     "@tailwindcss/vite": "^4.0.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "openapi-typescript": "^7.4.0"
   }
 }
