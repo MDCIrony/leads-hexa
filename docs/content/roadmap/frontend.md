@@ -126,9 +126,70 @@ Que un lead ajeno responda `404` y no `403` **no es un detalle de implementació
 que tratarlo como «no existe», sin insinuar que existe en otro sitio. Ver
 [ADR-0005](../decisiones/0005-404-en-vez-de-403.md).
 
+## El recorte del MVP
+
+Las dieciocho vistas de la sección siguiente son el alcance completo. **La primera entrega no las
+construye todas**: construye las nueve que hacen falta para recorrer el producto de punta a punta una
+vez, que es lo que hay que poder enseñar funcionando.
+
+El recorrido que define el recorte:
+
+```mermaid
+flowchart LR
+    A[Arranque:<br/>primer admin] --> B[Login]
+    B --> C[ADMIN crea<br/>organización + gestor]
+    C --> D[Gestor crea<br/>un asesor]
+    D --> E[Gestor crea y edita<br/>reglas]
+    E --> F[Gestor inserta un lead<br/>suelto o por CSV]
+    F --> G[Asesor entra y ve<br/>sus leads asignados]
+    G --> H[Asesor abre<br/>el detalle]
+```
+
+| # | Vista | Rol | Por qué es imprescindible |
+|---|---|---|---|
+| 1 | Arranque de la plataforma | — | Sin el primer administrador no se puede entrar a nada |
+| 2 | Login | — | Puerta única de los tres roles |
+| 3 | Organizaciones | `ADMIN` | Crea la organización **y su gestor** en un solo paso |
+| 4 | Asesores | `MANAGER` | Doble motivo: es quien recibirá el lead y quien iniciará sesión al final del recorrido |
+| 5 | Reglas de puntuación | `MANAGER` | Da al lead una puntuación; sin ella la regla de asignación no tiene por dónde cortar |
+| 6 | Reglas de asignación | `MANAGER` | Es lo que reparte el lead. Crear **y modificar**, que es lo que se quiere demostrar |
+| 7 | Alta de lead | `MANAGER` | Entrada individual |
+| 8 | Carga masiva | `MANAGER` | Entrada por CSV |
+| 9 | Mis leads + detalle | `AGENT` | Cierra el recorrido: el lead llegó a una persona concreta |
+
+### Qué queda fuera, y por qué se puede
+
+| Vista | Por qué no bloquea el recorrido |
+|---|---|
+| Panel del gestor | `GET /leads/stats` ya está construido y probado; sólo queda sin consumir |
+| Leads del gestor | El recorrido se verifica desde el lado del asesor, que es lo que demuestra el reparto |
+| Bandeja de entrada y trabajos | Sólo hacen falta cuando algo se rechaza; el recorrido feliz no pasa por ahí |
+| Grupos | Se evita apuntando la regla de asignación a **asesores concretos** en vez de a un grupo |
+| Orígenes | Dar de alta una organización ya crea sus dos orígenes, «Formulario manual» y «Carga de fichero» |
+| Reglas de descalificación | Misma forma que las otras dos familias; no añade nada al recorrido |
+| Notificaciones | El asesor ve su lead en su lista; el aviso es comodidad, no camino |
+
+### Tres cosas que el recorte obliga a resolver
+
+**«Registrar» es el arranque, no un alta autoservicio.** El primer `POST /agents` sin credencial crea
+el administrador de plataforma; en cuanto existe cualquier agente, ese mismo endpoint pasa a exigir
+`MANAGER` y responde `401`. La vista de arranque sólo tiene sentido con la plataforma vacía y debe
+decirlo cuando ya no lo está.
+
+**La regla de asignación necesita un destino.** Sin `target_group_id` ni `target_agent_ids` responde
+`400 RULE_WITHOUT_TARGET`. Como no hay vista de grupos en el recorte, el formulario apunta a asesores
+concretos, elegidos de `GET /agents`.
+
+**La ingesta es asíncrona y hay que cerrar el círculo.** Responde `202` y el lead no existe todavía.
+Las vistas de alta y de carga masiva tienen que sondear el trabajo hasta estado terminal y **mostrar
+en qué acabó el lead**: con qué puntuación y a quién se asignó, o por qué se quedó sin asignar. Sin
+eso, un lead que no case con ninguna regla deja la pantalla en silencio y el recorrido parece roto
+sin decir dónde.
+
 ## Vistas y funcionalidad mínima
 
 Lo que sigue acota **qué tiene que hacer cada vista para considerarse terminada**. No dice cómo.
+Marcadas con **·MVP·** las nueve del recorte de arriba.
 
 ### Panel del administrador de plataforma
 
@@ -137,7 +198,7 @@ sin `curl`.
 
 | Vista | Funcionalidad mínima |
 |---|---|
-| Organizaciones | Listar paginado; dar de alta una organización con su gestor en un solo formulario; renombrar; activar y desactivar |
+| Organizaciones **·MVP·** | Listar paginado; dar de alta una organización con su gestor en un solo formulario; renombrar; activar y desactivar |
 
 ### Panel del gestor
 
@@ -147,14 +208,14 @@ sin `curl`.
 | Leads | Tabla paginada con los cinco filtros del backend —estado, asesor, grupo, fuente y búsqueda— combinables entre sí, y columna de asesor asignado |
 | Detalle del lead | Ficha completa, desglose de las reglas que produjeron la puntuación, motivo de descalificación o descarte cuando lo haya, asignación manual a un asesor y descarte con motivo |
 | Bandeja de entrada | Registros de entrada con su estado; para uno rechazado, ver el payload tal como llegó y el error por campo; corregir y reintentar, o descartar |
-| Alta de lead | Formulario individual que **valida en cliente lo que el esquema exige**, y espera al procesamiento antes de dar el alta por buena |
-| Carga masiva | Subida real de fichero, seguimiento del trabajo hasta estado terminal, y resumen del resultado fila a fila |
+| Alta de lead **·MVP·** | Formulario individual que **valida en cliente lo que el esquema exige**, y espera al procesamiento antes de dar el alta por buena |
+| Carga masiva **·MVP·** | Subida real de fichero, seguimiento del trabajo hasta estado terminal, y resumen del resultado fila a fila |
 | Trabajos de entrada | Listado de cargas con su estado y contadores; reprocesar una que quedó a medias |
-| Asesores | Alta, edición, asignación a grupo, **desactivar y reactivar**, y ver los desactivados con `?is_active=false` |
+| Asesores **·MVP·** | Alta, edición, asignación a grupo, **desactivar y reactivar**, y ver los desactivados con `?is_active=false` |
 | Grupos | Alta, edición y borrado; estrategia por defecto, capacidad por asesor; ver sus miembros |
 | Orígenes | Alta, edición y borrado; mapeo de columnas del fichero a los campos de la plataforma |
-| Reglas de puntuación | Alta, edición, activación y borrado; constructor de condiciones con campo, operador y valor; puntos y prioridad |
-| Reglas de asignación | Alta, edición, activación y borrado; rango de puntuación, destino por grupo o por asesores, modo de coincidencia, estrategia y prioridad |
+| Reglas de puntuación **·MVP·** | Alta, edición, activación y borrado; constructor de condiciones con campo, operador y valor; puntos y prioridad |
+| Reglas de asignación **·MVP·** | Alta, edición, activación y borrado; rango de puntuación, destino por grupo o por asesores, modo de coincidencia, estrategia y prioridad |
 | Reglas de descalificación | Alta, edición, activación y borrado; constructor de condiciones |
 | Notificaciones | Campana con contador de no leídas, desplegable paginado, marcar una y marcar todas, y navegar al elemento relacionado |
 
@@ -162,16 +223,17 @@ sin `curl`.
 
 | Vista | Funcionalidad mínima |
 |---|---|
-| Mis leads | Lista paginada de los leads asignados, ordenada por fecha de asignación, con filtro por estado y búsqueda |
-| Detalle del lead | Ficha completa con contacto, empresa, presupuesto, sector, atributos personalizados, puntuación y su desglose |
+| Mis leads **·MVP·** | Lista paginada de los leads asignados, ordenada por fecha de asignación, con filtro por estado y búsqueda |
+| Detalle del lead **·MVP·** | Ficha completa con contacto, empresa, presupuesto, sector, atributos personalizados, puntuación y su desglose |
 | Notificaciones | Campana con contador, marcar leídas y navegar al lead |
 
 ### Transversal a los tres
 
 | Vista | Funcionalidad mínima |
 |---|---|
-| Login | Entrada única; guardar el token, rehidratarlo al recargar, y llevar a cada rol a su panel |
-| Errores y sesión | Un `401` cierra la sesión y vuelve al login; un `403` explica que el rol no alcanza; un `404` dice que no existe; un `422` señala el campo; un `500` ofrece reintentar |
+| Arranque de la plataforma **·MVP·** | Crear el primer administrador cuando la plataforma está vacía; detectar que ya no lo está y llevar al login en vez de ofrecer un formulario que va a responder `401` |
+| Login **·MVP·** | Entrada única; guardar el token, rehidratarlo al recargar, y llevar a cada rol a su panel |
+| Errores y sesión **·MVP·** | Un `401` cierra la sesión y vuelve al login; un `403` explica que el rol no alcanza; un `404` dice que no existe; un `422` señala el campo; un `500` ofrece reintentar |
 
 ## Qué ya existe y se puede aprovechar
 
