@@ -5,6 +5,7 @@ import { LeadDetailPage } from '../pages/LeadDetailPage';
 import { LoginPage } from '../pages/LoginPage';
 import { MyLeadsPage } from '../pages/MyLeadsPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { OrganizationsPage } from '../pages/OrganizationsPage';
 import { PlaceholderPage } from '../pages/PlaceholderPage';
 import { RoleRoute } from './role-guard';
 import { RootRedirect } from './root-redirect';
@@ -22,7 +23,7 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<RoleRoute allow={['ADMIN']} />}>
-        <Route path="/admin/organizaciones" element={<PlaceholderPage title="Organizaciones" />} />
+        <Route path="/admin/organizaciones" element={<OrganizationsPage />} />
       </Route>
 
       <Route element={<RoleRoute allow={['MANAGER']} />}>
