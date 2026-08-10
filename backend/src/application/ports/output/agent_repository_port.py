@@ -44,14 +44,21 @@ class AgentRepositoryPort(ABC):
         self,
         tenant_id: UUID,
         group_id: Optional[UUID] = None,
+        is_active: Optional[bool] = True,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Agent]:
-        """Return a page of active agents of this organization."""
+        """Return a page of this organization's agents.
+
+        is_active defaults to True so every caller written before this
+        filter existed keeps seeing only active agents; pass False for the
+        deactivated ones, or None for both."""
 
     @abstractmethod
-    def count_by_tenant(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> int:
-        """Return how many active agents this organization has."""
+    def count_by_tenant(
+        self, tenant_id: UUID, group_id: Optional[UUID] = None, is_active: Optional[bool] = True
+    ) -> int:
+        """Return how many agents match, honoring the same is_active filter as list_by_tenant."""
 
     @abstractmethod
     def get_by_id_and_tenant(self, agent_id: UUID, tenant_id: UUID) -> Optional[Agent]:

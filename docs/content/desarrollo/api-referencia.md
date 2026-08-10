@@ -240,7 +240,14 @@ cuenta por correo sin filtrar por organización.
 
 ### `GET /api/v1/agents`
 
-Lista paginada de la propia organización. Acepta `group_id` para filtrar.
+Lista paginada de la propia organización. Acepta `group_id` para filtrar, y `is_active` para elegir
+qué franja de activación se lista:
+
+| Petición | Devuelve |
+|---|---|
+| `GET /agents` | sólo activos — el comportamiento de siempre, sin cambios |
+| `GET /agents?is_active=false` | sólo desactivados |
+| `GET /agents?is_active=true` | sólo activos, explícito |
 
 ### `GET /api/v1/agents/{agent_id}`
 
@@ -248,15 +255,21 @@ Errores: `404 Not Found` (`AGENT_NOT_FOUND`, tanto si no existe como si es de ot
 
 ### `PATCH /api/v1/agents/{agent_id}`
 
-`name` y/o `group_id`, ambos opcionales. Errores: `404 Not Found` (`AGENT_NOT_FOUND`;
-`GROUP_NOT_FOUND` si el grupo no existe o es de otra organización).
+`name`, `group_id` y/o `is_active`, los tres opcionales. `is_active: true` **reactiva** a un asesor
+desactivado con `DELETE` — no hay un endpoint aparte para eso, activar y desactivar son el mismo
+atributo. Reactivar sólo cambia `is_active`: `group_id` y las asignaciones que ya tenía no se tocan,
+y el asesor recupera el acceso en el acto porque cada petición suya vuelve a resolver su identidad
+contra base de datos. Errores: `404 Not Found` (`AGENT_NOT_FOUND`; `GROUP_NOT_FOUND` si el grupo no
+existe o es de otra organización).
 
 ### `DELETE /api/v1/agents/{agent_id}`
 
 **Desactiva**, no borra: los leads que ya tiene asignados siguen apuntando a su identificador.
 Responde `200 OK` con el agente y `is_active: false`, no `204` — no es un borrado real. Un asesor
-desactivado deja de recibir asignaciones automáticas pero su historial sigue legible. Errores:
-`404 Not Found` (`AGENT_NOT_FOUND`).
+desactivado deja de recibir asignaciones automáticas pero su historial sigue legible, y deja de
+aparecer en `GET /agents` sin parámetro (sigue visible con `?is_active=false`). La operación inversa
+es `PATCH /api/v1/agents/{agent_id}` con `{"is_active": true}`. Errores: `404 Not Found`
+(`AGENT_NOT_FOUND`).
 
 ## Grupos de ventas
 

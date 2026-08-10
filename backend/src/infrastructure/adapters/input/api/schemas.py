@@ -308,6 +308,9 @@ class AgentCreate(BaseModel):
 class AgentUpdate(BaseModel):
     name: Optional[str] = None
     group_id: Optional[UUID] = None
+    # None-means-unchanged, same convention as elsewhere; True reactivates,
+    # False deactivates (same effect as DELETE /agents/{agent_id}).
+    is_active: Optional[bool] = None
 
 class AgentResponse(BaseModel):
     id: str

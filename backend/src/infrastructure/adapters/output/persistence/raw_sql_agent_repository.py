@@ -105,11 +105,18 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         self,
         tenant_id: UUID,
         group_id: Optional[UUID] = None,
+        is_active: Optional[bool] = True,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Agent]:
-        sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = TRUE"
+        sql = "SELECT * FROM agents WHERE tenant_id = %s"
         params: list = [tenant_id]
+        # is_active is not None, never just "if is_active": is_active=False
+        # is falsy, and the naive form would silently drop the clause and
+        # return everyone instead of only the deactivated agents.
+        if is_active is not None:
+            sql += " AND is_active = %s"
+            params.append(is_active)
         if group_id:
             sql += " AND group_id = %s"
             params.append(group_id)
@@ -119,9 +126,14 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         rows = self.connection.execute(sql, tuple(params)).fetchall()
         return [self._row_to_agent(row) for row in rows]
 
-    def count_by_tenant(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> int:
-        sql = "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s AND is_active = TRUE"
+    def count_by_tenant(
+        self, tenant_id: UUID, group_id: Optional[UUID] = None, is_active: Optional[bool] = True
+    ) -> int:
+        sql = "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s"
         params: list = [tenant_id]
+        if is_active is not None:
+            sql += " AND is_active = %s"
+            params.append(is_active)
         if group_id:
             sql += " AND group_id = %s"
             params.append(group_id)

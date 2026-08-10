@@ -1,0 +1,34 @@
+meta {
+  name: The reactivated agent logs in again
+  type: http
+  seq: 17
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: {{agentEmail}}
+  password: {{password}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.access_token: isString
+}
+
+docs {
+  # El punto entero del flujo, en sentido contrario
+
+  Las mismas credenciales que el paso 15 confirmó que ya no servían vuelven a responder `200` con
+  un token nuevo. Nada cambió en la contraseña ni en el correo: lo único que se movió, en el paso
+  anterior, fue `is_active` de vuelta a `true`. Reactivar no es una operación simbólica — devuelve
+  acceso real, verificado aquí con un login real, no sólo con el valor del campo en la respuesta del
+  `PATCH`.
+}

@@ -42,24 +42,34 @@ class InMemoryAgentRepository(AgentRepositoryPort):
     def count(self) -> int:
         return len(self.agents)
 
+    def _filter_by_active(self, agents: List[Agent], is_active: Optional[bool]) -> List[Agent]:
+        if is_active is None:
+            return agents
+        return [a for a in agents if a.is_active == is_active]
+
     def list_by_tenant(
-        self, tenant_id: UUID, group_id: Optional[UUID] = None, limit: int = 100, offset: int = 0
+        self,
+        tenant_id: UUID,
+        group_id: Optional[UUID] = None,
+        is_active: Optional[bool] = True,
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[Agent]:
         agents = [
-            a
-            for a in self.agents.values()
-            if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
+            a for a in self.agents.values() if a.tenant_id is not None and a.tenant_id.value == tenant_id
         ]
+        agents = self._filter_by_active(agents, is_active)
         agents = self._filter_by_group(agents, group_id)
         agents.sort(key=lambda a: (a.name, str(a.id)))
         return agents[offset : offset + limit]
 
-    def count_by_tenant(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> int:
+    def count_by_tenant(
+        self, tenant_id: UUID, group_id: Optional[UUID] = None, is_active: Optional[bool] = True
+    ) -> int:
         agents = [
-            a
-            for a in self.agents.values()
-            if a.is_active and a.tenant_id is not None and a.tenant_id.value == tenant_id
+            a for a in self.agents.values() if a.tenant_id is not None and a.tenant_id.value == tenant_id
         ]
+        agents = self._filter_by_active(agents, is_active)
         return len(self._filter_by_group(agents, group_id))
 
     def get_by_id_and_tenant(self, agent_id: UUID, tenant_id: UUID) -> Optional[Agent]:

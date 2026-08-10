@@ -191,6 +191,108 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
     return {"Authorization": f"Bearer {manager_login.json()['access_token']}"}
 
 
+def test_reactivating_an_agent_restores_login_and_default_listing():
+    with TestClient(app) as client:
+        headers = _manager_auth_headers(client)
+        email = f"reactivate_{uuid.uuid4().hex[:6]}@example.com"
+        password = "password123"
+        create_resp = client.post(
+            "/api/v1/agents",
+            json={"name": "Ana Reactivable", "email": email, "password": password},
+            headers=headers,
+        )
+        assert create_resp.status_code == 201
+        agent_id = create_resp.json()["id"]
+
+        deactivate_resp = client.delete(f"/api/v1/agents/{agent_id}", headers=headers)
+        assert deactivate_resp.status_code == 200
+        assert deactivate_resp.json()["is_active"] is False
+
+        # Deactivated: gone from the default listing, present under the
+        # explicit is_active=false view, and total matches both.
+        default_list = client.get("/api/v1/agents", headers=headers)
+        assert agent_id not in [a["id"] for a in default_list.json()["items"]]
+        inactive_list = client.get("/api/v1/agents?is_active=false", headers=headers)
+        inactive_ids = [a["id"] for a in inactive_list.json()["items"]]
+        assert agent_id in inactive_ids
+        assert inactive_list.json()["total"] == len(inactive_ids)
+        assert default_list.json()["total"] == len(default_list.json()["items"])
+
+        reactivate_resp = client.patch(
+            f"/api/v1/agents/{agent_id}", json={"is_active": True}, headers=headers
+        )
+        assert reactivate_resp.status_code == 200
+        assert reactivate_resp.json()["is_active"] is True
+
+        # The assertion that gives the task its point: reactivating restores
+        # real login access, not just the database flag.
+        login_resp = client.post(
+            "/api/v1/auth/login", data={"username": email, "password": password}
+        )
+        assert login_resp.status_code == 200
+        assert "access_token" in login_resp.json()
+
+        # Reactivated: back in the default listing.
+        default_list_after = client.get("/api/v1/agents", headers=headers)
+        assert agent_id in [a["id"] for a in default_list_after.json()["items"]]
+
+
+def test_patch_without_is_active_leaves_activation_state_untouched():
+    with TestClient(app) as client:
+        headers = _manager_auth_headers(client)
+        create_resp = client.post(
+            "/api/v1/agents",
+            json={"name": "Bruno", "email": f"bruno_{uuid.uuid4().hex[:6]}@example.com", "password": "password123"},
+            headers=headers,
+        )
+        agent_id = create_resp.json()["id"]
+
+        response = client.patch(f"/api/v1/agents/{agent_id}", json={"name": "Bruno R."}, headers=headers)
+        assert response.status_code == 200
+        assert response.json()["is_active"] is True
+
+
+def test_reactivate_agent_of_another_organization_returns_not_found():
+    with TestClient(app) as client:
+        admin_headers = _get_auth_headers(client)
+        first_org_headers = _create_org_manager_headers(client, admin_headers)
+        second_org_headers = _create_org_manager_headers(client, admin_headers)
+
+        create_resp = client.post(
+            "/api/v1/agents",
+            json={"name": "Ajena", "email": f"ajena_{uuid.uuid4().hex[:6]}@example.com", "password": "password123"},
+            headers=first_org_headers,
+        )
+        agent_id = create_resp.json()["id"]
+
+        response = client.patch(
+            f"/api/v1/agents/{agent_id}", json={"is_active": True}, headers=second_org_headers
+        )
+        assert response.status_code == 404
+        assert response.json()["error_code"] == "AGENT_NOT_FOUND"
+
+
+def test_agent_role_cannot_patch_another_agent():
+    with TestClient(app) as client:
+        headers = _manager_auth_headers(client)
+        create_resp = client.post(
+            "/api/v1/agents",
+            json={"name": "Sub", "email": f"sub_{uuid.uuid4().hex[:6]}@example.com", "password": "password123"},
+            headers=headers,
+        )
+        agent_id = create_resp.json()["id"]
+        agent_login = client.post(
+            "/api/v1/auth/login",
+            data={"username": create_resp.json()["email"], "password": "password123"},
+        )
+        agent_headers = {"Authorization": f"Bearer {agent_login.json()['access_token']}"}
+
+        response = client.patch(
+            f"/api/v1/agents/{agent_id}", json={"is_active": True}, headers=agent_headers
+        )
+        assert response.status_code == 403
+
+
 def test_create_agent_rejects_duplicate_email_across_tenants():
     with TestClient(app) as client:
         admin_headers = _get_auth_headers(client)

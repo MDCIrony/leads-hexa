@@ -1,0 +1,42 @@
+meta {
+  name: Reactivate the agent
+  type: http
+  seq: 16
+  tags: [
+    flow
+  ]
+}
+
+patch {
+  url: {{apiBase}}/agents/:agentId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  agentId: {{agentId}}
+}
+
+body:json {
+  {
+    "is_active": true
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{agentId}}
+  res.body.is_active: eq true
+}
+
+docs {
+  # La contrapartida de desactivar
+
+  El mismo gestor que desactivó al asesor dos pasos atrás lo reactiva con el mismo `PATCH` que edita
+  nombre y grupo — activar y desactivar son el mismo atributo, no dos endpoints distintos. Responde
+  `200` con `is_active: true`.
+
+  El paso siguiente comprueba que esto no es sólo una fila de base de datos: reintenta el login con
+  las credenciales que el asesor ya tenía, la misma contrapartida exacta que el paso *"The
+  deactivated agent loses access immediately"* demostró en sentido contrario.
+}

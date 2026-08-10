@@ -19,6 +19,9 @@ class GetLeadsQuery:
 class GetAgentsQuery:
     tenant_id: UUID
     group_id: Optional[UUID] = None
+    # True (the default) keeps today's listing behavior: only active agents.
+    # False lists the deactivated ones, None lists both.
+    is_active: Optional[bool] = True
     limit: int = 100
     offset: int = 0
 

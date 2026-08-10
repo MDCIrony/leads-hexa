@@ -77,12 +77,17 @@ def create_agent(
 @router.get("/", response_model=PaginatedAgentsResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_agents(
     group_id: Optional[UUID] = None,
+    # True keeps today's behavior when the client sends nothing: only
+    # active agents. ?is_active=false is the trash view for reactivation.
+    is_active: Optional[bool] = True,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     use_case: GetAgentsInputPort = Depends(get_get_agents_use_case),
     context: RequestContext = Depends(require_organization_manager),
 ):
-    query = GetAgentsQuery(tenant_id=context.tenant_id, group_id=group_id, limit=limit, offset=offset)
+    query = GetAgentsQuery(
+        tenant_id=context.tenant_id, group_id=group_id, is_active=is_active, limit=limit, offset=offset
+    )
     page = use_case.execute(query)
     items = [_to_response(a) for a in page.items]
     return PaginatedAgentsResponse(
@@ -117,6 +122,7 @@ def update_agent(
         agent_id=agent_id,
         name=request.name,
         group_id=request.group_id,
+        is_active=request.is_active,
     )
     return _to_response(use_case.execute(command))
 

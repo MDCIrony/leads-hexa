@@ -96,18 +96,6 @@ consumo externo, no sólo para el frontend propio.
 **Riesgo de no hacerlo:** ninguno funcional mientras el único consumidor sea la interfaz que se
 construye a la vez que la API. El coste aparece si un tercero integra directamente contra ella.
 
-## Un asesor desactivado no se puede reactivar desde la API
-
-Desactivar un asesor le impide autenticarse y lo saca de la asignación automática, pero no existe
-la operación inversa: la edición de un asesor sólo admite cambiar su nombre o su grupo.
-
-**Qué cuesta:** poco. Un campo más en la operación de edición y la llamada al método que ya existe
-en el modelo de dominio para reactivar.
-
-**Riesgo de no hacerlo:** es una vía muerta del producto. Un gestor que desactiva a alguien por
-error, o que readmite a quien estuvo de baja, no tiene forma de deshacerlo sin intervenir
-directamente sobre la base de datos.
-
 ## El documento de diseño maestro sigue marcado como propuesta
 
 El documento de diseño de referencia se sigue titulando "propuesto, pendiente de revisión", con la

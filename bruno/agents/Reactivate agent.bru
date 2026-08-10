@@ -1,0 +1,60 @@
+meta {
+  name: Reactivate agent
+  type: http
+  seq: 6
+  tags: [
+    reference
+  ]
+}
+
+patch {
+  url: {{apiBase}}/agents/:agentId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  agentId: {{agentId}}
+}
+
+body:json {
+  {
+    "is_active": true
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{agentId}}
+  res.body.is_active: eq true
+}
+
+docs {
+  # Reactivar un agente desactivado
+
+  No es un endpoint distinto: es `PATCH /agents/{{agentId}}` con `{"is_active": true}`. Activar y
+  desactivar son el mismo atributo, así que un endpoint por valor sólo multiplicaría la superficie
+  sin añadir nada. `DELETE /agents/{{agentId}}` sigue existiendo por compatibilidad y porque expresa
+  la intención habitual de desactivar.
+
+  ## Qué toca
+
+  `is_active` vuelve a `true` y nada más. `group_id` sigue donde estaba, y los leads que el agente
+  tenía asignados siguen apuntándole — nunca dejaron de hacerlo, por eso se desactiva en vez de
+  borrar. No hay estado que reconstruir.
+
+  ## Qué esperar después
+
+  El agente recupera el acceso en el acto: la siguiente petición suya vuelve a resolverse contra la
+  base de datos, que ya lo ve activo, y puede volver a iniciar sesión con las mismas credenciales.
+  `GET /agents` (sin parámetro) vuelve a incluirlo; antes de reactivar sólo aparecía con
+  `?is_active=false`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `404 AGENT_NOT_FOUND` | El agente del path no existe, o es de otra organización |
+}

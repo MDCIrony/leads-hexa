@@ -49,6 +49,7 @@ class UpdateAgentCommand:
     # this module; clearing an agent's group entirely is not a use case any
     # brief asks for yet.
     group_id: Optional[UUID] = None
+    is_active: Optional[bool] = None
 
 
 @dataclass(frozen=True)

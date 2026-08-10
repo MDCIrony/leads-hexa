@@ -15,6 +15,7 @@ get {
 
 params:query {
   ~group_id: {{groupId}}
+  ~is_active: false
   limit: 100
   offset: 0
 }
@@ -38,6 +39,7 @@ docs {
   | Parámetro | Tipo | Obligatorio | Nota |
   |---|---|---|---|
   | `group_id` | string | no | Filtra por grupo. Desactivado por defecto en este request |
+  | `is_active` | boolean | no | Por defecto `true` — sólo activos. `false` lista la papelera de desactivados. Desactivado por defecto en este request |
   | `limit` | number | no | Por defecto `100` |
   | `offset` | number | no | Por defecto `0` |
 

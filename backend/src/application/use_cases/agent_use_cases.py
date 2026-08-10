@@ -20,9 +20,17 @@ class GetAgentsUseCase(GetAgentsInputPort):
     def execute(self, query: GetAgentsQuery) -> AgentsPageResult:
         with self.uow:
             items = self.uow.agents.list_by_tenant(
-                query.tenant_id, group_id=query.group_id, limit=query.limit, offset=query.offset
+                query.tenant_id,
+                group_id=query.group_id,
+                is_active=query.is_active,
+                limit=query.limit,
+                offset=query.offset,
             )
-            total = self.uow.agents.count_by_tenant(query.tenant_id, group_id=query.group_id)
+            # Both calls need the same filter, or total counts a different
+            # population than items lists and has_more lies.
+            total = self.uow.agents.count_by_tenant(
+                query.tenant_id, group_id=query.group_id, is_active=query.is_active
+            )
         return AgentsPageResult(items=items, total=total)
 
 class GetAgentUseCase(GetAgentInputPort):
@@ -85,6 +93,8 @@ class UpdateAgentUseCase(UpdateAgentInputPort):
                         "El grupo no existe", error_code="GROUP_NOT_FOUND"
                     )
                 agent.group_id = GroupId(command.group_id)
+            if command.is_active is not None:
+                agent.is_active = command.is_active
             return self.uow.agents.save(agent)
 
 

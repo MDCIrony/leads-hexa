@@ -38,13 +38,14 @@ docs {
 
   ## El cuerpo
 
-  Sólo `name` y `group_id` son editables — el correo, el rol y la contraseña no se pueden cambiar
-  por este endpoint. Ambos campos son opcionales; se actualiza sólo lo que llega.
+  `name`, `group_id` e `is_active` son editables — el correo, el rol y la contraseña no se pueden
+  cambiar por este endpoint. Los tres campos son opcionales; se actualiza sólo lo que llega.
 
   | Campo | Tipo | Nota |
   |---|---|---|
   | `name` | string | |
   | `group_id` | string o `null` | `null` quita al agente de su grupo |
+  | `is_active` | boolean | `false` desactiva (mismo efecto que `DELETE`), `true` **reactiva** |
 
   ```json
   {
@@ -52,6 +53,11 @@ docs {
     "group_id": null
   }
   ```
+
+  Reactivar un agente que `DELETE /agents/{{agentId}}` había desactivado es este mismo endpoint con
+  `{"is_active": true}` — no hay un endpoint aparte para eso. Devuelve el acceso en el acto: la
+  siguiente petición autenticada de ese agente vuelve a resolverse contra la base de datos, que ya lo
+  ve activo. `group_id` y las asignaciones que tenía no se tocan; sólo `is_active` cambia.
 
   ## Qué devuelve
 
