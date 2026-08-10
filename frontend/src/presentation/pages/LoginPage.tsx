@@ -5,6 +5,7 @@ import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
 import { Input } from '../components/ui/Input';
+import { isPathAllowedForRole } from '../routes/role-access';
 
 interface LocationState {
   from?: { pathname: string };
@@ -26,10 +27,16 @@ export function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await login(email, password);
+      const currentUser = await login(email, password);
       const from = (location.state as LocationState | null)?.from?.pathname;
-      // '/' with no explicit origin defers to RootRedirect, which knows the role's panel.
-      navigate(from ?? '/', { replace: true });
+      // A destination only survives login if the newly authenticated role can
+      // reach it — otherwise it's someone else's leftover redirect (e.g. a
+      // manager's session on /asesores expiring, then an agent logging in on
+      // the same tab) and honoring it would drop the agent on a forbidden
+      // page as their first sight of the app. '/' defers to RootRedirect,
+      // which knows the role's own panel.
+      const destination = from && isPathAllowedForRole(currentUser.role, from) ? from : '/';
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(readApiError(err)?.message ?? 'No se pudo iniciar sesión.');
     } finally {
@@ -52,6 +59,7 @@ export function LoginPage() {
         <Field label="Correo">
           <Input
             type="email"
+            autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -60,6 +68,7 @@ export function LoginPage() {
         <Field label="Contraseña" error={error ?? undefined}>
           <Input
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

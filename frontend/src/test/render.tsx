@@ -36,7 +36,7 @@ export function renderWithProviders(
   const session: SessionContextValue = {
     user,
     status: user ? 'authenticated' : 'anonymous',
-    login: async () => {},
+    login: async () => USER_BY_ROLE.AGENT,
     logout: () => {},
   };
 

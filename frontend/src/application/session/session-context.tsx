@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { setSessionExpiredListener } from '../../infrastructure/api/api-client';
 import {
   login as loginRequest,
   logout as logoutRequest,
@@ -13,7 +14,9 @@ export type SessionStatus = 'loading' | 'authenticated' | 'anonymous';
 export interface SessionContextValue {
   user: CurrentUser | null;
   status: SessionStatus;
-  login: (email: string, password: string) => Promise<void>;
+  // Returns the freshly authenticated user: LoginPage needs the role to
+  // decide whether a pending destination still applies.
+  login: (email: string, password: string) => Promise<CurrentUser>;
   logout: () => void;
 }
 
@@ -39,6 +42,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const currentUser = await loginRequest(email, password);
     setUser(currentUser);
     setStatus('authenticated');
+    return currentUser;
   }, []);
 
   // Navigating away on logout is the router's job; this only clears the
@@ -48,6 +52,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setStatus('anonymous');
   }, []);
+
+  // A token that dies mid-session (expiry, revocation) is reported by
+  // api-client as a 401 on some unrelated request; this is what turns that
+  // into the same anonymous state a manual logout produces, so the guard
+  // takes it from there instead of an error string painted in place.
+  useEffect(() => {
+    setSessionExpiredListener(logout);
+    return () => setSessionExpiredListener(null);
+  }, [logout]);
 
   return (
     <SessionContext.Provider value={{ user, status, login, logout }}>

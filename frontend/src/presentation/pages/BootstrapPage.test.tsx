@@ -57,6 +57,12 @@ describe('BootstrapPage', () => {
     );
   });
 
+  it('declares autocomplete on the password field so the browser stops warning about it', () => {
+    renderBootstrap();
+
+    expect(screen.getByLabelText('Contraseña')).toHaveAttribute('autocomplete', 'new-password');
+  });
+
   it('surfaces EMAIL_ALREADY_EXISTS on a repeated email', async () => {
     const emailTaken = {
       error: true as const,

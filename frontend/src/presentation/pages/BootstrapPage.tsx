@@ -58,7 +58,13 @@ export function BootstrapPage() {
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Field>
         <Field label="Contraseña" error={error ?? undefined}>
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <Input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
         </Field>
         <Button type="submit" submitting={submitting} submittingLabel="Creando…" className="w-full">
           Crear administrador

@@ -57,7 +57,13 @@ export function AgentForm({ groups, onCreate }: AgentFormProps) {
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Field>
         <Field label="Contraseña">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <Input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
         </Field>
         <div className="space-y-1">
           <label htmlFor="agent-role" className="block text-sm font-medium text-slate-200">
