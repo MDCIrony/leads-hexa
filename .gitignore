@@ -27,3 +27,6 @@ __pycache__/
 
 # MkDocs build output. The site is generated, never committed.
 docs/site/
+
+# Planes de trabajo de sesión: material de despacho para subagentes, no del proyecto.
+.plans/
