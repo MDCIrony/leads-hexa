@@ -7,6 +7,11 @@ import { mapAssignmentRule, mapScoringRule } from '../mappers/rule.mapper';
 type ScoringRuleResponse = components['schemas']['ScoringRuleResponse'];
 type AssignmentRuleResponse = components['schemas']['AssignmentRuleResponse'];
 export type DisqualificationRule = components['schemas']['DisqualificationRuleResponse'];
+export type ScoringRuleCreate = components['schemas']['ScoringRuleCreate'];
+export type ScoringRuleUpdate = components['schemas']['ScoringRuleUpdate'];
+export type AssignmentRuleCreate = components['schemas']['AssignmentRuleCreate'];
+export type AssignmentRuleUpdate = components['schemas']['AssignmentRuleUpdate'];
+export type Criterion = components['schemas']['CriterionSchema'];
 
 export const scoring = {
   async list(limit: number, offset: number): Promise<PaginatedEnvelope<ScoringRuleModel>> {
