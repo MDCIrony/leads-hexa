@@ -11,6 +11,7 @@ from application.ports.input.intake_phase_use_case_ports import (
 )
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
+from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInputPort
 from application.ports.input.agent_use_case_ports import (
     CreateAgentInputPort, DeactivateAgentInputPort, GetAgentsInputPort, GetAgentInputPort,
     UpdateAgentInputPort,
@@ -49,6 +50,7 @@ from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
 from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
+from application.use_cases.get_lead_stats_use_case import GetLeadStatsUseCase
 from application.use_cases.agent_use_cases import (
     CreateAgentUseCase, DeactivateAgentUseCase, GetAgentsUseCase, GetAgentUseCase, UpdateAgentUseCase,
 )
@@ -155,6 +157,9 @@ def get_reprocess_intake_job_use_case(
 
 def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsInputPort:
     return GetLeadsUseCase(uow=uow)
+
+def get_get_lead_stats_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadStatsInputPort:
+    return GetLeadStatsUseCase(uow=uow)
 
 def get_create_agent_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),

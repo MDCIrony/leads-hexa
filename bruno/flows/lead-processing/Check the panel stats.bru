@@ -1,0 +1,38 @@
+meta {
+  name: Check the panel stats
+  type: http
+  seq: 19
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads/stats
+  body: none
+  auth: inherit
+}
+
+tests {
+  test("ASSIGNED subió respecto a la línea base, no un número absoluto", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.by_status.ASSIGNED).to.be.greaterThan(bru.getVar("assignedBaseline"));
+  });
+
+  test("las cifras no se contradicen entre sí", function() {
+    const sum = Object.values(res.body.by_status).reduce((a, b) => a + b, 0);
+    expect(res.body.total).to.equal(sum);
+    expect(res.body.unassigned).to.equal(res.body.by_status.UNASSIGNED);
+  });
+}
+
+docs {
+  # El panel cierra el recorrido
+
+  Este flujo ha ingresado, puntuado, repartido y descalificado leads reales de esta organización.
+  `GET /leads/stats` los ve todos en una sola petición.
+
+  La línea base se capturó en `Create the assignment rule`, antes de que este flujo ingiriera nada:
+  la aserción compara contra ella, no contra un número absoluto, porque la organización puede
+  arrastrar leads de ejecuciones anteriores del mismo flujo.
+}

@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -102,6 +103,13 @@ class GetIntakeJobsQuery:
     status: Optional[str] = None
     limit: int = 100
     offset: int = 0
+
+
+@dataclass(frozen=True)
+class GetLeadStatsQuery:
+    tenant_id: UUID
+    date_from: Optional[datetime] = None
+    date_to: Optional[datetime] = None
 
 
 @dataclass(frozen=True)

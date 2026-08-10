@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -5,8 +6,9 @@ from fastapi import APIRouter, Depends, Query, status
 
 from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand
 from application.dtos.context import RequestContext
-from application.dtos.queries import GetLeadQuery, GetLeadsQuery, GetMyLeadsQuery
+from application.dtos.queries import GetLeadQuery, GetLeadStatsQuery, GetLeadsQuery, GetMyLeadsQuery
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
+from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInputPort
 from application.ports.input.lead_lifecycle_use_case_ports import (
     AssignLeadInputPort, DiscardLeadInputPort, GetLeadInputPort, GetMyLeadsInputPort,
 )
@@ -16,6 +18,7 @@ from domain.policies.authorization_policy import AuthorizationPolicy
 from infrastructure.adapters.input.api.dependencies import (
     get_assign_lead_use_case,
     get_discard_lead_use_case,
+    get_get_lead_stats_use_case,
     get_get_lead_use_case,
     get_get_leads_use_case,
     get_get_my_leads_use_case,
@@ -24,11 +27,13 @@ from infrastructure.adapters.input.api.dependencies import (
 )
 
 from infrastructure.adapters.input.api.schemas import (
+    AgentLoadResponse,
     AppliedRuleResponse,
     AssignLeadRequest,
     DiscardLeadRequest,
     LeadDetailResponse,
     LeadResponse,
+    LeadStatsResponse,
     PaginatedLeadsResponse,
 )
 
@@ -146,6 +151,32 @@ def list_my_leads(
     )
     page = use_case.execute(query)
     return _paginate(page.items, page.total, limit, offset)
+
+
+# Declared before /{lead_id}, same reason as /mine above: FastAPI resolves
+# routes in declaration order, so "stats" would otherwise be swallowed by the
+# parametric route and rejected as an invalid UUID.
+@router.get("/stats", response_model=LeadStatsResponse, status_code=status.HTTP_200_OK)
+def get_lead_stats(
+    date_from: Optional[datetime] = Query(default=None, alias="from"),
+    date_to: Optional[datetime] = Query(default=None, alias="to"),
+    # Manager-only, no role branch: this is the whole organization's
+    # snapshot, same as GET /leads. An agent's view is GET /leads/mine.
+    context: RequestContext = Depends(require_organization_manager),
+    use_case: GetLeadStatsInputPort = Depends(get_get_lead_stats_use_case),
+) -> LeadStatsResponse:
+    query = GetLeadStatsQuery(tenant_id=context.tenant_id, date_from=date_from, date_to=date_to)
+    result = use_case.execute(query)
+    return LeadStatsResponse(
+        total=result.total,
+        by_status=result.by_status,
+        unassigned=result.unassigned,
+        pending_intake=result.pending_intake,
+        load_by_agent=[
+            AgentLoadResponse(agent_id=str(a.agent_id), name=a.name, active_leads=a.active_leads)
+            for a in result.load_by_agent
+        ],
+    )
 
 
 @router.get("/{lead_id}", response_model=LeadDetailResponse, status_code=status.HTTP_200_OK)

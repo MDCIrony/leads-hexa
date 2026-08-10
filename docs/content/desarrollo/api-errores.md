@@ -112,6 +112,7 @@ específico responde primero y esta red nunca llega a activarse.
 | `INVALID_RULE_CONDITIONS` | 400 | Una regla de descalificación se crea o actualiza con `conditions` vacía: se cumpliría siempre y descalificaría a toda la organización |
 | `INVALID_SCORE_BAND` | 400 | En una regla de asignación, `max_score` es menor que `min_score` |
 | `RULE_WITHOUT_TARGET` | 400 | Una regla de asignación no apunta ni a un grupo (`target_group_id`) ni a asesores concretos (`target_agent_ids`) |
+| `INVALID_DATE_RANGE` | 400 | En `GET /leads/stats`, `from` es posterior a `to` |
 
 Las tres siguientes son de `Criterion`, la gramática de condiciones compartida por las reglas de
 puntuación, asignación y descalificación — ver

@@ -95,6 +95,18 @@ class LeadDetailResponse(BaseModel):
     disqualification_reason: Optional[str] = None
     created_at: str
 
+class AgentLoadResponse(BaseModel):
+    agent_id: str
+    name: str
+    active_leads: int
+
+class LeadStatsResponse(BaseModel):
+    total: int
+    by_status: Dict[str, int]
+    unassigned: int
+    pending_intake: int
+    load_by_agent: List[AgentLoadResponse]
+
 class AssignLeadRequest(BaseModel):
     agent_id: UUID
 

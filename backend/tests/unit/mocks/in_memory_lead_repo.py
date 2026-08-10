@@ -1,4 +1,5 @@
-from typing import List, Optional, Dict
+from datetime import datetime
+from typing import List, Optional, Dict, Tuple
 from uuid import UUID
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from domain.entities.lead import Lead
@@ -146,3 +147,30 @@ class InMemoryLeadRepository(LeadRepositoryPort):
                 agent_id = lead.assigned_agent_id.value
                 loads[agent_id] = loads.get(agent_id, 0) + 1
         return loads
+
+    def count_by_status(
+        self,
+        tenant_id: UUID,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> Dict[str, int]:
+        result = {s.value: 0 for s in LeadStatus}
+        for lead in self.leads.values():
+            if lead.tenant_id.value != tenant_id:
+                continue
+            if date_from is not None and lead.created_at < date_from:
+                continue
+            if date_to is not None and lead.created_at > date_to:
+                continue
+            result[lead.status.value] += 1
+        return result
+
+    def active_load_by_agent_with_names(self, tenant_id: UUID) -> List[Tuple[UUID, str, int]]:
+        loads = self.active_load_by_agent(tenant_id)
+        named = [
+            (agent_id, self.agent_repo.agents[agent_id].name, load)
+            for agent_id, load in loads.items()
+            if self.agent_repo is not None and agent_id in self.agent_repo.agents
+        ]
+        named.sort(key=lambda entry: (-entry[2], entry[1]))
+        return named

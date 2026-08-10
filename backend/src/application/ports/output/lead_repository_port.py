@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 from domain.entities.lead import Lead
 from domain.value_objects.enums import LeadStatus
@@ -72,3 +73,16 @@ class LeadRepositoryPort(ABC):
     @abstractmethod
     def active_load_by_agent(self, tenant_id: UUID) -> Dict[UUID, int]:
         """Return how many active leads each agent of this organization holds."""
+
+    @abstractmethod
+    def count_by_status(
+        self,
+        tenant_id: UUID,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+    ) -> Dict[str, int]:
+        """Return how many leads this organization has in each status."""
+
+    @abstractmethod
+    def active_load_by_agent_with_names(self, tenant_id: UUID) -> List[Tuple[UUID, str, int]]:
+        """Return each agent's active-lead load together with their name."""

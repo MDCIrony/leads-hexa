@@ -60,7 +60,7 @@ flowchart LR
 
 | Vista | Contenido |
 |---|---|
-| Panel | Indicadores: leads del periodo, distribución por estado, sin asignar, bandeja pendiente, carga por asesor |
+| Panel | Indicadores: leads del periodo, distribución por estado, sin asignar, bandeja pendiente, carga por asesor. Los cinco salen de una sola petición, `GET /leads/stats` (ver [referencia](../desarrollo/api-referencia.md) y [ADR-0022](../decisiones/0022-agregados-del-panel.md)) |
 | Leads | Tabla con filtros por estado, asesor, grupo, fuente y búsqueda, con columna de asesor asignado. Detalle con desglose de reglas aplicadas, asignación manual y descarte |
 | Bandeja de entrada | Registros rechazados con su payload y sus errores. Corregir, reintentar o descartar |
 | Alta de lead | Formulario individual |

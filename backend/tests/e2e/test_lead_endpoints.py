@@ -60,6 +60,27 @@ def _agent_auth_headers(tenant_id: str, group_id: str = None) -> dict:
     return {"Authorization": f"Bearer {token}"}, str(agent.id)
 
 
+def _admin_auth_headers() -> dict:
+    """Same shortcut as _manager_auth_headers, but for the platform ADMIN,
+    which has no tenant."""
+    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+    from domain.entities.agent import Agent
+
+    db = app.state.container.database
+    uow = PostgresUnitOfWork(db)
+    admin = Agent.create(
+        name="Platform Admin",
+        email=f"admin_{uuid.uuid4().hex[:6]}@test.com",
+        role=AgentRole.ADMIN,
+    )
+    with uow:
+        uow.agents.save(admin)
+
+    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
+    token = token_service.issue(TokenClaims(agent_id=str(admin.id), role="ADMIN", tenant_id=None))
+    return {"Authorization": f"Bearer {token}"}
+
+
 def _create_group(tenant_id: str) -> str:
     from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
     from domain.entities.sales_group import SalesGroup
@@ -475,3 +496,96 @@ def test_list_leads_filters_respect_tenant_isolation():
         response = client.get("/api/v1/leads?q=IsolationCo", headers=headers_a)
         assert response.status_code == 200
         assert response.json()["items"] == []
+
+
+def test_lead_stats_is_not_swallowed_by_the_parametric_lead_id_route():
+    """Fixes the route-declaration order bug in place: with /stats declared
+    after /{lead_id}, this request would 422 as an invalid UUID instead of
+    reaching the stats endpoint."""
+    tenant_id = str(uuid.uuid4())
+    with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
+        headers = _manager_auth_headers(tenant_id)
+
+        response = client.get("/api/v1/leads/stats", headers=headers)
+
+        assert response.status_code == 200
+        assert "by_status" in response.json()
+
+
+def test_lead_stats_returns_the_five_adr_keys_and_stays_internally_consistent():
+    tenant_id = str(uuid.uuid4())
+    with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
+        headers = _manager_auth_headers(tenant_id)
+        group_id = _create_group(tenant_id)
+        agent_headers, agent_id = _agent_auth_headers(tenant_id, group_id=group_id)
+
+        assigned = ingest_and_resolve(client, headers, {
+            "first_name": "Lea", "last_name": "Funes", "email": "lea@stats.test",
+            "company": "StatsCo", "budget": 1000.0, "industry": "Tech",
+        })
+        client.post(f"/api/v1/leads/{assigned['lead_id']}/assign", json={"agent_id": agent_id}, headers=headers)
+
+        response = client.get("/api/v1/leads/stats", headers=headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        for key in ("total", "by_status", "unassigned", "pending_intake", "load_by_agent"):
+            assert key in body
+        # by_status always carries the six LeadStatus values, zero where empty.
+        assert set(body["by_status"].keys()) == {
+            "NEW", "QUALIFIED", "DISQUALIFIED", "UNASSIGNED", "ASSIGNED", "DISCARDED",
+        }
+        # The two assertions that keep the numbers from contradicting each other.
+        assert body["total"] == sum(body["by_status"].values())
+        assert body["unassigned"] == body["by_status"]["UNASSIGNED"]
+        assert body["by_status"]["ASSIGNED"] >= 1
+        loaded = next(a for a in body["load_by_agent"] if a["agent_id"] == agent_id)
+        assert loaded["name"] == "Agent"
+        assert loaded["active_leads"] >= 1
+
+
+def test_lead_stats_excludes_leads_from_other_organizations():
+    tenant_a = str(uuid.uuid4())
+    tenant_b = str(uuid.uuid4())
+    with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_a)
+        _seed_tenant_with_sources(tenant_b)
+        headers_a = _manager_auth_headers(tenant_a)
+        headers_b = _manager_auth_headers(tenant_b)
+
+        ingest_and_resolve(client, headers_b, {
+            "first_name": "Otto", "last_name": "Vera", "email": "otto@other-org.test",
+            "company": "OtherOrgCo", "budget": 1000.0, "industry": "Tech",
+        })
+
+        response = client.get("/api/v1/leads/stats", headers=headers_a)
+
+        assert response.status_code == 200
+        assert response.json()["total"] == 0
+
+
+def test_lead_stats_forbidden_for_agent_and_platform_admin():
+    tenant_id = str(uuid.uuid4())
+    with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
+        agent_headers, _ = _agent_auth_headers(tenant_id)
+        admin_headers = _admin_auth_headers()
+
+        assert client.get("/api/v1/leads/stats", headers=agent_headers).status_code == 403
+        assert client.get("/api/v1/leads/stats", headers=admin_headers).status_code == 403
+
+
+def test_lead_stats_rejects_a_from_later_than_to():
+    tenant_id = str(uuid.uuid4())
+    with TestClient(app) as client:
+        _seed_tenant_with_sources(tenant_id)
+        headers = _manager_auth_headers(tenant_id)
+
+        response = client.get(
+            "/api/v1/leads/stats?from=2030-01-01&to=2020-01-01", headers=headers,
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error_code"] == "INVALID_DATE_RANGE"

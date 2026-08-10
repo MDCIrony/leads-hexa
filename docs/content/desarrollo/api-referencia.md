@@ -39,6 +39,7 @@ puede devolver cada endpoint.
 | Trabajos de ingesta | `POST /api/v1/intake/jobs/{job_id}/reprocess` | `MANAGER` | 202 |
 | Leads | `GET /api/v1/leads` | `MANAGER` | 200 |
 | Leads | `GET /api/v1/leads/mine` | `MANAGER` o `AGENT` | 200 |
+| Leads | `GET /api/v1/leads/stats` | `MANAGER` | 200 |
 | Leads | `GET /api/v1/leads/{lead_id}` | `MANAGER` o `AGENT` (el suyo) | 200 |
 | Leads | `POST /api/v1/leads/{lead_id}/assign` | `MANAGER` | 200 |
 | Leads | `POST /api/v1/leads/{lead_id}/discard` | `MANAGER` | 200 |
@@ -592,6 +593,50 @@ Filtra por `status` y `q`, con el mismo significado que en `GET /api/v1/leads`. 
 sólo puede devolver todo o nada engañaría más que ayudaría. El orden es
 `assigned_at DESC NULLS LAST, id` — no `created_at` — porque la vista es "mis leads por cuándo me
 llegaron", y la columna es nula hasta que el lead se asigna.
+
+### `GET /api/v1/leads/stats`
+
+`MANAGER` únicamente: la foto de la organización entera, igual que `GET /api/v1/leads`. Un `AGENT`
+recibe `403` (su vista es `GET /api/v1/leads/mine`, no un panel de organización), y también un
+`ADMIN` (el plano de plataforma no alcanza dato operativo). Declarada antes de `/{lead_id}` en el
+router, misma razón que `/mine`: si fuera después, `stats` caería en la ruta paramétrica y se
+rechazaría como UUID inválido.
+
+Los cinco indicadores que pinta el Panel, en una sola petición:
+
+| Parámetro | Tipo | Contra qué |
+|---|---|---|
+| `from` | fecha | `leads.created_at >=` este valor. Ausente: sin límite inferior |
+| `to` | fecha | `leads.created_at <=` este valor. Ausente: sin límite superior |
+
+Ambos opcionales; sin ninguno, la cifra es "desde siempre". Nada se cachea ni se materializa: las
+cuatro consultas viajan en una única transacción, así que las cinco cifras son la misma foto.
+
+```json
+{
+  "total": 1240,
+  "by_status": {
+    "NEW": 12, "QUALIFIED": 300, "DISQUALIFIED": 88,
+    "UNASSIGNED": 40, "ASSIGNED": 700, "DISCARDED": 100
+  },
+  "unassigned": 40,
+  "pending_intake": 17,
+  "load_by_agent": [
+    {"agent_id": "5c8a1234-...", "name": "Ana Ruiz", "active_leads": 23}
+  ]
+}
+```
+
+`by_status` lleva siempre los seis valores de `LeadStatus`, con `0` donde no haya leads. `unassigned`
+es redundante a propósito con `by_status["UNASSIGNED"]`: el indicador propio que pide el Panel, sin
+que el cliente tenga que conocer ese nombre de estado interno. `pending_intake` suma los registros
+de entrada en `PENDING` y `REJECTED` — los dos estados sobre los que un gestor tiene algo pendiente.
+`load_by_agent` reutiliza la misma consulta que el motor de asignación (`active_load_by_agent`), con
+el nombre de cada asesor añadido para que el Panel no necesite una segunda petición a
+`GET /api/v1/agents`.
+
+Errores: `400 Bad Request` (`INVALID_DATE_RANGE`, ver [API · Errores](api-errores.md)) si `from` es
+posterior a `to`. Ver [ADR-0022](../decisiones/0022-agregados-del-panel.md).
 
 ### `GET /api/v1/leads/{lead_id}`
 

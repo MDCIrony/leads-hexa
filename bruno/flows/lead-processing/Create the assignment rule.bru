@@ -30,6 +30,18 @@ vars:post-response {
   assignmentRuleId: res.body.id
 }
 
+script:post-response {
+  // Baseline captured before the lead below is ingested and assigned: the
+  // stats check at the end of this flow proves ASSIGNED went up, never
+  // against an absolute number the organization could already have from a
+  // previous run.
+  const url = `${bru.getEnvVar("apiBase")}/leads/stats`;
+  const headers = { Authorization: `Bearer ${bru.getVar("managerToken")}` };
+  const stats = await bru.sendRequest({ method: "GET", url, headers });
+  const body = stats.data || stats.body;
+  bru.setVar("assignedBaseline", body.by_status.ASSIGNED);
+}
+
 assert {
   res.status: eq 201
   res.body.strategy: eq DIRECT_AGENT

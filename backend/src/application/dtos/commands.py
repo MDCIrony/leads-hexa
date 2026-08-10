@@ -347,3 +347,19 @@ class NotificationsPageResult:
 class MarkNotificationReadCommand:
     recipient_id: UUID
     notification_id: UUID
+
+
+@dataclass(frozen=True)
+class AgentLoad:
+    agent_id: UUID
+    name: str
+    active_leads: int
+
+
+@dataclass(frozen=True)
+class LeadStatsResult:
+    total: int
+    by_status: Dict[str, int]
+    unassigned: int
+    pending_intake: int
+    load_by_agent: List[AgentLoad]

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from infrastructure.adapters.output.persistence.raw_sql_agent_repository import RawSqlAgentRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
@@ -335,3 +336,78 @@ def test_pagination_with_a_filter_reports_the_full_total(test_db):
 
         assert len(page) == 1
         assert total == 3
+
+
+def test_count_by_status_fills_all_six_statuses_with_zero(test_db):
+    """The database only returns rows for statuses that actually have leads;
+    a panel needs the complete set, or ADR-0022 lies about what it returns."""
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW)
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW)
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.ASSIGNED)
+
+        counts = repo.count_by_status(tenant_id)
+
+        assert counts == {
+            "NEW": 2,
+            "QUALIFIED": 0,
+            "DISQUALIFIED": 0,
+            "UNASSIGNED": 0,
+            "ASSIGNED": 1,
+            "DISCARDED": 0,
+        }
+
+
+def test_count_by_status_respects_the_date_range(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        now = datetime.now(timezone.utc)
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW, created_at=now)
+        _seed_lead(
+            connection, tenant_id, source_id, status=LeadStatus.NEW,
+            created_at=now - timedelta(days=30),
+        )
+
+        counts = repo.count_by_status(tenant_id, date_from=now - timedelta(days=1))
+
+        assert counts["NEW"] == 1
+
+
+def test_active_load_by_agent_with_names_only_counts_assigned_and_orders_by_load(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        group = RawSqlSalesGroupRepository(connection).save(
+            SalesGroup.create(tenant_id=tenant_id, name="Sales")
+        )
+        ana = RawSqlAgentRepository(connection).save(
+            Agent.create("Ana Ruiz", "ana@example.com", group.id.value, role=AgentRole.AGENT, tenant_id=tenant_id)
+        )
+        beto = RawSqlAgentRepository(connection).save(
+            Agent.create("Beto Cruz", "beto@example.com", group.id.value, role=AgentRole.AGENT, tenant_id=tenant_id)
+        )
+
+        for i in range(2):
+            lead = _lead_for_load_test(tenant_id, source_id, f"ana{i}@example.com")
+            lead.assign_to(ana.id.value, lead.tenant_id)
+            repo.save(lead)
+
+        lead = _lead_for_load_test(tenant_id, source_id, "beto@example.com")
+        lead.assign_to(beto.id.value, lead.tenant_id)
+        repo.save(lead)
+
+        unqualified = _lead_for_load_test(tenant_id, source_id, "unassigned@example.com")
+        repo.save(unqualified)
+
+        rows = repo.active_load_by_agent_with_names(tenant_id)
+
+        assert rows == [(ana.id.value, "Ana Ruiz", 2), (beto.id.value, "Beto Cruz", 1)]
