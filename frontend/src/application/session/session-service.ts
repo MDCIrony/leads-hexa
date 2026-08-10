@@ -1,14 +1,9 @@
 import axios from 'axios';
-import { apiClient, loginRequest } from '../../infrastructure/api/api-client';
+import { login as loginRequest, me as fetchCurrentUser } from '../services/auth.service';
 import { clearToken, getToken, setToken } from '../../infrastructure/session/token-storage';
-import type { components } from '../../infrastructure/api/schema';
+import type { CurrentUser } from '../services/auth.service';
 
-export type CurrentUser = components['schemas']['CurrentUserResponse'];
-
-async function fetchCurrentUser(): Promise<CurrentUser> {
-  const { data } = await apiClient.get<CurrentUser>('/api/v1/auth/me');
-  return data;
-}
+export type { CurrentUser };
 
 /**
  * Two-step login: POST /auth/login returns only the token, never the role.
@@ -16,8 +11,8 @@ async function fetchCurrentUser(): Promise<CurrentUser> {
  * the role and identity that decide which panel the user lands on.
  */
 export async function login(email: string, password: string): Promise<CurrentUser> {
-  const { data } = await loginRequest(email, password);
-  setToken(data.access_token);
+  const { access_token } = await loginRequest(email, password);
+  setToken(access_token);
   return fetchCurrentUser();
 }
 
