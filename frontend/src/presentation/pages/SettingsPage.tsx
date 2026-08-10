@@ -3,7 +3,7 @@ import { AgentSettings } from '../components/AgentSettings';
 
 interface SettingsPageProps {
   agents: AgentModel[];
-  onAddAgent: (agent: Omit<AgentModel, 'id' | 'activeLeadsCount'>) => void;
+  onAddAgent: (agent: Omit<AgentModel, 'id'>) => void;
 }
 
 export function SettingsPage({ agents, onAddAgent }: SettingsPageProps) {

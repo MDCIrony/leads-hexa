@@ -2,9 +2,9 @@ export interface AgentModel {
   id: string;
   name: string;
   email: string;
-  team: string;
-  activeLeadsCount: number;
+  groupId: string | null;
   isActive: boolean;
+  role: string;
 }
 
 export function isAgentAvailable(agent: AgentModel): boolean {

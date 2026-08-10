@@ -21,12 +21,11 @@ export function RuleBuilderForm({ rules, onAddRule, onDeleteRule }: RuleBuilderF
 
     onAddRule({
       name,
-      field,
-      operator,
-      value: isNaN(Number(value)) ? value : Number(value),
+      conditions: [{ field, operator, value: isNaN(Number(value)) ? value : Number(value) }],
       scoreDelta,
+      priority: 0,
+      isActive: true,
     });
-
     setName('');
     setValue('');
   };
@@ -123,9 +122,11 @@ export function RuleBuilderForm({ rules, onAddRule, onDeleteRule }: RuleBuilderF
               <div key={rule.id} className="p-4 flex items-center justify-between hover:bg-slate-800/20">
                 <div>
                   <h4 className="font-semibold text-slate-200 text-sm">{rule.name}</h4>
-                  <p className="text-xs text-slate-400 font-mono mt-0.5">
-                    If <span className="text-indigo-300">{rule.field}</span> {rule.operator} <span className="text-emerald-300">{String(rule.value)}</span>
-                  </p>
+                  {rule.conditions.map((c, i) => (
+                    <p key={i} className="text-xs text-slate-400 font-mono mt-0.5">
+                      If <span className="text-indigo-300">{c.field}</span> {c.operator} <span className="text-emerald-300">{String(c.value)}</span>
+                    </p>
+                  ))}
                 </div>
 
                 <div className="flex items-center gap-4">

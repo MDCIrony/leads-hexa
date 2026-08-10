@@ -5,6 +5,8 @@ export enum Operator {
   LESS_THAN = 'LESS_THAN',
   CONTAINS = 'CONTAINS',
   IN = 'IN',
+  IS_EMPTY = 'IS_EMPTY',
+  IS_NOT_EMPTY = 'IS_NOT_EMPTY',
 }
 
 export enum AssignmentStrategy {
@@ -13,19 +15,33 @@ export enum AssignmentStrategy {
   DIRECT_AGENT = 'DIRECT_AGENT',
 }
 
-export interface ScoringRuleModel {
-  id: string;
-  name: string;
+export interface CriterionModel {
   field: string;
   operator: Operator;
   value: unknown;
-  scoreDelta: number;
 }
 
-export interface RoutingRuleModel {
+export interface ScoringRuleModel {
   id: string;
+  name: string;
+  conditions: CriterionModel[];
+  scoreDelta: number;
+  priority: number;
+  isActive: boolean;
+}
+
+// Named after what the API calls it — an assignment rule, not a "routing rule".
+export interface AssignmentRuleModel {
+  id: string;
+  name: string;
   minScore: number;
-  targetTeam: string;
-  assignmentStrategy: AssignmentStrategy;
+  maxScore: number | null;
+  targetGroupId: string | null;
   targetAgentIds: string[];
+  agentMatchMode: string;
+  strategy: AssignmentStrategy | null;
+  priority: number;
+  isActive: boolean;
+  rrCursor: number;
+  conditions: CriterionModel[];
 }

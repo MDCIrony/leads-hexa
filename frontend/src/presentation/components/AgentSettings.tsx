@@ -4,18 +4,17 @@ import { Users, UserPlus } from 'lucide-react';
 
 interface AgentSettingsProps {
   agents: AgentModel[];
-  onAddAgent: (agent: Omit<AgentModel, 'id' | 'activeLeadsCount'>) => void;
+  onAddAgent: (agent: Omit<AgentModel, 'id'>) => void;
 }
 
 export function AgentSettings({ agents, onAddAgent }: AgentSettingsProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [team, setTeam] = useState('Enterprise');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email) return;
-    onAddAgent({ name, email, team, isActive: true });
+    onAddAgent({ name, email, groupId: null, isActive: true, role: 'AGENT' });
     setName('');
     setEmail('');
   };
@@ -28,7 +27,7 @@ export function AgentSettings({ agents, onAddAgent }: AgentSettingsProps) {
           Registrar Agente de Ventas
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">Nombre Completo</label>
             <input
@@ -47,17 +46,6 @@ export function AgentSettings({ agents, onAddAgent }: AgentSettingsProps) {
               placeholder="clopez@sales.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Equipo / Especialización</label>
-            <input
-              type="text"
-              placeholder="Enterprise / SMB"
-              value={team}
-              onChange={(e) => setTeam(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -86,13 +74,10 @@ export function AgentSettings({ agents, onAddAgent }: AgentSettingsProps) {
               <div key={agent.id} className="p-4 flex items-center justify-between">
                 <div>
                   <h4 className="font-semibold text-slate-200 text-sm">{agent.name}</h4>
-                  <p className="text-xs text-slate-400 font-mono">{agent.email} • <span className="text-indigo-400">{agent.team}</span></p>
+                  <p className="text-xs text-slate-400 font-mono">{agent.email} • <span className="text-indigo-400">{agent.role}</span></p>
                 </div>
 
                 <div className="flex items-center gap-4">
-                  <span className="text-xs font-mono bg-slate-950 px-2.5 py-1 rounded border border-slate-800 text-slate-400">
-                    Carga: {agent.activeLeadsCount} leads
-                  </span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${agent.isActive ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
                     {agent.isActive ? 'Activo' : 'Inactivo'}
                   </span>

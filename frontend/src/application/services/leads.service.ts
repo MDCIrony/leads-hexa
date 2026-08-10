@@ -1,9 +1,10 @@
 import { apiClient } from '../../infrastructure/api/api-client';
 import type { components } from '../../infrastructure/api/schema';
 import type { PaginatedEnvelope } from '../data/use-paginated';
+import type { LeadModel } from '../../domain/lead.model';
+import { mapLead, mapLeadDetail } from '../mappers/lead.mapper';
 
-export type Lead = components['schemas']['LeadResponse'];
-export type LeadDetail = components['schemas']['LeadDetailResponse'];
+type LeadDetailResponse = components['schemas']['LeadDetailResponse'];
 
 export interface ListLeadsFilters {
   status?: string;
@@ -18,7 +19,7 @@ export async function list(
   limit: number,
   offset: number,
   filters: ListLeadsFilters = {}
-): Promise<PaginatedEnvelope<Lead>> {
+): Promise<PaginatedEnvelope<LeadModel>> {
   const { data } = await apiClient.get<components['schemas']['PaginatedLeadsResponse']>('/api/v1/leads', {
     params: {
       limit,
@@ -30,7 +31,7 @@ export async function list(
       q: filters.search,
     },
   });
-  return data;
+  return { ...data, items: data.items.map(mapLead) };
 }
 
 export interface ListMyLeadsFilters {
@@ -43,24 +44,24 @@ export async function listMine(
   limit: number,
   offset: number,
   filters: ListMyLeadsFilters = {}
-): Promise<PaginatedEnvelope<Lead>> {
+): Promise<PaginatedEnvelope<LeadModel>> {
   const { data } = await apiClient.get<components['schemas']['PaginatedLeadsResponse']>('/api/v1/leads/mine', {
     params: { limit, offset, status: filters.status, q: filters.search },
   });
-  return data;
+  return { ...data, items: data.items.map(mapLead) };
 }
 
-export async function get(id: string): Promise<LeadDetail> {
-  const { data } = await apiClient.get<LeadDetail>(`/api/v1/leads/${id}`);
-  return data;
+export async function get(id: string): Promise<LeadModel> {
+  const { data } = await apiClient.get<LeadDetailResponse>(`/api/v1/leads/${id}`);
+  return mapLeadDetail(data);
 }
 
-export async function assign(id: string, agentId: string): Promise<LeadDetail> {
-  const { data } = await apiClient.post<LeadDetail>(`/api/v1/leads/${id}/assign`, { agent_id: agentId });
-  return data;
+export async function assign(id: string, agentId: string): Promise<LeadModel> {
+  const { data } = await apiClient.post<LeadDetailResponse>(`/api/v1/leads/${id}/assign`, { agent_id: agentId });
+  return mapLeadDetail(data);
 }
 
-export async function discard(id: string, reason = ''): Promise<LeadDetail> {
-  const { data } = await apiClient.post<LeadDetail>(`/api/v1/leads/${id}/discard`, { reason });
-  return data;
+export async function discard(id: string, reason = ''): Promise<LeadModel> {
+  const { data } = await apiClient.post<LeadDetailResponse>(`/api/v1/leads/${id}/discard`, { reason });
+  return mapLeadDetail(data);
 }

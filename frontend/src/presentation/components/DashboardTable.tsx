@@ -13,7 +13,7 @@ export function DashboardTable({ leads }: DashboardTableProps) {
 
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch =
-      lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (lead.email ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
       `${lead.firstName} ${lead.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -26,8 +26,9 @@ export function DashboardTable({ leads }: DashboardTableProps) {
       [LeadStatus.NEW]: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
       [LeadStatus.QUALIFIED]: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
       [LeadStatus.DISQUALIFIED]: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+      [LeadStatus.UNASSIGNED]: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
       [LeadStatus.ASSIGNED]: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-      [LeadStatus.FAILED]: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      [LeadStatus.DISCARDED]: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
     };
 
     return (
@@ -62,8 +63,9 @@ export function DashboardTable({ leads }: DashboardTableProps) {
             <option value={LeadStatus.NEW}>Nuevo</option>
             <option value={LeadStatus.QUALIFIED}>Calificado</option>
             <option value={LeadStatus.DISQUALIFIED}>Descalificado</option>
+            <option value={LeadStatus.UNASSIGNED}>Sin asignar</option>
             <option value={LeadStatus.ASSIGNED}>Asignado</option>
-            <option value={LeadStatus.FAILED}>Fallido</option>
+            <option value={LeadStatus.DISCARDED}>Descartado</option>
           </select>
         </div>
       </div>

@@ -49,6 +49,6 @@ describe('agents.deactivate', () => {
 
     const agent = await deactivate(agentId);
 
-    expect(agent.is_active).toBe(true);
+    expect(agent.isActive).toBe(true);
   });
 });

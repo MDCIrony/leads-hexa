@@ -2,25 +2,38 @@ export enum LeadStatus {
   NEW = 'NEW',
   QUALIFIED = 'QUALIFIED',
   DISQUALIFIED = 'DISQUALIFIED',
+  UNASSIGNED = 'UNASSIGNED',
   ASSIGNED = 'ASSIGNED',
-  FAILED = 'FAILED',
+  DISCARDED = 'DISCARDED',
 }
 
+export interface AppliedRuleModel {
+  ruleId: string;
+  name: string;
+  scoreDelta: number;
+}
+
+// LeadResponse and LeadDetailResponse share every field below `createdAt`; the
+// detail-only ones stay optional so a single model fits both list and detail views.
 export interface LeadModel {
   id: string;
-  tenantId: string;
+  sourceId: string;
   firstName: string;
   lastName: string;
-  email: string;
+  email: string | null;
   company: string;
   budget: number;
   industry: string;
   customAttributes: Record<string, unknown>;
-  phone?: string;
+  phone: string | null;
   score: number;
   status: LeadStatus;
-  assignedAgentId?: string;
+  assignedAgentId: string | null;
   createdAt: string;
+  scoreBreakdown?: AppliedRuleModel[];
+  assignedAt?: string | null;
+  discardReason?: string | null;
+  disqualificationReason?: string | null;
 }
 
 export function formatLeadStatusLabel(status: LeadStatus): string {
@@ -28,8 +41,9 @@ export function formatLeadStatusLabel(status: LeadStatus): string {
     [LeadStatus.NEW]: 'Nuevo',
     [LeadStatus.QUALIFIED]: 'Calificado',
     [LeadStatus.DISQUALIFIED]: 'Descalificado',
+    [LeadStatus.UNASSIGNED]: 'Sin asignar',
     [LeadStatus.ASSIGNED]: 'Asignado',
-    [LeadStatus.FAILED]: 'Fallido',
+    [LeadStatus.DISCARDED]: 'Descartado',
   };
   return map[status] || status;
 }

@@ -57,7 +57,7 @@ describe('leads.get, leads.assign, leads.discard', () => {
 
     const lead = await assign(leadDetailFixture.id, leadDetailFixture.assigned_agent_id as string);
 
-    expect(lead.assigned_agent_id).toBe(leadDetailFixture.assigned_agent_id);
+    expect(lead.assignedAgentId).toBe(leadDetailFixture.assigned_agent_id);
   });
 
   it('discards with a reason', async () => {
