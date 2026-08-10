@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 
 interface LocationState {
   from?: { pathname: string };
+  notice?: string;
 }
 
 export function LoginPage() {
@@ -18,6 +19,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const notice = (location.state as LocationState | null)?.notice;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -42,6 +44,11 @@ export function LoginPage() {
         className="w-full max-w-sm space-y-4 p-8 border border-slate-800 rounded-xl bg-slate-900/40"
       >
         <h1 className="text-lg font-semibold">Iniciar sesión</h1>
+        {notice && (
+          <p className="text-sm bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg px-3 py-2">
+            {notice}
+          </p>
+        )}
         <Field label="Correo">
           <Input
             type="email"
