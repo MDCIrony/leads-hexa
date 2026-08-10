@@ -156,11 +156,10 @@ def list_assignment_rules(
     use_case: GetAssignmentRulesInputPort = Depends(get_get_assignment_rules_use_case),
     context: RequestContext = Depends(require_organization_manager),
 ):
-    # ponytail debt: the assignment-rule repository has no LIMIT/OFFSET of
-    # its own (every rule loads on every ingestion anyway), so limit/offset
-    # are honored here, slicing the already-fetched full list, rather than
-    # at the use case — widening GetAssignmentRulesQuery and the repository
-    # port for this alone was out of this task's scope.
+    # Sliced here rather than in SQL: the assignment-rule repository has no
+    # LIMIT/OFFSET, because the assignment engine loads every rule of the
+    # organization on each ingestion anyway. The client sees a correct page
+    # either way; what it does not get is a smaller query.
     rules = use_case.execute(GetAssignmentRulesQuery(tenant_id=context.tenant_id))
     all_items = [_to_response(r) for r in rules]
     items = all_items[offset:offset + limit]
