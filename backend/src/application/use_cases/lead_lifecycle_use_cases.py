@@ -97,11 +97,24 @@ class GetMyLeadsUseCase(GetMyLeadsInputPort):
         self.uow = uow
 
     def execute(self, query: GetMyLeadsQuery) -> LeadsPageResult:
+        status = None
+        if query.status is not None:
+            try:
+                status = LeadStatus(query.status)
+            except ValueError:
+                raise DomainException(
+                    f"Unknown lead status: {query.status}",
+                    error_code="INVALID_LEAD_STATUS",
+                )
         with self.uow:
             items = self.uow.leads.list_by_agent(
-                query.tenant_id, query.agent_id, limit=query.limit, offset=query.offset
+                query.tenant_id, query.agent_id,
+                status=status, search=query.search,
+                limit=query.limit, offset=query.offset,
             )
-            total = self.uow.leads.count_by_agent(query.tenant_id, query.agent_id)
+            total = self.uow.leads.count_by_agent(
+                query.tenant_id, query.agent_id, status=status, search=query.search,
+            )
         return LeadsPageResult(items=items, total=total)
 
 

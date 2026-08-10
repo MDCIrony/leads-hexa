@@ -6,6 +6,11 @@ from uuid import UUID
 @dataclass(frozen=True)
 class GetLeadsQuery:
     tenant_id: UUID
+    status: Optional[str] = None
+    assigned_agent_id: Optional[UUID] = None
+    group_id: Optional[UUID] = None
+    source_id: Optional[UUID] = None
+    search: Optional[str] = None
     limit: int = 100
     offset: int = 0
 
@@ -60,6 +65,8 @@ class GetDisqualificationRulesQuery:
 class GetMyLeadsQuery:
     tenant_id: UUID
     agent_id: UUID
+    status: Optional[str] = None
+    search: Optional[str] = None
     limit: int = 100
     offset: int = 0
 

@@ -211,6 +211,9 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.leads = leads if leads is not None else (lead_repo or InMemoryLeadRepository())
         self.rules = rules if rules is not None else (rule_repo or InMemoryRuleRepository())
         self.agents = agents if agents is not None else (agent_repo or InMemoryAgentRepository())
+        # group_id filtering on leads needs each lead's assigned agent.
+        if isinstance(self.leads, InMemoryLeadRepository) and isinstance(self.agents, InMemoryAgentRepository):
+            self.leads.agent_repo = self.agents
         self.tenants = tenants or InMemoryTenantRepository()
         self.groups = groups or InMemorySalesGroupRepository()
         self.sources = sources or InMemoryLeadSourceRepository()

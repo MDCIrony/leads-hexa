@@ -133,6 +133,7 @@ puntuación, asignación y descalificación — ver
 | `INVALID_JOB_TRANSITION` | 400 | Reprocesar un trabajo de ingesta que ya terminó (`COMPLETED` o `FAILED`) |
 | `INVALID_INTAKE_STATUS` | 400 | El filtro `status` de la bandeja de ingesta no es un valor conocido |
 | `INVALID_JOB_STATUS` | 400 | El filtro `status` de la lista de trabajos no es un valor conocido |
+| `INVALID_LEAD_STATUS` | 400 | El filtro `status` de `GET /leads` o `GET /leads/mine` no es un valor conocido |
 
 ## Definidos, no alcanzables desde la API hoy
 

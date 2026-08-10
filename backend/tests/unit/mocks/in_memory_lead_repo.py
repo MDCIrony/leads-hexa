@@ -7,6 +7,10 @@ from domain.value_objects.enums import LeadStatus
 class InMemoryLeadRepository(LeadRepositoryPort):
     def __init__(self) -> None:
         self.leads: Dict[UUID, Lead] = {}
+        # Wired by InMemoryUnitOfWork after both repos exist: resolving
+        # group_id needs each lead's assigned agent, which this repo has no
+        # other way to reach.
+        self.agent_repo = None
 
     def save(self, lead: Lead) -> Lead:
         self.leads[lead.id.value] = lead
@@ -21,12 +25,72 @@ class InMemoryLeadRepository(LeadRepositoryPort):
             return None
         return lead
 
-    def list_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[Lead]:
-        items = [l for l in self.leads.values() if l.tenant_id.value == tenant_id]
+    def _matches(
+        self,
+        lead: Lead,
+        tenant_id: UUID,
+        status: Optional[LeadStatus],
+        assigned_agent_id: Optional[UUID],
+        group_id: Optional[UUID],
+        source_id: Optional[UUID],
+        search: Optional[str],
+    ) -> bool:
+        if lead.tenant_id.value != tenant_id:
+            return False
+        if status is not None and lead.status != status:
+            return False
+        if assigned_agent_id is not None and (
+            lead.assigned_agent_id is None or lead.assigned_agent_id.value != assigned_agent_id
+        ):
+            return False
+        if group_id is not None:
+            agent = None
+            if lead.assigned_agent_id is not None and self.agent_repo is not None:
+                agent = self.agent_repo.agents.get(lead.assigned_agent_id.value)
+            agent_group_id = agent.group_id.value if agent and agent.group_id else None
+            if agent_group_id != group_id:
+                return False
+        if source_id is not None and lead.source_id.value != source_id:
+            return False
+        if search:
+            haystack = " ".join(
+                filter(None, [lead.first_name, lead.last_name, str(lead.email) if lead.email else None, lead.company])
+            ).lower()
+            if search.lower() not in haystack:
+                return False
+        return True
+
+    def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        status: Optional[LeadStatus] = None,
+        assigned_agent_id: Optional[UUID] = None,
+        group_id: Optional[UUID] = None,
+        source_id: Optional[UUID] = None,
+        search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Lead]:
+        items = [
+            l for l in self.leads.values()
+            if self._matches(l, tenant_id, status, assigned_agent_id, group_id, source_id, search)
+        ]
+        items.sort(key=lambda l: (l.created_at, l.id.value), reverse=True)
         return items[offset:offset + limit]
 
-    def count_by_tenant(self, tenant_id: UUID) -> int:
-        return len([l for l in self.leads.values() if l.tenant_id.value == tenant_id])
+    def count_by_tenant(
+        self,
+        tenant_id: UUID,
+        status: Optional[LeadStatus] = None,
+        assigned_agent_id: Optional[UUID] = None,
+        group_id: Optional[UUID] = None,
+        source_id: Optional[UUID] = None,
+        search: Optional[str] = None,
+    ) -> int:
+        return len([
+            l for l in self.leads.values()
+            if self._matches(l, tenant_id, status, assigned_agent_id, group_id, source_id, search)
+        ])
 
     def count_by_source(self, tenant_id: UUID, source_id: UUID) -> int:
         return len([
@@ -42,13 +106,34 @@ class InMemoryLeadRepository(LeadRepositoryPort):
         )
 
     def list_by_agent(
-        self, tenant_id: UUID, agent_id: UUID, limit: int = 100, offset: int = 0
+        self,
+        tenant_id: UUID,
+        agent_id: UUID,
+        status: Optional[LeadStatus] = None,
+        search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[Lead]:
-        items = [l for l in self.leads.values() if self._assigned_to(l, tenant_id, agent_id)]
+        items = [
+            l for l in self.leads.values()
+            if self._assigned_to(l, tenant_id, agent_id)
+            and self._matches(l, tenant_id, status, None, None, None, search)
+        ]
+        items.sort(key=lambda l: (l.assigned_at is not None, l.assigned_at, l.id.value), reverse=True)
         return items[offset:offset + limit]
 
-    def count_by_agent(self, tenant_id: UUID, agent_id: UUID) -> int:
-        return len([l for l in self.leads.values() if self._assigned_to(l, tenant_id, agent_id)])
+    def count_by_agent(
+        self,
+        tenant_id: UUID,
+        agent_id: UUID,
+        status: Optional[LeadStatus] = None,
+        search: Optional[str] = None,
+    ) -> int:
+        return len([
+            l for l in self.leads.values()
+            if self._assigned_to(l, tenant_id, agent_id)
+            and self._matches(l, tenant_id, status, None, None, None, search)
+        ])
 
     def active_load_by_agent(self, tenant_id: UUID) -> Dict[UUID, int]:
         loads: Dict[UUID, int] = {}

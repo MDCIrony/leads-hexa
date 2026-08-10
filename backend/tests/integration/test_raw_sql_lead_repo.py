@@ -1,12 +1,18 @@
 import uuid
+from infrastructure.adapters.output.persistence.raw_sql_agent_repository import RawSqlAgentRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
     RawSqlLeadSourceRepository,
 )
+from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
+    RawSqlSalesGroupRepository,
+)
+from domain.entities.agent import Agent
 from domain.entities.lead import Lead
 from domain.entities.lead_source import LeadSource
+from domain.entities.sales_group import SalesGroup
 from domain.value_objects import LeadStatus
-from domain.value_objects.enums import LeadSourceKind
+from domain.value_objects.enums import AgentRole, LeadSourceKind
 
 
 def _seed_source(connection, tenant_id: uuid.UUID) -> uuid.UUID:
@@ -139,3 +145,168 @@ def test_active_load_by_agent_counts_only_currently_assigned_leads(test_db):
         loads = repo.active_load_by_agent(tenant_id)
 
         assert loads == {ana: 3, beto: 1}
+
+
+def _seed_lead(connection, tenant_id, source_id, **overrides) -> Lead:
+    defaults = dict(
+        tenant_id=tenant_id,
+        source_id=source_id,
+        first_name="Maria",
+        last_name="Gomez",
+        email=f"{uuid.uuid4()}@example.com",
+        company="TechCorp",
+        budget=1000,
+        industry="Tech",
+    )
+    defaults.update(overrides)
+    lead = Lead.create(**defaults)
+    return RawSqlLeadRepository(connection).save(lead)
+
+
+def test_status_filter_returns_only_matching_leads(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW)
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW)
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
+
+        found = repo.list_by_tenant(tenant_id, status=LeadStatus.QUALIFIED)
+        assert len(found) == 1
+        assert found[0].status == LeadStatus.QUALIFIED
+        assert repo.count_by_tenant(tenant_id, status=LeadStatus.QUALIFIED) == 1
+
+
+def test_source_filter_returns_only_matching_leads(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_a = _seed_source(connection, tenant_id)
+        source_b = RawSqlLeadSourceRepository(connection).save(
+            LeadSource.create(tenant_id=tenant_id, name="Referido", kind=LeadSourceKind.MANUAL_FORM)
+        ).id.value
+
+        _seed_lead(connection, tenant_id, source_a)
+        _seed_lead(connection, tenant_id, source_b)
+        _seed_lead(connection, tenant_id, source_b)
+
+        found = repo.list_by_tenant(tenant_id, source_id=source_b)
+        assert len(found) == 2
+        assert repo.count_by_tenant(tenant_id, source_id=source_b) == 2
+
+
+def test_assigned_agent_id_filter(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+        agent_one, agent_two = uuid.uuid4(), uuid.uuid4()
+
+        lead_one = _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
+        lead_one.assign_to(agent_one, lead_one.tenant_id)
+        repo.save(lead_one)
+
+        lead_two = _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
+        lead_two.assign_to(agent_two, lead_two.tenant_id)
+        repo.save(lead_two)
+
+        found = repo.list_by_tenant(tenant_id, assigned_agent_id=agent_one)
+        assert len(found) == 1
+        assert repo.count_by_tenant(tenant_id, assigned_agent_id=agent_one) == 1
+
+
+def test_group_id_filter_scopes_agents_to_the_tenant(test_db):
+    """A group_id from another organization must not leak its agents' leads,
+    even though the outer query already scopes by tenant_id."""
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        other_tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        group = RawSqlSalesGroupRepository(connection).save(
+            SalesGroup.create(tenant_id=tenant_id, name="Sales")
+        )
+        agent = RawSqlAgentRepository(connection).save(
+            Agent.create(
+                "Ana", "ana@example.com", group.id.value, role=AgentRole.AGENT, tenant_id=tenant_id
+            )
+        )
+
+        lead = _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
+        lead.assign_to(agent.id.value, lead.tenant_id)
+        repo.save(lead)
+
+        found = repo.list_by_tenant(tenant_id, group_id=group.id.value)
+        assert len(found) == 1
+
+        _seed_source(connection, other_tenant_id)
+        other_group = RawSqlSalesGroupRepository(connection).save(
+            SalesGroup.create(tenant_id=other_tenant_id, name="Other Sales")
+        )
+        assert repo.list_by_tenant(tenant_id, group_id=other_group.id.value) == []
+
+
+def test_two_filters_combine_with_and(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW, company="Acme")
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED, company="Acme")
+        _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED, company="Globex")
+
+        found = repo.list_by_tenant(tenant_id, status=LeadStatus.QUALIFIED, search="Acme")
+        assert len(found) == 1
+        assert found[0].company == "Acme"
+        assert found[0].status == LeadStatus.QUALIFIED
+
+
+def test_search_matches_name_email_and_company_but_not_unrelated_leads(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        _seed_lead(connection, tenant_id, source_id, first_name="Valentina", last_name="Rios")
+        _seed_lead(connection, tenant_id, source_id, first_name="Pedro", last_name="Valentin")
+        _seed_lead(connection, tenant_id, source_id, email="valentin@example.com")
+        _seed_lead(connection, tenant_id, source_id, company="Valentino SRL")
+        _seed_lead(connection, tenant_id, source_id, first_name="Nobody", last_name="Unrelated")
+
+        found = repo.list_by_tenant(tenant_id, search="valentin")
+        assert len(found) == 4
+        assert repo.count_by_tenant(tenant_id, search="valentin") == 4
+
+
+def test_search_with_a_literal_percent_does_not_break_the_query(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        _seed_lead(connection, tenant_id, source_id, company="50% Off Corp")
+        _seed_lead(connection, tenant_id, source_id, company="Regular Corp")
+
+        found = repo.list_by_tenant(tenant_id, search="50%")
+        assert len(found) == 1
+        assert found[0].company == "50% Off Corp"
+
+
+def test_pagination_with_a_filter_reports_the_full_total(test_db):
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        for _ in range(3):
+            _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
+
+        page = repo.list_by_tenant(tenant_id, status=LeadStatus.QUALIFIED, limit=1, offset=0)
+        total = repo.count_by_tenant(tenant_id, status=LeadStatus.QUALIFIED)
+
+        assert len(page) == 1
+        assert total == 3

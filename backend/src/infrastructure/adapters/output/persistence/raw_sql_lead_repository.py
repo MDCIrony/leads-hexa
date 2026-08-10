@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import psycopg
@@ -122,20 +122,81 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         ).fetchone()
         return self._row_to_lead(row) if row else None
 
-    def list_by_tenant(self, tenant_id: UUID, limit: int = 100, offset: int = 0) -> List[Lead]:
-        cursor = self.connection.execute(
-            "SELECT * FROM leads WHERE tenant_id = %s ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
-            (tenant_id, limit, offset),
-        )
-        rows = cursor.fetchall()
+    def _filters(
+        self,
+        tenant_id: UUID,
+        status: Optional[LeadStatus],
+        assigned_agent_id: Optional[UUID],
+        group_id: Optional[UUID],
+        source_id: Optional[UUID],
+        search: Optional[str],
+    ) -> tuple[List[str], List[Any]]:
+        # Built up rather than fully duplicated per filter combination: five
+        # independent optional filters would otherwise mean many
+        # near-identical query strings. Values still travel exclusively
+        # through %s markers.
+        clauses: List[str] = []
+        params: List[Any] = []
+        if status is not None:
+            clauses.append("status = %s")
+            params.append(status.value)
+        if assigned_agent_id is not None:
+            clauses.append("assigned_agent_id = %s")
+            params.append(assigned_agent_id)
+        if group_id is not None:
+            clauses.append(
+                "assigned_agent_id IN (SELECT id FROM agents WHERE group_id = %s AND tenant_id = %s)"
+            )
+            params += [group_id, tenant_id]
+        if source_id is not None:
+            clauses.append("source_id = %s")
+            params.append(source_id)
+        if search:
+            clauses.append(
+                "(first_name ILIKE '%%' || %s || '%%' OR last_name ILIKE '%%' || %s || '%%'"
+                " OR email ILIKE '%%' || %s || '%%' OR company ILIKE '%%' || %s || '%%')"
+            )
+            params += [search, search, search, search]
+        return clauses, params
+
+    def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        status: Optional[LeadStatus] = None,
+        assigned_agent_id: Optional[UUID] = None,
+        group_id: Optional[UUID] = None,
+        source_id: Optional[UUID] = None,
+        search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Lead]:
+        clauses, params = self._filters(tenant_id, status, assigned_agent_id, group_id, source_id, search)
+        query = "SELECT * FROM leads WHERE tenant_id = %s"
+        query_params: List[Any] = [tenant_id]
+        for clause in clauses:
+            query += f" AND {clause}"
+        query_params += params
+        query += " ORDER BY created_at DESC, id LIMIT %s OFFSET %s"
+        query_params += [limit, offset]
+        rows = self.connection.execute(query, query_params).fetchall()
         return [self._row_to_lead(row) for row in rows]
 
-    def count_by_tenant(self, tenant_id: UUID) -> int:
-        cursor = self.connection.execute(
-            "SELECT COUNT(*) AS count FROM leads WHERE tenant_id = %s",
-            (tenant_id,),
-        )
-        row = cursor.fetchone()
+    def count_by_tenant(
+        self,
+        tenant_id: UUID,
+        status: Optional[LeadStatus] = None,
+        assigned_agent_id: Optional[UUID] = None,
+        group_id: Optional[UUID] = None,
+        source_id: Optional[UUID] = None,
+        search: Optional[str] = None,
+    ) -> int:
+        clauses, params = self._filters(tenant_id, status, assigned_agent_id, group_id, source_id, search)
+        query = "SELECT COUNT(*) AS count FROM leads WHERE tenant_id = %s"
+        query_params: List[Any] = [tenant_id]
+        for clause in clauses:
+            query += f" AND {clause}"
+        query_params += params
+        row = self.connection.execute(query, query_params).fetchone()
         return int(row["count"]) if row else 0
 
     def count_by_source(self, tenant_id: UUID, source_id: UUID) -> int:
@@ -147,23 +208,39 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         return int(row["total"]) if row else 0
 
     def list_by_agent(
-        self, tenant_id: UUID, agent_id: UUID, limit: int = 100, offset: int = 0
+        self,
+        tenant_id: UUID,
+        agent_id: UUID,
+        status: Optional[LeadStatus] = None,
+        search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[Lead]:
-        rows = self.connection.execute(
-            """
-            SELECT * FROM leads
-            WHERE tenant_id = %s AND assigned_agent_id = %s
-            ORDER BY created_at DESC, id LIMIT %s OFFSET %s
-            """,
-            (tenant_id, agent_id, limit, offset),
-        ).fetchall()
+        clauses, params = self._filters(tenant_id, status, None, None, None, search)
+        query = "SELECT * FROM leads WHERE tenant_id = %s AND assigned_agent_id = %s"
+        query_params: List[Any] = [tenant_id, agent_id]
+        for clause in clauses:
+            query += f" AND {clause}"
+        query_params += params
+        query += " ORDER BY assigned_at DESC NULLS LAST, id LIMIT %s OFFSET %s"
+        query_params += [limit, offset]
+        rows = self.connection.execute(query, query_params).fetchall()
         return [self._row_to_lead(row) for row in rows]
 
-    def count_by_agent(self, tenant_id: UUID, agent_id: UUID) -> int:
-        row = self.connection.execute(
-            "SELECT COUNT(*) AS count FROM leads WHERE tenant_id = %s AND assigned_agent_id = %s",
-            (tenant_id, agent_id),
-        ).fetchone()
+    def count_by_agent(
+        self,
+        tenant_id: UUID,
+        agent_id: UUID,
+        status: Optional[LeadStatus] = None,
+        search: Optional[str] = None,
+    ) -> int:
+        clauses, params = self._filters(tenant_id, status, None, None, None, search)
+        query = "SELECT COUNT(*) AS count FROM leads WHERE tenant_id = %s AND assigned_agent_id = %s"
+        query_params: List[Any] = [tenant_id, agent_id]
+        for clause in clauses:
+            query += f" AND {clause}"
+        query_params += params
+        row = self.connection.execute(query, query_params).fetchone()
         return int(row["count"])
 
     def active_load_by_agent(self, tenant_id: UUID) -> Dict[UUID, int]:
