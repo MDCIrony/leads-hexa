@@ -43,6 +43,17 @@ docs {
   `adminToken`, `managerToken`, `agentToken`, `tenantId` y `agentId` cargados, y con eso las carpetas
   de recurso ya responden.
 
+  Eso vale **en la aplicación de escritorio**, donde las variables sobreviven a la ejecución. Desde
+  la línea de comandos cada `bru run` es un proceso nuevo y empieza sin nada, así que el flujo y la
+  carpeta van en la misma invocación:
+
+  ```
+  bru run flows/organization-onboarding agents groups sources --env local -r
+  bru run flows/lead-processing         leads  intake        --env local -r
+  ```
+
+  La tabla de qué flujo alimenta a qué carpeta está en `README.md`.
+
   ## Cómo se parametriza
 
   Del entorno salen sólo cuatro valores: `baseUrl`, `apiBase`, `adminEmail` y `password`. Todo lo

@@ -55,6 +55,47 @@ No están pensadas para ejecutarse en bloque: buena parte necesita un `{{leadId}
 que sólo produce un flujo. Por eso llevan la etiqueta `reference` y los flujos la etiqueta `flow`,
 que es lo que permite filtrar con `--tags`.
 
+#### Cómo se les da lo que necesitan
+
+Las variables que escriben los flujos —los tokens, los identificadores— **viven en la ejecución, no
+en el disco**. Eso cambia lo que hay que hacer según desde dónde se lance:
+
+**En la aplicación de escritorio**, basta con ejecutar antes el flujo que produzca lo que la carpeta
+pide; las variables quedan cargadas en la sesión y las peticiones ya responden.
+
+**Desde la línea de comandos**, cada `bru run` es un proceso nuevo y empieza sin nada. Hay que
+encadenar el flujo y la carpeta **en la misma invocación**:
+
+```bash
+bru run flows/organization-onboarding agents groups sources tenants --env local -r
+bru run flows/lead-processing         leads  intake                 --env local -r
+bru run flows/notifications           notifications                 --env local -r
+```
+
+| Carpeta | Qué la alimenta | Qué le deja |
+|---|---|---|
+| `tenants`, `agents`, `groups`, `sources` | `flows/organization-onboarding` | `adminToken`, `managerToken`, `tenantId`, `agentId` |
+| `leads`, `intake` | `flows/lead-processing` | además `leadId`, `jobId`, `recordId` |
+| `notifications` | `flows/notifications` | además `agentToken` y un aviso sin leer |
+| `auth`, `health` | nada | son autónomas |
+
+Un `bru run . --tags reference` sobre un entorno recién levantado falla casi entero, y es lo
+esperado: son peticiones de exploración, no un harness.
+
+Y hay cinco fallos que **no** son de configuración. Encadenando `flows/lead-processing leads intake`
+pasan 25 de 30 peticiones; las cinco que responden `400` son las que **mutan** una entidad que el
+flujo ya llevó a su estado final:
+
+| Petición | Por qué `400` |
+|---|---|
+| `leads/Assign lead`, `leads/Discard lead` | El motor ya asignó ese lead; la transición es inválida |
+| `intake/Promote intake record`, `intake/Discard intake record` | El registro ya está `PROMOTED` |
+| `intake/Reprocess intake job` | El trabajo ya está `COMPLETED` |
+
+No hay nada que arreglar: son peticiones de exploración que necesitan una entidad en el estado de
+partida, y el flujo las deja pasadas de punto. Para probarlas a mano, ingiere un lead nuevo y usa su
+identificador.
+
 ### Los flujos
 
 | Flujo | Qué demuestra |
