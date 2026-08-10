@@ -61,6 +61,12 @@ nombre de esa regla como motivo. `ScoringEngine` no se detiene en la primera: ac
 (`ScoreBreakdown`), que el lead conserva para poder explicarse aunque las reglas que lo produjeron
 cambien después.
 
+Una `ScoringRule` se puede editar (`PATCH`) o borrar (`DELETE`) sin dejar huérfano ningún lead ya
+puntuado: el `ScoreBreakdown` congela nombre y puntos en el momento de puntuar, no una referencia
+viva a la regla. El `DELETE` borra la fila de verdad —a diferencia de `AssignmentRule` y
+`DisqualificationRule`, ninguna otra entidad la referencia por `id`—; para «apagar sin perder» está
+`is_active`.
+
 ```mermaid
 flowchart TD
     L[Lead interpretado] --> V[ViabilityEngine]

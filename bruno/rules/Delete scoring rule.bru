@@ -1,0 +1,51 @@
+meta {
+  name: Delete scoring rule
+  type: http
+  seq: 12
+  tags: [
+    reference
+  ]
+}
+
+delete {
+  url: {{apiBase}}/rules/scoring/:scoringRuleId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  scoringRuleId: {{scoringRuleId}}
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # `DELETE /rules/scoring/{{scoringRuleId}}`
+
+  Borra una regla de puntuación de la organización del token. Exige rol `MANAGER`. A diferencia de
+  las otras dos familias de reglas, ésta se borra de verdad: no queda un `is_active: false` implícito
+  que reactivar, porque `is_active` ya cumple ese papel.
+
+  ## Qué devuelve
+
+  `204`, sin cuerpo.
+
+  ## Qué toca
+
+  Elimina la fila de la regla. No toca a ningún lead ya puntuado por ella: el desglose que quedó
+  escrito en su ficha —identificador, nombre y puntos de la regla en el momento de aplicarse— sigue
+  ahí, aunque la regla ya no exista.
+
+  ## Qué esperar después
+
+  El `id` deja de aparecer en `GET /rules/scoring` y sale del motor de puntuación desde el siguiente
+  lead que se puntúe.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 SCORING_RULE_NOT_FOUND` | El `id` no existe, o existe pero en otra organización |
+}

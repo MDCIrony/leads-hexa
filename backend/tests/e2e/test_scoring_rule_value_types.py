@@ -69,7 +69,7 @@ def test_a_list_valued_rule_survives_the_round_trip(test_db):
         listed = client.get(
             "/api/v1/rules/scoring", headers={"Authorization": f"Bearer {manager_token}"}
         )
-        rule = next(r for r in listed.json() if r["name"] == "Sectores objetivo")
+        rule = next(r for r in listed.json()["items"] if r["name"] == "Sectores objetivo")
         assert rule["conditions"][0]["value"] == ["tech", "finance"]
 
 

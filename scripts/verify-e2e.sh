@@ -454,8 +454,7 @@ verify_f2c() {
   r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
     -d '{"name":"Retail BigBox","conditions":[{"field":"industry","operator":"EQUALS","value":"Retail"},{"field":"company","operator":"EQUALS","value":"BigBox"}],"score_delta":15}')
   check "regla de puntuación con dos condiciones se acepta" 201 "$(code "$r")"
-  # No PATCH/DELETE for scoring rules yet (out of this phase's scope), so
-  # this one is not cleaned up — harmless, each run uses a fresh tenant.
+  # Not cleaned up via DELETE — harmless, each run uses a fresh tenant.
 
   r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
     -d '{"first_name":"Cumple","last_name":"Ambas","company":"BigBox","industry":"Retail","budget":1000,"phone":"+573000000002"}')

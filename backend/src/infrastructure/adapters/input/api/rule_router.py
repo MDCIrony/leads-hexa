@@ -1,15 +1,15 @@
-from typing import List
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from application.dtos.commands import (
     CreateAssignmentRuleCommand, CreateDisqualificationRuleCommand, CreateScoringRuleCommand,
-    UpdateAssignmentRuleCommand, UpdateDisqualificationRuleCommand,
+    UpdateAssignmentRuleCommand, UpdateDisqualificationRuleCommand, UpdateScoringRuleCommand,
 )
 from application.dtos.context import RequestContext
 from application.dtos.queries import GetAssignmentRulesQuery, GetDisqualificationRulesQuery, GetRulesQuery
 from application.ports.input.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
-    GetAssignmentRulesInputPort, GetScoringRulesInputPort, UpdateAssignmentRuleInputPort,
+    DeleteScoringRuleInputPort, GetAssignmentRulesInputPort, GetScoringRulesInputPort,
+    UpdateAssignmentRuleInputPort, UpdateScoringRuleInputPort,
 )
 from application.ports.input.disqualification_rule_use_case_ports import (
     CreateDisqualificationRuleInputPort, DeleteDisqualificationRuleInputPort,
@@ -19,6 +19,7 @@ from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.rule import AssignmentRule, ScoringRule
 from infrastructure.adapters.input.api.dependencies import (
     get_create_scoring_rule_use_case, get_get_scoring_rules_use_case,
+    get_update_scoring_rule_use_case, get_delete_scoring_rule_use_case,
     get_create_assignment_rule_use_case, get_get_assignment_rules_use_case,
     get_update_assignment_rule_use_case, get_delete_assignment_rule_use_case,
     get_create_disqualification_rule_use_case, get_get_disqualification_rules_use_case,
@@ -27,7 +28,7 @@ from infrastructure.adapters.input.api.dependencies import (
 )
 from infrastructure.adapters.input.api.schemas import (
     AssignmentRuleCreate, AssignmentRuleResponse, AssignmentRuleUpdate, PaginatedAssignmentRulesResponse,
-    CriterionSchema, ScoringRuleCreate, ScoringRuleResponse,
+    CriterionSchema, ScoringRuleCreate, ScoringRuleResponse, ScoringRuleUpdate, PaginatedScoringRulesResponse,
     DisqualificationRuleCreate, DisqualificationRuleResponse, DisqualificationRuleUpdate,
     PaginatedDisqualificationRulesResponse,
 )
@@ -63,14 +64,51 @@ def create_scoring_rule(
     saved = use_case.execute(command)
     return _to_scoring_response(saved)
 
-@router.get("/scoring", response_model=List[ScoringRuleResponse], status_code=status.HTTP_200_OK)
+@router.get("/scoring", response_model=PaginatedScoringRulesResponse, status_code=status.HTTP_200_OK)
 def list_scoring_rules(
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     use_case: GetScoringRulesInputPort = Depends(get_get_scoring_rules_use_case),
     context: RequestContext = Depends(require_organization_manager),
 ):
-    query = GetRulesQuery(tenant_id=context.tenant_id)
-    rules = use_case.execute(query)
-    return [_to_scoring_response(r) for r in rules]
+    query = GetRulesQuery(tenant_id=context.tenant_id, limit=limit, offset=offset)
+    page = use_case.execute(query)
+    items = [_to_scoring_response(r) for r in page.items]
+    return PaginatedScoringRulesResponse(
+        items=items,
+        total=page.total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(items)) < page.total,
+    )
+
+
+@router.patch("/scoring/{rule_id}", response_model=ScoringRuleResponse, status_code=status.HTTP_200_OK)
+def update_scoring_rule(
+    rule_id: UUID,
+    request: ScoringRuleUpdate,
+    use_case: UpdateScoringRuleInputPort = Depends(get_update_scoring_rule_use_case),
+    context: RequestContext = Depends(require_organization_manager),
+):
+    command = UpdateScoringRuleCommand(
+        tenant_id=context.tenant_id,
+        rule_id=rule_id,
+        name=request.name,
+        conditions=[c.model_dump() for c in request.conditions] if request.conditions is not None else None,
+        score_delta=request.score_delta,
+        priority=request.priority,
+        is_active=request.is_active,
+    )
+    return _to_scoring_response(use_case.execute(command))
+
+
+@router.delete("/scoring/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_scoring_rule(
+    rule_id: UUID,
+    use_case: DeleteScoringRuleInputPort = Depends(get_delete_scoring_rule_use_case),
+    context: RequestContext = Depends(require_organization_manager),
+):
+    use_case.execute(tenant_id=context.tenant_id, rule_id=rule_id)
 
 
 def _to_response(rule: AssignmentRule) -> AssignmentRuleResponse:
@@ -113,19 +151,25 @@ def create_assignment_rule(
 
 @router.get("/assignment", response_model=PaginatedAssignmentRulesResponse, status_code=status.HTTP_200_OK)
 def list_assignment_rules(
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     use_case: GetAssignmentRulesInputPort = Depends(get_get_assignment_rules_use_case),
     context: RequestContext = Depends(require_organization_manager),
 ):
+    # ponytail debt: the assignment-rule repository has no LIMIT/OFFSET of
+    # its own (every rule loads on every ingestion anyway), so limit/offset
+    # are honored here, slicing the already-fetched full list, rather than
+    # at the use case — widening GetAssignmentRulesQuery and the repository
+    # port for this alone was out of this task's scope.
     rules = use_case.execute(GetAssignmentRulesQuery(tenant_id=context.tenant_id))
-    items = [_to_response(r) for r in rules]
-    # The use case has no pagination of its own — every rule is loaded on
-    # every ingestion anyway — so this page is simply "everything, at once".
+    all_items = [_to_response(r) for r in rules]
+    items = all_items[offset:offset + limit]
     return PaginatedAssignmentRulesResponse(
         items=items,
-        total=len(items),
-        limit=len(items) or 100,
-        offset=0,
-        has_more=False,
+        total=len(all_items),
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(items)) < len(all_items),
     )
 
 

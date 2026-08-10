@@ -44,6 +44,8 @@ puede devolver cada endpoint.
 | Leads | `POST /api/v1/leads/{lead_id}/discard` | `MANAGER` | 200 |
 | Reglas | `POST /api/v1/rules/scoring` | `MANAGER` | 201 |
 | Reglas | `GET /api/v1/rules/scoring` | `MANAGER` | 200 |
+| Reglas | `PATCH /api/v1/rules/scoring/{rule_id}` | `MANAGER` | 200 |
+| Reglas | `DELETE /api/v1/rules/scoring/{rule_id}` | `MANAGER` | 204 |
 | Reglas | `POST /api/v1/rules/assignment` | `MANAGER` | 201 |
 | Reglas | `GET /api/v1/rules/assignment` | `MANAGER` | 200 |
 | Reglas | `PATCH /api/v1/rules/assignment/{rule_id}` | `MANAGER` | 200 |
@@ -66,11 +68,12 @@ errores de cada endpoint, más abajo, sólo nombran lo específico de ese recurs
 los códigos `404`/`400` propios.
 
 **Paginación.** Todo endpoint de lista acepta `limit` (por defecto 100, rango `1`-`1000`) y `offset`
-(por defecto 0, mínimo `0`), y responde con la misma envoltura — con dos excepciones señaladas donde
-aparecen: `GET /rules/scoring` devuelve un array liso sin envoltura, y `GET /rules/assignment` usa la
-envoltura pero no acepta `limit`/`offset`: siempre devuelve todas las reglas en una única página. Un
-`limit` u `offset` fuera de rango responde `422 VALIDATION_ERROR` con `details[].field` señalando el
-parámetro, la misma envoltura de error que el resto de la API.
+(por defecto 0, mínimo `0`), y responde con la misma envoltura `{items, total, limit, offset,
+has_more}`. `GET /rules/assignment` es la única con una salvedad interna: el repositorio de reglas de
+asignación no pagina por sí mismo —el motor de asignación carga siempre la organización entera—, así
+que el recorte de página ocurre sobre esa lista ya completa, no en la consulta SQL; el contrato hacia
+fuera es idéntico al resto. Un `limit` u `offset` fuera de rango responde `422 VALIDATION_ERROR` con
+`details[].field` señalando el parámetro, la misma envoltura de error que el resto de la API.
 
 ```json
 {
@@ -639,22 +642,37 @@ recibe una lista).
 
 ### `GET /api/v1/rules/scoring`
 
-!!! note
-    Único endpoint de lista que **no** usa la envoltura de paginación: responde un array JSON
-    liso (`List[ScoringRuleResponse]`), no `{items, total, ...}`. Tampoco existen `PATCH` ni
-    `DELETE` para reglas de puntuación hoy — a diferencia de las de asignación y descalificación,
-    que sí los tienen.
-
 ```json
-[
-  {
-    "id": "22222222-2222-2222-2222-222222222222",
-    "name": "High Budget Rule",
-    "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 10000}],
-    "score_delta": 20, "priority": 0, "is_active": true
-  }
-]
+{
+  "items": [
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "High Budget Rule",
+      "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 10000}],
+      "score_delta": 20, "priority": 0, "is_active": true
+    }
+  ],
+  "total": 1, "limit": 100, "offset": 0, "has_more": false
+}
 ```
+
+### `PATCH /api/v1/rules/scoring/{rule_id}`
+
+Todos los campos opcionales; los ausentes se dejan sin cambios. Reconstruye la regla entera por
+`ScoringRule.create()`, igual que `PATCH /rules/disqualification/{rule_id}` — un `PATCH` no puede
+dejar la regla en un estado que la creación habría rechazado, como un `name` vaciado o una lista de
+`conditions` vacía.
+
+Errores: `404 Not Found` (`SCORING_RULE_NOT_FOUND`); `400 Bad Request` (`INVALID_RULE_NAME`,
+`INVALID_RULE_CONDITIONS`, `INVALID_RULE_FIELD`, `FIELD_NOT_SCORABLE`, `INVALID_RULE_VALUE`, si el
+cuerpo trae `name` o `conditions`).
+
+### `DELETE /api/v1/rules/scoring/{rule_id}`
+
+Borra la fila de verdad, no la desactiva: a diferencia de las reglas de asignación y descalificación,
+ninguna otra entidad referencia una regla de puntuación por `id` — el desglose de un lead ya puntuado
+guarda nombre y puntos materializados, no una referencia viva. Para «apagar sin perder» está
+`is_active`. Errores: `404 Not Found` (`SCORING_RULE_NOT_FOUND`).
 
 **Reglas de asignación**
 
@@ -682,9 +700,11 @@ que `min_score`; `RULE_WITHOUT_TARGET` si no se indica ni grupo ni asesores; y l
 
 ### `GET /api/v1/rules/assignment`
 
-Ordenadas por prioridad descendente — la misma con la que el motor las evalúa. El motor carga
-todas las reglas en cada ingesta, así que esta lista no pagina de verdad: siempre es una única
-página con todo.
+Ordenadas por prioridad descendente — la misma con la que el motor las evalúa. Acepta `limit` y
+`offset` como el resto de listas, pero el repositorio no pagina por sí mismo — el motor carga
+siempre la organización entera en cada ingesta — así que el recorte ocurre en memoria, sobre la
+lista completa ya traída. Deuda declarada: llevarlo a la consulta SQL exigiría ensanchar el puerto
+del repositorio (`get_assignment_rules_by_tenant`), fuera del alcance de este cambio.
 
 ### `PATCH /api/v1/rules/assignment/{rule_id}`
 

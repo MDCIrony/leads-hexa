@@ -13,6 +13,11 @@ get {
   auth: inherit
 }
 
+params:query {
+  limit: 100
+  offset: 0
+}
+
 assert {
   res.status: eq 200
   res.body.items: isArray
@@ -24,9 +29,11 @@ docs {
 
   Lista las reglas de asignación de la organización del token. Exige rol `MANAGER`.
 
-  Usa la envoltura `{items, total, limit, offset, has_more}` de las demás listas de la API, pero
-  **no acepta `limit` ni `offset`**: siempre devuelve todas las reglas en una única página. No hay
-  `params:query` en este request a propósito — no hace nada.
+  Usa la envoltura `{items, total, limit, offset, has_more}` de las demás listas de la API, y acepta
+  `limit`/`offset` con el mismo rango que el resto. Una diferencia queda por dentro: el repositorio
+  de reglas de asignación no pagina por sí mismo —siempre carga la organización entera, porque el
+  motor de asignación la necesita completa en cada ingesta—, así que el recorte de página ocurre
+  sobre esa lista ya completa, no en la consulta SQL.
 
   ## Qué devuelve
 
@@ -67,7 +74,8 @@ docs {
 
   ## Qué esperar después
 
-  No hay paginación que agotar: si `total` crece, `items` crece con él en la misma respuesta.
+  `has_more` compara contra `total` igual que en el resto de listas: con más reglas que `limit`,
+  vale `true` y una segunda página con `offset` mayor trae el resto.
 
   ## Errores
 

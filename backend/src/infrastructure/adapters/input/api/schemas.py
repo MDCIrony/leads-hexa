@@ -137,6 +137,13 @@ class ScoringRuleCreate(BaseModel):
     priority: int = 0
     is_active: bool = True
 
+class ScoringRuleUpdate(BaseModel):
+    name: Optional[str] = None
+    conditions: Optional[List[CriterionSchema]] = None
+    score_delta: Optional[int] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+
 class ScoringRuleResponse(BaseModel):
     id: str
     name: str
@@ -144,6 +151,13 @@ class ScoringRuleResponse(BaseModel):
     score_delta: int
     priority: int
     is_active: bool
+
+class PaginatedScoringRulesResponse(BaseModel):
+    items: List[ScoringRuleResponse]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 # --- Assignment Rule Schemas ---
 class AssignmentRuleCreate(BaseModel):

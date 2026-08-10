@@ -111,8 +111,9 @@ docs {
   nombre y puntos, escritos en el momento de puntuar—, así que la interfaz puede explicar un número
   aunque esta regla se edite o se borre después.
 
-  Esta familia **no tiene `PATCH` ni `DELETE`** hoy: una regla de puntuación, una vez creada, sólo se
-  desactiva creando otra que la contrarreste, o se deja tal cual.
+  `PATCH /rules/scoring/{id}` la edita y `DELETE /rules/scoring/{id}` la borra de verdad — a
+  diferencia de las otras dos familias de reglas, aquí el borrado no deja un `is_active: false`
+  implícito por recuperar, porque `is_active` ya cubre ese caso.
 
   ## Errores
 

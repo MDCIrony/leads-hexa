@@ -8,9 +8,13 @@ meta {
 }
 
 delete {
-  url: {{apiBase}}/rules/disqualification/{{disqualificationRuleId}}
+  url: {{apiBase}}/rules/disqualification/:disqualificationRuleId
   body: none
   auth: inherit
+}
+
+params:path {
+  disqualificationRuleId: {{disqualificationRuleId}}
 }
 
 assert {

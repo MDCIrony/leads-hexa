@@ -8,9 +8,13 @@ meta {
 }
 
 patch {
-  url: {{apiBase}}/rules/assignment/{{assignmentRuleId}}
+  url: {{apiBase}}/rules/assignment/:assignmentRuleId
   body: json
   auth: inherit
+}
+
+params:path {
+  assignmentRuleId: {{assignmentRuleId}}
 }
 
 body:json {

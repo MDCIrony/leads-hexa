@@ -1,0 +1,78 @@
+meta {
+  name: Update scoring rule
+  type: http
+  seq: 11
+  tags: [
+    reference
+  ]
+}
+
+patch {
+  url: {{apiBase}}/rules/scoring/:scoringRuleId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  scoringRuleId: {{scoringRuleId}}
+}
+
+body:json {
+  {
+    "priority": 5,
+    "is_active": false
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{scoringRuleId}}
+  res.body.priority: eq 5
+  res.body.is_active: eq false
+}
+
+docs {
+  # `PATCH /rules/scoring/{{scoringRuleId}}`
+
+  Actualiza una regla de puntuación de la organización del token. Exige rol `MANAGER`. Todos los
+  campos del cuerpo son opcionales — el ejemplo de este request sólo toca `priority` e `is_active`,
+  pero admite también `name`, `conditions` y `score_delta`.
+
+  ## El cuerpo
+
+  La validación es la misma que en la creación, campo por campo: un `name` vacío o unas
+  `conditions` vacías se rechazan en vez de guardarse.
+
+  ```json
+  {
+    "priority": 5,
+    "is_active": false
+  }
+  ```
+
+  ## Qué devuelve
+
+  `200` con la regla completa ya actualizada, misma forma que en la creación.
+
+  ## Qué toca
+
+  Actualiza la fila de la regla. No repuntúa a ningún lead ya procesado: el `score_breakdown` de un
+  lead puntuado antes de este cambio conserva el nombre y los puntos con los que se aplicó la regla
+  en su momento.
+
+  ## Qué esperar después
+
+  Si el cambio fue `is_active: false`, la regla deja de sumar puntos desde el siguiente lead que se
+  puntúe. Si fue `score_delta`, sólo se nota en las puntuaciones que se calculen a partir de ahora.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 SCORING_RULE_NOT_FOUND` | El `id` no existe, o existe pero en otra organización |
+  | `400 INVALID_RULE_NAME` | `name` llega vacío |
+  | `400 INVALID_RULE_CONDITIONS` | `conditions` llega vacía |
+  | `400 INVALID_RULE_FIELD` | algún `Criterion` de `conditions` trae `field` vacío |
+  | `400 FIELD_NOT_SCORABLE` | algún `Criterion` usa un campo fuera de la lista blanca |
+  | `400 INVALID_RULE_VALUE` | un `Criterion` con operador `IN` cuyo `value` no es una lista |
+}

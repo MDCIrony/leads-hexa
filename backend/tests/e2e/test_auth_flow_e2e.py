@@ -111,7 +111,7 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
 
         other_rules_resp = client.get("/api/v1/rules/scoring", headers=other_manager_headers)
         assert other_rules_resp.status_code == 200
-        assert other_rules_resp.json() == []
+        assert other_rules_resp.json()["items"] == []
 
         # 8. An AGENT-role token (default role) is forbidden from creating any rule.
         # Only a Manager may create agents, always inside its own
