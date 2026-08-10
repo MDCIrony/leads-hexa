@@ -43,29 +43,29 @@ describe('leads.listMine', () => {
 
 describe('leads.get, leads.assign, leads.discard', () => {
   it('reads a single lead', async () => {
-    mockApiClient({ 'GET /api/v1/leads/a407baf0-9597-4073-b95b-db6686ee6f0c': { data: leadDetailFixture } });
+    mockApiClient({ [`GET /api/v1/leads/${leadDetailFixture.id}`]: { data: leadDetailFixture } });
 
-    const lead = await get('a407baf0-9597-4073-b95b-db6686ee6f0c');
+    const lead = await get(leadDetailFixture.id);
 
-    expect(lead.id).toBe('a407baf0-9597-4073-b95b-db6686ee6f0c');
+    expect(lead.id).toBe(leadDetailFixture.id);
   });
 
   it('assigns to an agent id', async () => {
     mockApiClient({
-      'POST /api/v1/leads/a407baf0-9597-4073-b95b-db6686ee6f0c/assign': { data: leadDetailFixture },
+      [`POST /api/v1/leads/${leadDetailFixture.id}/assign`]: { data: leadDetailFixture },
     });
 
-    const lead = await assign('a407baf0-9597-4073-b95b-db6686ee6f0c', 'b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1');
+    const lead = await assign(leadDetailFixture.id, leadDetailFixture.assigned_agent_id as string);
 
-    expect(lead.assigned_agent_id).toBe('b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1');
+    expect(lead.assigned_agent_id).toBe(leadDetailFixture.assigned_agent_id);
   });
 
   it('discards with a reason', async () => {
     const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue(fakeResponse(leadDetailFixture));
 
-    await discard('a407baf0-9597-4073-b95b-db6686ee6f0c', 'duplicate');
+    await discard(leadDetailFixture.id, 'duplicate');
 
-    expect(postSpy).toHaveBeenCalledWith('/api/v1/leads/a407baf0-9597-4073-b95b-db6686ee6f0c/discard', {
+    expect(postSpy).toHaveBeenCalledWith(`/api/v1/leads/${leadDetailFixture.id}/discard`, {
       reason: 'duplicate',
     });
   });

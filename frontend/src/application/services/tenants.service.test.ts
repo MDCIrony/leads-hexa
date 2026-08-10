@@ -11,7 +11,7 @@ describe('tenants.list', () => {
 
     const page = await list(5, 0);
 
-    expect(page.total).toBe(239);
+    expect(page.total).toBe(tenantsPageFixture.total);
     expect(page.has_more).toBe(true);
     expect(page.items).toHaveLength(5);
   });

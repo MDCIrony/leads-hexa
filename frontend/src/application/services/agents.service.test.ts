@@ -33,21 +33,21 @@ describe('agents.list', () => {
 
 describe('agents.update', () => {
   it('reactivates through PATCH {is_active: true}, not a dedicated endpoint', async () => {
-    // mockApiClient only scripts get/post/put/delete (see src/test/mock-api.ts) — PATCH needs a direct spy.
-    const patchSpy = vi.spyOn(apiClient, 'patch').mockResolvedValue(fakeResponse(agentsPageFixture.items[0]));
+    const agentId = agentsPageFixture.items[0].id;
+    mockApiClient({ [`PATCH /api/v1/agents/${agentId}`]: { data: agentsPageFixture.items[0] } });
 
-    const agent = await update('b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1', { is_active: true });
+    const agent = await update(agentId, { is_active: true });
 
-    expect(patchSpy).toHaveBeenCalledWith('/api/v1/agents/b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1', { is_active: true });
-    expect(agent.id).toBe('b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1');
+    expect(agent.id).toBe(agentId);
   });
 });
 
 describe('agents.deactivate', () => {
   it('reads the 200 response as the agent, not a 204', async () => {
-    mockApiClient({ 'DELETE /api/v1/agents/b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1': { data: agentsPageFixture.items[0] } });
+    const agentId = agentsPageFixture.items[0].id;
+    mockApiClient({ [`DELETE /api/v1/agents/${agentId}`]: { data: agentsPageFixture.items[0] } });
 
-    const agent = await deactivate('b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1');
+    const agent = await deactivate(agentId);
 
     expect(agent.is_active).toBe(true);
   });

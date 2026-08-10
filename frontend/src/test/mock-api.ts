@@ -3,7 +3,7 @@ import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { apiClient } from '../infrastructure/api/api-client';
 import type { ApiErrorEnvelope } from '../infrastructure/api/api-error';
 
-type HttpMethod = 'get' | 'post' | 'put' | 'delete';
+type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 /** One scripted response: a captured fixture, or the error envelope a status provokes. */
 export type MockedRoute<T> = { status?: number; data: T } | { status: number; error: ApiErrorEnvelope };
@@ -48,6 +48,7 @@ export function mockApiClient(routes: Record<string, MockedRoute<unknown>>): voi
   vi.spyOn(apiClient, 'get').mockImplementation(makeHandler('get', routes) as unknown as typeof apiClient.get);
   vi.spyOn(apiClient, 'post').mockImplementation(makeHandler('post', routes) as unknown as typeof apiClient.post);
   vi.spyOn(apiClient, 'put').mockImplementation(makeHandler('put', routes) as unknown as typeof apiClient.put);
+  vi.spyOn(apiClient, 'patch').mockImplementation(makeHandler('patch', routes) as unknown as typeof apiClient.patch);
   vi.spyOn(apiClient, 'delete').mockImplementation(
     makeHandler('delete', routes) as unknown as typeof apiClient.delete
   );

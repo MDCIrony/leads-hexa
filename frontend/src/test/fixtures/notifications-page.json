@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "id": "2ee268ae-0056-4555-82b9-c3d49f9f8fde",
+      "kind": "LEAD_ASSIGNED",
+      "message": "Tienes un lead nuevo asignado",
+      "lead_id": "02447540-bc70-4f39-9a2b-42c2c4adf7b7",
+      "intake_record_id": null,
+      "is_read": false,
+      "created_at": "2026-08-10T19:38:22.833230Z"
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false,
+  "unread_count": 1
+}

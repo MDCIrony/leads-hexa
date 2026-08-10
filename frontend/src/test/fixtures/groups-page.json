@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "id": "5098ba3c-2e75-48c5-9637-525bb78e1bd9",
+      "name": "Ventas Fixtures 1786390701184",
+      "description": null,
+      "default_strategy": "LOWEST_LOAD",
+      "capacity_per_agent": null,
+      "is_active": true,
+      "agent_count": 0
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false
+}

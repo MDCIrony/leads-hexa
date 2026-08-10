@@ -1,8 +1,8 @@
 {
-  "id": "b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1",
+  "id": "cdc44a50-543b-4bf1-91f6-1abbaf16a94f",
   "name": "Fixture Agent",
-  "email": "agent-1786388466241@fixtures.test",
+  "email": "agent-1786390701184@fixtures.test",
   "role": "AGENT",
-  "tenant_id": "feb367ee-2b3a-4fe0-b7be-e713574e7fdf",
-  "tenant_name": "Fixtures Org 1786388466241"
+  "tenant_id": "3fde8067-83d8-4cc0-89b1-1a321e35db85",
+  "tenant_name": "Fixtures Org 1786390701184"
 }

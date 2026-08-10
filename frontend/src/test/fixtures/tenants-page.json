@@ -1,6 +1,24 @@
 {
   "items": [
     {
+      "id": "3fde8067-83d8-4cc0-89b1-1a321e35db85",
+      "name": "Fixtures Org 1786390701184",
+      "slug": "fixtures-org-1786390701184",
+      "is_active": true,
+      "created_at": "2026-08-10T19:38:21.477205+00:00",
+      "agent_count": 2,
+      "manager": null
+    },
+    {
+      "id": "bdfc3065-80de-4601-9220-0e57e1842dbb",
+      "name": "Verify Org 1786389173",
+      "slug": "verify-org-1786389173",
+      "is_active": true,
+      "created_at": "2026-08-10T19:12:53.675157+00:00",
+      "agent_count": 1,
+      "manager": null
+    },
+    {
       "id": "feb367ee-2b3a-4fe0-b7be-e713574e7fdf",
       "name": "Fixtures Org 1786388466241",
       "slug": "fixtures-org-1786388466241",
@@ -26,27 +44,9 @@
       "created_at": "2026-08-10T18:54:37.186148+00:00",
       "agent_count": 2,
       "manager": null
-    },
-    {
-      "id": "eb1a1510-425d-4b76-821f-2ba1944cf1d5",
-      "name": "Beta 1786384889085",
-      "slug": "beta-1786384889085",
-      "is_active": true,
-      "created_at": "2026-08-10T18:01:30.563089+00:00",
-      "agent_count": 2,
-      "manager": null
-    },
-    {
-      "id": "457642f0-ce5e-4092-ac9c-c069eec2fb38",
-      "name": "Alpha 1786384889085",
-      "slug": "alpha-1786384889085",
-      "is_active": true,
-      "created_at": "2026-08-10T18:01:29.389858+00:00",
-      "agent_count": 3,
-      "manager": null
     }
   ],
-  "total": 239,
+  "total": 241,
   "limit": 5,
   "offset": 0,
   "has_more": true
