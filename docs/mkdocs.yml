@@ -126,6 +126,7 @@ nav:
       - "ADR-0019 · Trabajo de fondo en proceso": decisiones/0019-trabajo-de-fondo-en-proceso.md
       - "ADR-0020 · Eventos desde la aplicación": decisiones/0020-eventos-desde-la-aplicacion.md
       - "ADR-0021 · Texto explicativo compuesto al escribir": decisiones/0021-texto-explicativo-compuesto-al-escribir.md
+      - "ADR-0022 · Agregados del panel": decisiones/0022-agregados-del-panel.md
 
   - Módulos:
       - modulos/index.md
