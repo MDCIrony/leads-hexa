@@ -1,10 +1,14 @@
-import { BulkUploader } from '../components/BulkUploader';
+import * as intakeService from '../../application/services/intake.service';
+import * as intakeJobsService from '../../application/services/intake-jobs.service';
+import { BulkUploader, type BulkUploadResult } from '../components/BulkUploader';
 
-interface BulkUploadPageProps {
-  onUpload: (file: File) => Promise<void>;
+async function uploadAndWait(file: File): Promise<BulkUploadResult> {
+  const accepted = await intakeService.batchUpload(file);
+  const job = await intakeJobsService.waitForJob(accepted.job_id);
+  return { succeeded: job.succeeded, failed: job.failed };
 }
 
-export function BulkUploadPage({ onUpload }: BulkUploadPageProps) {
+export function BulkUploadPage() {
   return (
     <div className="space-y-6">
       <div>
@@ -12,7 +16,7 @@ export function BulkUploadPage({ onUpload }: BulkUploadPageProps) {
         <p className="text-sm text-slate-400">Importa archivos CSV o Excel para calificar y enrutar prospectos en lote.</p>
       </div>
 
-      <BulkUploader onUpload={onUpload} />
+      <BulkUploader onUpload={uploadAndWait} />
     </div>
   );
 }
