@@ -58,6 +58,44 @@ Si uno no encaja, hay tres salidas y **sólo una es aceptable por defecto**:
 
 Lo mismo vale para los hooks y los ayudantes de test.
 
+## Estilo
+
+**Tailwind, en `className`, y nada más.** `index.css` es una sola línea —`@import "tailwindcss"`— y
+así se queda: ni ficheros CSS por componente, ni estilos en línea, ni `clsx`, ni `cva`. Una clase
+condicional se resuelve con una plantilla o con un `Record<Enum, string>` dentro del componente, como
+hace `DashboardTable` con los estados del lead.
+
+**El tema es oscuro y no tiene alternativa.** No hay modo claro y no se añade uno sobre la marcha.
+
+| | |
+|---|---|
+| **Fondo y superficies** | Página `bg-slate-950` · tarjeta `bg-slate-900/40` · borde `border-slate-800` |
+| **Texto** | `slate-100` títulos · `slate-200` cuerpo · `slate-400` secundario · `slate-500` apagado |
+| **Acento** | `indigo`: `bg-indigo-600` en la acción principal, `text-indigo-400` en lo activo |
+| **Semántica** | `emerald` bien · `rose` mal · `amber` aviso · `blue` neutro · `purple` asignado |
+| **Distintivo de estado** | Siempre la misma tríada: `bg-X-500/10 text-X-400 border-X-500/20` |
+| **Formas** | `rounded-lg` en controles · `rounded-xl` en tarjetas · `p-4` / `p-8` · `gap-3` |
+| **Iconos** | `lucide-react`. `w-5 h-5` en cabecera, `w-4 h-4` en línea |
+
+**Un color fuera de esta tabla es un defecto**, no una preferencia. Si un caso nuevo necesita uno, se
+añade aquí primero.
+
+### Las primitivas se usan, no se reescriben
+
+`Button`, `Input` y `Field` viven en `presentation/components/ui/`. **Ningún formulario escribe sus
+propias clases de `<input>` ni de `<button>`.** Son seis los formularios del MVP; seis juegos de
+clases escritos a mano divergen a la tercera pantalla, y el día que cambie el foco o el estado
+deshabilitado hay que tocarlos en seis sitios.
+
+Si una primitiva no encaja, se le añade una variante **dentro de ella**. Escribir el control a mano
+en la página es la salida que no está permitida.
+
+### Accesibilidad, el mínimo que no se negocia
+
+Todo campo lleva su `<label>` asociado —eso es lo que da `Field`—, todo botón sólo con icono lleva
+`aria-label`, y el foco del teclado se ve. No es una fase posterior: cuesta cero escribirlo ahora y
+caro añadirlo después.
+
 ## El contrato del backend no se escribe a mano
 
 `src/infrastructure/api/schema.d.ts` se **genera** desde `/openapi.json` con `npm run gen:api` y
