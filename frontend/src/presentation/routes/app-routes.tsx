@@ -1,5 +1,7 @@
 import { Route, Routes } from 'react-router';
+import { LeadDetailPage } from '../pages/LeadDetailPage';
 import { LoginPage } from '../pages/LoginPage';
+import { MyLeadsPage } from '../pages/MyLeadsPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { PlaceholderPage } from '../pages/PlaceholderPage';
 import { RoleRoute } from './role-guard';
@@ -30,8 +32,8 @@ export function AppRoutes() {
       </Route>
 
       <Route element={<RoleRoute allow={['AGENT']} />}>
-        <Route path="/mis-leads" element={<PlaceholderPage title="Mis leads" />} />
-        <Route path="/mis-leads/:leadId" element={<PlaceholderPage title="Detalle del lead" />} />
+        <Route path="/mis-leads" element={<MyLeadsPage />} />
+        <Route path="/mis-leads/:leadId" element={<LeadDetailPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
