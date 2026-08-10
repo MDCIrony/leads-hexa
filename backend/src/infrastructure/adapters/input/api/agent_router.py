@@ -1,6 +1,6 @@
 from uuid import UUID
 from typing import Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from application.dtos.commands import CreateAgentCommand, UpdateAgentCommand
 from application.dtos.context import RequestContext
@@ -77,8 +77,8 @@ def create_agent(
 @router.get("/", response_model=PaginatedAgentsResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_agents(
     group_id: Optional[UUID] = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     use_case: GetAgentsInputPort = Depends(get_get_agents_use_case),
     context: RequestContext = Depends(require_organization_manager),
 ):

@@ -65,10 +65,12 @@ ver [ADR-0004](../decisiones/0004-organizacion-desde-el-token.md). Todo endpoint
 errores de cada endpoint, más abajo, sólo nombran lo específico de ese recurso — el rol exigido y
 los códigos `404`/`400` propios.
 
-**Paginación.** Todo endpoint de lista acepta `limit` (por defecto 100) y `offset` (por defecto 0),
-y responde con la misma envoltura — con dos excepciones señaladas donde aparecen: `GET
-/rules/scoring` devuelve un array liso sin envoltura, y `GET /rules/assignment` usa la envoltura
-pero no acepta `limit`/`offset`: siempre devuelve todas las reglas en una única página.
+**Paginación.** Todo endpoint de lista acepta `limit` (por defecto 100, rango `1`-`1000`) y `offset`
+(por defecto 0, mínimo `0`), y responde con la misma envoltura — con dos excepciones señaladas donde
+aparecen: `GET /rules/scoring` devuelve un array liso sin envoltura, y `GET /rules/assignment` usa la
+envoltura pero no acepta `limit`/`offset`: siempre devuelve todas las reglas en una única página. Un
+`limit` u `offset` fuera de rango responde `422 VALIDATION_ERROR` con `details[].field` señalando el
+parámetro, la misma envoltura de error que el resto de la API.
 
 ```json
 {

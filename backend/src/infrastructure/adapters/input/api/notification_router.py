@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from application.dtos.commands import MarkNotificationReadCommand
 from application.dtos.context import RequestContext
@@ -34,8 +34,8 @@ def _to_response(notification: Notification) -> NotificationResponse:
 @router.get("/", response_model=NotificationsPageResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_notifications(
     unread_only: bool = False,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     use_case: GetNotificationsInputPort = Depends(get_get_notifications_use_case),
     context: RequestContext = Depends(require_organization_member),
 ):

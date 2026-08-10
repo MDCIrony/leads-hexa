@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 from application.dtos.commands import PromoteIntakeRecordCommand, ReceiveIntakeCommand
 from application.dtos.context import RequestContext
@@ -137,8 +137,8 @@ async def batch_upload(
 def list_intake_records(
     status: Optional[str] = None,
     job_id: Optional[UUID] = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     context: RequestContext = Depends(require_organization_manager),
     use_case: GetIntakeRecordsInputPort = Depends(get_get_intake_records_use_case),
 ):
@@ -208,8 +208,8 @@ def discard_intake_record(
 @router.get("/jobs", response_model=IntakeJobsPageResponse, status_code=status.HTTP_200_OK)
 def list_intake_jobs(
     status: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     context: RequestContext = Depends(require_organization_manager),
     use_case: GetIntakeJobsInputPort = Depends(get_get_intake_jobs_use_case),
 ):

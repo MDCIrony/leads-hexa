@@ -1,6 +1,6 @@
 from typing import List
 from uuid import UUID
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from application.dtos.commands import (
     CreateAssignmentRuleCommand, CreateDisqualificationRuleCommand, CreateScoringRuleCommand,
     UpdateAssignmentRuleCommand, UpdateDisqualificationRuleCommand,
@@ -196,8 +196,8 @@ def create_disqualification_rule(
     status_code=status.HTTP_200_OK,
 )
 def list_disqualification_rules(
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     use_case: GetDisqualificationRulesInputPort = Depends(get_get_disqualification_rules_use_case),
     context: RequestContext = Depends(require_organization_manager),
 ):

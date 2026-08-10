@@ -1,5 +1,5 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from application.dtos.commands import CreateLeadSourceCommand, UpdateLeadSourceCommand
 from application.dtos.context import RequestContext
@@ -51,8 +51,8 @@ def create_source(
 @router.get("", response_model=PaginatedSourcesResponse, status_code=status.HTTP_200_OK)
 @router.get("/", response_model=PaginatedSourcesResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_sources(
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     use_case: GetLeadSourcesInputPort = Depends(get_get_lead_sources_use_case),
     context: RequestContext = Depends(require_organization_manager),
 ):

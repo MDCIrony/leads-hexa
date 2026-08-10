@@ -1,6 +1,6 @@
 from typing import Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from application.dtos.commands import CreateTenantCommand, UpdateTenantCommand
 from application.dtos.context import RequestContext
@@ -65,8 +65,8 @@ def create_tenant(
 @router.get("", response_model=PaginatedTenantsResponse, status_code=status.HTTP_200_OK)
 @router.get("/", response_model=PaginatedTenantsResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_tenants(
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     use_case: GetTenantsInputPort = Depends(get_get_tenants_use_case),
     context: RequestContext = Depends(require_platform_admin),
 ):

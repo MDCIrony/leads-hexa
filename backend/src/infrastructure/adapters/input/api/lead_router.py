@@ -1,7 +1,7 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand
 from application.dtos.context import RequestContext
@@ -96,8 +96,8 @@ def _paginate(items: List[Lead], total: int, limit: int, offset: int) -> Paginat
 @router.get("", response_model=PaginatedLeadsResponse, status_code=status.HTTP_200_OK)
 @router.get("/", response_model=PaginatedLeadsResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_leads(
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     # Manager-only, and deliberately not "authenticated org member": this
     # endpoint returns the whole organization's pipeline, so a sales agent
     # reaching it would read its colleagues' leads. The agent's own view is
@@ -115,8 +115,8 @@ def list_leads(
 # an invalid UUID.
 @router.get("/mine", response_model=PaginatedLeadsResponse, status_code=status.HTTP_200_OK)
 def list_my_leads(
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     context: RequestContext = Depends(require_organization_member),
     use_case: GetMyLeadsInputPort = Depends(get_get_my_leads_use_case),
 ) -> PaginatedLeadsResponse:
