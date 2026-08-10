@@ -1,0 +1,53 @@
+meta {
+  name: Discard intake record
+  type: http
+  seq: 5
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/records/:recordId/discard
+  body: none
+  auth: inherit
+}
+
+params:path {
+  recordId: {{recordId}}
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # `POST /intake/records/{{recordId}}/discard`
+
+  Cierra un registro sin promoverlo: el gestor decide que no vale la pena recuperarlo. Exige rol
+  `MANAGER` y no lleva cuerpo.
+
+  ## Qué devuelve
+
+  `204`, sin contenido.
+
+  ## Qué toca
+
+  Cambia el `IntakeRecord` a `DISCARDED`. No crea ni toca ningún `Lead` — a diferencia de `promote`,
+  aquí no hay pipeline de dominio que correr.
+
+  ## Qué esperar después
+
+  El registro deja de ser recuperable: `DISCARDED` no es un estado desde el que se pueda promover ni
+  volver a descartar. Sigue visible en `GET /intake/records`, ahora con ese estado, para que quede
+  constancia de que se revisó y se descartó a propósito.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 INTAKE_RECORD_NOT_FOUND` | El registro no existe o es de otra organización |
+  | `403` | Quien llama es un asesor, no un gestor |
+  | `401` | Token ausente, inválido o agente desactivado |
+  | `400 INVALID_INTAKE_TRANSITION` | El registro ya está `PROMOTED` o `DISCARDED` |
+}

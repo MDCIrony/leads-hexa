@@ -1,0 +1,43 @@
+meta {
+  name: notifications
+  seq: 10
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  La campana: avisa a quien tiene que actuar sin que tenga que ir a mirar.
+
+  **El destinatario sale siempre del token**, nunca de la URL ni de un parámetro. No hay forma de
+  leer los avisos de otra persona: no es que esté prohibido, es que no se puede expresar. Exigen
+  `MANAGER` o `AGENT`; un `ADMIN` recibe `403` porque no pertenece a ninguna organización.
+
+  Esta carpeta usa `{{managerToken}}` por defecto. **Para ver la bandeja de un asesor hay que
+  cambiar el token de la carpeta a `{{agentToken}}`** — y esa diferencia es justo lo que hace
+  visible el reparto: los cuatro avisos no van todos al mismo sitio.
+
+  | Aviso | Cuándo | A quién |
+  |---|---|---|
+  | `LEAD_ASSIGNED` | Un lead se asigna, automática o manualmente | Al asesor asignado |
+  | `LEAD_REASSIGNED` | Un gestor reasigna un lead ya asignado | Al asesor nuevo |
+  | `LEAD_LEFT_UNASSIGNED` | Ninguna regla de reparto produjo asesor | A los gestores activos |
+  | `INTAKE_REJECTED` | Un payload no se pudo interpretar | A los gestores activos |
+
+  ## `unread_count` no es el de la página
+
+  Viaja junto a la lista, pero cuenta **todas** las no leídas del destinatario, no las de la página
+  pedida. La campana necesita las dos cosas a la vez, y hacer dos peticiones para pintar un icono es
+  precisamente lo que convierte el sondeo en un problema.
+
+  ## Al probar, medir contra una línea base
+
+  Estos endpoints acumulan entre ejecuciones. Comprobar «hay una notificación» o «`unread_count` es
+  1» funciona la primera vez y falla la segunda. Lo que se sostiene es capturar el contador antes de
+  provocar el evento y comprobar que **subió en uno**. Los flujos lo hacen así.
+}

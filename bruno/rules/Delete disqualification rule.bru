@@ -1,0 +1,45 @@
+meta {
+  name: Delete disqualification rule
+  type: http
+  seq: 10
+  tags: [
+    reference
+  ]
+}
+
+delete {
+  url: {{apiBase}}/rules/disqualification/{{disqualificationRuleId}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # `DELETE /rules/disqualification/{{disqualificationRuleId}}`
+
+  Borra una regla de descalificación de la organización del token. Exige rol `MANAGER`.
+
+  ## Qué devuelve
+
+  `204`, sin cuerpo.
+
+  ## Qué toca
+
+  Elimina la fila de la regla. No toca a ningún lead ya descalificado por ella: el motivo que quedó
+  escrito en su ficha —el nombre de la regla— sigue ahí, aunque la regla ya no exista.
+
+  ## Qué esperar después
+
+  El `id` deja de aparecer en `GET /rules/disqualification` y sale de la cascada de viabilidad desde
+  la siguiente ingesta. Si era la única regla que cubría un motivo de descalificación, los leads que
+  antes caían ahí empiezan a sobrevivir a esta etapa y a puntuarse con normalidad.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 DISQUALIFICATION_RULE_NOT_FOUND` | El `id` no existe, o existe pero en otra organización |
+}

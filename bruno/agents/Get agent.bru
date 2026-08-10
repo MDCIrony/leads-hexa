@@ -1,0 +1,63 @@
+meta {
+  name: Get agent
+  type: http
+  seq: 3
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/agents/:agentId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  agentId: {{agentId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{agentId}}
+  res.body.email: eq {{agentEmail}}
+}
+
+docs {
+  # `GET /agents/{{agentId}}`
+
+  Devuelve el detalle de un agente de la organización del token. Exige rol `MANAGER`.
+
+  ## Qué devuelve
+
+  `200`, con la misma forma que la creación:
+
+  ```json
+  {
+    "id": "…",
+    "name": "Carlos Ruiz",
+    "email": "carlos@acme.test",
+    "group_id": null,
+    "is_active": true,
+    "role": "AGENT",
+    "tenant_id": "…"
+  }
+  ```
+
+  ## Qué toca
+
+  Nada. Sólo lee, y sólo dentro de la organización del token.
+
+  ## Qué esperar después
+
+  Sirve para confirmar el estado de un agente tras crearlo, editarlo o desactivarlo con los otros
+  endpoints de esta carpeta.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `404 AGENT_NOT_FOUND` | No existe, o existe pero en otra organización — nunca `403`, para no confirmar su existencia a quien no debería saberlo |
+}

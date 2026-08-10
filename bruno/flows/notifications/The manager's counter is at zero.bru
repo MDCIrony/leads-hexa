@@ -1,0 +1,30 @@
+meta {
+  name: The manager's counter is at zero
+  type: http
+  seq: 21
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/notifications
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.unread_count: eq 0
+}
+
+docs {
+  # El único punto del flujo que sí compara contra un absoluto
+
+  Cada comprobación anterior midió contra una línea base, porque los avisos se acumulan entre
+  ejecuciones. Este paso puede exigir `0` exacto porque acaba de forzarlo: `Mark everything read` no
+  deja ningún aviso sin leer, sin importar cuántos hubiera antes.
+
+  Cierra el flujo confirmando que el marcado masivo hizo lo que dice: vaciar el contador de la
+  bandeja del gestor, no sólo el de la notificación que este flujo creó.
+}

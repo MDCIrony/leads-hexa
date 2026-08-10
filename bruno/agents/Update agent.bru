@@ -1,0 +1,78 @@
+meta {
+  name: Update agent
+  type: http
+  seq: 4
+  tags: [
+    reference
+  ]
+}
+
+patch {
+  url: {{apiBase}}/agents/:agentId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  agentId: {{agentId}}
+}
+
+body:json {
+  {
+    "name": "Carlos Ruiz Actualizado",
+    "group_id": null
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{agentId}}
+  res.body.name: eq Carlos Ruiz Actualizado
+  res.body.group_id: isNull
+}
+
+docs {
+  # `PATCH /agents/{{agentId}}`
+
+  Edita un agente de la organización del token. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  Sólo `name` y `group_id` son editables — el correo, el rol y la contraseña no se pueden cambiar
+  por este endpoint. Ambos campos son opcionales; se actualiza sólo lo que llega.
+
+  | Campo | Tipo | Nota |
+  |---|---|---|
+  | `name` | string | |
+  | `group_id` | string o `null` | `null` quita al agente de su grupo |
+
+  ```json
+  {
+    "name": "Carlos Ruiz Actualizado",
+    "group_id": null
+  }
+  ```
+
+  ## Qué devuelve
+
+  `200` con el agente ya actualizado, misma forma que `GET /agents/{{agentId}}`.
+
+  ## Qué toca
+
+  Actualiza la fila del agente. Si cambia `group_id`, el agente entra o sale del reparto automático
+  de ese grupo desde la siguiente asignación — no reasigna con retroactividad lo que ya tenía.
+
+  ## Qué esperar después
+
+  `GET /agents/{{agentId}}` refleja el cambio de inmediato.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `404 AGENT_NOT_FOUND` | El agente del path no existe, o es de otra organización |
+  | `404 GROUP_NOT_FOUND` | El `group_id` del cuerpo no existe, o es de otra organización |
+  | `422 VALIDATION_ERROR` | Tipo de dato incorrecto en algún campo |
+}

@@ -1,0 +1,80 @@
+meta {
+  name: Update source
+  type: http
+  seq: 3
+  tags: [
+    reference
+  ]
+}
+
+patch {
+  url: {{apiBase}}/sources/{{sourceId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Facebook Lead Ads (updated) {{runId}}",
+    "field_mapping": {},
+    "is_active": true
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{sourceId}}
+  res.body.is_active: eq true
+}
+
+docs {
+  # `PATCH /sources/{{sourceId}}`
+
+  Actualiza un origen de la organización del token. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  Todos los campos son opcionales; sólo se cambia lo que se manda.
+
+  | Campo | Tipo | Notas |
+  |---|---|---|
+  | `name` | string | único dentro de la organización |
+  | `field_mapping` | object | reemplaza al mapeo anterior entero, no lo combina |
+  | `is_active` | boolean | desactivar no borra ni desasocia los leads que ya trae encima |
+
+  **`kind` no es editable.** El tipo de un origen es una decisión que se toma una sola vez, al
+  crearlo.
+
+  ```json
+  {
+    "name": "Facebook Lead Ads",
+    "field_mapping": {},
+    "is_active": true
+  }
+  ```
+
+  ## Qué devuelve
+
+  `200` con el origen ya actualizado, misma forma que en la creación.
+
+  ## Qué toca
+
+  Actualiza la fila del origen. Si el campo que cambia es `is_active` y el origen es el
+  `MANUAL_FORM` o `FILE_UPLOAD` que la ingesta venía resolviendo sola, el efecto es inmediato: el
+  siguiente lead de esa vía deja de encontrar origen activo.
+
+  ## Qué esperar después
+
+  Un `GET /sources` posterior refleja el cambio. Desactivar el `MANUAL_FORM` de la organización es
+  la manera más directa de reproducir el `404 SOURCE_NOT_FOUND` que ve la ingesta cuando no hay
+  origen activo de ese tipo.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 SOURCE_NOT_FOUND` | El `id` no existe, o existe pero en otra organización |
+  | `400 SOURCE_ALREADY_EXISTS` | El nuevo `name` ya lo usa otro origen de la misma organización |
+  | `400 SOURCE_WITHOUT_NAME` | `name` llega vacío |
+  | `400 INVALID_FIELD_MAPPING` | `field_mapping` trae alguna clave o algún valor vacíos |
+}

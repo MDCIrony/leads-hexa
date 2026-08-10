@@ -1,0 +1,126 @@
+meta {
+  name: Create scoring rule
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/rules/scoring
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Presupuesto alto {{runId}}",
+    "conditions": [
+      {
+        "field": "budget",
+        "operator": "GREATER_THAN",
+        "value": 10000
+      }
+    ],
+    "score_delta": 25,
+    "priority": 0,
+    "is_active": true
+  }
+}
+
+vars:post-response {
+  scoringRuleId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isString
+  res.body.score_delta: eq 25
+  res.body.conditions: isArray
+}
+
+docs {
+  # `POST /rules/scoring`
+
+  Crea una regla de puntuación en la organización del token. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio | Notas |
+  |---|---|---|---|
+  | `name` | string | sí | |
+  | `conditions` | `Criterion[]` | sí | se combinan con Y; puede llegar vacía — entonces la regla se cumple siempre |
+  | `score_delta` | number | sí | puede ser negativo, para penalizar |
+  | `priority` | int | no | por defecto `0`; no decide el orden de aplicación, sólo el de lectura |
+  | `is_active` | boolean | no | por defecto `true` |
+
+  Cada `Criterion` es `{"field", "operator", "value"}`. Los campos evaluables son `first_name`,
+  `last_name`, `email`, `company`, `industry`, `budget`, `phone`, `score` y cualquier
+  `custom_attributes.<clave>`. Los operadores son `EQUALS`, `NOT_EQUALS`, `GREATER_THAN`,
+  `LESS_THAN`, `CONTAINS`, `IN`, `IS_EMPTY` e `IS_NOT_EMPTY`; los dos últimos ignoran `value`, e `IN`
+  exige que `value` sea una lista.
+
+  ```json
+  {
+    "name": "Presupuesto alto",
+    "conditions": [
+      {
+        "field": "budget",
+        "operator": "GREATER_THAN",
+        "value": 10000
+      }
+    ],
+    "score_delta": 25,
+    "priority": 0,
+    "is_active": true
+  }
+  ```
+
+  ## Qué devuelve
+
+  `201` con la regla creada:
+
+  ```json
+  {
+    "id": "…",
+    "name": "Presupuesto alto",
+    "conditions": [
+      {
+        "field": "budget",
+        "operator": "GREATER_THAN",
+        "value": 10000
+      }
+    ],
+    "score_delta": 25,
+    "priority": 0,
+    "is_active": true
+  }
+  ```
+
+  ## Qué toca
+
+  Inserta la regla en la organización del token. No repuntúa a ningún lead ya puntuado: sólo se
+  aplica a los que se puntúen de aquí en adelante.
+
+  ## Qué esperar después
+
+  A partir de ahora, cada lead que sobreviva la descalificación se evalúa contra **todas** las
+  reglas de puntuación activas, no sólo la primera que se cumpla, y suma los puntos de todas las que
+  apliquen. Cada regla que aplicó queda registrada en el `score_breakdown` del lead —identificador,
+  nombre y puntos, escritos en el momento de puntuar—, así que la interfaz puede explicar un número
+  aunque esta regla se edite o se borre después.
+
+  Esta familia **no tiene `PATCH` ni `DELETE`** hoy: una regla de puntuación, una vez creada, sólo se
+  desactiva creando otra que la contrarreste, o se deja tal cual.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `400 INVALID_RULE_NAME` | `name` vacío o ausente |
+  | `400 INVALID_RULE_CONDITIONS` | `conditions` no es una lista válida |
+  | `400 INVALID_RULE_FIELD` | algún `Criterion` trae `field` vacío |
+  | `400 FIELD_NOT_SCORABLE` | algún `Criterion` usa un campo fuera de la lista blanca, p. ej. `tenant_id` |
+  | `400 INVALID_RULE_VALUE` | un `Criterion` con operador `IN` cuyo `value` no es una lista |
+}

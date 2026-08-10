@@ -1,0 +1,48 @@
+meta {
+  name: rules
+  seq: 7
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  Las tres familias de reglas con las que un gestor configura qué hace la plataforma con cada lead
+  que entra. Los diez endpoints exigen `MANAGER`.
+
+  ## Una gramática, tres usos
+
+  Toda condición, sea de la familia que sea, es un `Criterion`: `{"field", "operator", "value"}`.
+  Aprenderla una vez sirve para descalificar, puntuar y repartir.
+
+  Los campos evaluables son `first_name`, `last_name`, `email`, `company`, `industry`, `budget`,
+  `phone`, `score`, y cualquier `custom_attributes.<clave>`. Los operadores son `EQUALS`,
+  `NOT_EQUALS`, `GREATER_THAN`, `LESS_THAN`, `CONTAINS`, `IN`, `IS_EMPTY` e `IS_NOT_EMPTY`; los dos
+  últimos ignoran `value`, e `IN` exige que `value` sea una lista.
+
+  **Dentro de una regla las condiciones se combinan con Y**, y no hay operador `O`. Una alternativa
+  se escribe como una segunda regla. Es deliberado: la regla se lee como una frase, y el «o» vive
+  entre reglas, no dentro.
+
+  ## Las tres se evalúan distinto
+
+  | Familia | Cuándo | Cómo recorre las reglas |
+  |---|---|---|
+  | Descalificación | Primero, antes de puntuar | Se detiene en la **primera** que se cumple, y corta el flujo |
+  | Puntuación | Después, si el lead sobrevivió | Aplica **todas** las que se cumplen y suma sus puntos |
+  | Asignación | Al final, con la puntuación ya fijada | Prueba en cascada hasta que una produzca un asesor |
+
+  Un lead descalificado no se puntúa ni se reparte: queda `DISQUALIFIED` con el **nombre de la
+  regla** como motivo, no con un número.
+
+  ## Asimetrías del CRUD
+
+  Las de puntuación **no tienen `PATCH` ni `DELETE`** hoy; las otras dos sí. Y `GET
+  /rules/scoring` es el único endpoint de lista de toda la API que devuelve un array liso, sin la
+  envoltura `{items, total, …}`.
+}

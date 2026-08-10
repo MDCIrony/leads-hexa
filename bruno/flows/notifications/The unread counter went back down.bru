@@ -1,0 +1,41 @@
+meta {
+  name: The unread counter went back down
+  type: http
+  seq: 14
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/notifications
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{agentToken}}
+}
+
+tests {
+  test("el contador volvió a la línea base", function() {
+    expect(res.body.unread_count).to.equal(bru.getVar("agentBaseline"));
+  });
+
+  test("la notificación marcada quedó leída", function() {
+    const marked = res.body.items.find((item) => item.id === bru.getVar("notificationId"));
+    expect(marked, "no se encontró la notificación marcada en la lista").to.exist;
+    expect(marked.is_read).to.equal(true);
+  });
+}
+
+docs {
+  # La misma línea base, ahora en sentido contrario
+
+  Antes se comprobó que `unread_count` subió en uno respecto a `agentBaseline`; ahora se comprueba
+  que **bajó** en uno y volvió exactamente a ese mismo valor. Es la misma disciplina de medir contra
+  una línea base, no contra un número fijo, aplicada al camino de vuelta.
+
+  La segunda comprobación busca la notificación por su `id` y confirma que `is_read` pasó a `true` —
+  el marcado no borra el aviso, sólo cambia su estado de lectura.
+}

@@ -1,0 +1,78 @@
+meta {
+  name: List sources
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/sources
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 100
+  offset: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.limit: eq 100
+  res.body.offset: eq 0
+}
+
+docs {
+  # `GET /sources`
+
+  Lista los orígenes de la organización del token, paginados. Exige rol `MANAGER`.
+
+  ## Los parámetros
+
+  | Parámetro | Tipo | Obligatorio | Notas |
+  |---|---|---|---|
+  | `limit` | int | no | tamaño de página |
+  | `offset` | int | no | desde qué posición |
+
+  ## Qué devuelve
+
+  `200` con la envoltura de paginación común a la mayoría de listas de la API:
+
+  ```json
+  {
+    "items": [
+      {
+        "id": "…",
+        "name": "Facebook Lead Ads",
+        "kind": "MANUAL_FORM",
+        "field_mapping": {},
+        "is_active": true,
+        "created_at": "…"
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0,
+    "has_more": false
+  }
+  ```
+
+  ## Qué toca
+
+  Nada. Sólo lee los orígenes de la organización del token — nunca los de otra, sin importar lo que
+  se pida en `limit`/`offset`.
+
+  ## Qué esperar después
+
+  `has_more` indica si queda página siguiente; se pide subiendo `offset` en `limit`. No hay filtro
+  por `kind` ni por `is_active`: la lista trae todos los orígenes, activos e inactivos.
+
+  ## Errores
+
+  Ninguno propio de este endpoint más allá de los genéricos de autenticación (`401`, `403` si el rol
+  no es `MANAGER`).
+}

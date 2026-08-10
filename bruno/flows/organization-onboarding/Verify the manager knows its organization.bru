@@ -1,0 +1,52 @@
+meta {
+  name: Verify the manager knows its organization
+  type: http
+  seq: 6
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/auth/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+tests {
+  test("la identidad que devuelve el token es la del gestor creado", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.email).to.equal(bru.getVar("managerEmail"));
+    expect(res.body.role).to.equal("MANAGER");
+  });
+
+  test("y apunta a la organización que se acaba de crear", function() {
+    expect(res.body.tenant_id).to.equal(bru.getVar("tenantId"));
+    expect(res.body.tenant_name).to.equal(bru.getVar("tenantName"));
+  });
+}
+
+docs {
+  # Quién soy, según el token
+
+  Cierra el círculo del alta: la organización conoce a su gestor —lo devolvió al crearse— y aquí el
+  gestor conoce su organización. Las dos mitades del vínculo son ciertas.
+
+  `GET /auth/me` acepta cualquier rol y devuelve `{id, name, email, role, tenant_id, tenant_name}`.
+  Es la única vía que tiene un asesor para saber su propio rol y a qué organización pertenece, ya
+  que no alcanza ni el listado de agentes ni el de organizaciones.
+
+  Para un `ADMIN` de plataforma, `tenant_id` y `tenant_name` son siempre `null`: no pertenece a
+  ninguna organización, opera el plano de encima.
+
+  ## Qué toca
+
+  Nada. Es una lectura. Pero no una lectura del token: la API **vuelve a leer el agente en la base
+  de datos** en cada petición y exige que siga activo. Por eso desactivar a alguien —o desactivar su
+  organización entera— le corta el acceso en el acto, sin esperar a que caduque lo que ya tiene en
+  la mano.
+}

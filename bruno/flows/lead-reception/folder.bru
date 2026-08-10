@@ -1,0 +1,41 @@
+meta {
+  name: lead-reception
+  seq: 3
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  # Recibir sin interpretar
+
+  Sigue la Fase 1 del diagrama de `docs/content/arquitectura/recorrido-de-un-lead.md`.
+
+  | Paso | Qué demuestra |
+  |---|---|
+  | Ensure platform admin, Log in as platform admin, Create organization, Log in as the new manager | Monta una organización nueva y entra como su gestor |
+  | Ingest a lead with a malformed email | Un correo roto responde `202`, no `422` |
+  | Await the job | El trabajo termina `COMPLETED` con el registro `failed: 1` |
+  | The record was rejected, with the reason per field | La bandeja explica el motivo por campo |
+  | The payload survived intact | Lo guardado es lo que llegó, sin sanear |
+  | Promote the record with a corrected payload | Corregir y reintentar genera el lead |
+  | Promoting reuses the row, it does not duplicate | Promover no crea un segundo registro |
+  | Batch upload a mixed file, Await the batch job, Each row landed in its own state | Una carga por fichero mezcla un acierto y un fallo en el mismo trabajo |
+
+  ## La promesa
+
+  Nada de lo que entra se pierde. Un correo mal formado no devuelve `422` ni descarta el payload:
+  la petición responde `202`, el payload queda guardado tal cual llegó, y el fallo aparece después
+  en la bandeja con el motivo por campo. El gestor lo corrige y lo reintenta.
+
+  ## Recibir y procesar están separados a propósito
+
+  La recepción persiste el payload y crea su trabajo en una transacción propia; la interpretación
+  ocurre después, en otra. Ningún fallo al interpretar puede borrar la constancia de haber
+  recibido.
+}

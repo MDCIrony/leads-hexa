@@ -1,0 +1,70 @@
+meta {
+  name: Await the second job
+  type: http
+  seq: 15
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/jobs/{{jobId}}
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  const TERMINAL = ["COMPLETED", "FAILED"];
+  const MAX_ATTEMPTS = 25;
+  const WAIT_MS = 200;
+
+  const unwrap = (r) => (r && r.data !== undefined ? r.data : r && r.body);
+
+  const url = `${bru.getEnvVar("apiBase")}/intake/jobs/${bru.getVar("jobId")}`;
+  const headers = { Authorization: `Bearer ${bru.getVar("managerToken")}` };
+
+  let job = res.body;
+  let attempts = 0;
+
+  while (!TERMINAL.includes(job.status) && attempts < MAX_ATTEMPTS) {
+    attempts += 1;
+    await bru.sleep(WAIT_MS);
+    job = unwrap(await bru.sendRequest({ method: "GET", url, headers }));
+  }
+
+  bru.setVar("jobStatus", job.status);
+  bru.setVar("jobSucceeded", job.succeeded);
+  bru.setVar("jobFailed", job.failed);
+  bru.setVar("jobAttempts", attempts);
+}
+
+tests {
+  test("descalificar no es fallar: el trabajo termina bien", function() {
+    expect(bru.getVar("jobStatus"), `se quedó en ${bru.getVar("jobStatus")} tras ${bru.getVar("jobAttempts")} intentos`).to.equal("COMPLETED");
+    expect(bru.getVar("jobSucceeded")).to.equal(1);
+    expect(bru.getVar("jobFailed")).to.equal(0);
+  });
+}
+
+docs {
+  # Esperar al segundo trabajo
+
+  Mismo sondeo que antes. Lo interesante está en lo que comprueba: **`succeeded: 1` y `failed: 0`**,
+  aunque el lead vaya a quedar descalificado.
+
+  Es una distinción que se confunde con facilidad. El contador del trabajo mide si el payload se
+  pudo **interpretar**, no si el lead resultó valioso:
+
+  | | `succeeded` | `failed` |
+  |---|---|---|
+  | Lead correcto y asignado | 1 | 0 |
+  | Lead correcto y descalificado por una regla | **1** | 0 |
+  | Payload que no se pudo interpretar (correo mal formado) | 0 | 1 |
+
+  Un lead descalificado se interpretó perfectamente: existe, tiene todos sus campos, y una regla de
+  negocio decidió que no es trabajable. Eso es una decisión, no un error. Un `failed` significa otra
+  cosa: que el payload no llegó a construir un lead válido, y que hay algo que corregir en la bandeja.
+
+  Confundirlos lleva a un cuadro de mandos donde afinar las reglas de descalificación parece degradar
+  la calidad de la ingesta.
+}

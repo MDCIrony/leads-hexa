@@ -1,0 +1,42 @@
+meta {
+  name: Batch upload a mixed file
+  type: http
+  seq: 11
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/batch-upload
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  file: @file(fixtures/leads-mixed.csv)
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+}
+
+assert {
+  res.status: eq 202
+  res.body.job_id: isDefined
+  res.body.record_ids: isEmpty
+}
+
+docs {
+  # Una carga que mezcla un acierto y un fallo
+
+  `fixtures/leads-mixed.csv` trae dos filas: Marta Iglesias con datos válidos, y Bruno Salas con el
+  mismo correo roto de los pasos anteriores. El objetivo es ver ambas salidas dentro del mismo
+  trabajo.
+
+  ## Por qué `record_ids` viene vacío
+
+  A diferencia del alta individual, aquí el `202` se responde **antes de leer el fichero**: la
+  fase de recepción sólo crea el `IntakeJob`. Las filas todavía no existen como registros, así que
+  no hay ningún `record_id` que devolver. El origen que usa es `FILE_UPLOAD`, no `MANUAL_FORM`.
+}

@@ -1,0 +1,92 @@
+meta {
+  name: List intake jobs
+  type: http
+  seq: 6
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/jobs?limit=100&offset=0
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 100
+  offset: 0
+  ~status: COMPLETED
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+}
+
+docs {
+  # `GET /intake/jobs`
+
+  Los trabajos de ingesta de la organización, del más reciente al más antiguo. Exige rol `MANAGER`.
+
+  Un `IntakeJob` es lo que la recepción crea y devuelve como `job_id`. Por él se sabe si el
+  procesamiento en segundo plano terminó y cómo le fue.
+
+  ## Parámetros
+
+  | Parámetro | Valores | Notas |
+  |---|---|---|
+  | `status` | `PENDING` · `PROCESSING` · `COMPLETED` · `FAILED` | Opcional. Viene desactivado en este request |
+  | `limit` | entero | Por defecto 100 |
+  | `offset` | entero | Por defecto 0 |
+
+  ## Qué devuelve
+
+  `200` con la envoltura habitual de paginación:
+
+  ```json
+  {
+    "items": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "source_id": "22222222-2222-2222-2222-222222222222",
+        "kind": "SINGLE",
+        "status": "COMPLETED",
+        "total_items": 1,
+        "succeeded": 1,
+        "failed": 0,
+        "created_at": "2026-08-09T10:00:00+00:00",
+        "completed_at": "2026-08-09T10:00:01+00:00"
+      }
+    ],
+    "total": 1, "limit": 100, "offset": 0, "has_more": false
+  }
+  ```
+
+  `kind` distingue el alta individual (`SINGLE`) de la carga de fichero (`BATCH`).
+
+  ## Qué toca
+
+  Nada. Es una lectura acotada a la organización del token.
+
+  ## Qué esperar después
+
+  Para qué sirve de verdad este listado: **encontrar los trabajos que se quedaron a medias**. Filtrar
+  por `status=PROCESSING` saca los que empezaron y no cerraron, que es lo que ocurre si el proceso
+  muere mientras interpreta un registro. Se recuperan con `POST /intake/jobs/{id}/reprocess`.
+
+  Filtrar por `FAILED` saca los que no pudieron ni empezar — típicamente un fichero ilegible en una
+  carga por lotes.
+
+  `succeeded` y `failed` cuentan si cada payload se pudo **interpretar**, no si el lead resultó
+  valioso: un lead descalificado por una regla de negocio cuenta como `succeeded`, porque se
+  interpretó perfectamente. Sólo entra en `failed` lo que no llegó a construir un lead válido.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `400 INVALID_JOB_STATUS` | `status` no es uno de los cuatro valores conocidos |
+  | `403` | Quien llama es un asesor, no un gestor |
+  | `401` | Token ausente, inválido o agente desactivado |
+}

@@ -1,0 +1,36 @@
+meta {
+  name: Deactivate the agent
+  type: http
+  seq: 14
+  tags: [
+    flow
+  ]
+}
+
+delete {
+  url: {{apiBase}}/agents/:agentId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  agentId: {{agentId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{agentId}}
+  res.body.is_active: eq false
+}
+
+docs {
+  # Desactivar, no borrar
+
+  El gestor desactiva al asesor que creó al principio del flujo. Responde `200` —no `204`— con el
+  agente completo y `is_active: false`. No hay manera de eliminar un agente por la API: lo que queda
+  es su registro, marcado como inactivo, con su historial intacto.
+
+  `{{agentToken}}` sigue guardado, sin tocar, tal como lo dejó el login del paso 6. El paso siguiente
+  lo reutiliza tal cual para comprobar qué le pasa a un token que sigue siendo criptográficamente
+  válido cuando quien lo tiene ya no puede operar.
+}

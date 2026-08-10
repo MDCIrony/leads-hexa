@@ -1,0 +1,67 @@
+meta {
+  name: List scoring rules
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/rules/scoring
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isArray
+}
+
+docs {
+  # `GET /rules/scoring`
+
+  Lista las reglas de puntuación de la organización del token. Exige rol `MANAGER`.
+
+  ## Qué devuelve
+
+  `200` con un **array liso** de reglas — sin `limit` ni `offset` que pedir:
+
+  ```json
+  [
+    {
+      "id": "…",
+      "name": "Presupuesto alto",
+      "conditions": [
+        {
+          "field": "budget",
+          "operator": "GREATER_THAN",
+          "value": 10000
+        }
+      ],
+      "score_delta": 25,
+      "priority": 0,
+      "is_active": true
+    }
+  ]
+  ```
+
+  Es el único endpoint de lista de toda la API que responde así. El resto usa la envoltura
+  `{items, total, limit, offset, has_more}`; éste no, porque no pagina: el motor de puntuación carga
+  siempre la organización entera para evaluar un lead, así que la lista tampoco recorta.
+
+  ## Qué toca
+
+  Nada. Sólo lee.
+
+  ## Qué esperar después
+
+  Cada regla trae su `id`, útil para casarla con el `rule_id` que aparece en el `score_breakdown`
+  de un lead ya puntuado — aunque esa regla se haya editado o borrado desde entonces, porque el
+  desglose congela nombre y puntos en el momento de aplicarse.
+
+  ## Errores
+
+  Ninguno propio de este endpoint más allá de los genéricos de autenticación (`401`, `403` si el rol
+  no es `MANAGER`).
+}

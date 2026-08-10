@@ -1,0 +1,65 @@
+meta {
+  name: List my leads
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads/mine?limit=100&offset=0
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 100
+  offset: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.limit: eq 100
+  res.body.offset: eq 0
+  res.body.has_more: isBoolean
+}
+
+docs {
+  # `GET /leads/mine`
+
+  Devuelve los leads asignados a quien llama, sea gestor o asesor. Exige `MANAGER` o `AGENT`.
+
+  Es **la única vía que tiene un asesor** hacia sus propios leads: `GET /leads` le responde `403`
+  porque expondría los de sus compañeros. Para probarlo como asesor, cambia el token de la carpeta
+  a `{{agentToken}}`.
+
+  ## Los parámetros
+
+  `params:query`: `limit` (100 por defecto) y `offset` (0 por defecto).
+
+  ## Qué devuelve
+
+  `200` con la misma envoltura de paginación que `GET /leads`: `{items, total, limit, offset,
+  has_more}`. Tampoco incluye `score_breakdown` en cada elemento.
+
+  ## Qué toca
+
+  Sólo lee: los leads cuyo `assigned_agent_id` coincide con quien llama.
+
+  Está declarada **antes** de `/{lead_id}` en el router: FastAPI resuelve las rutas en el orden en
+  que se declaran, así que si `mine` fuera después caería en la ruta paramétrica y fallaría al
+  intentar leerse como UUID.
+
+  ## Qué esperar después
+
+  Con un `id` de la lista, `GET /leads/{{leadId}}` trae el detalle completo.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Lo pide un `ADMIN` — no pertenece a ninguna organización |
+}

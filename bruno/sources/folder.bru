@@ -1,0 +1,28 @@
+meta {
+  name: sources
+  seq: 6
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  Un origen responde «¿de dónde vino este lead?». Cada lead ingerido guarda el identificador del
+  origen por el que entró, y esa trazabilidad es la razón de que un origen con leads no se pueda
+  borrar (`SOURCE_IN_USE`).
+
+  Los cuatro endpoints exigen `MANAGER`. El nombre es único dentro de la organización.
+
+  Al crear una organización nacen dos automáticamente, y son los que usa la ingesta: `MANUAL_FORM`
+  para el alta individual y `FILE_UPLOAD` para la carga de ficheros. La ingesta **no recibe un
+  identificador de origen**: lo resuelve sola buscando el origen activo del tipo que le corresponde.
+  De ahí que desactivar el `MANUAL_FORM` de una organización rompa su alta individual con un `404`.
+
+  El tipo (`kind`) no se puede cambiar después de crear el origen. `WEBHOOK` está declarado como
+  tipo, pero todavía no existe ningún endpoint que reciba por esa vía.
+}

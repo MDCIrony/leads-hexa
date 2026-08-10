@@ -1,0 +1,51 @@
+meta {
+  name: Create organization
+  type: http
+  seq: 3
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/tenants
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Alert Lab {{runId}}",
+    "manager": {
+      "name": "Ana Ruiz",
+      "email": "ana-{{runId}}@alertlab.test",
+      "password": "{{password}}"
+    }
+  }
+}
+
+vars:post-response {
+  tenantId: res.body.id
+  managerEmail: res.body.manager.email
+}
+
+assert {
+  res.status: eq 201
+  res.body.manager.role: eq MANAGER
+}
+
+docs {
+  # Una organización nueva para este flujo
+
+  Cada ejecución trabaja sobre su propia organización, sufijada con `runId`. Es lo que permite
+  volver a correr el flujo sin borrar la base de datos y sin que los avisos de la pasada anterior
+  contaminen la línea base que se captura más abajo.
+
+  El alta crea en la misma transacción la organización y su gestor, que es quien recibirá el aviso
+  cuando ningún asesor pueda tomar un lead. Este es el único paso del flujo que usa `{{adminToken}}`;
+  todo lo demás va con el token del gestor o el del asesor.
+}

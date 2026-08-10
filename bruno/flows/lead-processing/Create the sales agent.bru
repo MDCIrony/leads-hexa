@@ -1,0 +1,50 @@
+meta {
+  name: Create the sales agent
+  type: http
+  seq: 5
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/agents
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Carlos Ruiz",
+    "email": "carlos-{{runId}}@routinglab.test",
+    "password": "{{password}}",
+    "role": "AGENT"
+  }
+}
+
+vars:post-response {
+  agentId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.role: eq AGENT
+  res.body.is_active: eq true
+}
+
+docs {
+  # El asesor que recibirá el lead
+
+  Lo crea el gestor con su propio token, y por eso **no lleva `tenant_id` en el cuerpo**: la
+  organización sale del token de quien llama. No hay forma de crear un asesor en otra organización,
+  ni equivocándose ni queriendo.
+
+  El mismo endpoint que aquí exige `MANAGER` fue público en el primer paso del flujo, cuando la
+  plataforma estaba vacía. Es el único endpoint de la API con ese comportamiento condicional.
+
+  ## Qué esperar después
+
+  El asesor ya puede entrar con su correo y su contraseña, y ya es candidato a recibir leads. Todavía
+  no recibirá ninguno: hace falta una regla de asignación que lo nombre, y es lo que se crea unos
+  pasos más abajo.
+}

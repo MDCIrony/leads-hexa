@@ -1,0 +1,39 @@
+meta {
+  name: Log in as the sales agent
+  type: http
+  seq: 6
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: {{agentEmail}}
+  password: {{password}}
+}
+
+vars:post-response {
+  agentToken: res.body.access_token
+}
+
+assert {
+  res.status: eq 200
+  res.body.access_token: isString
+}
+
+docs {
+  # El asesor entra con su propia sesión
+
+  Igual que el login del gestor, salvo que aquí el correo es `agentEmail`, el que se guardó al crear
+  el asesor. El token resultante, `agentToken`, es el que separa la bandeja del asesor de la del
+  gestor: cada uno lee sólo lo que el suyo trae dentro.
+
+  Sin este paso, el flujo no tendría forma de comprobar que un aviso llega a un destinatario y no al
+  otro — el destinatario sale siempre del token, nunca de un parámetro.
+}

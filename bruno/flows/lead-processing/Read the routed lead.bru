@@ -1,0 +1,81 @@
+meta {
+  name: Read the routed lead
+  type: http
+  seq: 13
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads/{{leadId}}
+  body: none
+  auth: inherit
+}
+
+tests {
+  test("el lead existe y conserva lo que entró", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.company).to.equal("Northwind");
+    expect(res.body.industry).to.equal("Technology");
+  });
+
+  test("las dos reglas de puntuación sumaron: 25 + 15 = 40", function() {
+    expect(res.body.score).to.equal(40);
+    expect(res.body.score_breakdown).to.have.lengthOf(2);
+    const total = res.body.score_breakdown.reduce((acc, r) => acc + r.score_delta, 0);
+    expect(total).to.equal(res.body.score);
+  });
+
+  test("el desglose nombra las reglas que lo produjeron", function() {
+    const names = res.body.score_breakdown.map(r => r.name);
+    expect(names.some(n => n.startsWith("Presupuesto alto"))).to.equal(true);
+    expect(names.some(n => n.startsWith("Sector tecnológico"))).to.equal(true);
+  });
+
+  test("la regla de reparto lo mandó al asesor", function() {
+    expect(res.body.status).to.equal("ASSIGNED");
+    expect(res.body.assigned_agent_id).to.equal(bru.getVar("agentId"));
+    expect(res.body.assigned_at).to.not.equal(null);
+  });
+
+  test("no se descalificó por el camino", function() {
+    expect(res.body.disqualification_reason).to.equal(null);
+  });
+}
+
+docs {
+  # El lead, al final del recorrido
+
+  Aquí se comprueba de una vez el resultado de las tres etapas sobre el mismo lead.
+
+  | Etapa | Qué se comprueba |
+  |---|---|
+  | Viabilidad | `disqualification_reason` es `null`: ninguna regla lo cortó |
+  | Puntuación | `score` es 40, y el desglose tiene dos entradas que suman exactamente eso |
+  | Asignación | `status` es `ASSIGNED` y `assigned_agent_id` es el asesor creado |
+
+  ## Por qué se comprueba que el desglose suma la puntuación
+
+  Comprobar `score: 40` a secas pasaría igual si el motor hubiera aplicado una sola regla de 40
+  puntos, o si el número viniera de cualquier otro sitio. Comprobar que **el desglose suma la
+  puntuación** y que nombra las dos reglas esperadas es lo que ata el número a su causa.
+
+  Ese desglose se escribe en el momento de puntuar y se queda con el lead: una entrada por regla
+  aplicada, con su identificador, su nombre y sus puntos. Por eso la interfaz puede explicar un 40
+  aunque mañana alguien edite la regla de presupuesto o la borre. Es también la razón de que los
+  listados no lo traigan y sólo esté en el detalle: es información para explicar un lead concreto, no
+  para pintar una tabla.
+
+  ## `ASSIGNED` frente a `QUALIFIED`
+
+  Un lead que sobrevive a la viabilidad pasa por `QUALIFIED` tras puntuarse, sin ningún umbral que
+  superar — ese corte se retiró y hoy vive en la banda más baja de las reglas de reparto. Si después
+  una regla le encuentra asesor, termina en `ASSIGNED`; si ninguna lo hace, termina en `UNASSIGNED` y
+  los gestores reciben un aviso.
+
+  ## Qué esperar después
+
+  El lead ya aparece en `GET /leads/mine` del asesor, y el asesor tiene un aviso `LEAD_ASSIGNED`
+  esperándolo. Eso es lo que recorre el flujo `notifications`.
+}

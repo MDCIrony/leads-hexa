@@ -1,0 +1,47 @@
+meta {
+  name: Ingest a lead nobody can take
+  type: http
+  seq: 17
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "first_name": "Diego",
+    "last_name": "Fuentes",
+    "email": "diego-{{runId}}@northwind.test",
+    "company": "Northwind",
+    "budget": 15000,
+    "industry": "Retail",
+    "phone": "+34600333444",
+    "custom_attributes": {"employee_count": 40}
+  }
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+}
+
+assert {
+  res.status: eq 202
+  res.body.status: eq PENDING
+}
+
+docs {
+  # El mismo lead, con el reparto vacío
+
+  Tiene teléfono y correo, así que sigue siendo viable — llega tan lejos como el anterior. La
+  diferencia es que la organización ya no tiene ninguna regla de asignación: se borró en el paso
+  previo. El motor prueba la cascada, no encuentra candidato, y el lead queda `UNASSIGNED`.
+
+  Es el evento `LeadLeftUnassigned`, y el aviso que provoca va al gestor, no a ningún asesor: no hay
+  a quién más avisar.
+}

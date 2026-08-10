@@ -1,0 +1,45 @@
+meta {
+  name: Create the sales agent
+  type: http
+  seq: 5
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/agents
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Carlos Ruiz",
+    "email": "carlos-{{runId}}@alertlab.test",
+    "password": "{{password}}",
+    "role": "AGENT"
+  }
+}
+
+vars:post-response {
+  agentId: res.body.id
+  agentEmail: res.body.email
+}
+
+assert {
+  res.status: eq 201
+  res.body.role: eq AGENT
+  res.body.is_active: eq true
+}
+
+docs {
+  # El asesor que recibirá el aviso
+
+  Lo crea el gestor con su propio token, así que no lleva `tenant_id` en el cuerpo: la organización
+  sale del token de quien llama.
+
+  Guarda `agentEmail` además de `agentId`, algo que este flujo necesita y `lead-processing` no: aquí
+  el asesor tiene que entrar con su propia sesión para leer su propia bandeja de avisos, no sólo
+  aparecer como destino de una regla.
+}

@@ -1,0 +1,28 @@
+meta {
+  name: agents
+  seq: 4
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  Las personas de una organización: gestores y asesores comerciales.
+
+  Los cinco endpoints exigen `MANAGER` y operan siempre dentro de su propia organización — la que
+  sale del token. No hay `tenant_id` en ningún cuerpo.
+
+  **`POST /agents` es el único endpoint de la API con autenticación condicional.** Mientras la tabla
+  de agentes esté vacía no pide credencial y crea siempre un `ADMIN` de plataforma, ignorando el
+  `role` que llegue: es la única puerta de entrada al sistema. En cuanto existe un agente, exige
+  `MANAGER` y deja de poder crear administradores.
+
+  **`DELETE` desactiva, no borra.** Responde `200` con el agente y `is_active: false`, no `204`. Los
+  leads que ya tenía asignados siguen apuntando a su identificador y su historial sigue legible; lo
+  que pierde es el acceso y las asignaciones automáticas nuevas.
+}

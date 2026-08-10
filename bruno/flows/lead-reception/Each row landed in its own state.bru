@@ -1,0 +1,50 @@
+meta {
+  name: Each row landed in its own state
+  type: http
+  seq: 13
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/records?job_id={{jobId}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  job_id: {{jobId}}
+}
+
+tests {
+  test("el fichero dejó sus dos filas como registros", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.total).to.equal(2);
+  });
+
+  test("una se promovió y la otra se rechazó, identificadas por su correo", function() {
+    const items = res.body.items;
+    const promoted = items.find((r) => r.payload.email === "miglesias@northwind.test");
+    const rejected = items.find((r) => r.payload.email === "bruno@@salas");
+
+    expect(promoted).to.not.equal(undefined);
+    expect(promoted.status).to.equal("PROMOTED");
+
+    expect(rejected).to.not.equal(undefined);
+    expect(rejected.status).to.equal("REJECTED");
+  });
+}
+
+docs {
+  # Identificar por contenido, no por posición
+
+  El orden en que el procesamiento en segundo plano termina cada fila no está garantizado. Una
+  comprobación sobre `items[0]` pasaría o fallaría según qué fila gane la carrera ese día — que no
+  es lo que este flujo quiere demostrar.
+
+  En su lugar, cada registro se identifica por el correo de su propio `payload`:
+  `miglesias@northwind.test` es la fila válida y `bruno@@salas` la que sigue rota, la misma que
+  entró en el alta individual del principio del flujo. Así el flujo comprueba lo que importa —que
+  cada fila terminó en el estado que le corresponde— sin depender de en qué orden llegó.
+}

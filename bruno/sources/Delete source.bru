@@ -1,0 +1,51 @@
+meta {
+  name: Delete source
+  type: http
+  seq: 4
+  tags: [
+    reference
+  ]
+}
+
+delete {
+  url: {{apiBase}}/sources/{{sourceId}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # `DELETE /sources/{{sourceId}}`
+
+  Borra un origen de la organización del token. Exige rol `MANAGER`.
+
+  ## Qué devuelve
+
+  `204`, sin cuerpo.
+
+  ## Qué toca
+
+  Elimina la fila del origen, y nada más — no toca los leads que entraron por él. Es justo lo que lo
+  impide en el caso normal: ver `SOURCE_IN_USE` más abajo.
+
+  ## Qué esperar después
+
+  El `id` deja de aparecer en `GET /sources` y de servir para ingerir por esa vía. Si era el
+  `MANUAL_FORM` o `FILE_UPLOAD` activo de su tipo, la ingesta correspondiente empieza a fallar con
+  `404 SOURCE_NOT_FOUND` hasta que se active otro.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 SOURCE_NOT_FOUND` | El `id` no existe, o existe pero en otra organización |
+  | `400 SOURCE_IN_USE` | El origen tiene leads o registros de ingesta asociados |
+
+  `SOURCE_IN_USE` es semánticamente un conflicto — el estado del origen impide el borrado sin que
+  nada esté mal en la petición — pero responde `400`: en esta API no existe ningún `409`. Es
+  deliberado, no un olvido: cada lead guarda el identificador de su origen para trazabilidad, y
+  borrar el origen dejaría esa referencia colgando.
+}

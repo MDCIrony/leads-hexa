@@ -1,0 +1,111 @@
+meta {
+  name: Create assignment rule
+  type: http
+  seq: 3
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/rules/assignment
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Banda alta {{runId}}",
+    "min_score": 50,
+    "max_score": 100,
+    "target_group_id": "{{groupId}}",
+    "target_agent_ids": [],
+    "agent_match_mode": "ANY",
+    "strategy": "ROUND_ROBIN",
+    "priority": 10,
+    "conditions": []
+  }
+}
+
+vars:post-response {
+  assignmentRuleId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isString
+  res.body.is_active: eq true
+  res.body.rr_cursor: eq 0
+}
+
+docs {
+  # `POST /rules/assignment`
+
+  Crea una regla de asignación en la organización del token. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio | Notas |
+  |---|---|---|---|
+  | `name` | string | sí | |
+  | `min_score` | number | no | por defecto `0` |
+  | `max_score` | number \| `null` | no | por defecto `null`, sin techo |
+  | `target_group_id` | uuid | no | |
+  | `target_agent_ids` | uuid[] | no | por defecto `[]` |
+  | `agent_match_mode` | string | no | `ANY` \| `ONLY`, por defecto `ANY` |
+  | `strategy` | string \| `null` | no | `ROUND_ROBIN` \| `LOWEST_LOAD` \| `DIRECT_AGENT`; `null` usa la del grupo destino |
+  | `priority` | int | no | por defecto `0` |
+  | `conditions` | `Criterion[]` | no | por defecto `[]`; se combinan con Y |
+
+  La regla debe apuntar a algo: un grupo, unos asesores concretos, o ambos. `agent_match_mode`
+  decide cómo se combinan cuando hay ambos — `ANY` es la unión, `ONLY` la intersección.
+
+  ```json
+  {
+    "name": "Banda alta",
+    "min_score": 50,
+    "max_score": 100,
+    "target_group_id": "9c1f2e...",
+    "target_agent_ids": [],
+    "agent_match_mode": "ANY",
+    "strategy": "ROUND_ROBIN",
+    "priority": 10,
+    "conditions": []
+  }
+  ```
+
+  ## Qué devuelve
+
+  `201` con la regla creada, que además de lo enviado trae:
+
+  | Campo | Notas |
+  |---|---|
+  | `id` | |
+  | `is_active` | siempre `true` al crear |
+  | `rr_cursor` | `0` al crear; es el puntero interno de `ROUND_ROBIN` |
+
+  ## Qué toca
+
+  Inserta la regla en la organización del token. No reasigna a ningún lead ya asignado: sólo entra
+  en juego en la siguiente pasada del motor.
+
+  ## Qué esperar después
+
+  Con la puntuación ya fija, el motor filtra las reglas cuya banda `[min_score, max_score]` contiene
+  la puntuación del lead y cuyas `conditions` se cumplen, las ordena por `priority` descendente y las
+  prueba en cascada: descarta candidatos de otra organización, inactivos, de grupo inactivo o que ya
+  alcanzaron la capacidad de su grupo — la carga se cuenta al vuelo sobre los leads `ASSIGNED`, no es
+  una columna que se pueda desincronizar. Si una regla no produce candidato, se prueba la siguiente.
+  Si ninguna lo hace, el lead queda `UNASSIGNED` y se avisa al gestor.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `400 INVALID_RULE_NAME` | `name` vacío o ausente |
+  | `400 INVALID_SCORE_BAND` | `max_score` menor que `min_score` |
+  | `400 RULE_WITHOUT_TARGET` | ni `target_group_id` ni `target_agent_ids` traen nada |
+  | `400 INVALID_RULE_FIELD` | algún `Criterion` de `conditions` trae `field` vacío |
+  | `400 FIELD_NOT_SCORABLE` | algún `Criterion` usa un campo fuera de la lista blanca |
+  | `400 INVALID_RULE_VALUE` | un `Criterion` con operador `IN` cuyo `value` no es una lista |
+}

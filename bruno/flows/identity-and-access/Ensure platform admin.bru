@@ -1,0 +1,67 @@
+meta {
+  name: Ensure platform admin
+  type: http
+  seq: 1
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/agents
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Platform Root",
+    "email": "{{adminEmail}}",
+    "password": "{{password}}"
+  }
+}
+
+script:pre-request {
+  // Marca de esta ejecución: sufija todo lo que el flujo cree, para que volver a
+  // correrlo no choque con la pasada anterior ni exija una base de datos limpia.
+  bru.setVar("runId", String(Date.now()));
+}
+
+tests {
+  test("la plataforma queda con un administrador", function() {
+    // 201 la primera vez; 401 después, porque el arranque deja de ser público en
+    // cuanto existe cualquier agente. Las dos respuestas son correctas aquí.
+    expect([201, 401]).to.include(res.status);
+  });
+
+  test("si lo creó ahora, nace ADMIN y sin organización", function() {
+    if (res.status === 201) {
+      expect(res.body.role).to.equal("ADMIN");
+      expect(res.body.tenant_id).to.equal(null);
+    }
+  });
+}
+
+docs {
+  # Arranque de la plataforma
+
+  La API nace vacía y sin nadie dentro. Este es el único momento en que `POST /agents` responde sin
+  credencial, y el agente que crea nace **siempre `ADMIN` de plataforma**, con `tenant_id: null`,
+  ignorando el `role` que llegue en el cuerpo.
+
+  En cuanto existe un agente cualquiera, el mismo endpoint pasa a exigir `MANAGER` y deja de poder
+  crear administradores. Por eso este paso acepta dos respuestas como buenas:
+
+  | Respuesta | Qué significa |
+  |---|---|
+  | `201` | La plataforma estaba vacía y acaba de nacer su administrador |
+  | `401` | Ya había alguien dentro; el arranque se cerró hace tiempo |
+
+  Un `403` aquí sería otra cosa: querría decir que se mandó un token de alguien que no es gestor.
+
+  ## De dónde sale `runId`
+
+  Se fija en este primer paso y vale para todo el flujo. Es la marca temporal con la que se sufijan
+  los nombres que el flujo va creando, y es lo que permite **volver a correrlo sobre la misma base
+  de datos** sin chocar con la ejecución anterior.
+}

@@ -1,0 +1,41 @@
+meta {
+  name: Locate the lead
+  type: http
+  seq: 9
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/records?job_id={{jobId}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  job_id: {{jobId}}
+}
+
+vars:post-response {
+  leadId: res.body.items[0].lead_id
+}
+
+tests {
+  test("el registro se promovió y apunta a su lead", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.items[0].status).to.equal("PROMOTED");
+    expect(res.body.items[0].lead_id).to.be.a("string");
+  });
+}
+
+docs {
+  # El hilo hacia el lead ya interpretado
+
+  Igual que en `lead-processing`: filtra la bandeja por `job_id` para acotarla a lo que este flujo
+  acaba de meter, y guarda `leadId` desde el único registro que produjo.
+
+  `PROMOTED` confirma que el lead existe de verdad dentro de Alpha antes de que el resto del flujo
+  intente alcanzarlo desde Beta, desde un compañero de asesor y desde el administrador de
+  plataforma.
+}

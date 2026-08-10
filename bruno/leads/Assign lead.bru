@@ -1,0 +1,74 @@
+meta {
+  name: Assign lead
+  type: http
+  seq: 4
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/leads/:leadId/assign
+  body: json
+  auth: inherit
+}
+
+params:path {
+  leadId: {{leadId}}
+}
+
+body:json {
+  {
+    "agent_id": "{{agentId}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ASSIGNED
+  res.body.assigned_agent_id: eq {{agentId}}
+  res.body.assigned_at: isNotEmpty
+}
+
+docs {
+  # `POST /leads/{{leadId}}/assign`
+
+  Asigna el lead a un asesor. Exige `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio |
+  |---|---|---|
+  | `agent_id` | UUID | Sí |
+
+  ```json
+  {"agent_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"}
+  ```
+
+  ## Qué devuelve
+
+  `200` con el detalle actualizado del lead: `status: ASSIGNED` y `assigned_at` poblado.
+
+  ## Qué toca
+
+  Si el lead ya estaba asignado, **reasigna**: es la misma operación sin importar el estado de
+  partida, no hace falta comprobar antes a quién pertenecía.
+
+  Efecto que no se ve en la respuesta: genera un aviso al asesor destino — `LEAD_ASSIGNED` si el
+  lead no tenía asesor, `LEAD_REASSIGNED` si ya estaba asignado a otro. Se comprueba pidiendo
+  `GET /notifications` con el token de ese asesor.
+
+  ## Qué esperar después
+
+  `GET /leads/{{leadId}}` vuelve a traer el mismo `status` y `assigned_agent_id` que esta respuesta.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Lo pide un `AGENT` o un `ADMIN` — sólo `MANAGER` asigna |
+  | `404 LEAD_NOT_FOUND` | El lead no existe o es de otra organización |
+  | `404 AGENT_NOT_FOUND` | El asesor se resuelve acotado a la organización de quien llama: uno ajeno se lee como inexistente, nunca como `403` |
+  | `400 CROSS_TENANT_ASSIGNMENT` | El lead y el asesor no pertenecen a la misma organización |
+  | `400 INVALID_LEAD_TRANSITION` | El lead está en un estado no asignable, por ejemplo `DISCARDED` |
+}

@@ -1,0 +1,42 @@
+meta {
+  name: A colleague's lead is invisible, not forbidden
+  type: http
+  seq: 18
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads/:leadId
+  body: none
+  auth: bearer
+}
+
+params:path {
+  leadId: {{leadId}}
+}
+
+auth:bearer {
+  token: {{otherAgentToken}}
+}
+
+tests {
+  test("el lead de un compañero es 404 para un asesor, no 403", function() {
+    expect(res.status).to.equal(404);
+    expect(res.body.error_code).to.equal("LEAD_NOT_FOUND");
+  });
+}
+
+docs {
+  # Pertenecer a la organización no basta
+
+  Elena sí es de Alpha, la misma organización dueña del lead. Aun así, el lead no es suyo — está
+  asignado a Carlos —, y la respuesta es `404 LEAD_NOT_FOUND`: exactamente la misma que recibió el
+  gestor de Beta en el paso 12, que ni siquiera pertenece a la organización.
+
+  Un `403` aquí le confirmaría a Elena que ese lead existe dentro de Alpha y está asignado a otro,
+  y le permitiría recorrer identificadores para deducir el tamaño y la forma del trabajo de sus
+  compañeros sin leer un solo dato. El `404` no distingue "no es tuyo" de "no existe", y esa
+  ambigüedad es la protección.
+}

@@ -1,0 +1,29 @@
+meta {
+  name: Delete the assignment rule
+  type: http
+  seq: 16
+  tags: [
+    flow
+  ]
+}
+
+delete {
+  url: {{apiBase}}/rules/assignment/{{assignmentRuleId}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # Sin ninguna regla, a propósito
+
+  Borra la única regla de asignación que tenía esta organización. Deja a la organización sin ningún
+  criterio capaz de encontrar candidato, que es exactamente lo que el siguiente lead necesita para
+  provocar el otro camino: `LeadLeftUnassigned`.
+
+  No toca al asesor ni a sus leads ya asignados — borrar la regla es borrar el criterio, no el
+  equipo ni lo que ya se repartió con él.
+}

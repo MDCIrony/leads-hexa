@@ -1,0 +1,62 @@
+meta {
+  name: Get current user
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/auth/me
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: isDefined
+  res.body.role: isString
+}
+
+docs {
+  # `GET /auth/me`
+
+  Devuelve la identidad de quien hace la petición: quién es, qué rol tiene y a qué organización
+  pertenece. Acepta cualquier rol autenticado — es el único endpoint de la colección sin
+  restricción de rol.
+
+  ## Qué devuelve
+
+  ```json
+  {
+    "id": "3f2e1a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+    "name": "Ana Ruiz",
+    "email": "ana@acme.test",
+    "role": "MANAGER",
+    "tenant_id": "9c8b7a6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+    "tenant_name": "Acme Corp"
+  }
+  ```
+
+  Para un `ADMIN`, `tenant_id` y `tenant_name` viajan como `null`: la plataforma no lo adscribe a
+  ninguna organización, opera por encima de todas.
+
+  ## Qué toca
+
+  Nada. Lee el agente autenticado a partir del token y lo devuelve tal cual está en ese instante en
+  la base de datos.
+
+  ## Qué esperar después
+
+  Es la única vía que tiene un `AGENT` para conocer su propio rol y su organización: no existe
+  ningún endpoint de listado de agentes accesible para ese rol. Úsalo para confirmar con qué
+  identidad quedó autenticada una sesión, en vez de asumir el rol a partir de qué credenciales se
+  usaron en el login.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token, token caducado, o el agente o su organización quedaron desactivados desde que se emitió |
+}

@@ -1,0 +1,49 @@
+meta {
+  name: Health check
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{baseUrl}}/health
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ok
+}
+
+docs {
+  # `GET /health`
+
+  Dice si la plataforma está en pie. Público: no lleva token ni lo mira.
+
+  Es el único endpoint que **no** cuelga de `/api/v1` — va contra la raíz del servidor.
+
+  ## Qué devuelve
+
+  ```json
+  {"status": "ok"}
+  ```
+
+  ## Qué toca
+
+  Nada. No lee la base de datos ni escribe en ella.
+
+  ## Qué significa que responda
+
+  Más de lo que parece. La API no empieza a aceptar peticiones hasta haber aplicado las migraciones
+  pendientes, así que un `200` aquí no dice sólo «el proceso arrancó»: dice «el esquema está al
+  día». Por eso es lo que hay que esperar tras levantar la pila, en vez de dormir unos segundos a
+  ver si suena la flauta.
+
+  Si no responde, el proceso no llegó a arrancar. Los motivos habituales son la base de datos
+  todavía sin aceptar conexiones, una migración que falló, o una dependencia ausente en la imagen
+  —esto último se arregla reconstruyendo, que es el único caso que lo exige—. El detalle está
+  siempre en `docker compose logs backend`.
+}

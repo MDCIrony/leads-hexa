@@ -1,0 +1,127 @@
+meta {
+  name: Create disqualification rule
+  type: http
+  seq: 7
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/rules/disqualification
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Sin vía de contacto {{runId}}",
+    "conditions": [
+      {
+        "field": "phone",
+        "operator": "IS_EMPTY"
+      },
+      {
+        "field": "email",
+        "operator": "IS_EMPTY"
+      }
+    ],
+    "priority": 0,
+    "is_active": true
+  }
+}
+
+vars:post-response {
+  disqualificationRuleId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isString
+  res.body.conditions: length 2
+}
+
+docs {
+  # `POST /rules/disqualification`
+
+  Crea una regla de descalificación en la organización del token. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio | Notas |
+  |---|---|---|---|
+  | `name` | string | sí | |
+  | `conditions` | `Criterion[]` | sí, y no puede llegar vacía | se combinan con Y |
+  | `priority` | int | no | por defecto `0`; decide qué regla se prueba primero |
+  | `is_active` | boolean | no | por defecto `true` |
+
+  `conditions` vacía se rechaza a propósito: una regla sin condiciones se cumpliría siempre y
+  descalificaría a toda la organización.
+
+  El ejemplo de abajo ilustra la Y entre condiciones: descalifica a quien no tenga **ni** teléfono
+  **ni** correo. Quien tenga sólo uno de los dos no se descalifica — para esa alternativa haría falta
+  una segunda regla, porque dentro de una regla no existe el operador O.
+
+  ```json
+  {
+    "name": "Sin vía de contacto",
+    "conditions": [
+      {
+        "field": "phone",
+        "operator": "IS_EMPTY"
+      },
+      {
+        "field": "email",
+        "operator": "IS_EMPTY"
+      }
+    ],
+    "priority": 0,
+    "is_active": true
+  }
+  ```
+
+  ## Qué devuelve
+
+  `201` con la regla creada:
+
+  ```json
+  {
+    "id": "…",
+    "name": "Sin vía de contacto",
+    "conditions": [
+      {
+        "field": "phone",
+        "operator": "IS_EMPTY"
+      },
+      {
+        "field": "email",
+        "operator": "IS_EMPTY"
+      }
+    ],
+    "priority": 0,
+    "is_active": true
+  }
+  ```
+
+  ## Qué toca
+
+  Inserta la regla en la organización del token. No reevalúa a ningún lead ya procesado: sólo entra
+  en juego en la siguiente ingesta.
+
+  ## Qué esperar después
+
+  La descalificación es la primera etapa del procesamiento, antes de puntuar. El motor recorre las
+  reglas activas por `priority` descendente y se detiene en la **primera** que se cumple: el lead
+  queda `DISQUALIFIED` con el **nombre de esa regla** como motivo — no con un número — y no llega a
+  puntuarse ni a repartirse. Si ninguna regla se cumple, el lead sigue el flujo normal.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `400 INVALID_RULE_NAME` | `name` vacío o ausente |
+  | `400 INVALID_RULE_CONDITIONS` | `conditions` ausente o vacía |
+  | `400 INVALID_RULE_FIELD` | algún `Criterion` trae `field` vacío |
+  | `400 FIELD_NOT_SCORABLE` | algún `Criterion` usa un campo fuera de la lista blanca |
+  | `400 INVALID_RULE_VALUE` | un `Criterion` con operador `IN` cuyo `value` no es una lista |
+}

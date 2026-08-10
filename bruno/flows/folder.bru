@@ -1,0 +1,59 @@
+meta {
+  name: flows
+  seq: 11
+}
+
+docs {
+  Un flujo por diagrama de secuencia de la documentación. Cada carpeta es una secuencia ejecutable
+  que recorre el producto de punta a punta, y sirve a la vez de prueba end-to-end y de guion legible
+  de lo que hace la plataforma.
+
+  | Flujo | Qué demuestra | Diagrama |
+  |---|---|---|
+  | `identity-and-access` | Cómo se entra y qué corta el acceso | `modulos/identidad-y-acceso.md` |
+  | `organization-onboarding` | Un alta que crea cinco cosas en una transacción | `modulos/organizaciones.md` |
+  | `lead-reception` | Recibir sin interpretar: nada se pierde | `arquitectura/recorrido-de-un-lead.md` · Fase 1 |
+  | `lead-processing` | Viabilidad, puntuación y reparto en segundo plano | `arquitectura/recorrido-de-un-lead.md` · Fase 2 |
+  | `notifications` | Un evento se convierte en aviso para quien debe actuar | `modulos/notificaciones.md` |
+  | `tenant-isolation` | Por qué es `404` y no `403` | ADR-0004 y ADR-0005 |
+
+  ## Cómo se ejecutan
+
+  ```
+  bru run flows --env local -r              # los seis, en orden
+  bru run flows/lead-processing -r --env local
+  bru run . -r --env local --tags flow      # sólo lo ejecutable, sin la referencia
+  ```
+
+  El código de salida es `0` si todo pasa, `1` si falla alguna aserción y `3` si un sondeo se quedó
+  en bucle. Añade `--reporter-html informe.html` para verlo en el navegador.
+
+  ## Tres reglas que hacen que sigan funcionando dentro de un año
+
+  **Cada flujo es autónomo.** Asegura el administrador de plataforma y crea su propia organización.
+  Se puede correr uno solo, en cualquier orden, sin haber corrido los demás.
+
+  **Nada depende de una base de datos limpia.** El primer paso de cada flujo genera un `runId` con
+  la marca temporal, y sufija con él todo nombre que crea. Volver a correrlo no choca con la
+  ejecución anterior. No hace falta `docker compose down -v` entre pasadas.
+
+  **Nada se afirma contra un absoluto.** Un contador se compara con la línea base capturada antes,
+  no con cero; un listado se busca por el elemento que este flujo creó, no por su posición. Es lo
+  que separa una prueba que sigue siendo cierta de una que sólo pasó la primera vez.
+
+  ## Cómo se extiende
+
+  Un flujo nuevo es una carpeta con su `folder.bru` —nombre, `seq` y unos `docs` que digan qué
+  demuestra— y sus peticiones numeradas con `seq` dentro del bloque `meta`. Se copia el patrón de
+  `lead-processing`, que es el más completo: encadena, sondea un trabajo asíncrono y comprueba
+  resultados de negocio.
+
+  Si el flujo espera algo que tarda, se sondea: un `script:post-response` que repite la consulta con
+  `bru.sendRequest` hasta un estado terminal, con tope de intentos, y publica lo alcanzado en
+  variables para que las comprobaciones corran una sola vez sobre el resultado final. El paso
+  `Await lead processing` de `lead-processing` es la copia que hay que hacer.
+
+  Nunca una espera fija. Un `sleep` de dos segundos alarga cada ejecución aunque el trabajo tarde
+  cincuenta milisegundos, y el día que la máquina va cargada se queda corto: la prueba falla sin que
+  nada se haya roto, alguien sube el número, y deja de significar nada.
+}

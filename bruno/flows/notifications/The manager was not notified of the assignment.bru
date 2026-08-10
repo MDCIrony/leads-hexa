@@ -1,0 +1,36 @@
+meta {
+  name: The manager was not notified of the assignment
+  type: http
+  seq: 12
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/notifications
+  body: none
+  auth: inherit
+}
+
+tests {
+  test("ninguno de los avisos del gestor combina este lead con LEAD_ASSIGNED", function() {
+    const leadId = bru.getVar("assignedLeadId");
+    const match = res.body.items.find(
+      (item) => item.kind === "LEAD_ASSIGNED" && item.lead_id === leadId
+    );
+    expect(match, "el gestor recibió un LEAD_ASSIGNED que era del asesor").to.not.exist;
+  });
+}
+
+docs {
+  # Lo que no pasa importa tanto como lo que pasa
+
+  `LEAD_ASSIGNED` es un aviso para el asesor asignado, no para el gestor: quien tiene que actuar
+  sobre una asignación automática es quien la recibe, y el gestor no necesita enterarse de cada una.
+  Un sistema que avisara a todos de todo equivaldría a no avisar a nadie.
+
+  Esta petición usa `auth: inherit`, así que hereda el `{{managerToken}}` de la carpeta. Busca, entre
+  las notificaciones del gestor, una que combine el `lead_id` capturado en el paso anterior con
+  `kind: LEAD_ASSIGNED` — y comprueba que no existe.
+}

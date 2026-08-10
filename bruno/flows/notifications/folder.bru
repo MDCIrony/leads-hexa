@@ -1,0 +1,44 @@
+meta {
+  name: notifications
+  seq: 5
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  # Un evento se convierte en aviso para quien debe actuar
+
+  Sigue `modulos/notificaciones.md`. Monta una organización, un asesor y una regla que lo nombra en
+  exclusiva, y luego provoca los dos eventos que `NotificationHandler` traduce en aviso: un lead que
+  encuentra asesor y uno que se queda sin ninguno.
+
+  | Paso | Qué demuestra |
+  |---|---|
+  | Capturar la línea base | Los avisos se miden contra lo que ya había, nunca contra cero |
+  | `LEAD_ASSIGNED` al asesor | El aviso llega a quien tiene que actuar |
+  | Silencio para el gestor | Y sólo a esa persona — nadie más se entera de la misma asignación |
+  | Marcar como leído | El destinatario sale del token; otro no puede tocar lo que no ve |
+  | `LEAD_LEFT_UNASSIGNED` al gestor | Quedarse sin asesor no es un error, es algo que alguien resuelve a mano |
+  | Marcado masivo | `read-all` vacía el contador de un aviso a la vez |
+
+  ## Por qué nunca se compara contra cero
+
+  Las notificaciones se acumulan entre ejecuciones: un gestor o un asesor de una pasada anterior
+  puede tener avisos sin leer en la base de datos. Un test que exigiera `unread_count === 1` pasaría
+  la primera vez que corre el flujo y fallaría la segunda. Por eso cada comprobación de contador
+  primero **captura la línea base**, antes de provocar el evento, y luego exige que subió —o
+  bajó— exactamente en uno respecto a esa línea base, nunca respecto a cero.
+
+  ## Un aviso, un destinatario
+
+  `LEAD_ASSIGNED` va al asesor asignado; `LEAD_LEFT_UNASSIGNED` va a los gestores activos. El flujo
+  comprueba tanto lo que pasa como lo que **no** pasa: el gestor no recibe el aviso de una asignación
+  que no es su responsabilidad. Un sistema que avisara a todos de todo equivaldría a no avisar a
+  nadie.
+}

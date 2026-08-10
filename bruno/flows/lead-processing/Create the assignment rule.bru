@@ -1,0 +1,77 @@
+meta {
+  name: Create the assignment rule
+  type: http
+  seq: 9
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/rules/assignment
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Todo a Carlos {{runId}}",
+    "min_score": 0,
+    "max_score": null,
+    "target_agent_ids": ["{{agentId}}"],
+    "agent_match_mode": "ANY",
+    "strategy": "DIRECT_AGENT",
+    "priority": 10,
+    "conditions": []
+  }
+}
+
+vars:post-response {
+  assignmentRuleId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.strategy: eq DIRECT_AGENT
+}
+
+docs {
+  # La tercera etapa: ¿quién atiende este lead?
+
+  Manda al asesor creado antes cualquier lead que llegue hasta aquí, sin condiciones y sin techo de
+  puntuación.
+
+  Es a propósito la regla más simple que se puede escribir, porque lo que este flujo demuestra es el
+  **recorrido** de un lead, no la cascada de reparto. Una regla con banda de puntuación acotada, un
+  grupo destino y varios candidatos compitiendo por capacidad es otra historia, y merece su propio
+  flujo.
+
+  ## Qué significa cada campo
+
+  | Campo | Aquí | Qué hace |
+  |---|---|---|
+  | `min_score` / `max_score` | `0` y `null` | La banda de puntuación que atiende. `null` es «sin techo» |
+  | `target_agent_ids` | El asesor creado | A quién puede repartir |
+  | `target_group_id` | ausente | El grupo destino, si lo hubiera |
+  | `agent_match_mode` | `ANY` | Unión entre grupo y asesores nombrados. `ONLY` sería la intersección |
+  | `strategy` | `DIRECT_AGENT` | Cómo elegir entre los candidatos que sobrevivan |
+  | `priority` | `10` | Orden en que se prueban las reglas, de mayor a menor |
+
+  Una regla tiene que apuntar a algo: un grupo, unos asesores, o ambos. Si no apunta a nada, responde
+  `400 RULE_WITHOUT_TARGET` — no se guarda una regla que nunca podría asignar nada.
+
+  ## Cómo elige el motor
+
+  Filtra las reglas cuya banda contiene la puntuación del lead y cuyas condiciones se cumplen, las
+  ordena por prioridad y las prueba en cascada. De cada una descarta a quien no sea de la
+  organización, esté inactivo, pertenezca a un grupo inactivo, o haya alcanzado la capacidad de su
+  grupo. Si no queda nadie, pasa a la regla siguiente; si queda alguien, aplica la estrategia y ahí
+  termina la búsqueda.
+
+  La carga de cada asesor se cuenta al vuelo sobre sus leads `ASSIGNED`. No es una columna que alguien
+  incremente, así que no puede desincronizarse.
+
+  **Si ninguna regla produce candidato**, el lead queda `UNASSIGNED` y los gestores reciben un aviso
+  `LEAD_LEFT_UNASSIGNED`. Es la única de las tres etapas con un estado y un aviso dedicados a esa
+  salida: quedarse sin asesor no es un error, es una situación que alguien tiene que resolver a mano.
+}

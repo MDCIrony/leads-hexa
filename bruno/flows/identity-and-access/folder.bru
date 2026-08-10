@@ -1,0 +1,37 @@
+meta {
+  name: identity-and-access
+  seq: 1
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  # Cómo se entra y qué corta el acceso
+
+  Sigue `docs/content/modulos/identidad-y-acceso.md`. Monta una organización, entra con sus tres
+  roles y comprueba tanto lo que cada uno alcanza como lo que la API rechaza.
+
+  | Bloque | Qué demuestra |
+  |---|---|
+  | Arranque y alta | El primer administrador, una organización nueva, su gestor y su asesor |
+  | Identidad | `GET /auth/me` responde distinto según quién pregunta, dentro de la misma organización |
+  | Rechazos de login | Contraseña incorrecta y correo inexistente responden **el mismo** error |
+  | Los dos planos | Un `ADMIN` de plataforma no alcanza dato operativo, igual que un `AGENT` no alcanza el listado completo |
+  | Revocación | Desactivar a un asesor le corta el acceso al instante, sin esperar a que caduque su token |
+
+  ## Por qué importa el orden
+
+  Los tres primeros bloques construyen el escenario: un administrador, una organización con su
+  gestor y un asesor dentro de ella. Todo lo que viene después son comprobaciones negativas o de
+  aislamiento sobre ese mismo escenario, y por eso ninguna crea nada nuevo.
+
+  El último paso reutiliza el token del asesor que se guardó varios pasos antes, precisamente para
+  demostrar que ese token —todavía válido, todavía sin caducar— deja de servir en el instante en que
+  se desactiva a quien lo tiene.
+}

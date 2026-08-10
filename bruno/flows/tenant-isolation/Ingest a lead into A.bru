@@ -1,0 +1,54 @@
+meta {
+  name: Ingest a lead into A
+  type: http
+  seq: 7
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "first_name": "Marta",
+    "last_name": "Iglesias",
+    "email": "marta-{{runId}}@alpha.test",
+    "company": "Northwind",
+    "budget": 42000,
+    "industry": "Technology",
+    "phone": "+34600111222",
+    "custom_attributes": {"employee_count": 150}
+  }
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+}
+
+tests {
+  test("la recepción acepta sin interpretar", function() {
+    expect(res.status).to.equal(202);
+    expect(res.body.status).to.equal("PENDING");
+  });
+
+  test("devuelve con qué seguir la pista de lo recibido", function() {
+    expect(res.body.job_id).to.be.a("string");
+    expect(res.body.record_ids).to.have.lengthOf(1);
+  });
+}
+
+docs {
+  # El lead que Alpha va a necesitar defender
+
+  Un lead con teléfono y correo, viable de sobra. No hace falta que puntúe ni que se reparta de una
+  forma concreta: lo único que este flujo necesita de él es que exista, `PROMOTED`, dentro de
+  Alpha, para intentar alcanzarlo después desde Beta y desde fuera del asesor al que se asigne.
+
+  Va con `auth: inherit`, así que entra bajo el token del gestor de Alpha y queda ligado a esa
+  organización sin que el cuerpo lo diga en ningún sitio.
+}

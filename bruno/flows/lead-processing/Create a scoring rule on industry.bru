@@ -1,0 +1,51 @@
+meta {
+  name: Create a scoring rule on industry
+  type: http
+  seq: 8
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/rules/scoring
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Sector tecnológico {{runId}}",
+    "conditions": [
+      {"field": "industry", "operator": "EQUALS", "value": "Technology"}
+    ],
+    "score_delta": 15,
+    "priority": 0,
+    "is_active": true
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.score_delta: eq 15
+}
+
+docs {
+  # La segunda etapa: ¿cuánto vale este lead? (2 de 2)
+
+  Suma **15 puntos** a todo lead del sector tecnológico.
+
+  Con esta ya son dos reglas activas. El lead que entra más abajo cumple las dos —42 000 de
+  presupuesto y sector `Technology`—, así que su puntuación final tiene que ser **40**, no 25 ni 15.
+
+  Esa suma es la comprobación que de verdad importa de esta etapa: distingue «aplica todas las que
+  se cumplen» de «aplica la primera que se cumple», que es lo que hace la etapa anterior. Si el
+  motor de puntuación se detuviera en la primera, el lead saldría con 25 y el flujo lo cazaría.
+
+  ## Qué esperar después
+
+  El lead procesado no sólo llevará `score: 40`: llevará un `score_breakdown` con **dos entradas**,
+  una por regla, cada una con su identificador, su nombre y sus puntos. Ese desglose se escribe en el
+  momento de puntuar y se queda con el lead, así que la interfaz puede explicar de dónde salió el 40
+  aunque cualquiera de las dos reglas se edite o se borre mañana.
+}

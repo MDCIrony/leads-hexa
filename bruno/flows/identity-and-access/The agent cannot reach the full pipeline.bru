@@ -1,0 +1,35 @@
+meta {
+  name: The agent cannot reach the full pipeline
+  type: http
+  seq: 13
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{agentToken}}
+}
+
+assert {
+  res.status: eq 403
+}
+
+docs {
+  # Un `AGENT` ve sus leads, no los de todos
+
+  `GET /leads` devuelve el flujo completo de la organización, sin filtrar por asesor asignado. Eso
+  es exactamente lo que un `AGENT` no debe leer: dejaría ver los leads de sus compañeros. Por eso
+  exige `MANAGER`, y un asesor recibe `403` igual que el administrador del paso anterior — con el
+  mismo `403`, no un listado recortado en silencio.
+
+  Un `AGENT` sí tiene su propia vista: `GET /leads/mine`, que no está en este flujo porque no es lo
+  que se está probando aquí. Lo que importa es que el endpoint completo permanece cerrado para él,
+  no que exista una alternativa.
+}

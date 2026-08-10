@@ -1,0 +1,35 @@
+meta {
+  name: Another recipient cannot mark it read
+  type: http
+  seq: 15
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/notifications/:notificationId/read
+  body: none
+  auth: inherit
+}
+
+params:path {
+  notificationId: {{notificationId}}
+}
+
+assert {
+  res.status: eq 404
+  res.body.error_code: eq NOTIFICATION_NOT_FOUND
+}
+
+docs {
+  # `404`, no `403`
+
+  Esta petición usa `auth: inherit`, así que la hace el gestor — que no es el destinatario de esta
+  notificación. No falla por permiso denegado: falla porque, para el token del gestor, esa
+  notificación **no existe**. El destinatario sale siempre del token, nunca de la URL, así que no hay
+  forma de expresar «leer el aviso de otro» para comprobar después si se tiene permiso.
+
+  Es la misma razón que en `leads`: un `403` confirmaría que el recurso existe en otra parte. `404`
+  no confirma nada.
+}

@@ -1,0 +1,38 @@
+meta {
+  name: Reject an unknown email
+  type: http
+  seq: 10
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: nadie-{{runId}}@identitylab.test
+  password: {{password}}
+}
+
+tests {
+  test("un correo que no existe se rechaza igual que uno con contraseña equivocada", function() {
+    expect(res.status).to.equal(401);
+    expect(res.body.error_code).to.equal("INVALID_CREDENTIALS");
+  });
+}
+
+docs {
+  # Correo que no existe
+
+  `nadie-{{runId}}@identitylab.test` no se creó en ningún paso de este flujo. La contraseña que se
+  manda es la correcta para el gestor, pero eso es irrelevante: no hay ninguna cuenta contra la que
+  compararla.
+
+  Responde el mismo `401 INVALID_CREDENTIALS` que el paso anterior, con el mismo cuerpo. Desde
+  fuera, «la cuenta no existe» y «la contraseña no coincide» son indistinguibles, y esa es la
+  garantía que se está comprobando.
+}

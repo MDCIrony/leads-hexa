@@ -1,0 +1,93 @@
+meta {
+  name: Await lead processing
+  type: http
+  seq: 11
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/jobs/{{jobId}}
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  const TERMINAL = ["COMPLETED", "FAILED"];
+  const MAX_ATTEMPTS = 25;
+  const WAIT_MS = 200;
+
+  // Distintas versiones del cliente devuelven el cuerpo en `data` o en `body`.
+  const unwrap = (r) => (r && r.data !== undefined ? r.data : r && r.body);
+
+  const url = `${bru.getEnvVar("apiBase")}/intake/jobs/${bru.getVar("jobId")}`;
+  const headers = { Authorization: `Bearer ${bru.getVar("managerToken")}` };
+
+  let job = res.body;
+  let attempts = 0;
+
+  while (!TERMINAL.includes(job.status) && attempts < MAX_ATTEMPTS) {
+    attempts += 1;
+    await bru.sleep(WAIT_MS);
+    job = unwrap(await bru.sendRequest({ method: "GET", url, headers }));
+  }
+
+  // Se publica el estado alcanzado aunque se agoten los intentos: la comprobación
+  // de abajo tiene que poder decir en qué se quedó, no sólo que no llegó.
+  bru.setVar("jobStatus", job.status);
+  bru.setVar("jobSucceeded", job.succeeded);
+  bru.setVar("jobFailed", job.failed);
+  bru.setVar("jobTotalItems", job.total_items);
+  bru.setVar("jobAttempts", attempts);
+}
+
+tests {
+  test("el trabajo llegó a un estado terminal", function() {
+    expect(bru.getVar("jobStatus"), `se quedó en ${bru.getVar("jobStatus")} tras ${bru.getVar("jobAttempts")} intentos`).to.be.oneOf(["COMPLETED", "FAILED"]);
+  });
+
+  test("terminó bien, con su único registro procesado", function() {
+    expect(bru.getVar("jobStatus")).to.equal("COMPLETED");
+    expect(bru.getVar("jobTotalItems")).to.equal(1);
+    expect(bru.getVar("jobSucceeded")).to.equal(1);
+    expect(bru.getVar("jobFailed")).to.equal(0);
+  });
+}
+
+docs {
+  # Esperar bien: sondear, no dormir
+
+  El procesamiento ocurre después de que la API haya respondido. Preguntar por el trabajo justo
+  después de ingerir lo devuelve todavía `PENDING` o `PROCESSING`. Este paso es el que espera.
+
+  ## Cómo espera
+
+  Consulta el trabajo y, mientras no esté en un estado terminal, vuelve a consultarlo tras una pausa
+  corta, hasta 25 veces. En cuanto llega a `COMPLETED` o `FAILED`, para.
+
+  El bucle vive dentro del propio script, con `bru.sendRequest`, en lugar de repetir la petición con
+  `bru.setNextRequest`. Así funciona igual desde el ejecutor por línea de comandos y desde el botón
+  de enviar de la aplicación, y las comprobaciones corren una sola vez, sobre el estado final, en vez
+  de una vez por intento.
+
+  ## Por qué no una espera fija
+
+  Un `sleep` de dos segundos hace dos cosas malas a la vez: alarga cada ejecución aunque el trabajo
+  tarde cincuenta milisegundos, y **el día que la máquina va cargada, se queda corto**. Entonces la
+  prueba falla sin que nada se haya roto, alguien sube el número, y la prueba deja de significar
+  nada. Sondear hasta un estado terminal no tiene ninguno de los dos problemas.
+
+  ## Qué pasa si se agotan los intentos
+
+  El script publica igualmente el estado alcanzado, y la primera comprobación falla diciendo en qué
+  se quedó y tras cuántos intentos. Un trabajo atascado en `PROCESSING` significa que el proceso murió
+  a mitad; se recupera con `POST /intake/jobs/{id}/reprocess`, que retoma exactamente los registros
+  que quedaron `PENDING`.
+
+  ## Qué comprueba
+
+  Que el trabajo terminó, que terminó **bien**, y que procesó exactamente un registro con éxito y
+  ninguno fallido. `total_items` vale 1 porque el alta individual crea un registro; en una carga de
+  fichero sería `null` hasta que el fichero se parsea.
+}

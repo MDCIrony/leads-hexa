@@ -1,0 +1,68 @@
+meta {
+  name: Discard lead
+  type: http
+  seq: 5
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/leads/:leadId/discard
+  body: json
+  auth: inherit
+}
+
+params:path {
+  leadId: {{leadId}}
+}
+
+body:json {
+  {
+    "reason": "Presupuesto insuficiente"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq DISCARDED
+  res.body.discard_reason: eq "Presupuesto insuficiente"
+}
+
+docs {
+  # `POST /leads/{{leadId}}/discard`
+
+  Descarta el lead con un motivo. Exige `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio |
+  |---|---|---|
+  | `reason` | string | Sí — vacío o ausente responde `400 DISCARD_WITHOUT_REASON` |
+
+  ```json
+  {"reason": "Presupuesto insuficiente"}
+  ```
+
+  ## Qué devuelve
+
+  `200` con el detalle actualizado del lead: `status: DISCARDED` y `discard_reason` poblado.
+
+  ## Qué toca
+
+  Escribe el motivo y cierra el lead. Un lead `DISCARDED` ya no admite asignación: un intento
+  posterior de `assign` responde `400 INVALID_LEAD_TRANSITION`.
+
+  ## Qué esperar después
+
+  `GET /leads/{{leadId}}` vuelve a traer `status: DISCARDED` y el mismo `discard_reason`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Lo pide un `AGENT` o un `ADMIN` — sólo `MANAGER` descarta |
+  | `404 LEAD_NOT_FOUND` | El lead no existe o es de otra organización |
+  | `400 DISCARD_WITHOUT_REASON` | El motivo llega vacío o ausente |
+  | `400 INVALID_LEAD_TRANSITION` | El lead ya está en un estado que no admite descarte |
+}

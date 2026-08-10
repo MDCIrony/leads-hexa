@@ -1,0 +1,62 @@
+meta {
+  name: intake
+  seq: 8
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  La puerta por la que entran los leads, y la bandeja donde queda lo que no se pudo interpretar. Los
+  ocho endpoints exigen `MANAGER`.
+
+  ## Por qué responde 202 y no 201
+
+  La API **nunca interpreta un lead en la misma petición que lo recibe**. Guarda el payload tal cual
+  llegó como `IntakeRecord`, crea su `IntakeJob`, confirma la transacción y responde `202`. La
+  interpretación —validar, descalificar, puntuar, repartir— ocurre después, en segundo plano y en
+  transacciones distintas.
+
+  La consecuencia práctica es que **un payload inválido no devuelve error**. La petición responde
+  `202` igual, y el fallo aparece luego: el registro queda `REJECTED` con el motivo por campo, y el
+  trabajo `COMPLETED` con `failed: 1`. Nada de lo que entra se pierde, aunque no valga.
+
+  ## Las dos vías, y en qué se diferencian
+
+  | | `leads/ingest` | `leads/batch-upload` |
+  |---|---|---|
+  | Cuerpo | JSON | `multipart/form-data`, campo `file` |
+  | Origen que usa | `MANUAL_FORM` | `FILE_UPLOAD` |
+  | `record_ids` en la respuesta | El del registro creado | Siempre vacío |
+
+  En la carga de fichero el `202` llega **antes de leer el fichero**: las filas todavía no existen,
+  se materializan como registros en segundo plano. Por eso `record_ids` viene vacío y `total_items`
+  es `null` hasta que el trabajo avanza. Un fichero ilegible tampoco da error: el trabajo queda
+  `FAILED` sin ningún registro.
+
+  ## Cómo se sabe cómo fue
+
+  Por el trabajo (`GET /intake/jobs/{id}` → `COMPLETED` o `FAILED`, con `succeeded` y `failed`) o
+  por el registro (`GET /intake/records?job_id=…` → `PROMOTED` con su `lead_id`, o `REJECTED` con
+  sus `errors`).
+
+  Como el procesamiento es asíncrono, consultar el trabajo justo después de ingerir puede
+  devolverlo todavía `PENDING`. Hay que **sondear hasta un estado terminal**, no leer una sola vez.
+  El flujo `flows/lead-processing` lo hace bien y sirve de patrón.
+
+  ## Los dos reintentos, y en qué se diferencian
+
+  **`records/{id}/promote`** reintenta *un registro* con el payload corregido, y reutiliza la misma
+  fila: corregir y promover nunca crea un segundo registro ni un lead duplicado.
+
+  **`jobs/{id}/reprocess`** relanza *un trabajo* que quedó a medias, y sólo vuelve a leer los
+  registros que sigan `PENDING`: los que ya llegaron a un estado terminal no se tocan, así que
+  reprocesar dos veces tampoco duplica nada. A diferencia de la ingesta, este corre de forma
+  síncrona pese a responder `202` — la comprobación de propiedad tiene que poder devolver un `404`
+  limpio, y una vez que la respuesta empezó a enviarse ya no puede.
+}

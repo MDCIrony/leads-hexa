@@ -1,0 +1,49 @@
+meta {
+  name: Create organization
+  type: http
+  seq: 3
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/tenants
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Identity Lab {{runId}}",
+    "manager": {
+      "name": "Ana Ruiz",
+      "email": "ana-{{runId}}@identitylab.test",
+      "password": "{{password}}"
+    }
+  }
+}
+
+vars:post-response {
+  tenantId: res.body.id
+  managerEmail: res.body.manager.email
+}
+
+assert {
+  res.status: eq 201
+  res.body.manager.role: eq MANAGER
+}
+
+docs {
+  # Una organización nueva para este flujo
+
+  Cada ejecución trabaja sobre su propia organización, sufijada con `runId`. El alta crea en la
+  misma transacción la organización y su gestor: no hay manera de que exista una sin la otra.
+
+  Este es el único paso del flujo que usa `{{adminToken}}` para escribir. Todo lo demás va con el
+  token del gestor o del asesor, que son quienes operan dentro de la organización.
+}

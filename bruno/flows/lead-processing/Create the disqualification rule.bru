@@ -1,0 +1,66 @@
+meta {
+  name: Create the disqualification rule
+  type: http
+  seq: 6
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/rules/disqualification
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Sin vía de contacto {{runId}}",
+    "conditions": [
+      {"field": "phone", "operator": "IS_EMPTY"},
+      {"field": "email", "operator": "IS_EMPTY"}
+    ],
+    "priority": 0,
+    "is_active": true
+  }
+}
+
+vars:post-response {
+  disqualificationRuleId: res.body.id
+  disqualificationRuleName: res.body.name
+}
+
+assert {
+  res.status: eq 201
+  res.body.conditions: length 2
+}
+
+docs {
+  # La primera etapa: ¿se puede trabajar este lead?
+
+  Esta regla descalifica a quien no deja **ni teléfono ni correo**: no hay forma de contactarlo, así
+  que no hay nada que un comercial pueda hacer con él.
+
+  ## Las dos condiciones se combinan con Y
+
+  Y ahí está lo que casi todo el mundo lee mal la primera vez. La regla **no** dice «sin teléfono o
+  sin correo». Dice «sin teléfono **y** sin correo»: quien deja uno de los dos no se descalifica.
+
+  Dentro de una regla no existe el operador `O`. Una alternativa se escribe como una segunda regla,
+  y el motor se detiene en la primera que se cumpla. Es deliberado: la regla se lee como una frase,
+  y el «o» vive entre reglas, no dentro de una.
+
+  ## Por qué el motivo es un nombre y no un número
+
+  Cuando la regla se cumple, el lead queda `DISQUALIFIED` y su `disqualification_reason` es **el
+  nombre de esta regla**, no una puntuación ni un código. Un gestor que mira un lead descartado lee
+  «Sin vía de contacto» y entiende la decisión sin consultar nada más.
+
+  Por eso este paso guarda el nombre en una variable: la comprobación final del flujo lo compara
+  contra lo que devuelve el lead.
+
+  ## Errores que conviene conocer
+
+  `conditions` no puede llegar vacía: una regla sin condiciones se cumpliría siempre y descalificaría
+  a toda la organización. Ese intento responde `400 INVALID_RULE_CONDITIONS`.
+}

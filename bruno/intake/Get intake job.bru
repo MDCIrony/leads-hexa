@@ -1,0 +1,91 @@
+meta {
+  name: Get intake job
+  type: http
+  seq: 7
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/jobs/:jobId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  jobId: {{jobId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: isString
+  res.body.status: isString
+}
+
+docs {
+  # `GET /intake/jobs/{{jobId}}`
+
+  El estado de un trabajo concreto. Exige rol `MANAGER`. Es la forma de saber si lo que se ingirió ya
+  se procesó, y cómo acabó.
+
+  ## Qué devuelve
+
+  `200` con el trabajo:
+
+  ```json
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "source_id": "22222222-2222-2222-2222-222222222222",
+    "kind": "SINGLE",
+    "status": "COMPLETED",
+    "total_items": 1,
+    "succeeded": 1,
+    "failed": 0,
+    "created_at": "2026-08-09T10:00:00+00:00",
+    "completed_at": "2026-08-09T10:00:01+00:00"
+  }
+  ```
+
+  Los cuatro estados posibles:
+
+  | Estado | Qué significa |
+  |---|---|
+  | `PENDING` | Aceptado, aún sin empezar |
+  | `PROCESSING` | En curso, o interrumpido a mitad si lleva ahí mucho rato |
+  | `COMPLETED` | Terminó; `succeeded` y `failed` dicen cómo |
+  | `FAILED` | No pudo ni empezar — un fichero ilegible, por ejemplo |
+
+  `total_items` es **`null` en una carga por lotes** hasta que el fichero se parsea en segundo plano:
+  al aceptar la petición todavía no se sabe cuántas filas tiene.
+
+  ## Qué toca
+
+  Nada. Es una lectura acotada a la organización del token.
+
+  ## Qué esperar después, y cómo consultarlo bien
+
+  El procesamiento es **asíncrono**. Consultar justo después de ingerir devuelve el trabajo todavía
+  `PENDING` o `PROCESSING`, y eso no significa que algo vaya mal: significa que aún no ha terminado.
+
+  Hay que **sondear hasta un estado terminal**, no leer una sola vez ni esperar un tiempo fijo. Una
+  espera fija alarga cada comprobación sin motivo y, el día que la máquina va cargada, se queda
+  corta. El flujo `flows/lead-processing` tiene el patrón resuelto en su paso `Await lead processing`:
+  repite la consulta con un tope de intentos y publica el estado alcanzado.
+
+  Un trabajo que lleva mucho rato en `PROCESSING` no se resolverá solo: quiere decir que el proceso
+  murió mientras interpretaba un registro. Se retoma con `POST /intake/jobs/{id}/reprocess`, que
+  vuelve a leer sólo los registros que siguen `PENDING`.
+
+  Para ver qué pasó con cada payload en concreto —y no sólo el recuento—, la consulta es
+  `GET /intake/records?job_id=…`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 INTAKE_JOB_NOT_FOUND` | El trabajo no existe **o es de otra organización** — nunca `403`, para no confirmar su existencia |
+  | `403` | Quien llama es un asesor, no un gestor |
+  | `401` | Token ausente, inválido o agente desactivado |
+  | `422 VALIDATION_ERROR` | El identificador no es un UUID bien formado |
+}

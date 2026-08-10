@@ -1,0 +1,46 @@
+meta {
+  name: Inspect the second intake record
+  type: http
+  seq: 16
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/records?job_id={{jobId}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  job_id: {{jobId}}
+}
+
+vars:post-response {
+  leadId: res.body.items[0].lead_id
+}
+
+tests {
+  test("el registro se promovió, no se rechazó", function() {
+    expect(res.status).to.equal(200);
+    const record = res.body.items[0];
+    expect(record.status).to.equal("PROMOTED");
+    expect(record.errors).to.have.lengthOf(0);
+    expect(record.lead_id).to.be.a("string");
+  });
+}
+
+docs {
+  # El registro de un lead descalificado se promueve igual
+
+  Es la misma distinción del paso anterior, vista ahora desde la bandeja: el registro queda
+  **`PROMOTED`**, con `errors` vacío y su `lead_id` apuntando a un lead que existe.
+
+  `REJECTED` está reservado para lo que no se pudo interpretar. Un lead descalificado sí se
+  interpretó: el registro cumplió su función, generó su lead, y ahí termina su papel. Lo que la regla
+  decidió sobre ese lead es asunto del lead, no del registro.
+
+  La consecuencia práctica es que la bandeja no se llena de leads descalificados. Sólo contiene lo
+  que hay que corregir o descartar a mano — que es justo lo que la hace útil como cola de trabajo.
+}

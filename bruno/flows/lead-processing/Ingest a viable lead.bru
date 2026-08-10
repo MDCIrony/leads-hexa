@@ -1,0 +1,74 @@
+meta {
+  name: Ingest a viable lead
+  type: http
+  seq: 10
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "first_name": "Marta",
+    "last_name": "Iglesias",
+    "email": "marta-{{runId}}@northwind.test",
+    "company": "Northwind",
+    "budget": 42000,
+    "industry": "Technology",
+    "phone": "+34600111222",
+    "custom_attributes": {"employee_count": 150}
+  }
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+  recordId: res.body.record_ids[0]
+}
+
+tests {
+  test("la recepción acepta sin interpretar", function() {
+    expect(res.status).to.equal(202);
+    expect(res.body.status).to.equal("PENDING");
+  });
+
+  test("devuelve con qué seguir la pista de lo recibido", function() {
+    expect(res.body.job_id).to.be.a("string");
+    expect(res.body.record_ids).to.have.lengthOf(1);
+  });
+}
+
+docs {
+  # El lead entra por la puerta
+
+  Un lead con teléfono, correo, 42 000 de presupuesto y sector `Technology`. Sobrevivirá a la regla
+  de viabilidad —tiene vía de contacto—, cumplirá las dos reglas de puntuación, y la regla de reparto
+  lo mandará al asesor.
+
+  ## Por qué la respuesta es `202` y no `201`
+
+  Porque en este momento **el lead todavía no existe**. Lo que existe es el payload, guardado tal
+  cual llegó, y un trabajo que lo procesará después. La API responde en cuanto esa transacción
+  confirma, y la interpretación —validar, descalificar, puntuar, repartir— ocurre en segundo plano,
+  en transacciones distintas.
+
+  La consecuencia práctica: **un payload inválido tampoco daría error aquí**. Respondería `202` igual,
+  y el fallo aparecería luego en la bandeja, con el motivo por campo. Nada de lo que entra se pierde,
+  aunque no valga.
+
+  ## No se nombra ningún origen
+
+  El cuerpo no lleva `source_id`, y no hay dónde ponerlo. La ingesta resuelve sola el origen activo
+  de tipo `MANUAL_FORM` de la organización del token — el que nació con ella. Tampoco lleva
+  `tenant_id`: sale del token, y uno enviado en el cuerpo se ignoraría.
+
+  ## Qué esperar después
+
+  `job_id` y `record_ids[0]` son los dos hilos por los que se sigue la pista de lo que pase a
+  continuación. El paso siguiente usa el primero para esperar a que el trabajo termine.
+}

@@ -1,0 +1,58 @@
+meta {
+  name: The agent was notified
+  type: http
+  seq: 11
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/notifications
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{agentToken}}
+}
+
+script:post-response {
+  const assigned = res.body.items.find(
+    (item) => item.kind === "LEAD_ASSIGNED" && item.lead_id && item.is_read === false
+  );
+  bru.setVar("notificationId", assigned ? assigned.id : null);
+  bru.setVar("assignedLeadId", assigned ? assigned.lead_id : null);
+}
+
+tests {
+  test("el contador subió exactamente en uno respecto a la línea base", function() {
+    expect(res.body.unread_count).to.equal(bru.getVar("agentBaseline") + 1);
+  });
+
+  test("hay un aviso de asignación sin leer, con el lead que lo originó", function() {
+    const assigned = res.body.items.find(
+      (item) => item.kind === "LEAD_ASSIGNED" && item.lead_id && item.is_read === false
+    );
+    expect(assigned, "no apareció ningún LEAD_ASSIGNED sin leer").to.exist;
+    expect(assigned.lead_id).to.be.a("string");
+    expect(assigned.is_read).to.equal(false);
+  });
+}
+
+docs {
+  # El aviso llegó a quien tiene que actuar
+
+  `unread_count` no se compara contra un número fijo: se compara contra `agentBaseline`, capturado
+  antes de ingerir el lead. Una organización con avisos previos haría que un `unread_count === 1`
+  fallara aquí; comprobar que subió en uno funciona sin importar cuántas veces se haya corrido el
+  flujo antes.
+
+  Busca, entre los elementos de la página, uno de `kind` `LEAD_ASSIGNED`, con `lead_id` no nulo y
+  `is_read` en falso. Encontrarlo confirma que el evento `LeadAssigned` que publicó el caso de uso de
+  asignación llegó de verdad hasta `NotificationHandler` y se tradujo en un aviso persistido, no sólo
+  en una línea de log.
+
+  Guarda su `id` en `notificationId`, que los pasos de marcado usan más abajo, y su `lead_id` en
+  `assignedLeadId`, que el paso siguiente usa para comprobar que el gestor no recibió el mismo aviso.
+}

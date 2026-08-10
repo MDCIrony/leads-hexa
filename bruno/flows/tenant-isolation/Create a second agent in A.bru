@@ -1,0 +1,42 @@
+meta {
+  name: Create a second agent in A
+  type: http
+  seq: 16
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/agents
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Elena Vidal",
+    "email": "elena-{{runId}}@alpha.test",
+    "password": "{{password}}",
+    "role": "AGENT"
+  }
+}
+
+vars:post-response {
+  otherAgentId: res.body.id
+  otherAgentEmail: res.body.email
+}
+
+assert {
+  res.status: eq 201
+  res.body.role: eq AGENT
+}
+
+docs {
+  # Un compañero, no un extraño
+
+  Elena pertenece a Alpha, igual que Carlos y que el lead que se le asignó. La diferencia con
+  Beta importa aquí: lo que se prueba a continuación no es el aislamiento entre organizaciones,
+  sino que pertenecer a la misma organización que un lead no basta para verlo — hace falta,
+  además, que sea el suyo.
+}

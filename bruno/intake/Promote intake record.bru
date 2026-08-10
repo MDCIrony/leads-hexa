@@ -1,0 +1,115 @@
+meta {
+  name: Promote intake record
+  type: http
+  seq: 4
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/records/:recordId/promote
+  body: json
+  auth: inherit
+}
+
+params:path {
+  recordId: {{recordId}}
+}
+
+body:json {
+  {
+    "payload": {
+      "first_name": "Bruno",
+      "last_name": "Salas",
+      "email": "bruno.salas@salas.test",
+      "company": "Salas SL",
+      "budget": 3000,
+      "industry": "Retail",
+      "phone": "+34600333444"
+    }
+  }
+}
+
+vars:post-response {
+  leadId: res.body.lead_id
+}
+
+assert {
+  res.status: eq 200
+  res.body.lead_id: isDefined
+}
+
+docs {
+  # `POST /intake/records/{{recordId}}/promote`
+
+  Reintenta un registro con su payload corregido. Exige rol `MANAGER`, y a diferencia de la ingesta
+  original, esta corrección no es asíncrona: la respuesta ya lleva el resultado.
+
+  ## El cuerpo
+
+  Un único campo, `payload`, con el objeto completo y corregido: los mismos campos que
+  `POST /intake/leads/ingest`, no sólo el que falló.
+
+  ```json
+  {
+    "payload": {
+      "first_name": "Bruno",
+      "last_name": "Salas",
+      "email": "bruno.salas@salas.test",
+      "company": "Salas SL",
+      "budget": 3000,
+      "industry": "Retail",
+      "phone": "+34600333444"
+    }
+  }
+  ```
+
+  ## Qué devuelve
+
+  `200` si el payload corregido valida:
+
+  ```json
+  {
+    "lead_id": "...",
+    "status": "ASSIGNED",
+    "score": 40,
+    "assigned_agent_id": "...",
+    "applied_rules_count": 2,
+    "error": null,
+    "error_code": null,
+    "intake_record_id": "..."
+  }
+  ```
+
+  `400` si sigue sin validar — y aquí el cuerpo **no** es la misma envoltura con `error`/`error_code`
+  rellenos: es el sobre genérico de error de dominio, más el identificador del registro para saber
+  cuál corregir de nuevo:
+
+  ```json
+  {"error": true, "error_code": "INVALID_EMAIL", "message": "Formato de correo electrónico inválido", "intake_record_id": "..."}
+  ```
+
+  ## Qué toca
+
+  Reutiliza `source_id` del registro original —el canal por el que llegó de verdad, no uno resuelto
+  de nuevo— y corre el mismo pipeline que `leads/ingest`: valida contra el dominio, descalifica,
+  puntúa y reparte, todo dentro de esta misma petición. Reutiliza siempre la misma fila: nunca crea
+  un segundo `IntakeRecord` ni duplica el lead. Si el payload corregido falla otra vez, el registro
+  ya quedó `REJECTED` con sus errores nuevos antes de que la respuesta salga.
+
+  ## Qué esperar después
+
+  Nada que sondear: el resultado de este request ya es el definitivo. Con `200`, el lead existe y
+  `GET /leads/{{leadId}}` responde de inmediato. Con `400`, el registro sigue en la bandeja como
+  `REJECTED` con los errores nuevos — corregible con otra llamada a este mismo endpoint.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 INTAKE_RECORD_NOT_FOUND` | El registro no existe o es de otra organización |
+  | `403` | Quien llama es un asesor, no un gestor |
+  | `401` | Token ausente, inválido o agente desactivado |
+  | `400 INVALID_INTAKE_TRANSITION` | El registro no está en un estado promovible — por ejemplo, ya `PROMOTED` |
+}

@@ -1,0 +1,28 @@
+meta {
+  name: groups
+  seq: 5
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  Un grupo reúne asesores bajo una política de reparto compartida: qué estrategia se usa por defecto
+  al repartirles trabajo y cuántos leads activos aguanta cada uno.
+
+  Los cuatro endpoints exigen `MANAGER`. El nombre es único dentro de la organización — el mismo
+  nombre sí se acepta en otra.
+
+  Dos asimetrías que conviene tener presentes:
+
+  **Desactivar un grupo no desactiva a sus asesores.** Dejan de recibir asignaciones automáticas,
+  pero siguen atendiendo lo que ya tienen y siguen entrando en la aplicación. Es lo contrario de
+  desactivar una organización, que sí corta el acceso en cascada.
+
+  **Borrar un grupo no borra a sus asesores.** Quedan sin grupo (`group_id: null`).
+}

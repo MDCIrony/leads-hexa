@@ -1,0 +1,75 @@
+meta {
+  name: Reprocess intake job
+  type: http
+  seq: 8
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/jobs/:jobId/reprocess
+  body: none
+  auth: inherit
+}
+
+params:path {
+  jobId: {{jobId}}
+}
+
+assert {
+  res.status: eq 202
+  res.body.id: isString
+}
+
+docs {
+  # `POST /intake/jobs/{{jobId}}/reprocess`
+
+  Retoma un trabajo que se quedó a medias. Exige rol `MANAGER` y no lleva cuerpo.
+
+  Es la vía de recuperación cuando el proceso muere mientras interpreta un registro: el trabajo se
+  queda en `PROCESSING` sin cerrar, y los registros que no llegaron a tocarse siguen `PENDING`.
+
+  ## Qué devuelve
+
+  `202` con el trabajo **ya en su estado final**, `COMPLETED` o `FAILED`, y los contadores puestos al
+  día.
+
+  ## Qué toca
+
+  Reinicia los contadores del trabajo y vuelve a leer **sólo los registros que sigan `PENDING`**. Los
+  que ya llegaron a un estado terminal —`PROMOTED`, `REJECTED`, `DISCARDED`— no se tocan.
+
+  De ahí la propiedad que importa: **reprocesar dos veces no duplica ningún lead**. La operación es
+  segura de repetir, que es exactamente lo que se necesita de un mecanismo de recuperación: quien lo
+  usa suele estar a oscuras sobre cuánto se había hecho ya.
+
+  ## Por qué responde 202 pero no es asíncrono
+
+  Es la excepción de esta carpeta. La ingesta responde `202` y procesa en segundo plano; este
+  endpoint responde `202` y **ya ha terminado de procesar** cuando contesta.
+
+  El motivo es que tiene que poder fallar limpiamente. Comprobar que el trabajo existe, que es de
+  esta organización y que está en un estado retomable son cosas que deben acabar en un `404` o un
+  `400` con su código. Una vez que la respuesta ha empezado a enviarse, una excepción lanzada dentro
+  de una tarea de fondo ya no se puede convertir en eso: el cliente recibiría un `202` y nunca sabría
+  que su petición no se admitió.
+
+  El `202` se conserva por coherencia con el resto de la ingesta, pero aquí el trabajo ya está hecho:
+  no hace falta sondear después.
+
+  ## Qué esperar después
+
+  El trabajo queda cerrado y sus registros en su estado definitivo. Lo que siga `REJECTED` no es cosa
+  de este endpoint: son payloads que no valen, y se corrigen uno a uno con
+  `POST /intake/records/{id}/promote` o se cierran con `discard`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 INTAKE_JOB_NOT_FOUND` | El trabajo no existe o es de otra organización |
+  | `400 INVALID_JOB_TRANSITION` | El trabajo ya está `COMPLETED` o `FAILED` — un trabajo cerrado no se retoma |
+  | `403` | Quien llama es un asesor, no un gestor |
+  | `401` | Token ausente, inválido o agente desactivado |
+}

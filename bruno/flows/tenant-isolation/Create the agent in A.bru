@@ -1,0 +1,42 @@
+meta {
+  name: Create the agent in A
+  type: http
+  seq: 5
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/agents
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Carlos Ruiz",
+    "email": "carlos-{{runId}}@alpha.test",
+    "password": "{{password}}",
+    "role": "AGENT"
+  }
+}
+
+vars:post-response {
+  agentId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.role: eq AGENT
+  res.body.is_active: eq true
+}
+
+docs {
+  # El asesor que recibirá el lead de Alpha
+
+  Lo crea el gestor de A con su propio token — `auth: inherit`, heredado del `folder.bru` —, así
+  que nace dentro de Alpha sin que nadie lo diga explícitamente. Es el asesor al que la regla de
+  asignación de más abajo apunta, y el mismo al que un compañero de A intentará ver el lead ajeno
+  más adelante en el flujo.
+}

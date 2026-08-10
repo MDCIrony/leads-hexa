@@ -1,0 +1,30 @@
+meta {
+  name: Mark everything read
+  type: http
+  seq: 20
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/notifications/read-all
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # El marcado masivo, sobre la bandeja del gestor
+
+  A diferencia del paso individual sobre la bandeja del asesor, este marca **todas** las
+  notificaciones del gestor de una vez — incluida la que acaba de comprobar el paso anterior, y
+  cualquier otra que llevara sin leer de ejecuciones previas.
+
+  Es idempotente: si el gestor ya no tuviera nada pendiente, esta llamada seguiría respondiendo `204`
+  sin cambiar nada. Deja a la organización lista para que la siguiente pasada del flujo vuelva a
+  medir desde una base limpia.
+}

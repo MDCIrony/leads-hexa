@@ -1,0 +1,38 @@
+meta {
+  name: The platform admin cannot reach operational data
+  type: http
+  seq: 12
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+assert {
+  res.status: eq 403
+}
+
+docs {
+  # Un `ADMIN` no es un superusuario
+
+  `{{adminToken}}` es perfectamente válido: es el mismo token que abrió la organización de este
+  flujo. Pero un administrador de plataforma sólo alcanza el plano de organizaciones —`POST
+  /tenants` y poco más—, y `GET /leads` es dato operativo, del plano de abajo.
+
+  Responde `403`, no `404`. El `403` dice «sé quién eres y no te llega»: aquí no se está pidiendo un
+  lead concreto de otra organización, se está pidiendo una capacidad entera que este rol nunca tuvo.
+  El `404` se reserva para cuando confirmar la existencia de un recurso ya sería filtrar información
+  — y ese no es el caso.
+
+  Los dos planos son disjuntos, no una jerarquía: ser `ADMIN` no implica heredar lo que puede un
+  `MANAGER`.
+}

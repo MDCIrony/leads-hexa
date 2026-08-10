@@ -1,0 +1,84 @@
+meta {
+  type: collection
+}
+
+auth {
+  mode: none
+}
+
+docs {
+  # Lead Router · API
+
+  Superficie HTTP completa de la plataforma, más los flujos de negocio que la recorren de punta a
+  punta. Dos registros con propósitos distintos, y conviene no confundirlos.
+
+  ## Los dos registros
+
+  **Las carpetas de recurso** (`auth`, `tenants`, `agents`, `groups`, `sources`, `rules`, `intake`,
+  `leads`, `notifications`, `health`) tienen un request por endpoint, documentado al completo: qué
+  hace, qué cuerpo admite, qué devuelve, qué escribe en la base de datos y qué se puede esperar
+  después. Son para explorar y probar a mano. **No están pensadas para ejecutarse en bloque**: la
+  mitad necesita un `{{leadId}}` o un `{{recordId}}` que sólo produce un flujo.
+
+  **`flows/`** tiene un flujo por diagrama de secuencia de la documentación. Cada uno es una
+  secuencia ejecutable, encadenada y con aserciones de negocio: sirve a la vez de prueba end-to-end
+  y de guion legible de lo que hace el producto.
+
+  ```
+  bru run flows --env local -r          # los seis flujos
+  bru run flows/lead-processing -r --env local
+  bru run . -r --env local --tags flow  # sólo lo ejecutable, sin la referencia
+  ```
+
+  ## Antes de empezar
+
+  La plataforma tiene que estar levantada (`docker compose up -d`). El entorno `local` apunta a
+  `http://localhost:8001`.
+
+  La API nace vacía y sin nadie dentro. El primer `POST /agents` no pide credencial y crea el
+  administrador de plataforma; a partir de ahí ese endpoint exige `MANAGER`. Cualquier flujo de
+  `flows/` hace ese arranque por su cuenta, así que correr uno cualquiera deja el entorno usable.
+
+  Para trabajar a mano, el camino más corto es correr `flows/organization-onboarding`: deja
+  `adminToken`, `managerToken`, `agentToken`, `tenantId` y `agentId` cargados, y con eso las carpetas
+  de recurso ya responden.
+
+  ## Cómo se parametriza
+
+  Del entorno salen sólo cuatro valores: `baseUrl`, `apiBase`, `adminEmail` y `password`. Todo lo
+  demás son **variables de ejecución** que los flujos escriben conforme avanzan:
+
+  | Variable | La escribe | Se usa en |
+  |---|---|---|
+  | `adminToken` | Login del administrador de plataforma | `tenants` |
+  | `managerToken` | Login del gestor de la organización | Casi todo lo demás |
+  | `agentToken` | Login del asesor | `leads/mine`, `notifications` |
+  | `tenantId`, `agentId`, `groupId`, `sourceId` | Las altas de cada recurso | Rutas y cuerpos |
+  | `leadId`, `jobId`, `recordId` | La ingesta y su procesamiento | Consultas de resultado |
+  | `runId` | El primer paso de cada flujo | Sufijo de todo nombre creado |
+
+  `runId` es un marcado temporal que hace repetible cada flujo: los nombres que crea no chocan con
+  los de la ejecución anterior, así que **no hace falta una base de datos limpia** para volver a
+  correrlos.
+
+  ## Tres invariantes que explican casi todas las respuestas
+
+  **La organización sale del token.** Nunca de la URL ni del cuerpo. Un `tenant_id` enviado en el
+  cuerpo se ignora en silencio.
+
+  **404, nunca 403, al leer algo de otra organización.** Un `403` confirmaría que ese identificador
+  existe. Vale también para un asesor pidiendo el lead de un compañero. El `403` queda reservado
+  para cuando la identidad es válida pero el rol no alcanza.
+
+  **Recibir y procesar están separados.** La ingesta responde `202` y guarda el payload tal cual
+  llegó; la interpretación ocurre después, en segundo plano. Un payload que no valida no devuelve
+  error: queda en la bandeja, con el motivo por campo, para corregirlo y reintentarlo.
+
+  ## Los tres roles
+
+  | Rol | Alcance |
+  |---|---|
+  | `ADMIN` | Sólo el plano de plataforma: organizaciones. Recibe `403` en todo lo operativo |
+  | `MANAGER` | Su organización entera |
+  | `AGENT` | Lo suyo: sus leads y sus avisos |
+}

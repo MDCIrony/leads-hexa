@@ -1,0 +1,51 @@
+meta {
+  name: Delete group
+  type: http
+  seq: 4
+  tags: [
+    reference
+  ]
+}
+
+delete {
+  url: {{apiBase}}/groups/:groupId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  groupId: {{groupId}}
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # `DELETE /groups/{{groupId}}`
+
+  Borra un grupo de la organización del token. Exige rol `MANAGER`. A diferencia de un agente, un
+  grupo sí se borra de verdad: no es una baja lógica.
+
+  ## Qué devuelve
+
+  `204`, sin cuerpo.
+
+  ## Qué toca
+
+  Borra la fila del grupo. **Sus asesores no se borran**: quedan sin grupo (`group_id: null`) y
+  siguen operando con normalidad, sólo que fuera de cualquier política de reparto compartida hasta
+  que se les asigne otro grupo.
+
+  ## Qué esperar después
+
+  `GET /agents` sobre los que estaban en este grupo muestra `group_id: null`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `404 GROUP_NOT_FOUND` | No existe, o es de otra organización |
+}

@@ -1,0 +1,79 @@
+meta {
+  name: Update assignment rule
+  type: http
+  seq: 5
+  tags: [
+    reference
+  ]
+}
+
+patch {
+  url: {{apiBase}}/rules/assignment/{{assignmentRuleId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "priority": 20,
+    "is_active": false
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{assignmentRuleId}}
+  res.body.priority: eq 20
+  res.body.is_active: eq false
+}
+
+docs {
+  # `PATCH /rules/assignment/{{assignmentRuleId}}`
+
+  Actualiza una regla de asignación de la organización del token. Exige rol `MANAGER`. Todos los
+  campos del cuerpo son opcionales — el ejemplo de este request sólo toca `priority` e `is_active`,
+  pero admite cualquiera de los campos de la creación (`name`, `min_score`, `max_score`,
+  `target_group_id`, `target_agent_ids`, `agent_match_mode`, `strategy`, `conditions`).
+
+  ## El cuerpo
+
+  Dos asimetrías respecto a la creación, y ambas deliberadas:
+
+  - **`rr_cursor` no es un campo editable.** Una actualización parcial nunca reinicia una rotación
+    `ROUND_ROBIN` en curso — si lo fuera, cambiar la prioridad de una regla resetearía a quién le
+    toca el siguiente lead.
+  - **El nombre, la banda de puntuación y el destino no se vuelven a validar como conjunto.** Se
+    sobrescriben tal cual llegan. `conditions`, si se manda, sí se valida igual que en la creación
+    (`Criterion` por `Criterion`).
+
+  ```json
+  {
+    "priority": 20,
+    "is_active": false
+  }
+  ```
+
+  ## Qué devuelve
+
+  `200` con la regla completa ya actualizada, misma forma que en la creación.
+
+  ## Qué toca
+
+  Actualiza la fila de la regla. No reasigna a ningún lead ya asignado: el cambio sólo se nota en la
+  siguiente pasada del motor.
+
+  ## Qué esperar después
+
+  Si el cambio fue `is_active: false`, la regla deja de entrar en la cascada de asignación en el
+  acto. Si fue `priority`, el orden de la cascada cambia desde la siguiente asignación — y también
+  el orden en que la lista `GET /rules/assignment` la devuelve.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 ASSIGNMENT_RULE_NOT_FOUND` | El `id` no existe, o existe pero en otra organización |
+  | `400 INVALID_RULE_FIELD` | `conditions` trae un `Criterion` con `field` vacío |
+  | `400 FIELD_NOT_SCORABLE` | `conditions` trae un `Criterion` con un campo fuera de la lista blanca |
+  | `400 INVALID_RULE_VALUE` | `conditions` trae un `Criterion` con operador `IN` cuyo `value` no es una lista |
+}

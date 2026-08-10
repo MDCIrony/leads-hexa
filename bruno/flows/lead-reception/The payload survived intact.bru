@@ -1,0 +1,42 @@
+meta {
+  name: The payload survived intact
+  type: http
+  seq: 8
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/records?status=REJECTED&job_id={{jobId}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  status: REJECTED
+  job_id: {{jobId}}
+}
+
+tests {
+  test("aparece filtrado por su estado y su trabajo", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.total).to.equal(1);
+  });
+
+  test("el correo guardado es exactamente el que se mandó, sin sanear", function() {
+    expect(res.body.items[0].payload.email).to.equal("bruno@@salas");
+  });
+}
+
+docs {
+  # Lo guardado es lo que llegó
+
+  El payload se persiste **antes** de intentar interpretarlo, y se persiste tal cual — no una
+  versión ya limpiada o corregida. `bruno@@salas` sigue siendo `bruno@@salas` en la bandeja, con
+  sus dos arrobas intactas.
+
+  Es la comprobación que sostiene la promesa entera: si la recepción saneara el dato antes de
+  guardarlo, el gestor no podría saber qué mandó realmente quien lo envió, y corregir un registro
+  sería adivinar en vez de editar.
+}

@@ -1,0 +1,63 @@
+meta {
+  name: Ingest a lead with a malformed email
+  type: http
+  seq: 5
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "first_name": "Bruno",
+    "last_name": "Salas",
+    "email": "bruno@@salas",
+    "company": "Salas SL",
+    "budget": 3000,
+    "industry": "Retail"
+  }
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+  recordId: res.body.record_ids[0]
+}
+
+tests {
+  test("un correo roto no descarta el payload", function() {
+    expect(res.status).to.equal(202);
+    expect(res.body.status).to.equal("PENDING");
+  });
+
+  test("devuelve con qué seguir la pista de lo recibido", function() {
+    expect(res.body.job_id).to.be.a("string");
+    expect(res.body.record_ids).to.have.lengthOf(1);
+  });
+}
+
+docs {
+  # Un correo que no vale, y que aun así entra
+
+  `bruno@@salas` lleva dos arrobas: ningún analizador de correo lo acepta. El resto del payload es
+  válido. Este paso comprueba lo único que importa de la recepción: que el formato del correo no se
+  valida aquí.
+
+  ## Por qué la respuesta es `202` y no `422`
+
+  El esquema de entrada no valida el formato de `email` — esa comprobación es del dominio, y ocurre
+  después, en segundo plano. La recepción sólo persiste el payload tal cual llegó y crea el trabajo
+  que lo procesará. Devolver `422` en este punto significaría descartar el payload sin guardar
+  constancia de que llegó; en su lugar, la petición confirma la recepción y dejará que sea la
+  interpretación posterior la que falle, con el motivo por campo, en la bandeja.
+
+  ## Qué esperar después
+
+  `job_id` y `record_ids[0]` son los dos hilos por los que se sigue la pista de lo que pase con
+  este correo. El paso siguiente espera a que el trabajo termine.
+}

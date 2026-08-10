@@ -1,0 +1,44 @@
+meta {
+  name: leads
+  seq: 9
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  El lead ya interpretado: consultarlo, asignarlo a mano y descartarlo.
+
+  ## Quién ve qué
+
+  | Endpoint | `MANAGER` | `AGENT` | `ADMIN` |
+  |---|---|---|---|
+  | `GET /leads` | Toda su organización | `403` | `403` |
+  | `GET /leads/mine` | Los suyos | Los suyos | `403` |
+  | `GET /leads/{id}` | Cualquiera de su organización | Sólo el suyo | `403` |
+  | `assign` · `discard` | Sí | `403` | `403` |
+
+  Un asesor que pida el detalle de un lead de un compañero recibe **`404`, no `403`**: un `403` le
+  confirmaría que ese lead existe en su organización. Lo mismo vale para un lead de otra
+  organización, y para el asesor destino al asignar.
+
+  ## Estados
+
+  Un lead recién procesado sale de la ingesta como `DISQUALIFIED` (una regla de viabilidad se
+  cumplió), `ASSIGNED` (una regla de reparto encontró asesor) o `UNASSIGNED` (ninguna lo encontró).
+  Desde ahí el gestor puede asignarlo, reasignarlo o descartarlo con un motivo obligatorio.
+
+  Un lead `DISCARDED` ya no admite asignación: responde `INVALID_LEAD_TRANSITION`.
+
+  ## Por qué el detalle trae `score_breakdown`
+
+  El detalle guarda una entrada por cada regla de puntuación que se aplicó —identificador, nombre y
+  puntos—, escrita en el momento de puntuar. Así la interfaz puede explicar de dónde salió un número
+  aunque la regla que lo produjo se haya editado o borrado después. `GET /leads/{id}` lo trae; los
+  listados, no.
+}

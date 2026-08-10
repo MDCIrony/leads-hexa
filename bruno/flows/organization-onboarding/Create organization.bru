@@ -1,0 +1,87 @@
+meta {
+  name: Create organization
+  type: http
+  seq: 3
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/tenants
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Northwind {{runId}}",
+    "manager": {
+      "name": "Ana Ruiz",
+      "email": "ana-{{runId}}@northwind.test",
+      "password": "{{password}}"
+    }
+  }
+}
+
+vars:post-response {
+  tenantId: res.body.id
+  managerEmail: res.body.manager.email
+  tenantName: res.body.name
+}
+
+tests {
+  test("la organización se crea con su identificador y su slug", function() {
+    expect(res.status).to.equal(201);
+    expect(res.body.id).to.be.a("string");
+    expect(res.body.slug).to.be.a("string");
+    expect(res.body.is_active).to.equal(true);
+  });
+
+  test("el slug se deriva del nombre", function() {
+    expect(res.body.slug).to.contain("northwind");
+  });
+
+  test("nace con su primer gestor dentro", function() {
+    expect(res.body.manager.role).to.equal("MANAGER");
+    expect(res.body.manager.tenant_id).to.equal(res.body.id);
+    expect(res.body.manager.is_active).to.equal(true);
+  });
+}
+
+docs {
+  # El alta, en una transacción
+
+  Un `ADMIN` da de alta la organización y su primer gestor en la misma petición. No hay un endpoint
+  para crear la organización y otro para ponerle gestor: **es una sola operación**, y por debajo una
+  sola transacción.
+
+  ## Qué crea, exactamente
+
+  | | |
+  |---|---|
+  | La organización | Con su `slug` derivado del nombre |
+  | El primer gestor | Rol `MANAGER`, contraseña cifrada con bcrypt, ya dentro de la organización |
+  | Origen `MANUAL_FORM` | El que usará el alta individual de leads |
+  | Origen `FILE_UPLOAD` | El que usará la carga de ficheros |
+
+  Los dos orígenes no son un detalle administrativo: **sin ellos la ingesta no funciona**. La ingesta
+  no recibe un identificador de origen, lo resuelve sola buscando el activo del tipo que le toca. Una
+  organización que naciera sin ellos respondería `404 SOURCE_NOT_FOUND` al primer lead que entrara.
+  Por eso nacen aquí y no se dejan para después.
+
+  ## El slug, y por qué no cambia al renombrar
+
+  Se deriva del nombre al crear la organización y se queda fijo. Renombrarla después no lo toca: el
+  slug identifica, el nombre describe, y un identificador que cambia cuando alguien corrige una
+  errata deja de ser un identificador.
+
+  De ahí que un nombre sin ningún carácter alfanumérico —del que no se puede derivar slug alguno—
+  se rechace con `INVALID_TENANT_NAME` en vez de guardarse con un slug vacío.
+
+  ## Qué esperar después
+
+  El gestor ya puede entrar con su correo y su contraseña, y ese login devuelve el token con el que
+  se opera todo lo demás de la organización. El `ADMIN` que la creó, en cambio, no alcanza nada de
+  lo que hay dentro.
+}

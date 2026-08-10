@@ -1,0 +1,43 @@
+meta {
+  name: Manager A cannot assign the lead to B's agent
+  type: http
+  seq: 15
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/leads/:leadId/assign
+  body: json
+  auth: inherit
+}
+
+params:path {
+  leadId: {{leadId}}
+}
+
+body:json {
+  {
+    "agent_id": "{{agentIdB}}"
+  }
+}
+
+tests {
+  test("el asesor de Beta no existe para el gestor de Alpha", function() {
+    expect(res.status).to.equal(404);
+    expect(res.body.error_code).to.equal("AGENT_NOT_FOUND");
+  });
+}
+
+docs {
+  # El `404` protege también el recurso referenciado, no sólo el pedido
+
+  El gestor de Alpha tiene todo el derecho sobre `{{leadId}}` — es suyo. Lo que no existe para él
+  es `{{agentIdB}}`: el asesor se resuelve acotado a su propia organización, y uno ajeno se lee
+  como inexistente, igual que en `POST /leads/{{leadId}}/assign` documentado en `leads/`.
+
+  Si esto respondiera `403`, sería una forma de averiguar qué identificadores de asesor están dados
+  de alta en otras organizaciones sin necesidad de leer ni un dato suyo — el mismo problema que
+  ADR-0005 evita en el sentido inverso.
+}

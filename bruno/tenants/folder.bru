@@ -1,0 +1,26 @@
+meta {
+  name: tenants
+  seq: 3
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+docs {
+  El plano de plataforma: dar de alta organizaciones, listarlas, renombrarlas y desactivarlas.
+
+  **Los tres endpoints exigen `ADMIN`**, y un `ADMIN` no alcanza nada más que esto: en cualquier
+  endpoint operativo recibe `403`. Es la separación deliberada entre quien opera la plataforma y
+  quien trabaja dentro de una organización.
+
+  Por eso esta carpeta usa `{{adminToken}}` y no `{{managerToken}}` como el resto.
+
+  Dar de alta una organización no crea sólo la organización: en la misma transacción nacen su primer
+  gestor y sus dos orígenes de leads (`MANUAL_FORM` y `FILE_UPLOAD`). Si el correo del gestor ya
+  estaba en uso, no se crea nada.
+}

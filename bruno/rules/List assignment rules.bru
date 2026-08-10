@@ -1,0 +1,76 @@
+meta {
+  name: List assignment rules
+  type: http
+  seq: 4
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/rules/assignment
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.has_more: eq false
+}
+
+docs {
+  # `GET /rules/assignment`
+
+  Lista las reglas de asignación de la organización del token. Exige rol `MANAGER`.
+
+  Usa la envoltura `{items, total, limit, offset, has_more}` de las demás listas de la API, pero
+  **no acepta `limit` ni `offset`**: siempre devuelve todas las reglas en una única página. No hay
+  `params:query` en este request a propósito — no hace nada.
+
+  ## Qué devuelve
+
+  `200`:
+
+  ```json
+  {
+    "items": [
+      {
+        "id": "…",
+        "name": "Banda alta",
+        "min_score": 50,
+        "max_score": 100,
+        "target_group_id": "…",
+        "target_agent_ids": [],
+        "agent_match_mode": "ANY",
+        "strategy": "ROUND_ROBIN",
+        "priority": 10,
+        "is_active": true,
+        "rr_cursor": 0,
+        "conditions": []
+      }
+    ],
+    "total": 1,
+    "limit": 1,
+    "offset": 0,
+    "has_more": false
+  }
+  ```
+
+  Los `items` llegan **ordenados por `priority` descendente**: es el mismo orden con el que el motor
+  de asignación las prueba en cascada, así que esta lista sirve para leer de un vistazo la cascada
+  completa tal como se va a ejecutar.
+
+  ## Qué toca
+
+  Nada. Sólo lee.
+
+  ## Qué esperar después
+
+  No hay paginación que agotar: si `total` crece, `items` crece con él en la misma respuesta.
+
+  ## Errores
+
+  Ninguno propio de este endpoint más allá de los genéricos de autenticación (`401`, `403` si el rol
+  no es `MANAGER`).
+}

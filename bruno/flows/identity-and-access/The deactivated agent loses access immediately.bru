@@ -1,0 +1,37 @@
+meta {
+  name: The deactivated agent loses access immediately
+  type: http
+  seq: 15
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/auth/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{agentToken}}
+}
+
+assert {
+  res.status: eq 401
+}
+
+docs {
+  # El punto entero del flujo
+
+  `{{agentToken}}` es el mismo token que en el paso 8 respondía `200` con `role: AGENT`. No ha
+  caducado — el JWT dura 60 minutos y esto ocurre segundos después de emitirlo — y su firma sigue
+  siendo válida. Lo único que cambió es una fila en la base de datos: `is_active` pasó a `false` en
+  el paso anterior.
+
+  Y aun así responde `401`. Cada petición vuelve a recargar el agente desde base de datos por su
+  identificador, en vez de confiar en lo que el token dice sobre sí mismo, y exige que siga activo.
+  Es la diferencia entre revocar el acceso al instante y tener que esperar a que caduquen los tokens
+  ya emitidos — que en un sistema que sólo confiara en la firma del JWT sería el único remedio
+  disponible.
+}

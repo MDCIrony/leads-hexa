@@ -1,0 +1,81 @@
+meta {
+  name: Update tenant
+  type: http
+  seq: 3
+  tags: [
+    reference
+  ]
+}
+
+patch {
+  url: {{apiBase}}/tenants/:tenantId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  tenantId: {{tenantId}}
+}
+
+body:json {
+  {
+    "name": "Acme Corp renombrada {{runId}}",
+    "is_active": true
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  # `PATCH /tenants/{tenant_id}`
+
+  Modifica una organización existente: su nombre, su estado activo, o ambos. Exige rol `ADMIN`.
+
+  ## El cuerpo
+
+  Ambos campos son opcionales — se manda sólo lo que cambia.
+
+  | Campo | Tipo | Obligatorio |
+  |---|---|---|
+  | `name` | string | No |
+  | `is_active` | boolean | No |
+
+  ```json
+  {
+    "name": "Acme Corp renombrada",
+    "is_active": true
+  }
+  ```
+
+  ## Qué devuelve
+
+  `200` con la organización ya actualizada, en el mismo formato que el alta.
+
+  ## Qué toca
+
+  Escribe la organización. Si `is_active` pasa a `false`, la desactivación **se propaga en
+  cascada a todos sus agentes**: pierden el acceso de inmediato aunque su token siga sin caducar,
+  porque cada petición vuelve a comprobar el estado en la base de datos en el momento de recibirla.
+
+  Renombrar la organización **no** toca su `slug`: se fijó al crearla, a partir del nombre
+  original, y queda estable pase lo que pase con el nombre después.
+
+  ## Qué esperar después
+
+  Tras desactivar una organización, cualquier agente suyo que intente usar un endpoint operativo
+  recibe `401` en la siguiente petición, aunque su JWT siga vigente por tiempo. Reactivarla
+  (`is_active: true`) revierte esa condición de inmediato, sin que los agentes necesiten volver a
+  autenticarse.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 TENANT_NOT_FOUND` | El identificador no corresponde a ninguna organización |
+  | `400 INVALID_TENANT_NAME` | El nombre nuevo no deja ningún carácter alfanumérico con el que construir un `slug` |
+  | `400 TENANT_ALREADY_EXISTS` | Ya existe otra organización con el nombre nuevo |
+  | `403 FORBIDDEN` | Quien llama no es `ADMIN` |
+  | `422 VALIDATION_ERROR` | Algún campo tiene un tipo incorrecto |
+}

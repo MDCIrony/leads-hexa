@@ -1,0 +1,44 @@
+meta {
+  name: lead-processing
+  seq: 4
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  # El procesamiento de un lead
+
+  Sigue la Fase 2 del diagrama de `docs/content/arquitectura/recorrido-de-un-lead.md`.
+
+  Es el flujo más completo de la colección, y el que conviene copiar al escribir uno nuevo: monta
+  una organización entera, la configura con las tres familias de reglas, mete dos leads por la
+  puerta y comprueba que cada uno sale por donde debe.
+
+  ## Las tres etapas, y por qué no son la misma cosa
+
+  | Etapa | Pregunta | Cómo recorre las reglas | Si ninguna aplica |
+  |---|---|---|---|
+  | Viabilidad | ¿Se puede trabajar? | Se detiene en la **primera** que se cumple | El lead es viable y sigue |
+  | Puntuación | ¿Cuánto vale? | Aplica **todas** las que se cumplen y suma | Conserva cero y sigue |
+  | Asignación | ¿Quién lo atiende? | Prueba en cascada hasta encontrar candidato | Queda `UNASSIGNED`, con aviso |
+
+  Este flujo mete dos leads justamente para ver dos salidas distintas: uno viable, que recorre las
+  tres etapas y acaba asignado; y otro sin ninguna vía de contacto, que muere en la primera y nunca
+  llega a puntuarse.
+
+  ## Lo que hace que este flujo sea honesto
+
+  El procesamiento ocurre **después** de que la API haya respondido, en segundo plano. Preguntar por
+  el resultado inmediatamente después de ingerir devuelve un trabajo todavía `PENDING`.
+
+  El paso `Await lead processing` sondea hasta un estado terminal, con un tope de intentos, y si se
+  agota deja el estado alcanzado a la vista para que la comprobación siguiente falle con un mensaje
+  que se entiende. Lo que **no** hace es esperar un tiempo fijo: una espera fija o alarga la prueba
+  sin motivo, o la pone verde por suerte el día que la máquina va rápida.
+}

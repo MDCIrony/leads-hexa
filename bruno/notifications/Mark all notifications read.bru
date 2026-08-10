@@ -1,0 +1,46 @@
+meta {
+  name: Mark all notifications read
+  type: http
+  seq: 3
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/notifications/read-all
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # `POST /notifications/read-all`
+
+  Marca todas las notificaciones de quien llama como leídas. Exige `MANAGER` o `AGENT`.
+
+  Está declarada **antes** que `/{notification_id}/read`, por la misma razón que `leads/mine`: si
+  no fuera así, `read-all` caería en la ruta paramétrica y se intentaría leer `read-all` como UUID.
+
+  ## Qué devuelve
+
+  `204`, sin cuerpo.
+
+  ## Qué toca
+
+  Escribe `is_read: true` en todas las notificaciones del destinatario que aún no lo estuvieran. Es
+  idempotente: llamarla dos veces no falla, la segunda simplemente no cambia nada.
+
+  ## Qué esperar después
+
+  `GET /notifications` vuelve a traer `unread_count: 0` y ningún elemento con `is_read: false`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Lo pide un `ADMIN` — no pertenece a ninguna organización |
+}

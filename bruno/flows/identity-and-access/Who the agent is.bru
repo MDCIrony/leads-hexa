@@ -1,0 +1,35 @@
+meta {
+  name: Who the agent is
+  type: http
+  seq: 8
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/auth/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{agentToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.role: eq AGENT
+  res.body.tenant_id: eq {{tenantId}}
+}
+
+docs {
+  # `GET /auth/me` visto por el asesor
+
+  Mismo endpoint, mismo `tenant_id` que el gestor del paso anterior, rol distinto. Es lo que se
+  espera de dos identidades de la misma organización: comparten organización, no comparten alcance.
+
+  `GET /auth/me` es además el único endpoint de la colección sin restricción de rol — cualquier
+  actor autenticado puede preguntarse quién es. Los pasos siguientes prueban lo contrario: lo que
+  cada rol **no** alcanza.
+}

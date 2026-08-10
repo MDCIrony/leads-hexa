@@ -1,0 +1,66 @@
+meta {
+  name: Get lead
+  type: http
+  seq: 3
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads/:leadId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  leadId: {{leadId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{leadId}}
+  res.body.score_breakdown: isArray
+  res.body.status: isString
+}
+
+docs {
+  # `GET /leads/{{leadId}}`
+
+  Detalle completo de un lead. `MANAGER` puede pedir cualquiera de su organización; `AGENT` sólo el
+  suyo.
+
+  ## Qué devuelve
+
+  `200` con todos los campos del listado más `score_breakdown` (lista de `{rule_id, name,
+  score_delta}`), `assigned_at`, `discard_reason` y `disqualification_reason`:
+
+  ```json
+  {
+    "score_breakdown": [
+      {"rule_id": "a1b2c3d4-1111-4a2b-9c3d-000000000001", "name": "Presupuesto alto", "score_delta": 10}
+    ],
+    "assigned_at": null,
+    "discard_reason": null,
+    "disqualification_reason": null
+  }
+  ```
+
+  ## Qué toca
+
+  Sólo lee. `score_breakdown` no se recalcula: guarda una entrada por cada regla de puntuación que
+  se aplicó, escrita en el momento de puntuar, para poder explicar de dónde salió un número aunque
+  la regla se haya editado o borrado después. Por eso el listado no lo trae y el detalle sí.
+
+  ## Qué esperar después
+
+  `POST /leads/{{leadId}}/assign` y `POST /leads/{{leadId}}/discard` cambian el `status` que se ve
+  en este mismo detalle.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 LEAD_NOT_FOUND` | El identificador no existe, el lead es de otra organización, o un asesor pide el detalle de un lead ajeno — nunca `403`, porque confirmaría que ese lead existe en su organización |
+  | `403` | Lo pide un `ADMIN` — no pertenece a ninguna organización |
+}

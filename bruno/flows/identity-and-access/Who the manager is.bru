@@ -1,0 +1,31 @@
+meta {
+  name: Who the manager is
+  type: http
+  seq: 7
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/auth/me
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.role: eq MANAGER
+  res.body.tenant_id: eq {{tenantId}}
+}
+
+docs {
+  # `GET /auth/me` visto por el gestor
+
+  Es la única vía que tiene quien llama de confirmar con qué identidad quedó autenticada una sesión,
+  en vez de asumir el rol a partir de qué credenciales se usaron en el login. Aquí confirma dos
+  cosas: el rol que le dio el alta de la organización, y que su `tenant_id` es el mismo que devolvió
+  `Create organization`.
+
+  El paso siguiente hace la misma pregunta con el token del asesor, para comparar.
+}

@@ -1,0 +1,47 @@
+meta {
+  name: The record was rejected, with the reason per field
+  type: http
+  seq: 7
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/records?job_id={{jobId}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  job_id: {{jobId}}
+}
+
+tests {
+  test("el trabajo dejó exactamente un registro", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.total).to.equal(1);
+  });
+
+  test("el registro quedó rechazado, sin lead", function() {
+    const record = res.body.items[0];
+    expect(record.status).to.equal("REJECTED");
+    expect(record.lead_id).to.equal(null);
+  });
+
+  test("el motivo se explica por campo", function() {
+    const errors = res.body.items[0].errors;
+    const emailError = errors.find((e) => e.field === "email");
+    expect(emailError).to.not.equal(undefined);
+  });
+}
+
+docs {
+  # La bandeja explica el motivo, no sólo el fallo
+
+  Un registro `REJECTED` no es un fallo mudo: `errors` trae una entrada por cada campo que no
+  validó, con el mensaje, el valor recibido y un código. Aquí hay uno solo, y es el de `email`.
+
+  Esto es lo que permite que el paso siguiente corrija exactamente ese campo y reintente, en vez de
+  adivinar qué falló releyendo el payload original.
+}

@@ -1,0 +1,56 @@
+meta {
+  name: Verify the two lead sources were born with it
+  type: http
+  seq: 5
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/sources
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+vars:post-response {
+  sourceId: res.body.items[0].id
+}
+
+tests {
+  test("la organización nace con exactamente dos orígenes", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.total).to.equal(2);
+  });
+
+  test("son los dos que la ingesta necesita, y están activos", function() {
+    const kinds = res.body.items.map(s => s.kind).sort();
+    expect(kinds).to.eql(["FILE_UPLOAD", "MANUAL_FORM"]);
+    expect(res.body.items.every(s => s.is_active)).to.equal(true);
+  });
+}
+
+docs {
+  # Los dos orígenes que nacieron con la organización
+
+  Nadie los creó: salieron de la misma transacción que la organización y el gestor. Esta consulta es
+  la que lo demuestra desde fuera.
+
+  `MANUAL_FORM` es el que usa el alta individual de leads; `FILE_UPLOAD`, el que usa la carga de
+  ficheros. La ingesta **no recibe un identificador de origen**: lo resuelve sola, buscando el
+  origen activo del tipo que le corresponde dentro de la organización del token.
+
+  Ese detalle tiene una consecuencia práctica que conviene conocer antes de tropezar con ella:
+  desactivar el origen `MANUAL_FORM` de una organización no «desactiva un origen», **rompe su alta
+  individual de leads**, que empieza a responder `404 SOURCE_NOT_FOUND`.
+
+  ## Por qué se comprueba el total y no que «haya alguno»
+
+  Comprobar que existen dos, y que son exactamente esos dos, distingue una organización recién
+  creada de una a la que alguien ya le añadió orígenes. Un test que sólo mirase si la lista no está
+  vacía pasaría igual en los dos casos, y dejaría de decir nada.
+}

@@ -1,0 +1,47 @@
+meta {
+  name: Create organization B
+  type: http
+  seq: 10
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/tenants
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Beta {{runId}}",
+    "manager": {
+      "name": "Bea Soto",
+      "email": "bea-{{runId}}@beta.test",
+      "password": "{{password}}"
+    }
+  }
+}
+
+vars:post-response {
+  tenantIdB: res.body.id
+  managerEmailB: res.body.manager.email
+}
+
+assert {
+  res.status: eq 201
+  res.body.manager.role: eq MANAGER
+}
+
+docs {
+  # La segunda organización: la que no debería ver nada de Alpha
+
+  Beta nace igual que Alpha, con `{{adminToken}}`, y sirve exactamente para un propósito: ser el
+  punto de vista de fuera. Todo lo que ocurre a partir de aquí con el gestor y los asesores de Beta
+  intenta alcanzar el lead de Alpha, y todo debería fallar.
+}

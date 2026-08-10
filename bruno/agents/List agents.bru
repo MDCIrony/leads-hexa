@@ -1,0 +1,83 @@
+meta {
+  name: List agents
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/agents
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~group_id: {{groupId}}
+  limit: 100
+  offset: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.limit: eq 100
+  res.body.offset: eq 0
+  res.body.has_more: isBoolean
+}
+
+docs {
+  # `GET /agents`
+
+  Lista los agentes de la organización del token, paginados. Exige rol `MANAGER`.
+
+  ## Los parámetros
+
+  | Parámetro | Tipo | Obligatorio | Nota |
+  |---|---|---|---|
+  | `group_id` | string | no | Filtra por grupo. Desactivado por defecto en este request |
+  | `limit` | number | no | Por defecto `100` |
+  | `offset` | number | no | Por defecto `0` |
+
+  ## Qué devuelve
+
+  `200`, envuelto en paginación:
+
+  ```json
+  {
+    "items": [
+      {
+        "id": "…",
+        "name": "Carlos Ruiz",
+        "email": "carlos@acme.test",
+        "group_id": null,
+        "is_active": true,
+        "role": "AGENT",
+        "tenant_id": "…"
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0,
+    "has_more": false
+  }
+  ```
+
+  ## Qué toca
+
+  Nada. Sólo lee, y sólo dentro de la organización del token.
+
+  ## Qué esperar después
+
+  `limit` y `offset` paginan; `has_more` dice si queda una página siguiente. Para ver un agente
+  concreto de la lista, `GET /agents/{{agentId}}` con su `id`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+}

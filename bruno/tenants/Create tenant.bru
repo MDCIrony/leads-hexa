@@ -1,0 +1,117 @@
+meta {
+  name: Create tenant
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/tenants
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Acme Corp {{runId}}",
+    "manager": {
+      "name": "Ana Ruiz",
+      "email": "ana-{{runId}}@acme.test",
+      "password": "{{password}}"
+    }
+  }
+}
+
+vars:post-response {
+  tenantId: res.body.id
+  managerEmail: res.body.manager.email
+}
+
+assert {
+  res.status: eq 201
+  res.body.slug: isString
+  res.body.manager.role: eq MANAGER
+}
+
+docs {
+  # `POST /tenants`
+
+  Da de alta una organización nueva. Exige rol `ADMIN`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio |
+  |---|---|---|
+  | `name` | string | Sí |
+  | `manager.name` | string | Sí |
+  | `manager.email` | string | Sí |
+  | `manager.password` | string | Sí |
+
+  ```json
+  {
+    "name": "Acme Corp",
+    "manager": {
+      "name": "Ana Ruiz",
+      "email": "ana@acme.test",
+      "password": "Secret123"
+    }
+  }
+  ```
+
+  ## Qué devuelve
+
+  `201`, con la organización recién creada y su primer gestor:
+
+  ```json
+  {
+    "id": "9c8b7a6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+    "name": "Acme Corp",
+    "slug": "acme-corp",
+    "is_active": true,
+    "created_at": "2026-08-09T12:00:00Z",
+    "agent_count": null,
+    "manager": {
+      "id": "3f2e1a4b-5c6d-7e8f-9a0b-1c2d3e4f5a6b",
+      "name": "Ana Ruiz",
+      "email": "ana@acme.test",
+      "group_id": null,
+      "is_active": true,
+      "role": "MANAGER",
+      "tenant_id": "9c8b7a6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d"
+    }
+  }
+  ```
+
+  `agent_count` viaja como `null` aquí: es un agregado que sólo se calcula en el listado, no en el
+  alta.
+
+  ## Qué toca
+
+  En **una sola transacción** crea tres cosas: la organización, su primer gestor con la contraseña
+  cifrada, y **dos orígenes de leads** (`MANUAL_FORM` y `FILE_UPLOAD`) listos para usar. El `slug`
+  se deriva del nombre en ese mismo momento y queda fijo desde entonces.
+
+  Si el correo del gestor ya existe en la plataforma, la transacción entera se descarta: no queda
+  ni la organización ni los orígenes a medio crear.
+
+  ## Qué esperar después
+
+  Con la organización creada, su gestor ya puede autenticarse en `POST /auth/login` con el correo y
+  la contraseña mandados aquí, y desde ahí dar de alta agentes, grupos y reglas dentro de su propia
+  organización. Los dos orígenes de leads quedan disponibles de inmediato para recibir leads, sin
+  ningún paso adicional de configuración.
+
+  Este request guarda `tenantId` y `managerEmail` para encadenar el resto de la colección.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `400 TENANT_ALREADY_EXISTS` | Ya existe una organización con ese nombre (o el mismo `slug` derivado) |
+  | `400 EMAIL_ALREADY_EXISTS` | El correo del gestor ya pertenece a otro agente |
+  | `400 INVALID_TENANT_NAME` | El nombre no deja ningún carácter alfanumérico con el que construir el `slug` |
+  | `403 FORBIDDEN` | Quien llama no es `ADMIN` |
+  | `422 VALIDATION_ERROR` | Falta un campo obligatorio o tiene un tipo incorrecto |
+}

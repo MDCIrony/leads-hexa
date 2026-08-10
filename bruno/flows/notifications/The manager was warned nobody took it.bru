@@ -1,0 +1,37 @@
+meta {
+  name: The manager was warned nobody took it
+  type: http
+  seq: 19
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/notifications
+  body: none
+  auth: inherit
+}
+
+tests {
+  test("existe un LEAD_LEFT_UNASSIGNED sin leer, creado por esta ejecución", function() {
+    const orphaned = res.body.items.find(
+      (item) => item.kind === "LEAD_LEFT_UNASSIGNED" && item.is_read === false
+    );
+    expect(orphaned, "no apareció ningún LEAD_LEFT_UNASSIGNED sin leer").to.exist;
+    expect(orphaned.lead_id).to.be.a("string");
+  });
+}
+
+docs {
+  # El gestor es quien tiene que resolverlo a mano
+
+  Sin ninguna regla de asignación capaz de cubrirlo, el lead ingerido en el paso anterior quedó
+  `UNASSIGNED`, y `NotificationHandler` avisó a los gestores activos de la organización — no a ningún
+  asesor, porque ninguno es responsable de un lead que el motor no le asignó.
+
+  El paso anterior de marcado masivo del flujo previo, si lo hubo, deja leídos los avisos de pasadas
+  anteriores; filtrar por `is_read === false` es lo que aísla el aviso que provocó **esta** ejecución
+  sin necesitar comparar contra el `lead_id` exacto, que aquí no se conoce de antemano — el lead no
+  existía todavía cuando se hizo la ingesta.
+}

@@ -1,0 +1,55 @@
+meta {
+  name: Promote the record with a corrected payload
+  type: http
+  seq: 9
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/records/:recordId/promote
+  body: json
+  auth: inherit
+}
+
+params:path {
+  recordId: {{recordId}}
+}
+
+body:json {
+  {
+    "payload": {
+      "first_name": "Bruno",
+      "last_name": "Salas",
+      "email": "bruno-{{runId}}@salas.test",
+      "company": "Salas SL",
+      "budget": 3000,
+      "industry": "Retail"
+    }
+  }
+}
+
+vars:post-response {
+  leadId: res.body.lead_id
+}
+
+tests {
+  test("el reintento con el correo corregido genera el lead", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.lead_id).to.be.a("string");
+  });
+}
+
+docs {
+  # Corregir y reintentar
+
+  Mismo registro, payload corregido: el único cambio es el correo, que ya no lleva las dos
+  arrobas. `promote` reinterpreta el `payload` completo que se manda en el cuerpo, no sólo el
+  campo que falló.
+
+  ## Qué devuelve
+
+  La misma forma que el resultado interno de una ingesta que sí valida: `lead_id`, `status`,
+  `score`, `assigned_agent_id`. El registro pasa a `PROMOTED` y ese `lead_id` queda enlazado a él.
+}

@@ -1,0 +1,40 @@
+meta {
+  name: Capture the agent's baseline
+  type: http
+  seq: 7
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/notifications
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{agentToken}}
+}
+
+script:post-response {
+  bru.setVar("agentBaseline", res.body.unread_count);
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  # Medir contra una línea base, nunca contra cero
+
+  Las notificaciones se acumulan entre ejecuciones: si el asesor recibiera algún aviso en una pasada
+  anterior, `unread_count` ya no arranca en cero. Un test que exigiera `unread_count === 1` tras la
+  asignación pasaría la primera vez que corre este flujo y fallaría la segunda, sin que nada se
+  hubiera roto.
+
+  Este paso captura el contador **antes** de provocar el evento y lo guarda en `agentBaseline` con
+  `bru.setVar`. El paso `The agent was notified`, más abajo, no comprueba que `unread_count` valga un
+  número fijo: comprueba que subió exactamente en uno respecto a esta línea base. Es lo que mantiene
+  la prueba cierta con la base de datos llena.
+}

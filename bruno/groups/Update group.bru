@@ -1,0 +1,88 @@
+meta {
+  name: Update group
+  type: http
+  seq: 3
+  tags: [
+    reference
+  ]
+}
+
+patch {
+  url: {{apiBase}}/groups/:groupId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  groupId: {{groupId}}
+}
+
+body:json {
+  {
+    "name": "Enterprise Actualizado",
+    "description": "Cuentas grandes, revisado",
+    "default_strategy": "ROUND_ROBIN",
+    "capacity_per_agent": 8,
+    "is_active": true
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{groupId}}
+  res.body.name: eq Enterprise Actualizado
+  res.body.default_strategy: eq ROUND_ROBIN
+  res.body.capacity_per_agent: eq 8
+}
+
+docs {
+  # `PATCH /groups/{{groupId}}`
+
+  Edita un grupo de la organización del token. Exige rol `MANAGER`. Todos los campos son opcionales:
+  se actualiza sólo lo que llega.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Nota |
+  |---|---|---|
+  | `name` | string | Único dentro de la organización |
+  | `description` | string | |
+  | `default_strategy` | string | `ROUND_ROBIN`, `LOWEST_LOAD` o `DIRECT_AGENT` |
+  | `capacity_per_agent` | number | **No se vuelve a validar aquí** — a diferencia de la creación, se sobrescribe tal cual llega, incluso con cero o negativo |
+  | `is_active` | boolean | Desactiva o reactiva el grupo |
+
+  ```json
+  {
+    "name": "Enterprise Actualizado",
+    "description": "Cuentas grandes, revisado",
+    "default_strategy": "ROUND_ROBIN",
+    "capacity_per_agent": 8,
+    "is_active": true
+  }
+  ```
+
+  ## Qué devuelve
+
+  `200` con el grupo ya actualizado, misma forma que `POST /groups`.
+
+  ## Qué toca
+
+  Actualiza la fila del grupo. **Desactivarlo (`is_active: false`) no desactiva a sus asesores**:
+  siguen atendiendo lo que ya tienen y siguen entrando en la aplicación; sólo dejan de recibir
+  asignaciones automáticas nuevas de este grupo. Es lo contrario de desactivar una organización, que
+  sí corta el acceso en cascada.
+
+  ## Qué esperar después
+
+  `GET /groups` refleja el cambio de inmediato.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `404 GROUP_NOT_FOUND` | No existe, o es de otra organización |
+  | `400 INVALID_GROUP_NAME` | `name` vacío |
+  | `400 GROUP_ALREADY_EXISTS` | El nuevo nombre ya lo usa otro grupo de la organización |
+}

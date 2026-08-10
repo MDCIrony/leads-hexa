@@ -1,0 +1,43 @@
+meta {
+  name: Promoting reuses the row, it does not duplicate
+  type: http
+  seq: 10
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/records?job_id={{jobId}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  job_id: {{jobId}}
+}
+
+tests {
+  test("el trabajo sigue con un único registro", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.total).to.equal(1);
+  });
+
+  test("ese registro es el mismo, ahora promovido", function() {
+    const record = res.body.items[0];
+    expect(record.status).to.equal("PROMOTED");
+    expect(record.lead_id).to.equal(bru.getVar("leadId"));
+  });
+}
+
+docs {
+  # Promover reutiliza la fila, no la duplica
+
+  Es la comprobación que más vale de todo el flujo. `job_id` sigue trayendo `total: 1` después de
+  promover: el mismo registro que nació `REJECTED` es ahora `PROMOTED`, con el `lead_id` que acaba
+  de generar.
+
+  Si promover creara una segunda fila en vez de reescribir la primera, la bandeja acabaría con dos
+  registros del mismo lead —uno rechazado y otro promovido— y el recuento de lo recibido dejaría de
+  ser fiable: contaría dos entradas por un único payload que llegó una sola vez.
+}

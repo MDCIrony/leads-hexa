@@ -1,0 +1,51 @@
+meta {
+  name: Reject a duplicate manager email
+  type: http
+  seq: 8
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/tenants
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Southwind {{runId}}",
+    "manager": {
+      "name": "Ana Ruiz",
+      "email": "ana-{{runId}}@northwind.test",
+      "password": "{{password}}"
+    }
+  }
+}
+
+tests {
+  test("el correo de gestor ya usado se rechaza", function() {
+    expect(res.status).to.equal(400);
+    expect(res.body.error_code).to.equal("EMAIL_ALREADY_EXISTS");
+  });
+}
+
+docs {
+  # Nombre libre, correo ya usado
+
+  Aquí el nombre de la organización está libre: nadie se llama «Southwind». Lo que colisiona es el
+  correo del gestor, que es el que se creó en el paso 3.
+
+  Es el caso que de verdad pone a prueba la transacción. Si el alta fuera una secuencia de
+  operaciones independientes —crear organización, luego crear gestor, luego crear orígenes—, la
+  organización se habría escrito antes de descubrir el problema, y quedaría en la base de datos una
+  organización sin gestor: existe, ocupa su nombre, y **nadie puede entrar en ella**. Nada en la API
+  permitiría arreglarla, porque no hay ningún endpoint para añadirle un primer gestor después.
+
+  El paso siguiente comprueba que eso no ha pasado.
+
+  ## Qué toca
+
+  Nada, y ese es exactamente el punto.
+}

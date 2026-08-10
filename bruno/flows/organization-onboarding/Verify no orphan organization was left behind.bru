@@ -1,0 +1,58 @@
+meta {
+  name: Verify no orphan organization was left behind
+  type: http
+  seq: 9
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/tenants?limit=100&offset=0
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 100
+  offset: 0
+}
+
+tests {
+  test("el alta que falló no dejó ninguna organización a medias", function() {
+    expect(res.status).to.equal(200);
+    const orphan = res.body.items.find(t => t.name === `Southwind ${bru.getVar("runId")}`);
+    expect(orphan, "quedó una organización sin gestor").to.equal(undefined);
+  });
+
+  test("la que sí se creó sigue ahí, con su gestor contado", function() {
+    const created = res.body.items.find(t => t.id === bru.getVar("tenantId"));
+    expect(created, "desapareció la organización creada").to.not.equal(undefined);
+    expect(created.agent_count).to.be.at.least(1);
+  });
+}
+
+docs {
+  # La comprobación que da sentido a las dos anteriores
+
+  Que una petición responda `400` sólo dice que la API contestó un error. No dice que **no escribió
+  nada**. Este paso mira el estado real después del fallo, que es lo único que distingue una
+  transacción de verdad de un error devuelto a destiempo.
+
+  Comprueba dos cosas opuestas a la vez:
+
+  - «Southwind», cuya alta falló por el correo repetido, **no existe**. No quedó una organización sin
+    gestor ocupando un nombre y sin forma de entrar en ella.
+  - «Northwind», la que sí se creó, **sigue existiendo** y con su gestor contado en `agent_count`. El
+    fallo posterior no arrastró consigo lo que ya estaba bien.
+
+  ## Por qué se busca por nombre y no por posición
+
+  El listado acumula organizaciones de todas las ejecuciones anteriores, así que mirar `items[0]` o
+  contar el total funcionaría una vez y fallaría a la siguiente. Buscar el elemento que **esta**
+  ejecución creó —por su `runId`— es lo que hace que la comprobación siga siendo cierta dentro de un
+  año y con la base de datos llena.
+
+  `agent_count` cuenta los asesores activos de cada organización. En el listado siempre viene
+  poblado, mientras que `manager` viene `null`: es un agregado, no una lista de identidades.
+}

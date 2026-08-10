@@ -1,0 +1,55 @@
+meta {
+  name: Deactivate agent
+  type: http
+  seq: 5
+  tags: [
+    reference
+  ]
+}
+
+delete {
+  url: {{apiBase}}/agents/:agentId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  agentId: {{agentId}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: eq {{agentId}}
+  res.body.is_active: eq false
+}
+
+docs {
+  # `DELETE /agents/{{agentId}}`
+
+  Desactiva a un agente de la organización del token. Exige rol `MANAGER`. **Desactiva, no borra**:
+  no hay manera de eliminar un agente por la API.
+
+  ## Qué devuelve
+
+  `200` — no `204` — con el agente y `is_active: false`.
+
+  ## Qué toca
+
+  Marca al agente como inactivo. Lo que pierde: acceso a la aplicación (cada petición suya revalida
+  el estado en base de datos, así que el corte es inmediato, no espera a que caduque su token) y las
+  asignaciones automáticas nuevas. Lo que conserva: los leads que ya tenía asignados siguen
+  apuntando a su identificador, y su historial sigue legible.
+
+  ## Qué esperar después
+
+  `GET /agents/{{agentId}}` muestra `is_active: false`. Si el agente intenta iniciar sesión, recibe
+  `401 INVALID_CREDENTIALS` como cualquier otra credencial inválida.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `404 AGENT_NOT_FOUND` | No existe, o es de otra organización |
+}

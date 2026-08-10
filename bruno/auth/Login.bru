@@ -1,0 +1,84 @@
+meta {
+  name: Login
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: {{managerEmail}}
+  password: {{password}}
+}
+
+vars:post-response {
+  managerToken: res.body.access_token
+}
+
+assert {
+  res.status: eq 200
+  res.body.token_type: eq bearer
+  res.body.access_token: isString
+}
+
+docs {
+  # `POST /auth/login`
+
+  La única puerta de entrada. Público.
+
+  ## El cuerpo va como formulario, no como JSON
+
+  Es el esquema estándar `OAuth2PasswordRequestForm` de FastAPI, así que el `Content-Type` es
+  `application/x-www-form-urlencoded` y **el correo viaja en el campo `username`**. Mandar JSON aquí
+  responde `422`, y es el error más habitual al integrar contra este endpoint por primera vez.
+
+  ```
+  username=ana@acme.test&password=Secret123
+  ```
+
+  ## Qué devuelve
+
+  ```json
+  {"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…", "token_type": "bearer"}
+  ```
+
+  El token es un JWT firmado con `HS256` que caduca a los **60 minutos** y lleva dentro el
+  identificador del agente, su rol y su organización. Se manda en `Authorization: Bearer <token>`.
+
+  ## Qué toca
+
+  Nada. Lee el agente por correo y comprueba la contraseña contra su hash `bcrypt`. No escribe: no
+  hay sesión que guardar ni marca de último acceso.
+
+  ## Qué esperar después
+
+  Este request guarda el token en la variable **`managerToken`**, que es la que usan por defecto casi
+  todas las carpetas de la colección. Cambia el nombre en `vars:post-response` si estás entrando
+  como otro rol, o usa los requests que ya lo hacen dentro de `flows/`.
+
+  Con qué credenciales entrar, según lo que quieras probar:
+
+  | Rol | De dónde sale | Alcance |
+  |---|---|---|
+  | `ADMIN` | El arranque de la plataforma (`adminEmail` del entorno) | Sólo `tenants` |
+  | `MANAGER` | El alta de una organización lo crea | Su organización entera |
+  | `AGENT` | Lo crea un gestor con `POST /agents` | Sus leads y sus avisos |
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 INVALID_CREDENTIALS` | Contraseña incorrecta, correo inexistente, agente desactivado u organización desactivada — **el mismo error para los cuatro casos**, para no revelar cuál de ellos ocurrió |
+  | `422 VALIDATION_ERROR` | Falta `username` o `password`, o el cuerpo se mandó como JSON |
+
+  Un detalle que importa: el token no basta por sí solo para seguir dentro. Cada petición posterior
+  vuelve a leer el agente en la base de datos y exige que siga activo. Desactivar a alguien le corta
+  el acceso en el acto, sin esperar a que caduque lo que ya tiene en la mano.
+}

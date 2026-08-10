@@ -1,0 +1,29 @@
+meta {
+  name: Reject a request with no token
+  type: http
+  seq: 11
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/auth/me
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 401
+}
+
+docs {
+  # Sin `Authorization`, sin identidad
+
+  `GET /auth/me` no tiene restricción de rol, pero sigue exigiendo **alguien**. Sin cabecera
+  `Authorization`, no hay agente que resolver, y la API responde `401` antes de llegar a preguntarse
+  qué rol tendría.
+
+  Es el mismo fallo que produciría un token caducado o manipulado: no hay identidad verificable que
+  recargar desde base de datos.
+}

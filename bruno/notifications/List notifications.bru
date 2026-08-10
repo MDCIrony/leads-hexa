@@ -1,0 +1,92 @@
+meta {
+  name: List notifications
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/notifications?unread_only=false&limit=100&offset=0
+  body: none
+  auth: inherit
+}
+
+params:query {
+  unread_only: false
+  limit: 100
+  offset: 0
+}
+
+vars:post-response {
+  notificationId: res.body.items[0].id
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.limit: eq 100
+  res.body.offset: eq 0
+  res.body.has_more: isBoolean
+  res.body.unread_count: isNumber
+}
+
+docs {
+  # `GET /notifications`
+
+  Lista los avisos de quien llama. **El destinatario sale siempre del token**, nunca de la URL ni de
+  un parámetro: no hay forma de expresar «los avisos de otra persona». Exige `MANAGER` o `AGENT`.
+
+  Esta carpeta usa `{{managerToken}}` por defecto. Para ver la bandeja de un asesor, cambia el token
+  de la carpeta a `{{agentToken}}`.
+
+  ## Los parámetros
+
+  `params:query`: `unread_only` (`false` por defecto), `limit` (100 por defecto) y `offset` (0 por
+  defecto).
+
+  ## Qué devuelve
+
+  `200` con la envoltura de paginación más `unread_count`:
+
+  ```json
+  {"items": [...], "total": 12, "limit": 100, "offset": 0, "has_more": false, "unread_count": 3}
+  ```
+
+  Cada elemento trae `{id, kind, message, lead_id, intake_record_id, is_read, created_at}`, con
+  `kind` ∈ `LEAD_ASSIGNED|LEAD_REASSIGNED|LEAD_LEFT_UNASSIGNED|INTAKE_REJECTED`.
+
+  `unread_count` cuenta **todas** las no leídas del destinatario, no las de la página pedida: la
+  campana necesita las dos cosas a la vez, y hacer dos peticiones para pintar un icono es
+  precisamente lo que convierte el sondeo en un problema.
+
+  A quién va cada aviso:
+
+  | Aviso | A quién |
+  |---|---|
+  | `LEAD_ASSIGNED` | Al asesor asignado |
+  | `LEAD_REASSIGNED` | Al asesor nuevo |
+  | `LEAD_LEFT_UNASSIGNED` | A los gestores activos — ninguna regla de reparto produjo asesor |
+  | `INTAKE_REJECTED` | A los gestores activos — un payload no se pudo interpretar |
+
+  ## Qué toca
+
+  Sólo lee.
+
+  ## Qué esperar después
+
+  Estos endpoints acumulan entre ejecuciones: comprobar «`unread_count` es 1» funciona la primera
+  vez y falla la segunda. Lo que se sostiene es capturar el contador antes de provocar el evento y
+  comprobar que subió en uno.
+
+  Esta petición guarda el primer elemento en **`notificationId`**, listo para
+  `POST /notifications/{{notificationId}}/read`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Lo pide un `ADMIN` — no pertenece a ninguna organización |
+}

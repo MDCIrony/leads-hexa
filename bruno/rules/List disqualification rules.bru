@@ -1,0 +1,85 @@
+meta {
+  name: List disqualification rules
+  type: http
+  seq: 8
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/rules/disqualification
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 100
+  offset: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+}
+
+docs {
+  # `GET /rules/disqualification`
+
+  Lista las reglas de descalificación de la organización del token. Exige rol `MANAGER`.
+
+  ## Los parámetros
+
+  | Parámetro | Tipo | Obligatorio | Notas |
+  |---|---|---|---|
+  | `limit` | int | no | tamaño de página |
+  | `offset` | int | no | desde qué posición |
+
+  ## Qué devuelve
+
+  `200` con la envoltura de paginación común a la mayoría de listas de la API:
+
+  ```json
+  {
+    "items": [
+      {
+        "id": "…",
+        "name": "Sin vía de contacto",
+        "conditions": [
+          {
+            "field": "phone",
+            "operator": "IS_EMPTY"
+          },
+          {
+            "field": "email",
+            "operator": "IS_EMPTY"
+          }
+        ],
+        "priority": 0,
+        "is_active": true
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0,
+    "has_more": false
+  }
+  ```
+
+  ## Qué toca
+
+  Nada. Sólo lee.
+
+  ## Qué esperar después
+
+  Los `items` llegan ordenados por `priority` descendente, igual que en `GET /rules/assignment` —
+  es el orden en que el motor de descalificación las prueba, deteniéndose en la primera que se
+  cumple. La diferencia con la de asignación es que ésta **sí** pagina: con muchas reglas, la
+  cabeza de la cascada puede quedar en una página y el resto en la siguiente.
+
+  ## Errores
+
+  Ninguno propio de este endpoint más allá de los genéricos de autenticación (`401`, `403` si el rol
+  no es `MANAGER`).
+}

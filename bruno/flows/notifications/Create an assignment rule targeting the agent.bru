@@ -1,0 +1,47 @@
+meta {
+  name: Create an assignment rule targeting the agent
+  type: http
+  seq: 8
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/rules/assignment
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Todo a Carlos {{runId}}",
+    "min_score": 0,
+    "max_score": null,
+    "target_agent_ids": ["{{agentId}}"],
+    "agent_match_mode": "ANY",
+    "strategy": "DIRECT_AGENT",
+    "priority": 10,
+    "conditions": []
+  }
+}
+
+vars:post-response {
+  assignmentRuleId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.strategy: eq DIRECT_AGENT
+}
+
+docs {
+  # La única regla capaz de encontrar candidato
+
+  Manda al asesor creado antes cualquier lead que llegue, sin condiciones y sin techo de puntuación.
+  Es la única regla de asignación de esta organización, y eso es a propósito: este flujo la borra más
+  abajo, precisamente para dejar a un segundo lead sin ninguna regla capaz de asignarlo.
+
+  `DIRECT_AGENT` con un solo `target_agent_ids` hace que el resultado sea determinista: no hay
+  reparto entre varios candidatos que complique la comprobación de a quién llegó el aviso.
+}

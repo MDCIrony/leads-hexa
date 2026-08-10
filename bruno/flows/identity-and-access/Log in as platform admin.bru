@@ -1,0 +1,39 @@
+meta {
+  name: Log in as platform admin
+  type: http
+  seq: 2
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: {{adminEmail}}
+  password: {{password}}
+}
+
+vars:post-response {
+  adminToken: res.body.access_token
+}
+
+assert {
+  res.status: eq 200
+  res.body.token_type: eq bearer
+}
+
+docs {
+  # Entrar como administrador de plataforma
+
+  El cuerpo va como **formulario**, no como JSON: es el esquema `OAuth2PasswordRequestForm`, y el
+  correo viaja en el campo `username`. Mandar JSON aquí responde `422`.
+
+  Guarda el token en `adminToken`. Este flujo lo usa dos veces: para dar de alta la organización más
+  abajo, y para demostrar, hacia el final, que un administrador no alcanza dato operativo aunque su
+  token sea perfectamente válido.
+}

@@ -1,0 +1,76 @@
+meta {
+  name: Batch upload
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/batch-upload
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  file: @file(fixtures/leads-mixed.csv)
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+}
+
+assert {
+  res.status: eq 202
+  res.body.job_id: isDefined
+  res.body.record_ids: isEmpty
+}
+
+docs {
+  # `POST /intake/leads/batch-upload`
+
+  Registra leads en bloque desde un fichero CSV o Excel. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  `multipart/form-data` con un único campo, `file`. La fixture `fixtures/leads-mixed.csv` de esta
+  colección trae dos filas a propósito: Marta Iglesias con datos válidos, y Bruno Salas con el correo
+  `bruno@@salas`, deliberadamente mal formado — para ver ambas salidas dentro del mismo trabajo.
+
+  ## Qué devuelve
+
+  `202`:
+
+  ```json
+  {"job_id": "...", "record_ids": [], "status": "PENDING"}
+  ```
+
+  `record_ids` viene **siempre vacío**: el `202` se responde antes de leer el fichero, así que las
+  filas todavía no existen como registros.
+
+  ## Qué toca
+
+  Crea el `IntakeJob` (`kind: BATCH`) de inmediato, sin ningún `IntakeRecord` todavía. El fichero se
+  lee y se parte en filas en segundo plano: cada fila se convierte en un `IntakeRecord` propio y
+  sigue el mismo pipeline de validación que `leads/ingest`. Un fichero ilegible (formato no
+  reconocido, columnas ausentes) tampoco produce un error HTTP: el trabajo queda `FAILED` sin haber
+  creado ningún registro.
+
+  ## Qué esperar después
+
+  Sondear `GET /intake/jobs/{{jobId}}` hasta un estado terminal — `total_items` es `null` hasta que
+  el parseo termina, y sólo entonces refleja el número real de filas. Con la fixture de esta
+  colección el trabajo termina `COMPLETED` con `succeeded: 1` y `failed: 1`. Qué fila se promovió y
+  cuál quedó rechazada, y por qué, se confirma en `GET /intake/records?job_id={{jobId}}`.
+  `flows/lead-processing` sondea así y sirve de patrón.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 SOURCE_NOT_FOUND` | La organización no tiene un origen `FILE_UPLOAD` activo |
+  | `403` | Quien llama es un asesor, no un gestor |
+  | `401` | Token ausente, inválido o agente desactivado |
+  | `422` | La petición no trae el fichero |
+}

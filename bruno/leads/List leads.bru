@@ -1,0 +1,65 @@
+meta {
+  name: List leads
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads?limit=100&offset=0
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 100
+  offset: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.limit: eq 100
+  res.body.offset: eq 0
+  res.body.has_more: isBoolean
+}
+
+docs {
+  # `GET /leads`
+
+  Devuelve el flujo completo de leads de la organización de quien llama. Exige `MANAGER`.
+
+  ## Los parámetros
+
+  `params:query`: `limit` (100 por defecto) y `offset` (0 por defecto), para paginar.
+
+  ## Qué devuelve
+
+  `200` con la envoltura de paginación:
+
+  ```json
+  {"items": [...], "total": 42, "limit": 100, "offset": 0, "has_more": false}
+  ```
+
+  Cada elemento trae `{id, tenant_id, source_id, first_name, last_name, email, company, budget,
+  industry, custom_attributes, phone, score, status, assigned_agent_id, created_at}`. El listado no
+  incluye `score_breakdown`: eso sólo lo trae el detalle, `GET /leads/{{leadId}}`.
+
+  ## Qué toca
+
+  Sólo lee: los leads de la organización que identifica el token, sin filtrar por asesor asignado.
+
+  ## Qué esperar después
+
+  Con un `id` de la lista se puede pedir el detalle en `GET /leads/{{leadId}}`, que añade
+  `score_breakdown`, `assigned_at`, `discard_reason` y `disqualification_reason`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Lo pide un `AGENT` (leería los leads de sus compañeros) o un `ADMIN` (no alcanza dato operativo) |
+}

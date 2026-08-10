@@ -1,0 +1,109 @@
+meta {
+  name: List intake records
+  type: http
+  seq: 3
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/records?limit=100&offset=0
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~status: PENDING
+  ~job_id: {{jobId}}
+  limit: 100
+  offset: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+}
+
+docs {
+  # `GET /intake/records`
+
+  Lista la bandeja de entrada de la organización: todo lo que llegó por `leads/ingest` o
+  `leads/batch-upload`, en el estado en el que haya quedado. Exige rol `MANAGER`.
+
+  ## Los parámetros
+
+  | Parámetro | Tipo | Uso |
+  |---|---|---|
+  | `status` | string | Opcional. Uno de `PENDING`, `PROMOTED`, `REJECTED`, `DISCARDED` |
+  | `job_id` | string | Opcional. Restringe a los registros de un trabajo concreto |
+  | `limit` | número | Tamaño de página, por defecto `100` |
+  | `offset` | número | Desplazamiento de página, por defecto `0` |
+
+  `status` y `job_id` vienen desactivados en esta colección para que la primera ejecución liste todo
+  sin filtrar; se activan según lo que se quiera inspeccionar.
+
+  ## Qué devuelve
+
+  `200` con envoltura de paginación:
+
+  ```json
+  {
+    "items": [
+      {
+        "id": "...",
+        "source_id": "...",
+        "status": "REJECTED",
+        "payload": {
+          "first_name": "Bruno",
+          "last_name": "Salas",
+          "email": "bruno@@salas",
+          "company": "Salas SL",
+          "industry": "Retail",
+          "budget": 3000,
+          "phone": "+34600333444",
+          "custom_attributes": {}
+        },
+        "errors": [
+          {
+            "field": "email",
+            "message": "Formato de correo electrónico inválido",
+            "received_value": null,
+            "error_code": "INVALID_EMAIL"
+          }
+        ],
+        "received_at": "2026-08-09T10:00:00Z",
+        "processed_at": "2026-08-09T10:00:01Z",
+        "lead_id": null
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0,
+    "has_more": false
+  }
+  ```
+
+  `lead_id` sólo está poblado si el registro llegó a `PROMOTED`; en cualquier otro estado va `null`.
+  `errors` va vacío salvo que el estado sea `REJECTED`.
+
+  ## Qué toca
+
+  Nada. Lee `IntakeRecord` filtrado por organización —la organización sale del token, nunca de un
+  parámetro— y opcionalmente por `status` o `job_id`.
+
+  ## Qué esperar después
+
+  Es un punto de llegada, no dispara nada. Para corregir un registro `REJECTED`,
+  `POST /intake/records/{{recordId}}/promote`; para descartarlo sin más,
+  `POST /intake/records/{{recordId}}/discard`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Quien llama es un asesor, no un gestor |
+  | `401` | Token ausente, inválido o agente desactivado |
+  | `400 INVALID_INTAKE_STATUS` | `status` no es uno de los cuatro valores conocidos |
+}

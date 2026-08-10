@@ -1,0 +1,40 @@
+meta {
+  name: Log in as the new manager
+  type: http
+  seq: 4
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: {{managerEmail}}
+  password: {{password}}
+}
+
+vars:post-response {
+  managerToken: res.body.access_token
+}
+
+assert {
+  res.status: eq 200
+  res.body.access_token: isString
+}
+
+docs {
+  # El gestor entra con lo que se creó en el paso anterior
+
+  La contraseña que se mandó en el alta se guardó cifrada con bcrypt, y aquí se comprueba contra ese
+  hash. Que este login funcione demuestra que el gestor se creó de verdad, con su credencial usable.
+
+  El token que devuelve lleva dentro la organización, así que a partir de aquí **no hay que volver a
+  nombrarla**: ni en una URL ni en el cuerpo de ninguna petición. `managerToken` es el que hereda
+  este `folder.bru`, y por eso todo lo que sigue usa `auth: inherit` salvo cuando el paso pide
+  explícitamente otra identidad.
+}

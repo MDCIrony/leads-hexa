@@ -1,0 +1,82 @@
+meta {
+  name: List groups
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/groups
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 100
+  offset: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.limit: eq 100
+  res.body.offset: eq 0
+  res.body.has_more: isBoolean
+}
+
+docs {
+  # `GET /groups`
+
+  Lista los grupos de la organización del token, paginados. Exige rol `MANAGER`.
+
+  ## Los parámetros
+
+  | Parámetro | Tipo | Obligatorio | Nota |
+  |---|---|---|---|
+  | `limit` | number | no | Por defecto `100` |
+  | `offset` | number | no | Por defecto `0` |
+
+  ## Qué devuelve
+
+  `200`, envuelto en paginación. A diferencia de la respuesta de creación, cada elemento trae
+  `agent_count` poblado:
+
+  ```json
+  {
+    "items": [
+      {
+        "id": "…",
+        "name": "Enterprise",
+        "description": "Cuentas grandes",
+        "default_strategy": "LOWEST_LOAD",
+        "capacity_per_agent": 5,
+        "is_active": true,
+        "agent_count": 3
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0,
+    "has_more": false
+  }
+  ```
+
+  ## Qué toca
+
+  Nada. Sólo lee, y sólo dentro de la organización del token.
+
+  ## Qué esperar después
+
+  `agent_count` es lo que distingue esta respuesta de la de `POST /groups`: aquí sí cuenta cuántos
+  agentes tiene cada grupo en este momento.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+}

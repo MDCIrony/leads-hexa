@@ -1,0 +1,74 @@
+meta {
+  name: Inspect the intake record
+  type: http
+  seq: 12
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/records?job_id={{jobId}}
+  body: none
+  auth: inherit
+}
+
+params:query {
+  job_id: {{jobId}}
+}
+
+vars:post-response {
+  leadId: res.body.items[0].lead_id
+}
+
+tests {
+  test("el trabajo dejó exactamente un registro", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.total).to.equal(1);
+  });
+
+  test("el registro se promovió y apunta a su lead", function() {
+    const record = res.body.items[0];
+    expect(record.status).to.equal("PROMOTED");
+    expect(record.lead_id).to.be.a("string");
+    expect(record.errors).to.have.lengthOf(0);
+    expect(record.processed_at).to.not.equal(null);
+  });
+
+  test("el payload guardado es el que se mandó, sin transformar", function() {
+    const payload = res.body.items[0].payload;
+    expect(payload.company).to.equal("Northwind");
+    expect(payload.budget).to.equal(42000);
+  });
+}
+
+docs {
+  # La bandeja: qué pasó con lo que entró
+
+  Todo payload que llega a la ingesta se persiste como `IntakeRecord` **antes** de intentar
+  interpretarlo. Esta consulta es la que cuenta qué fue de él.
+
+  | Estado | Qué significa |
+  |---|---|
+  | `PENDING` | Todavía no se ha procesado |
+  | `PROMOTED` | Se interpretó bien y generó un lead; `lead_id` apunta a él |
+  | `REJECTED` | No se pudo interpretar; `errors` lleva el motivo por campo |
+  | `DISCARDED` | El gestor decidió no recuperarlo |
+
+  ## El payload se guarda sin transformar
+
+  La tercera comprobación es la que sostiene la promesa entera: lo que quedó guardado es **lo que se
+  mandó**, no una versión ya masajeada. Eso es lo que permite corregir un registro rechazado y
+  reintentarlo, y lo que hace que la bandeja sirva de constancia de lo recibido y no sólo de lista de
+  errores.
+
+  ## Por qué se filtra por trabajo
+
+  La bandeja acumula los registros de todas las ejecuciones anteriores. Filtrar por `job_id` acota la
+  consulta a lo que **esta** ejecución metió, y es lo que permite comprobar `total: 1` sin que la
+  comprobación caduque en cuanto la base de datos tenga historia.
+
+  ## Qué esperar después
+
+  `lead_id` es el hilo hacia el lead ya interpretado. El paso siguiente lo sigue.
+}

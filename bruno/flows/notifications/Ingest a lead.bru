@@ -1,0 +1,46 @@
+meta {
+  name: Ingest a lead
+  type: http
+  seq: 9
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "first_name": "Marta",
+    "last_name": "Iglesias",
+    "email": "marta-{{runId}}@northwind.test",
+    "company": "Northwind",
+    "budget": 42000,
+    "industry": "Technology",
+    "phone": "+34600111222",
+    "custom_attributes": {"employee_count": 150}
+  }
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+}
+
+assert {
+  res.status: eq 202
+  res.body.status: eq PENDING
+}
+
+docs {
+  # El lead que sí encuentra asesor
+
+  Tiene teléfono y correo, así que sobrevive a la etapa de viabilidad, y la única regla de asignación
+  que existe ahora mismo lo manda al asesor. Es el evento `LeadAssigned` que `NotificationHandler`
+  convierte en el aviso `LEAD_ASSIGNED` para el asesor, y en silencio para el gestor.
+
+  El procesamiento ocurre en segundo plano; el paso siguiente sondea `jobId` hasta que termina.
+}

@@ -1,0 +1,41 @@
+meta {
+  name: Manager B cannot read A's lead
+  type: http
+  seq: 12
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads/:leadId
+  body: none
+  auth: bearer
+}
+
+params:path {
+  leadId: {{leadId}}
+}
+
+auth:bearer {
+  token: {{managerTokenB}}
+}
+
+tests {
+  test("el lead de Alpha no existe para el gestor de Beta", function() {
+    expect(res.status).to.equal(404);
+    expect(res.body.error_code).to.equal("LEAD_NOT_FOUND");
+  });
+}
+
+docs {
+  # El corazón del aislamiento: ni el identificador basta
+
+  El gestor de Beta tiene un token válido, de gestor, con permiso de sobra para leer leads — sólo
+  que no los de Alpha. La API responde `404 LEAD_NOT_FOUND`, exactamente el mismo código y el
+  mismo `error_code` que si `{{leadId}}` no existiera en absoluto.
+
+  Nunca `403`. Un `403` confirmaría que ese identificador corresponde a un lead real en alguna
+  organización, y sería una rendija por la que enumerar identificadores ajenos. Ver ADR-0005 en
+  `docs/content/decisiones/0005-404-en-vez-de-403.md`.
+}

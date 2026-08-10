@@ -1,0 +1,51 @@
+meta {
+  name: Create organization A
+  type: http
+  seq: 3
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/tenants
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Alpha {{runId}}",
+    "manager": {
+      "name": "Ana Ruiz",
+      "email": "ana-{{runId}}@alpha.test",
+      "password": "{{password}}"
+    }
+  }
+}
+
+vars:post-response {
+  tenantId: res.body.id
+  managerEmail: res.body.manager.email
+}
+
+assert {
+  res.status: eq 201
+  res.body.manager.role: eq MANAGER
+}
+
+docs {
+  # La primera de las dos organizaciones
+
+  Alpha es la organización dueña del lead que el resto del flujo intenta alcanzar desde fuera. Se
+  crea igual que en `lead-processing`: sufijada con `runId`, con su gestor y sus dos orígenes de
+  leads en la misma transacción.
+
+  El token que arma este paso es `{{adminToken}}`, el único punto del flujo donde se usa: crear una
+  organización es una operación de plataforma, y todo lo que ocurre después dentro de Alpha va con
+  el token de su gestor.
+}

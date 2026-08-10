@@ -1,0 +1,59 @@
+meta {
+  name: Ingest a lead with no contact channel
+  type: http
+  seq: 14
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "first_name": "Bruno",
+    "last_name": "Salas",
+    "company": "Salas SL",
+    "budget": 90000,
+    "industry": "Technology"
+  }
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+}
+
+assert {
+  res.status: eq 202
+  res.body.status: eq PENDING
+}
+
+docs {
+  # El segundo lead: sin teléfono y sin correo
+
+  Mismo endpoint, payload distinto. Este trae 90 000 de presupuesto y sector `Technology` —cumpliría
+  las dos reglas de puntuación y valdría 40 puntos— pero **no deja ninguna forma de contactarlo**.
+
+  La regla de viabilidad se cumple, y el pipeline se corta ahí: no se puntúa ni se reparte. Es lo que
+  demuestra que las tres etapas están en orden y que la primera manda sobre las otras dos.
+
+  ## `email` y `phone` son opcionales de verdad
+
+  El esquema de entrada los acepta ausentes sin rechazar nada. Ninguna validación de formato ocurre
+  aquí: el correo, si viene, lo valida el dominio más adelante, y uno mal formado deja el registro en
+  la bandeja con su motivo en vez de perderse.
+
+  Que este payload se acepte y luego se descalifique no es una contradicción: **recibir y valorar son
+  decisiones distintas**. Un lead sin vía de contacto se recibe igual —queda constancia de que
+  llegó— y es después cuando una regla de negocio, que el gestor escribió y puede cambiar, decide que
+  no es trabajable.
+
+  ## Qué esperar después
+
+  El trabajo terminará `COMPLETED` con `succeeded: 1`. Descalificar **no es fallar**: el payload se
+  interpretó perfectamente, y el lead se creó. Lo que ocurre es que nació ya descartado.
+}

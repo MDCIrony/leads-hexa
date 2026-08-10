@@ -1,0 +1,48 @@
+meta {
+  name: The platform admin gets 403, not 404
+  type: http
+  seq: 19
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads/:leadId
+  body: none
+  auth: bearer
+}
+
+params:path {
+  leadId: {{leadId}}
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("el administrador de plataforma no alcanza dato operativo", function() {
+    expect(res.status).to.equal(403);
+    expect(res.body.error_code).to.equal("FORBIDDEN");
+  });
+}
+
+docs {
+  # El contraste que cierra el flujo
+
+  El mismo `{{leadId}}` que en los pasos 12 y 18 devolvió `404` aquí devuelve `403 FORBIDDEN`, y es
+  la respuesta correcta, no una inconsistencia.
+
+  Un administrador de plataforma no pertenece a ninguna organización — su token no lleva una que
+  comparar contra la del lead. No hay nada que ocultarle sobre la existencia del recurso: cualquier
+  lead, de cualquier organización, le resulta igual de inalcanzable, porque su problema no es de
+  pertenencia sino de plano. `GET /leads/{{leadId}}` es dato operativo, y el plano de plataforma no
+  lo alcanza — igual que `Log in as platform admin` ya documentó para el resto de endpoints
+  operativos.
+
+  Este es el contraste que sostiene la regla completa: el `404` protege la existencia de un recurso
+  concreto frente a quien podría, en otras circunstancias, tener acceso a él; el `403` dice que un
+  rol entero no alcanza una capacidad, sin que exista ninguna circunstancia en la que sí la
+  alcanzaría.
+}

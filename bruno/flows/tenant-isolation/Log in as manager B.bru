@@ -1,0 +1,36 @@
+meta {
+  name: Log in as manager B
+  type: http
+  seq: 11
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: {{managerEmailB}}
+  password: {{password}}
+}
+
+vars:post-response {
+  managerTokenB: res.body.access_token
+}
+
+assert {
+  res.status: eq 200
+  res.body.access_token: isString
+}
+
+docs {
+  # El gestor de Beta entra con su propio token
+
+  `managerTokenB` lleva dentro la organización Beta, y es distinto de `managerToken` — el de Alpha,
+  que se guardó en el paso 4 y sigue vivo en variables de ejecución. Los pasos siguientes usan uno
+  u otro a propósito, según de qué lado de la frontera quieren preguntar.
+}

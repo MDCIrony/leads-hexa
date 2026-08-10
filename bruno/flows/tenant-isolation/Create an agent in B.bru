@@ -1,0 +1,45 @@
+meta {
+  name: Create an agent in B
+  type: http
+  seq: 14
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/agents
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{managerTokenB}}
+}
+
+body:json {
+  {
+    "name": "Dani Prieto",
+    "email": "dani-{{runId}}@beta.test",
+    "password": "{{password}}",
+    "role": "AGENT"
+  }
+}
+
+vars:post-response {
+  agentIdB: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.role: eq AGENT
+}
+
+docs {
+  # Un asesor real de Beta
+
+  Necesario para el siguiente paso: probar que el gestor de Alpha no puede asignar su lead a un
+  asesor que existe, sólo que en otra organización. Un identificador inventado no demostraría lo
+  mismo — cualquier sistema rechaza lo que no existe en absoluto. Lo que hay que comprobar es que
+  rechaza igual lo que sí existe, en otro sitio.
+}

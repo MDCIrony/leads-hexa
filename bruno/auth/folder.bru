@@ -1,0 +1,31 @@
+meta {
+  name: auth
+  seq: 2
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  Cómo se entra y cómo se sabe quién eres.
+
+  `POST /auth/login` es público y es la única puerta: devuelve un JWT firmado con `HS256` que caduca
+  a los 60 minutos y lleva dentro el identificador del agente, su rol y su organización. Todo lo
+  demás en esta colección va con ese token en `Authorization: Bearer`.
+
+  El cuerpo del login viaja como **formulario**, no como JSON: es el esquema estándar
+  `OAuth2PasswordRequestForm`, y el correo va en el campo `username`.
+
+  `GET /auth/me` acepta cualquier rol y es la única vía que tiene un asesor para conocer su propio
+  rol y su organización.
+
+  Un detalle que se paga caro si se ignora: el token no basta por sí solo. Cada petición vuelve a
+  leer el agente en la base de datos y exige que siga activo, así que desactivar a alguien —o
+  desactivar su organización entera— le corta el acceso de inmediato, sin esperar a que su token
+  caduque.
+}

@@ -1,0 +1,43 @@
+meta {
+  name: Log in as platform admin
+  type: http
+  seq: 2
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: {{adminEmail}}
+  password: {{password}}
+}
+
+vars:post-response {
+  adminToken: res.body.access_token
+}
+
+assert {
+  res.status: eq 200
+  res.body.token_type: eq bearer
+}
+
+docs {
+  # Entrar como administrador de plataforma
+
+  El cuerpo va como **formulario**, no como JSON: es el esquema `OAuth2PasswordRequestForm`, y el
+  correo viaja en el campo `username`. Mandar JSON aquí responde `422`.
+
+  Guarda el token en `adminToken`, que es el que hereda toda esta carpeta y el que exigen los tres
+  endpoints de organizaciones.
+
+  Un administrador de plataforma **sólo** alcanza el plano de organizaciones. En cualquier endpoint
+  operativo —leads, reglas, ingesta, avisos— recibe `403`. No es una limitación pendiente de
+  levantar: es la separación deliberada entre quien opera la plataforma y quien trabaja dentro de
+  una organización.
+}

@@ -1,0 +1,43 @@
+meta {
+  name: Manager B's pipeline does not contain it
+  type: http
+  seq: 13
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads?limit=100&offset=0
+  body: none
+  auth: bearer
+}
+
+params:query {
+  limit: 100
+  offset: 0
+}
+
+auth:bearer {
+  token: {{managerTokenB}}
+}
+
+tests {
+  test("el lead de Alpha no aparece en el listado de Beta", function() {
+    expect(res.status).to.equal(200);
+    const ids = res.body.items.map((lead) => lead.id);
+    expect(ids).to.not.include(bru.getVar("leadId"));
+  });
+}
+
+docs {
+  # Lo que falta, no un total en cero
+
+  La comprobación honesta no es que Beta tenga `total: 0` — eso dejaría de ser cierto en cuanto
+  Beta tuviera actividad propia, y la prueba pasaría por el motivo equivocado. Lo que este paso
+  comprueba es que el `id` del lead de Alpha no aparece entre los elementos del listado de Beta,
+  sin importar cuántos leads propios tenga.
+
+  `GET /leads` filtra siempre por la organización del token que llama; no hay parámetro que amplíe
+  ese alcance.
+}

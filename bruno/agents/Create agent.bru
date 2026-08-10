@@ -1,0 +1,108 @@
+meta {
+  name: Create agent
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/agents
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Carlos Ruiz",
+    "email": "carlos-{{runId}}@acme.test",
+    "password": "{{password}}",
+    "role": "AGENT",
+    "group_id": null
+  }
+}
+
+vars:post-response {
+  agentId: res.body.id
+  agentEmail: res.body.email
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isString
+  res.body.email: eq carlos-{{runId}}@acme.test
+  res.body.role: eq AGENT
+  res.body.is_active: eq true
+  res.body.group_id: isNull
+  res.body.tenant_id: isString
+}
+
+docs {
+  # `POST /agents`
+
+  Da de alta un agente — gestor o asesor — dentro de la organización del token. Exige rol
+  `MANAGER`, con una única excepción de arranque descrita abajo.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio | Nota |
+  |---|---|---|---|
+  | `name` | string | sí | |
+  | `email` | string | sí | Validado en el esquema: necesita `@` y un punto en el dominio |
+  | `password` | string | sí | |
+  | `role` | string | no | `ADMIN`, `MANAGER` o `AGENT`; por defecto `AGENT` — pedir `ADMIN` fuera del arranque responde `403` |
+  | `group_id` | string o `null` | no | |
+  | `is_active` | boolean | no | Por defecto `true` |
+
+  ```json
+  {
+    "name": "Carlos Ruiz",
+    "email": "carlos-7f3a1c@acme.test",
+    "password": "Secret123",
+    "role": "AGENT",
+    "group_id": null
+  }
+  ```
+
+  ## Qué devuelve
+
+  `201`:
+
+  ```json
+  {
+    "id": "…",
+    "name": "Carlos Ruiz",
+    "email": "carlos-7f3a1c@acme.test",
+    "group_id": null,
+    "is_active": true,
+    "role": "AGENT",
+    "tenant_id": "…"
+  }
+  ```
+
+  ## Qué toca
+
+  Inserta el agente con la contraseña ya hasheada (`bcrypt`). No dispara ningún evento ni aviso: un
+  alta no notifica a nadie.
+
+  **Autenticación condicional — lo más importante de este endpoint.** Mientras la tabla de agentes
+  esté completamente vacía, no pide credencial y crea siempre un `ADMIN` de plataforma con
+  `tenant_id: null`, ignorando cualquier `role` que llegue en el cuerpo: es la única puerta de
+  entrada al sistema. En cuanto existe un agente cualquiera, el endpoint exige `MANAGER` y ya no
+  puede volver a crear administradores.
+
+  ## Qué esperar después
+
+  El agente puede iniciar sesión de inmediato con `POST /auth/login`. `GET /agents/{{agentId}}`
+  confirma el alta, y si tiene `group_id`, entra en el reparto automático de ese grupo.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Fuera del arranque, sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER`, o el cuerpo pide `role: ADMIN` |
+  | `422 VALIDATION_ERROR` | Email inválido o falta algún campo obligatorio |
+  | `500 INTERNAL_ERROR` | El correo ya existe en la organización. Hay un índice único, pero no se captura antes de insertar: llega como error interno, no como conflicto |
+}

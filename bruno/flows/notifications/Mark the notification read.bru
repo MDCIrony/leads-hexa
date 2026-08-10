@@ -1,0 +1,36 @@
+meta {
+  name: Mark the notification read
+  type: http
+  seq: 13
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/notifications/:notificationId/read
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{agentToken}}
+}
+
+params:path {
+  notificationId: {{notificationId}}
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # Sólo el destinatario puede marcarlo
+
+  Lo marca el asesor, con su propio token: es su bandeja, y el aviso es suyo. Responde `204` sin
+  cuerpo, y no toca nada más de la bandeja — el resto de sus avisos sigue como estaba.
+
+  El paso siguiente comprueba que `unread_count` volvió a la línea base capturada al principio del
+  flujo, y el de después de ese comprueba que otro destinatario no puede repetir esta llamada.
+}

@@ -1,0 +1,91 @@
+meta {
+  name: Create source
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/sources
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Facebook Lead Ads {{runId}}",
+    "kind": "MANUAL_FORM",
+    "field_mapping": {}
+  }
+}
+
+vars:post-response {
+  sourceId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isString
+  res.body.kind: eq MANUAL_FORM
+  res.body.is_active: eq true
+}
+
+docs {
+  # `POST /sources`
+
+  Da de alta un origen en la organización del token. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio | Notas |
+  |---|---|---|---|
+  | `name` | string | sí | único dentro de la organización; el mismo nombre sí vale en otra |
+  | `kind` | string | sí | `MANUAL_FORM` \| `FILE_UPLOAD` \| `WEBHOOK` |
+  | `field_mapping` | object | no | por defecto `{}` |
+
+  ```json
+  {
+    "name": "Facebook Lead Ads",
+    "kind": "MANUAL_FORM",
+    "field_mapping": {}
+  }
+  ```
+
+  ## Qué devuelve
+
+  `201` con el origen creado:
+
+  ```json
+  {
+    "id": "…",
+    "name": "Facebook Lead Ads",
+    "kind": "MANUAL_FORM",
+    "field_mapping": {},
+    "is_active": true,
+    "created_at": "…"
+  }
+  ```
+
+  ## Qué toca
+
+  Inserta el origen en la organización del token, activo desde el alta. No reingresa ni reprocesa
+  ningún lead existente: crear un origen es una operación de catálogo, sin efecto retroactivo.
+
+  ## Qué esperar después
+
+  El origen aparece en `GET /sources` y queda disponible para editarlo o borrarlo por su `id`. Si su
+  `kind` es `MANUAL_FORM` o `FILE_UPLOAD` y es el único activo de ese tipo en la organización, la
+  ingesta empieza a resolverlo sola en cuanto llega un lead de esa vía — sin que nadie pase su
+  identificador por parámetro.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `400 SOURCE_ALREADY_EXISTS` | Ya existe un origen con ese nombre en la organización |
+  | `400 SOURCE_WITHOUT_NAME` | `name` vacío o ausente |
+  | `400 INVALID_FIELD_MAPPING` | `field_mapping` trae alguna clave o algún valor vacíos |
+  | `422 VALIDATION_ERROR` | `kind` no es uno de los tres valores admitidos |
+}

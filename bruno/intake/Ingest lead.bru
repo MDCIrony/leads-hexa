@@ -1,0 +1,106 @@
+meta {
+  name: Ingest lead
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/intake/leads/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "first_name": "Maria",
+    "last_name": "Gomez",
+    "email": "mgomez-{{runId}}@techcorp.test",
+    "company": "TechCorp",
+    "budget": 15000,
+    "industry": "Technology",
+    "phone": "+34600111222",
+    "custom_attributes": {"employee_count": 150}
+  }
+}
+
+vars:post-response {
+  jobId: res.body.job_id
+  recordId: res.body.record_ids[0]
+}
+
+assert {
+  res.status: eq 202
+  res.body.job_id: isDefined
+}
+
+docs {
+  # `POST /intake/leads/ingest`
+
+  Registra un lead individual llegado por un formulario manual. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio |
+  |---|---|---|
+  | `first_name` | string | Sí |
+  | `last_name` | string | Sí |
+  | `company` | string | Sí |
+  | `budget` | número | Sí |
+  | `industry` | string | Sí |
+  | `email` | string | No |
+  | `phone` | string | No |
+  | `custom_attributes` | objeto | No — por defecto `{}` |
+
+  ```json
+  {
+    "first_name": "Maria",
+    "last_name": "Gomez",
+    "email": "mgomez-{{runId}}@techcorp.test",
+    "company": "TechCorp",
+    "budget": 15000,
+    "industry": "Technology",
+    "phone": "+34600111222",
+    "custom_attributes": {"employee_count": 150}
+  }
+  ```
+
+  El esquema **no valida el formato del correo a propósito**: esa comprobación pertenece al dominio,
+  no a la puerta de entrada. Un correo como `bruno@@salas` no produce un `422` aquí — la petición se
+  acepta igual, y el registro queda en la bandeja con el error de formato en vez de perderse.
+
+  ## Qué devuelve
+
+  `202`, antes de interpretar nada:
+
+  ```json
+  {"job_id": "...", "record_ids": ["..."], "status": "PENDING"}
+  ```
+
+  ## Qué toca
+
+  Busca el origen `MANUAL_FORM` activo de la organización, guarda el cuerpo tal cual llegó como
+  `IntakeRecord` y crea su `IntakeJob` (`kind: SINGLE`), todo en la transacción que confirma esta
+  respuesta. La interpretación —validar contra el dominio, descalificar, puntuar, repartir— ocurre
+  después, en segundo plano y en una transacción distinta.
+
+  ## Qué esperar después
+
+  El procesamiento es asíncrono: sondear el trabajo justo después de este request puede devolverlo
+  todavía `PENDING`. Hay que sondear `GET /intake/jobs/{{jobId}}` **hasta un estado terminal**
+  (`COMPLETED` o `FAILED`), nunca leerlo una sola vez ni esperar un tiempo fijo —
+  `flows/lead-processing` sigue exactamente este patrón. El resultado concreto de este registro se
+  confirma en `GET /intake/records?job_id={{jobId}}`: `PROMOTED` con su `lead_id`, o `REJECTED` con
+  el motivo por campo en `errors`.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `404 SOURCE_NOT_FOUND` | La organización no tiene un origen `MANUAL_FORM` activo |
+  | `403` | Quien llama es un asesor, no un gestor |
+  | `401` | Token ausente, inválido o agente desactivado |
+  | `422` | Falta un campo obligatorio o su tipo no cuadra — nunca por el formato del correo |
+}

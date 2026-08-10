@@ -1,0 +1,36 @@
+meta {
+  name: organization-onboarding
+  seq: 2
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+docs {
+  # Alta de una organización
+
+  Sigue el diagrama de `docs/content/modulos/organizaciones.md`.
+
+  Dar de alta una organización no crea una organización. Crea **cinco cosas en una sola
+  transacción**: la organización, su primer gestor con la contraseña cifrada, y sus dos orígenes de
+  leads (`MANUAL_FORM` y `FILE_UPLOAD`). O entran las cinco, o no entra ninguna.
+
+  Eso es lo que este flujo comprueba, y lo comprueba por el lado que duele: **provocando el fallo**.
+  Repetir el alta con un correo de gestor ya usado tiene que dejar el sistema exactamente como
+  estaba — sin una organización huérfana sin gestor, que es justo lo que ocurriría si cada paso
+  fuera su propia transacción.
+
+  ## Qué recorre
+
+  | | |
+  |---|---|
+  | 1-2 | El arranque de la plataforma: el primer agente nace sin credencial y nace `ADMIN` |
+  | 3 | El alta, en una transacción |
+  | 4-6 | Que las cinco cosas existen y se conocen entre sí |
+  | 7-8 | Que un nombre repetido y un correo repetido se rechazan, cada uno con su código |
+}

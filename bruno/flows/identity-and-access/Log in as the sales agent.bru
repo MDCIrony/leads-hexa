@@ -1,0 +1,37 @@
+meta {
+  name: Log in as the sales agent
+  type: http
+  seq: 6
+  tags: [
+    flow
+  ]
+}
+
+post {
+  url: {{apiBase}}/auth/login
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  username: {{agentEmail}}
+  password: {{password}}
+}
+
+vars:post-response {
+  agentToken: res.body.access_token
+}
+
+assert {
+  res.status: eq 200
+  res.body.access_token: isString
+}
+
+docs {
+  # El asesor entra con lo que acaba de crear su gestor
+
+  Mismo endpoint público que los dos logins anteriores, con una identidad distinta. `agentToken`
+  queda guardado para el resto del flujo: lo usan tanto los pasos que comprueban qué alcanza un
+  `AGENT` como el último paso, que reutiliza este mismo token —sin volver a pedirlo— para demostrar
+  que deja de servir en cuanto se desactiva a quien lo tiene.
+}

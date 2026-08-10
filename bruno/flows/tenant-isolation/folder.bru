@@ -1,0 +1,60 @@
+meta {
+  name: tenant-isolation
+  seq: 6
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{managerToken}}
+}
+
+docs {
+  # El aislamiento entre organizaciones
+
+  Sigue ADR-0004 y ADR-0005 de `docs/content/decisiones/`. Monta dos organizaciones, A y B, y
+  comprueba desde cada ángulo posible que ninguna alcanza los datos de la otra: ni leyendo, ni
+  listando, ni asignando.
+
+  | Paso | Qué comprueba |
+  |---|---|
+  | Organización A ingiere y procesa un lead | Punto de partida: un lead real, `PROMOTED`, con asesor |
+  | El gestor de B pide el lead de A | `404`, no `403` — el recurso no existe para quien no es su dueño |
+  | El listado de B no contiene el lead de A | El aislamiento se ve en lo que falta, no en un total en cero |
+  | El gestor de A intenta asignarlo a un asesor de B | `404` sobre el asesor referenciado, no sólo sobre el pedido |
+  | Un asesor de A pide el lead de un compañero | `404` — pertenece a su organización, pero no es suyo |
+  | El administrador de plataforma pide el mismo lead | `403` — identidad válida, capacidad que no le toca |
+
+  ## La organización sale del token, y no hay dónde mentir
+
+  Ninguna petición de este flujo nombra una organización: ni en la URL, ni en una cabecera, ni en
+  el cuerpo. El aislamiento no depende de que quien llama diga la verdad, porque no existe ningún
+  sitio donde pudiera decir una mentira. Un `tenant_id` que se mandara en el cuerpo se ignoraría.
+
+  ## `404` frente a `403`: la misma pregunta, dos respuestas distintas
+
+  Los dos son accesos denegados, y la diferencia no es arbitraria:
+
+  | | Respuesta | Por qué |
+  |---|---|---|
+  | Un asesor pidiendo el lead de un compañero | `404` | Un `403` le confirmaría que ese lead existe en su organización. Podría recorrer identificadores y deducir el tamaño y la forma del trabajo ajeno sin leer un solo dato |
+  | Un administrador de plataforma pidiendo cualquier lead | `403` | No hay nada que ocultarle sobre la existencia del recurso: su problema es de plano, no de pertenencia. Es una identidad válida operando donde no le toca |
+
+  La regla que los separa: el `404` protege la existencia de un recurso concreto; el `403` dice
+  que el rol no alcanza una capacidad entera.
+
+  ## El listado no se comprueba contra cero
+
+  Que el lead de A no aparezca entre los de B es la comprobación honesta. Que B tenga cero leads
+  dejaría de ser cierto en cuanto B tuviera actividad propia, y la prueba pasaría por el motivo
+  equivocado.
+
+  ## El `404` también protege el recurso referenciado
+
+  Cuando el gestor de A intenta asignar su propio lead a un asesor de B, el `404` no es sobre el
+  lead — es sobre el asesor. El gestor de A tiene todo el derecho sobre su lead; lo que no existe
+  para él es ese asesor. Si respondiera `403`, sería una forma de averiguar qué identificadores de
+  asesor están dados de alta en otras organizaciones.
+}

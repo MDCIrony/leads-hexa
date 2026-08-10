@@ -1,0 +1,102 @@
+meta {
+  name: Create group
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/groups
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Enterprise {{runId}}",
+    "description": "Cuentas grandes",
+    "default_strategy": "LOWEST_LOAD",
+    "capacity_per_agent": 5
+  }
+}
+
+vars:post-response {
+  groupId: res.body.id
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isString
+  res.body.name: eq Enterprise {{runId}}
+  res.body.default_strategy: eq LOWEST_LOAD
+  res.body.capacity_per_agent: eq 5
+  res.body.is_active: eq true
+  res.body.agent_count: isNull
+}
+
+docs {
+  # `POST /groups`
+
+  Da de alta un grupo en la organización del token: la unidad que reúne asesores bajo una política
+  de reparto compartida. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio | Nota |
+  |---|---|---|---|
+  | `name` | string | sí | Único dentro de la organización; el mismo nombre sí se acepta en otra |
+  | `description` | string | no | |
+  | `default_strategy` | string | no | `ROUND_ROBIN`, `LOWEST_LOAD` o `DIRECT_AGENT`; por defecto `LOWEST_LOAD` |
+  | `capacity_per_agent` | number | no | Cuántos leads activos aguanta cada asesor del grupo |
+
+  ```json
+  {
+    "name": "Enterprise 7f3a1c",
+    "description": "Cuentas grandes",
+    "default_strategy": "LOWEST_LOAD",
+    "capacity_per_agent": 5
+  }
+  ```
+
+  ## Qué devuelve
+
+  `201`:
+
+  ```json
+  {
+    "id": "…",
+    "name": "Enterprise 7f3a1c",
+    "description": "Cuentas grandes",
+    "default_strategy": "LOWEST_LOAD",
+    "capacity_per_agent": 5,
+    "is_active": true,
+    "agent_count": null
+  }
+  ```
+
+  `agent_count` llega vacío aquí porque un grupo recién creado todavía no tiene a nadie dentro;
+  `GET /groups` sí lo trae poblado.
+
+  ## Qué toca
+
+  Inserta el grupo. No mueve agentes: para meter a alguien dentro hace falta `PATCH /agents/{id}`
+  con este `group_id`.
+
+  ## Qué esperar después
+
+  El `id` sirve para asignarle agentes por `PATCH /agents/{id}` y para las reglas de enrutamiento
+  que apunten a este grupo.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin token |
+  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `400 GROUP_ALREADY_EXISTS` | Ya existe un grupo con ese nombre en la organización. Es un conflicto, pero responde `400`: en esta API no existe ningún `409` |
+  | `400 INVALID_GROUP_NAME` | Nombre vacío o inválido |
+  | `400 INVALID_GROUP_CAPACITY` | `capacity_per_agent` menor o igual que cero |
+  | `422 VALIDATION_ERROR` | Tipo de dato incorrecto en algún campo |
+}

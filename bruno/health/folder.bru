@@ -1,0 +1,12 @@
+meta {
+  name: health
+  seq: 1
+}
+
+docs {
+  Lo único que cuelga de la raíz del servidor y no de `/api/v1`, y lo único que responde sin
+  credencial ninguna.
+
+  Sirve para saber si la plataforma terminó de arrancar: la API no responde hasta haber aplicado las
+  migraciones, así que un `200` aquí significa que la base de datos está al día.
+}

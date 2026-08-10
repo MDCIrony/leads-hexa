@@ -1,0 +1,48 @@
+meta {
+  name: Mark notification read
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+post {
+  url: {{apiBase}}/notifications/:notificationId/read
+  body: none
+  auth: inherit
+}
+
+params:path {
+  notificationId: {{notificationId}}
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  # `POST /notifications/{{notificationId}}/read`
+
+  Marca una notificación como leída. Exige `MANAGER` o `AGENT`, y sólo sobre las propias.
+
+  ## Qué devuelve
+
+  `204`, sin cuerpo.
+
+  ## Qué toca
+
+  Escribe `is_read: true` en esa notificación. Nada más cambia: el resto de la bandeja sigue igual.
+
+  ## Qué esperar después
+
+  `GET /notifications` vuelve a traer esa notificación con `is_read: true`, y `unread_count` baja en
+  uno respecto al valor capturado antes de esta llamada.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Lo pide un `ADMIN` — no pertenece a ninguna organización |
+  | `404 NOTIFICATION_NOT_FOUND` | El identificador no existe o pertenece a otro destinatario — nunca `403`, por la misma razón que en `leads`: confirmaría que esa notificación existe |
+}

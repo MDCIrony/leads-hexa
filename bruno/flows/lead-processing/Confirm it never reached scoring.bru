@@ -1,0 +1,66 @@
+meta {
+  name: Confirm it never reached scoring
+  type: http
+  seq: 17
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads/{{leadId}}
+  body: none
+  auth: inherit
+}
+
+tests {
+  test("el lead quedó descalificado", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.status).to.equal("DISQUALIFIED");
+  });
+
+  test("el motivo es el nombre de la regla, no un número", function() {
+    expect(res.body.disqualification_reason).to.equal(bru.getVar("disqualificationRuleName"));
+  });
+
+  test("el pipeline se cortó: no se puntuó", function() {
+    expect(res.body.score).to.equal(0);
+    expect(res.body.score_breakdown).to.have.lengthOf(0);
+  });
+
+  test("ni se repartió", function() {
+    expect(res.body.assigned_agent_id).to.equal(null);
+    expect(res.body.assigned_at).to.equal(null);
+  });
+}
+
+docs {
+  # La comprobación que cierra el flujo
+
+  Este lead traía 90 000 de presupuesto y sector `Technology`: cumplía las dos reglas de puntuación y
+  habría valido 40 puntos, igual que el primero. Y la regla de reparto no tenía condiciones ni techo,
+  así que también le habría encontrado asesor.
+
+  No pasó ninguna de las dos cosas. **`score` es 0, el desglose está vacío y no hay asesor.**
+
+  Eso es lo que significa que la viabilidad corta el flujo: no es un filtro que se aplique *además*
+  de las otras dos etapas, es una puerta anterior. Si un lead no es trabajable, no tiene sentido
+  preguntarse cuánto vale ni a quién dárselo.
+
+  ## Por qué se compara el motivo contra el nombre guardado
+
+  `disqualification_reason` es el **nombre de la regla que se cumplió**, y aquí se compara contra el
+  nombre que devolvió la creación de esa regla, no contra un texto escrito a mano. Así la
+  comprobación sigue siendo cierta si alguien reescribe el nombre de la regla, y sigue fallando si el
+  motor empieza a poner ahí otra cosa — que es justo el reparto de responsabilidades que se quiere.
+
+  ## Las tres etapas, comprobadas
+
+  Con este paso el flujo ha demostrado las tres, cada una por su comportamiento distintivo:
+
+  | Etapa | Lead viable | Lead sin vía de contacto |
+  |---|---|---|
+  | Viabilidad | Ninguna regla se cumple, sigue | La regla se cumple, corta |
+  | Puntuación | Dos reglas suman 40 | No llega a ejecutarse |
+  | Asignación | Va al asesor, `ASSIGNED` | No llega a ejecutarse |
+}
