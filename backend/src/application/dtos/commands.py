@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from domain.entities.lead import Lead
     from domain.entities.lead_source import LeadSource
     from domain.entities.notification import Notification
+    from domain.entities.rule import ScoringRule
     from domain.entities.sales_group import SalesGroup
     from domain.entities.tenant import Tenant
 
@@ -60,6 +61,24 @@ class CreateScoringRuleCommand:
     score_delta: int
     priority: int = 0
     is_active: bool = True
+
+
+@dataclass(frozen=True)
+class UpdateScoringRuleCommand:
+    tenant_id: UUID
+    rule_id: UUID
+    # None-means-unchanged, same convention as UpdateDisqualificationRuleCommand.
+    name: Optional[str] = None
+    conditions: Optional[List[Dict[str, Any]]] = None
+    score_delta: Optional[int] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+@dataclass(frozen=True)
+class ScoringRulesPageResult:
+    items: List["ScoringRule"]
+    total: int
 
 
 @dataclass(frozen=True)

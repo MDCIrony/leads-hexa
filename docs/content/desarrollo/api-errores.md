@@ -59,6 +59,7 @@ organización.
 | `GROUP_NOT_FOUND` | Grupo de ventas |
 | `ASSIGNMENT_RULE_NOT_FOUND` | Regla de asignación |
 | `DISQUALIFICATION_RULE_NOT_FOUND` | Regla de descalificación |
+| `SCORING_RULE_NOT_FOUND` | Regla de puntuación |
 | `SOURCE_NOT_FOUND` | Origen de leads — también cuando la organización no tiene uno activo para el canal que se está usando |
 | `INTAKE_RECORD_NOT_FOUND` | Registro de la bandeja de ingesta |
 | `INTAKE_JOB_NOT_FOUND` | Trabajo de ingesta |

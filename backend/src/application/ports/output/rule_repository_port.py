@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from domain.entities.rule import AssignmentRule, ScoringRule
 
@@ -10,6 +10,26 @@ class RuleRepositoryPort(ABC):
 
     @abstractmethod
     def save_scoring_rule(self, tenant_id: UUID, rule: ScoringRule) -> ScoringRule:
+        pass
+
+    # Prefixed with scoring_ (unlike DisqualificationRuleRepositoryPort's
+    # bare names) because this port is shared with assignment rules.
+    @abstractmethod
+    def get_scoring_rule_by_id_and_tenant(self, rule_id: UUID, tenant_id: UUID) -> Optional[ScoringRule]:
+        pass
+
+    @abstractmethod
+    def list_scoring_rules_by_tenant(
+        self, tenant_id: UUID, limit: int = 100, offset: int = 0
+    ) -> List[ScoringRule]:
+        pass
+
+    @abstractmethod
+    def count_scoring_rules_by_tenant(self, tenant_id: UUID) -> int:
+        pass
+
+    @abstractmethod
+    def delete_scoring_rule(self, rule_id: UUID, tenant_id: UUID) -> bool:
         pass
 
     @abstractmethod

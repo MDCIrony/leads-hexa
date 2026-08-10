@@ -27,6 +27,8 @@ class GetAgentQuery:
 @dataclass(frozen=True)
 class GetRulesQuery:
     tenant_id: UUID
+    limit: int = 100
+    offset: int = 0
 
 
 @dataclass(frozen=True)

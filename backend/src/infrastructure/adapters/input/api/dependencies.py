@@ -17,7 +17,8 @@ from application.ports.input.agent_use_case_ports import (
 )
 from application.ports.input.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
-    GetAssignmentRulesInputPort, GetScoringRulesInputPort, UpdateAssignmentRuleInputPort,
+    DeleteScoringRuleInputPort, GetAssignmentRulesInputPort, GetScoringRulesInputPort,
+    UpdateAssignmentRuleInputPort, UpdateScoringRuleInputPort,
 )
 from application.ports.input.disqualification_rule_use_case_ports import (
     CreateDisqualificationRuleInputPort, DeleteDisqualificationRuleInputPort,
@@ -53,7 +54,8 @@ from application.use_cases.agent_use_cases import (
 )
 from application.use_cases.rule_use_cases import (
     CreateAssignmentRuleUseCase, CreateScoringRuleUseCase, DeleteAssignmentRuleUseCase,
-    GetAssignmentRulesUseCase, GetScoringRulesUseCase, UpdateAssignmentRuleUseCase,
+    DeleteScoringRuleUseCase, GetAssignmentRulesUseCase, GetScoringRulesUseCase,
+    UpdateAssignmentRuleUseCase, UpdateScoringRuleUseCase,
 )
 from application.use_cases.disqualification_rule_use_cases import (
     CreateDisqualificationRuleUseCase, DeleteDisqualificationRuleUseCase,
@@ -177,6 +179,12 @@ def get_create_scoring_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> 
 
 def get_get_scoring_rules_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetScoringRulesInputPort:
     return GetScoringRulesUseCase(uow=uow)
+
+def get_update_scoring_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateScoringRuleInputPort:
+    return UpdateScoringRuleUseCase(uow=uow)
+
+def get_delete_scoring_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteScoringRuleInputPort:
+    return DeleteScoringRuleUseCase(uow=uow)
 
 def get_create_assignment_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateAssignmentRuleInputPort:
     return CreateAssignmentRuleUseCase(uow=uow)

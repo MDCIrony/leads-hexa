@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 import psycopg
@@ -13,24 +13,59 @@ class RawSqlRuleRepository(RuleRepositoryPort):
         self.connection = connection
 
     def get_scoring_rules_by_tenant(self, tenant_id: UUID) -> List[ScoringRule]:
+        # ORDER BY added here too: without it, paginating list_scoring_rules_by_tenant
+        # against the same table with no stable order could repeat or skip rows.
         cursor = self.connection.execute(
-            "SELECT * FROM scoring_rules WHERE tenant_id = %s", (tenant_id,)
+            "SELECT * FROM scoring_rules WHERE tenant_id = %s ORDER BY priority DESC, id",
+            (tenant_id,),
         )
         rows = cursor.fetchall()
-        rules = []
-        for r in rows:
-            rules.append(
-                ScoringRule.create(
-                    tenant_id=r["tenant_id"],
-                    rule_id=r["id"],
-                    name=r["name"],
-                    conditions=r["conditions"] or [],
-                    score_delta=r["score_delta"],
-                    priority=r["priority"],
-                    is_active=r["is_active"],
-                )
-            )
-        return rules
+        return [self._to_scoring_rule(row) for row in rows]
+
+    def get_scoring_rule_by_id_and_tenant(self, rule_id: UUID, tenant_id: UUID) -> Optional[ScoringRule]:
+        row = self.connection.execute(
+            "SELECT * FROM scoring_rules WHERE id = %s AND tenant_id = %s",
+            (rule_id, tenant_id),
+        ).fetchone()
+        return self._to_scoring_rule(row) if row else None
+
+    def list_scoring_rules_by_tenant(
+        self, tenant_id: UUID, limit: int = 100, offset: int = 0
+    ) -> List[ScoringRule]:
+        rows = self.connection.execute(
+            "SELECT * FROM scoring_rules WHERE tenant_id = %s "
+            "ORDER BY priority DESC, id LIMIT %s OFFSET %s",
+            (tenant_id, limit, offset),
+        ).fetchall()
+        return [self._to_scoring_rule(row) for row in rows]
+
+    def count_scoring_rules_by_tenant(self, tenant_id: UUID) -> int:
+        row = self.connection.execute(
+            "SELECT COUNT(*) AS count FROM scoring_rules WHERE tenant_id = %s",
+            (tenant_id,),
+        ).fetchone()
+        return int(row["count"])
+
+    def delete_scoring_rule(self, rule_id: UUID, tenant_id: UUID) -> bool:
+        # Filtered inside the DELETE itself, same double-key convention as
+        # RawSqlDisqualificationRuleRepository.delete.
+        cursor = self.connection.execute(
+            "DELETE FROM scoring_rules WHERE id = %s AND tenant_id = %s",
+            (rule_id, tenant_id),
+        )
+        return cursor.rowcount > 0
+
+    @staticmethod
+    def _to_scoring_rule(row) -> ScoringRule:
+        return ScoringRule.create(
+            tenant_id=row["tenant_id"],
+            rule_id=row["id"],
+            name=row["name"],
+            conditions=row["conditions"] or [],
+            score_delta=row["score_delta"],
+            priority=row["priority"],
+            is_active=row["is_active"],
+        )
 
     def get_assignment_rules_by_tenant(self, tenant_id: UUID) -> List[AssignmentRule]:
         rows = self.connection.execute(
