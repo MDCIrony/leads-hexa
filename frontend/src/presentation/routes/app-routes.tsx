@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router';
+import { AgentsPage } from '../pages/AgentsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { PlaceholderPage } from '../pages/PlaceholderPage';
@@ -22,7 +23,7 @@ export function AppRoutes() {
       </Route>
 
       <Route element={<RoleRoute allow={['MANAGER']} />}>
-        <Route path="/asesores" element={<PlaceholderPage title="Asesores" />} />
+        <Route path="/asesores" element={<AgentsPage />} />
         <Route path="/reglas/puntuacion" element={<PlaceholderPage title="Reglas de puntuación" />} />
         <Route path="/reglas/asignacion" element={<PlaceholderPage title="Reglas de asignación" />} />
         <Route path="/leads/nuevo" element={<PlaceholderPage title="Alta de lead" />} />
