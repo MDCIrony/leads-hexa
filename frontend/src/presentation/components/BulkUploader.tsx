@@ -1,31 +1,39 @@
 import { useState } from 'react';
-import { UploadCloud, CheckCircle2, FileSpreadsheet } from 'lucide-react';
+import { UploadCloud, CheckCircle2, AlertTriangle, FileSpreadsheet } from 'lucide-react';
+
+export interface BulkUploadResult {
+  succeeded: number;
+  failed: number;
+}
 
 interface BulkUploaderProps {
-  onUpload: (file: File) => Promise<void>;
+  onUpload: (file: File) => Promise<BulkUploadResult>;
 }
 
 export function BulkUploader({ onUpload }: BulkUploaderProps) {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<BulkUploadResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
-      setSuccessMessage(null);
+      setResult(null);
+      setErrorMessage(null);
     }
   };
 
   const handleUpload = async () => {
     if (!file) return;
     setIsUploading(true);
+    setErrorMessage(null);
     try {
-      await onUpload(file);
-      setSuccessMessage(`Archivo ${file.name} procesado correctamente.`);
+      const outcome = await onUpload(file);
+      setResult(outcome);
       setFile(null);
     } catch {
-      setSuccessMessage('Error al procesar el archivo.');
+      setErrorMessage('Error al procesar el archivo.');
     } finally {
       setIsUploading(false);
     }
@@ -64,10 +72,26 @@ export function BulkUploader({ onUpload }: BulkUploaderProps) {
         </div>
       )}
 
-      {successMessage && (
-        <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>{successMessage}</span>
+      {result && (
+        <div
+          className={`flex items-center justify-center gap-2 text-sm p-3 rounded-lg border ${
+            result.failed > 0
+              ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+          }`}
+        >
+          {result.failed > 0 ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+          <span>
+            {result.succeeded} {result.succeeded === 1 ? 'fila cargada' : 'filas cargadas'}, {result.failed}{' '}
+            {result.failed === 1 ? 'rechazada' : 'rechazadas'}.
+          </span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="flex items-center justify-center gap-2 text-rose-400 text-sm bg-rose-500/10 p-3 rounded-lg border border-rose-500/20">
+          <AlertTriangle className="w-4 h-4" />
+          <span>{errorMessage}</span>
         </div>
       )}
     </div>

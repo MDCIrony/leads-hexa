@@ -1,9 +1,11 @@
 import { Route, Routes } from 'react-router';
 import { AgentsPage } from '../pages/AgentsPage';
 import { BootstrapPage } from '../pages/BootstrapPage';
+import { BulkUploadPage } from '../pages/BulkUploadPage';
 import { LeadDetailPage } from '../pages/LeadDetailPage';
 import { LoginPage } from '../pages/LoginPage';
 import { MyLeadsPage } from '../pages/MyLeadsPage';
+import { NewLeadPage } from '../pages/NewLeadPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { OrganizationsPage } from '../pages/OrganizationsPage';
 import { PlaceholderPage } from '../pages/PlaceholderPage';
@@ -30,8 +32,8 @@ export function AppRoutes() {
         <Route path="/asesores" element={<AgentsPage />} />
         <Route path="/reglas/puntuacion" element={<PlaceholderPage title="Reglas de puntuación" />} />
         <Route path="/reglas/asignacion" element={<PlaceholderPage title="Reglas de asignación" />} />
-        <Route path="/leads/nuevo" element={<PlaceholderPage title="Alta de lead" />} />
-        <Route path="/leads/carga" element={<PlaceholderPage title="Carga masiva" />} />
+        <Route path="/leads/nuevo" element={<NewLeadPage />} />
+        <Route path="/leads/carga" element={<BulkUploadPage />} />
       </Route>
 
       <Route element={<RoleRoute allow={['AGENT']} />}>
