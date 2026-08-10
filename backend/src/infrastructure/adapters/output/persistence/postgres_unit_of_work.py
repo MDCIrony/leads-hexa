@@ -4,6 +4,8 @@ from typing import Optional
 import psycopg
 
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
+# infrastructure → domain is an allowed direction; the inverse is not.
+from domain.exceptions import DomainException
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
 from infrastructure.adapters.output.persistence.raw_sql_rule_repository import RawSqlRuleRepository
@@ -59,6 +61,20 @@ class PostgresUnitOfWork(UnitOfWorkPort):
                 self._connection_ctx.__exit__(exc_type, exc_val, exc_tb)
                 self._connection_ctx = None
                 self.connection = None
+
+        # Translated only after rollback and pool return have both happened,
+        # so a raw psycopg error never leaves a borrowed connection or an open
+        # transaction behind. Only the two constraint types a use case can
+        # forget to pre-check are covered; anything else keeps its original
+        # type and reaches unhandled_exception_handler as a 500, unchanged.
+        if isinstance(exc_val, psycopg.errors.UniqueViolation):
+            raise DomainException(
+                "Ya existe un registro con ese valor", error_code="ALREADY_EXISTS"
+            ) from exc_val
+        if isinstance(exc_val, psycopg.errors.ForeignKeyViolation):
+            raise DomainException(
+                "Referencia a un registro que no existe", error_code="RELATED_ENTITY_NOT_FOUND"
+            ) from exc_val
 
     def commit(self) -> None:
         if self.connection:

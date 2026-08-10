@@ -82,6 +82,19 @@ organización.
 | `GROUP_ALREADY_EXISTS` | 400 | Ya existe un grupo con ese nombre en la organización |
 | `SOURCE_IN_USE` | 400 | El origen tiene leads asociados; borrarlo perdería su trazabilidad |
 
+## Red de seguridad genérica en la persistencia
+
+`PostgresUnitOfWork.__exit__` traduce estos dos si una violación de índice único o de clave foránea
+llega desde psycopg sin que ningún caso de uso la haya comprobado antes de escribir. El mensaje es
+deliberadamente genérico — a diferencia de `EMAIL_ALREADY_EXISTS` o `GROUP_NOT_FOUND`, no puede
+señalar un campo concreto. Cuando existe una comprobación previa en el caso de uso, su código
+específico responde primero y esta red nunca llega a activarse.
+
+| `error_code` | HTTP | Significa |
+|---|---|---|
+| `ALREADY_EXISTS` | 400 | `UniqueViolation` sin comprobación previa en el caso de uso |
+| `RELATED_ENTITY_NOT_FOUND` | 400 | `ForeignKeyViolation` sin comprobación previa en el caso de uso |
+
 ## Validación de campos
 
 | `error_code` | HTTP | Significa |
