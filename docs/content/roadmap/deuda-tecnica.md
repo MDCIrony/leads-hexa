@@ -17,27 +17,6 @@ transcripción cuidadosa.
 ningún diagrama: informa mal, con la autoridad visual de un diagrama, y quien lo lea confiará en
 una estructura que ya no existe.
 
-## Falta un test de contrato de serialización
-
-Las pruebas automáticas comprueban sobre todo códigos de estado HTTP y qué queda guardado, casi
-nunca el cuerpo completo de una respuesta. Eso ha dejado pasar el mismo defecto varias veces: un
-campo nuevo llega hasta el borde de la API y el adaptador de salida lo descarta sin que ningún
-test lo note.
-
-| Campo que se perdió en la respuesta | Cómo se detectó |
-|---|---|
-| El correo del lead | Se serializaba como la cadena de texto `"None"` |
-| El identificador del origen | Estaba en el diseño; la respuesta lo omitía |
-| El identificador del registro de entrada | Mismo patrón, en otra respuesta |
-| El motivo de descalificación | Ausente del detalle del lead hasta que una prueba lo necesitó |
-
-**Qué cuesta:** un test que compare el cuerpo entero de una petición `GET` contra lo que se envió
-a crear el recurso, en vez de comprobar sólo el código de estado.
-
-**Riesgo de no hacerlo:** el patrón ya se repitió cuatro veces con síntomas distintos. Sin ese
-test, el próximo campo que un adaptador descarte lo va a encontrar quien construya la interfaz —o
-quien la use—, no la suite.
-
 ## Una conexión de arranque se comparte entre hilos sin sincronización
 
 Al arrancar, el proceso abre una conexión de base de datos en modo autocommit que vive mientras

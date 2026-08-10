@@ -92,6 +92,39 @@ Deben estar siempre 4/4. Si uno falla, algo cruzó una frontera que la arquitect
 para impedir — ver [Arquitectura](../arquitectura/index.md) y
 [ADR-0001](../decisiones/0001-arquitectura-hexagonal.md).
 
+## El test de contrato de serialización
+
+`backend/tests/e2e/test_response_contract.py` vigila un defecto que la suite dejó pasar cuatro
+veces: **un campo nuevo llega hasta el borde de la API y el adaptador de salida lo descarta**. El
+correo del lead se serializó como la cadena `"None"`; el identificador del origen, el del registro
+de entrada y el motivo de descalificación se quedaron fuera de su respuesta. Ninguno lo detectó una
+prueba: el primero apareció en el harness de negocio y el último, escribiendo otro test.
+
+El resto de pruebas afirma sobre los campos que le interesan, así que sigue en verde aunque el
+adaptador tire otros ocho. Ésta afirma sobre todos a la vez, con dos comprobaciones por entidad:
+
+- **Nada de lo enviado vuelve vacío.** Se crea el recurso con valor en cada campo opcional, se
+  relee, y se compara campo a campo.
+- **Ningún campo del esquema queda sin rellenar.** Se recorren los campos declarados en el modelo
+  Pydantic y se exige que ninguno vuelva `None`.
+
+Añade además una garantía transversal: ningún cuerpo de respuesta contiene `hashed_password`,
+`secret_hash` ni `password`.
+
+!!! warning "Cuando este test falle, el arreglo está en el router"
+    Los campos que legítimamente pueden volver vacíos viven en `NULLABLE_BY_DESIGN`, **cada uno con
+    su razón escrita al lado**: estados del ciclo de vida que son mutuamente excluyentes, un
+    `lead_id` que sólo existe si el registro llegó a promoverse. Cada uno de ésos se ejercita
+    aparte, en un test que provoca su transición, para que la exención no se convierta en un hueco
+    de cobertura.
+
+    Si un campo empieza a volver `None` y no está en esa tabla, el test falla a propósito. **La
+    corrección es rellenarlo en el router, no añadir una línea a `NULLABLE_BY_DESIGN`.** Ampliar la
+    tabla para silenciar el fallo reintroduce exactamente el defecto que este test existe para
+    impedir, y es tanto más tentador cuanto que el frontend genera sus tipos desde este contrato:
+    un campo declarado en el esquema y nunca rellenado compila en TypeScript y llega `undefined` al
+    navegador.
+
 ## La limpieza entre pruebas
 
 Cada test de integración o end-to-end trunca las tablas antes de correr. La lista de tablas no está
