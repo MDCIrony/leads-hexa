@@ -1,0 +1,36 @@
+{
+  "items": [
+    {
+      "id": "428b66a6-10d2-4636-8689-0631f9990d1a",
+      "name": "Presupuesto alto 1786388341645",
+      "conditions": [
+        {
+          "field": "budget",
+          "operator": "GREATER_THAN",
+          "value": 5000
+        }
+      ],
+      "score_delta": 25,
+      "priority": 5,
+      "is_active": true
+    },
+    {
+      "id": "f9805c75-84bc-4dc4-8806-d3ec1a052baa",
+      "name": "Sector tecnologico 1786388341645",
+      "conditions": [
+        {
+          "field": "industry",
+          "operator": "EQUALS",
+          "value": "Technology"
+        }
+      ],
+      "score_delta": 15,
+      "priority": 0,
+      "is_active": true
+    }
+  ],
+  "total": 2,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false
+}

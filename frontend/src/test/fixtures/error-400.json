@@ -1,0 +1,8 @@
+{
+  "status": 400,
+  "data": {
+    "error": true,
+    "error_code": "FIELD_NOT_SCORABLE",
+    "message": "El campo 'tenant_id' no es evaluable"
+  }
+}

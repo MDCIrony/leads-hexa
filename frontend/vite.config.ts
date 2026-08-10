@@ -12,8 +12,4 @@ export default defineConfig({
       '/api': backendOrigin,
     },
   },
-  test: {
-    environment: 'node',
-    globals: true,
-  },
 });

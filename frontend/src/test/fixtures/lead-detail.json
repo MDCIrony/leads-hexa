@@ -1,0 +1,32 @@
+{
+  "id": "8af196c8-17e8-4a8c-99c4-6a611aef65dd",
+  "tenant_id": "df2e68ca-57e7-4bf4-b276-787f27b6d307",
+  "source_id": "b579ebdd-e461-486c-a1cb-e3d997927afd",
+  "first_name": "Marta",
+  "last_name": "Iglesias",
+  "email": "marta-1786388341645@northwind.test",
+  "company": "Northwind",
+  "budget": 42000,
+  "industry": "Technology",
+  "custom_attributes": {},
+  "phone": "+34600111222",
+  "score": 40,
+  "score_breakdown": [
+    {
+      "rule_id": "428b66a6-10d2-4636-8689-0631f9990d1a",
+      "name": "Presupuesto alto 1786388341645",
+      "score_delta": 25
+    },
+    {
+      "rule_id": "f9805c75-84bc-4dc4-8806-d3ec1a052baa",
+      "name": "Sector tecnologico 1786388341645",
+      "score_delta": 15
+    }
+  ],
+  "status": "ASSIGNED",
+  "assigned_agent_id": "5c4d6ddb-3b0d-4ee7-8a7b-4e45862b5f95",
+  "assigned_at": "2026-08-10T18:59:03.261274+00:00",
+  "discard_reason": null,
+  "disqualification_reason": null,
+  "created_at": "2026-08-10T18:59:03.256213+00:00"
+}

@@ -1,0 +1,8 @@
+{
+  "status": 404,
+  "data": {
+    "error": true,
+    "error_code": "LEAD_NOT_FOUND",
+    "message": "El lead no existe"
+  }
+}

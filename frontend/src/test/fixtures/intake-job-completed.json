@@ -1,0 +1,11 @@
+{
+  "id": "c0cef2d8-99d3-4297-becd-d64de5db43e7",
+  "source_id": "b579ebdd-e461-486c-a1cb-e3d997927afd",
+  "kind": "SINGLE",
+  "status": "COMPLETED",
+  "total_items": 1,
+  "succeeded": 1,
+  "failed": 0,
+  "created_at": "2026-08-10T18:59:03.241734Z",
+  "completed_at": "2026-08-10T18:59:03.268450Z"
+}

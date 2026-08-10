@@ -1,0 +1,24 @@
+{
+  "items": [
+    {
+      "id": "e51d5a49-625c-4774-82b0-4bf218972f8e",
+      "name": "Todo al asesor 1786388341645",
+      "min_score": 0,
+      "max_score": null,
+      "target_group_id": null,
+      "target_agent_ids": [
+        "5c4d6ddb-3b0d-4ee7-8a7b-4e45862b5f95"
+      ],
+      "agent_match_mode": "ANY",
+      "strategy": "DIRECT_AGENT",
+      "priority": 10,
+      "is_active": true,
+      "rr_cursor": 0,
+      "conditions": []
+    }
+  ],
+  "total": 1,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false
+}

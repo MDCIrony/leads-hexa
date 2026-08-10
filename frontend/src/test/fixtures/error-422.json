@@ -1,0 +1,25 @@
+{
+  "status": 422,
+  "data": {
+    "error": true,
+    "error_code": "VALIDATION_ERROR",
+    "message": "La petición no supera la validación de esquema",
+    "details": [
+      {
+        "field": "name",
+        "code": "missing",
+        "message": "Field required"
+      },
+      {
+        "field": "conditions",
+        "code": "missing",
+        "message": "Field required"
+      },
+      {
+        "field": "score_delta",
+        "code": "missing",
+        "message": "Field required"
+      }
+    ]
+  }
+}
