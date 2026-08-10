@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import psycopg
@@ -96,5 +97,39 @@ def test_saving_again_with_fewer_errors_replaces_the_previous_set(test_db):
         assert found is not None
         assert len(found.errors) == 1
         assert found.errors[0].field == "email"
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_list_by_tenant_orders_newest_first(test_db):
+    """Explicit timestamps avoid flakiness on systems fast enough to save all
+    three within the same microsecond."""
+    repo, conn, ctx = _repo(test_db)
+    try:
+        tenant = _tenant(conn)
+        source = _source(conn, tenant.id.value)
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        first = IntakeRecord.create(
+            tenant_id=tenant.id.value, source_id=source.id.value, payload={}, received_at=base
+        )
+        second = IntakeRecord.create(
+            tenant_id=tenant.id.value,
+            source_id=source.id.value,
+            payload={},
+            received_at=base + timedelta(minutes=1),
+        )
+        third = IntakeRecord.create(
+            tenant_id=tenant.id.value,
+            source_id=source.id.value,
+            payload={},
+            received_at=base + timedelta(minutes=2),
+        )
+        repo.save(first)
+        repo.save(second)
+        repo.save(third)
+
+        found = repo.list_by_tenant(tenant.id.value, limit=3, offset=0)
+
+        assert [r.id.value for r in found] == [third.id.value, second.id.value, first.id.value]
     finally:
         ctx.__exit__(None, None, None)

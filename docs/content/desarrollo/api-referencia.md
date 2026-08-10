@@ -427,6 +427,8 @@ fallo, para que el gestor lo corrija y lo reintente o lo descarte.
 ### `GET /api/v1/intake/records`
 
 `MANAGER`. Filtra por `status` (`PENDING` · `PROMOTED` · `REJECTED` · `DISCARDED`) y por `job_id`.
+El orden es `received_at DESC, id`: el último registro que llegó sale primero, igual que
+`GET /leads` y `GET /notifications` — lo que un gestor abre a mirar es lo que acaba de entrar.
 
 ```json
 {
@@ -496,7 +498,8 @@ procesamiento en segundo plano ya terminó, y cómo le fue.
 
 ### `GET /api/v1/intake/jobs`
 
-`MANAGER`. Filtra por `status` (`PENDING` · `PROCESSING` · `COMPLETED` · `FAILED`).
+`MANAGER`. Filtra por `status` (`PENDING` · `PROCESSING` · `COMPLETED` · `FAILED`). El orden es
+`created_at DESC, id`: el trabajo más reciente sale primero.
 
 ```json
 {

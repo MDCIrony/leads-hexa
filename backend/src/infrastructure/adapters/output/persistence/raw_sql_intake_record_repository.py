@@ -87,7 +87,7 @@ class RawSqlIntakeRecordRepository(IntakeRecordRepositoryPort):
         if job_id is not None:
             query += " AND job_id = %s"
             params.append(job_id)
-        query += " ORDER BY received_at, id LIMIT %s OFFSET %s"
+        query += " ORDER BY received_at DESC, id LIMIT %s OFFSET %s"
         params += [limit, offset]
         rows = self.connection.execute(query, params).fetchall()
         return [self._row_to_record(row) for row in rows]

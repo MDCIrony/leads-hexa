@@ -62,13 +62,13 @@ class RawSqlIntakeJobRepository(IntakeJobRepositoryPort):
         if status is not None:
             rows = self.connection.execute(
                 "SELECT * FROM intake_jobs WHERE tenant_id = %s AND status = %s "
-                "ORDER BY created_at, id LIMIT %s OFFSET %s",
+                "ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
                 (tenant_id, status.value, limit, offset),
             ).fetchall()
         else:
             rows = self.connection.execute(
                 "SELECT * FROM intake_jobs WHERE tenant_id = %s "
-                "ORDER BY created_at, id LIMIT %s OFFSET %s",
+                "ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
                 (tenant_id, limit, offset),
             ).fetchall()
         return [self._row_to_job(row) for row in rows]

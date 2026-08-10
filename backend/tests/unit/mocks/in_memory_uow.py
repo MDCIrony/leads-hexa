@@ -56,7 +56,10 @@ class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
             and (status is None or r.status == status)
             and (job_id is None or (r.job_id is not None and r.job_id.value == job_id))
         ]
-        matches.sort(key=lambda r: r.received_at)
+        # Stable two-pass sort: tiebreak by id ascending first, then order by
+        # received_at descending without disturbing that ascending tiebreak.
+        matches.sort(key=lambda r: r.id.value)
+        matches.sort(key=lambda r: r.received_at, reverse=True)
         return matches[offset : offset + limit]
 
     def count_by_tenant(
@@ -100,7 +103,10 @@ class InMemoryIntakeJobRepository(IntakeJobRepositoryPort):
             for j in self._jobs.values()
             if j.tenant_id.value == tenant_id and (status is None or j.status == status)
         ]
-        matches.sort(key=lambda j: j.created_at)
+        # Stable two-pass sort: tiebreak by id ascending first, then order by
+        # created_at descending without disturbing that ascending tiebreak.
+        matches.sort(key=lambda j: j.id.value)
+        matches.sort(key=lambda j: j.created_at, reverse=True)
         return matches[offset : offset + limit]
 
     def count_by_tenant(self, tenant_id: UUID, status: Optional[IntakeJobStatus] = None) -> int:

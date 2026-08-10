@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import psycopg
@@ -152,5 +153,31 @@ def test_an_intake_record_saved_with_a_job_id_reads_it_back(test_db):
         assert found is not None
         assert found.job_id is not None
         assert found.job_id.value == job.id.value
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_list_by_tenant_orders_newest_first(test_db):
+    """Explicit timestamps avoid flakiness on systems fast enough to save all
+    three within the same microsecond."""
+    repo, conn, ctx = _repo(test_db)
+    try:
+        tenant = _tenant(conn)
+        source = _source(conn, tenant.id.value)
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+        first = IntakeJob.create(tenant_id=tenant.id.value, source_id=source.id.value, kind=IntakeJobKind.SINGLE)
+        first.created_at = base
+        second = IntakeJob.create(tenant_id=tenant.id.value, source_id=source.id.value, kind=IntakeJobKind.SINGLE)
+        second.created_at = base + timedelta(minutes=1)
+        third = IntakeJob.create(tenant_id=tenant.id.value, source_id=source.id.value, kind=IntakeJobKind.SINGLE)
+        third.created_at = base + timedelta(minutes=2)
+        repo.save(first)
+        repo.save(second)
+        repo.save(third)
+
+        found = repo.list_by_tenant(tenant.id.value, limit=3, offset=0)
+
+        assert [j.id.value for j in found] == [third.id.value, second.id.value, first.id.value]
     finally:
         ctx.__exit__(None, None, None)
