@@ -41,8 +41,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStatus('authenticated');
   }, []);
 
-  // Navigating away on logout is the router's job (next task); this only
-  // clears the session and leaves the hole for it to fill.
+  // Navigating away on logout is the router's job; this only clears the
+  // session state.
   const logout = useCallback(() => {
     logoutRequest();
     setUser(null);

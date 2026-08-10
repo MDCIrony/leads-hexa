@@ -1,11 +1,17 @@
-import { Layers, Bell } from 'lucide-react';
+import { Layers, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { useSession } from '../../application/session/use-session';
 
-interface HeaderProps {
-  tenantId: string;
-  onTenantChange: (id: string) => void;
-}
+/** logout() only clears the session; navigating away is this call site's job. */
+export function Header() {
+  const { user, logout } = useSession();
+  const navigate = useNavigate();
 
-export function Header({ tenantId, onTenantChange }: HeaderProps) {
+  function handleLogout() {
+    logout();
+    navigate('/login', { replace: true });
+  }
+
   return (
     <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur px-6 flex items-center justify-between sticky top-0 z-50">
       <div className="flex items-center gap-3">
@@ -19,20 +25,18 @@ export function Header({ tenantId, onTenantChange }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
-          <span className="text-slate-400">Tenant:</span>
-          <select
-            value={tenantId}
-            onChange={(e) => onTenantChange(e.target.value)}
-            className="bg-transparent text-slate-200 font-mono focus:outline-none cursor-pointer"
-          >
-            <option value="b1a2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d">Tenant Alpha (Demo)</option>
-            <option value="9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d">Tenant Beta</option>
-          </select>
-        </div>
-
-        <button className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors">
-          <Bell className="w-4 h-4" />
+        {user && (
+          <div className="text-right text-xs">
+            <p className="text-slate-200 font-medium">{user.name}</p>
+            <p className="text-slate-500">{user.tenant_name ?? user.role}</p>
+          </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
+          title="Cerrar sesión"
+        >
+          <LogOut className="w-4 h-4" />
         </button>
       </div>
     </header>

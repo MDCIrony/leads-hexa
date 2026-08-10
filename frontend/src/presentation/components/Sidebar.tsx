@@ -1,19 +1,30 @@
-import { LayoutDashboard, Sliders, UploadCloud, Users } from 'lucide-react';
+import { Building2, LayoutDashboard, Sliders, UploadCloud, UserPlus, Users } from 'lucide-react';
+import { NavLink } from 'react-router';
+import { useSession } from '../../application/session/use-session';
 
-export type TabType = 'dashboard' | 'rules' | 'upload' | 'settings';
-
-interface SidebarProps {
-  activeTab: TabType;
-  onTabChange: (tab: TabType) => void;
+interface MenuItem {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
 }
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard Leads', icon: LayoutDashboard },
-    { id: 'rules', label: 'Reglas de Scoring', icon: Sliders },
-    { id: 'upload', label: 'Carga Masiva (CSV)', icon: UploadCloud },
-    { id: 'settings', label: 'Agentes & Webhooks', icon: Users },
-  ] as const;
+// One entry per protected route in the routes table — see role-guard.tsx for the roles that gate them.
+const MENU_BY_ROLE: Record<string, MenuItem[]> = {
+  ADMIN: [{ to: '/admin/organizaciones', label: 'Organizaciones', icon: Building2 }],
+  MANAGER: [
+    { to: '/asesores', label: 'Asesores', icon: Users },
+    { to: '/reglas/puntuacion', label: 'Reglas de puntuación', icon: Sliders },
+    { to: '/reglas/asignacion', label: 'Reglas de asignación', icon: LayoutDashboard },
+    { to: '/leads/nuevo', label: 'Alta de lead', icon: UserPlus },
+    { to: '/leads/carga', label: 'Carga masiva', icon: UploadCloud },
+  ],
+  AGENT: [{ to: '/mis-leads', label: 'Mis leads', icon: LayoutDashboard }],
+};
+
+/** The menu comes from the session's role — never a locally-picked tab. */
+export function Sidebar() {
+  const { user } = useSession();
+  const items = user ? (MENU_BY_ROLE[user.role] ?? []) : [];
 
   return (
     <aside className="w-64 border-r border-slate-800 bg-slate-900/30 p-4 flex flex-col gap-2">
@@ -21,24 +32,22 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         Navegación
       </div>
 
-      {menuItems.map((item) => {
-        const Icon = item.icon;
-        const isActive = activeTab === item.id;
-        return (
-          <button
-            key={item.id}
-            onClick={() => onTabChange(item.id as TabType)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+      {items.map(({ to, label, icon: Icon }) => (
+        <NavLink
+          key={to}
+          to={to}
+          className={({ isActive }) =>
+            `w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
               isActive
                 ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-            }`}
-          >
-            <Icon className="w-4 h-4" />
-            <span>{item.label}</span>
-          </button>
-        );
-      })}
+            }`
+          }
+        >
+          <Icon className="w-4 h-4" />
+          <span>{label}</span>
+        </NavLink>
+      ))}
     </aside>
   );
 }

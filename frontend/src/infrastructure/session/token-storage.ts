@@ -1,6 +1,5 @@
 // The backend issues the JWT in the response body and sets no cookie, so
-// localStorage is the only place that survives a reload (decision in
-// .plans/frontend/01-cimientos/README.md).
+// localStorage is the only place that survives a reload.
 const TOKEN_KEY = 'leads-hexa:access_token';
 
 export function getToken(): string | null {
