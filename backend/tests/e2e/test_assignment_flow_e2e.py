@@ -223,3 +223,84 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
             client.post("/api/v1/rules/assignment", json={"name": "Nope"}, headers=plain_headers).status_code
             == 403
         )
+
+
+def test_assignment_rule_with_unknown_or_foreign_group_is_a_404_not_a_500():
+    """target_group_id used to reach the database unchecked: an unknown id
+    tripped the assignment_rules_target_group_id_fkey and surfaced as a raw
+    500, and a group belonging to another tenant was silently accepted
+    (foreign key happy, tenant boundary not). Both POST and PATCH must
+    resolve the group scoped to the caller's own tenant."""
+    with TestClient(app) as client:
+        admin_headers = _bootstrap_admin_headers(client)
+        org = _create_org(client, admin_headers, f"Acme {uuid.uuid4().hex[:6]}")
+        headers = org["manager_headers"]
+
+        other_org = _create_org(client, admin_headers, f"Other {uuid.uuid4().hex[:6]}")
+        other_group = client.post(
+            "/api/v1/groups", json={"name": "Foreign"}, headers=other_org["manager_headers"]
+        )
+        assert other_group.status_code == 201, other_group.text
+        foreign_group_id = other_group.json()["id"]
+
+        unknown_group_id = str(uuid.uuid4())
+
+        own_group = client.post("/api/v1/groups", json={"name": "Own"}, headers=headers)
+        assert own_group.status_code == 201, own_group.text
+        own_agent = client.post(
+            "/api/v1/agents",
+            json={
+                "name": "Own Agent",
+                "email": f"own_{uuid.uuid4().hex[:6]}@acme.test",
+                "group_id": own_group.json()["id"],
+                "password": "agent-pass-123",
+            },
+            headers=headers,
+        )
+        assert own_agent.status_code == 201, own_agent.text
+        own_agent_id = own_agent.json()["id"]
+
+        def _create_payload(target_group_id: str) -> dict:
+            return {
+                "name": "probe",
+                "min_score": 0,
+                "max_score": None,
+                "target_group_id": target_group_id,
+                "target_agent_ids": [],
+                "agent_match_mode": "ANY",
+                "strategy": "ROUND_ROBIN",
+                "priority": 10,
+                "conditions": [],
+            }
+
+        # Unknown group: fails the foreign key, must not leak as a 500.
+        resp = client.post(
+            "/api/v1/rules/assignment", json=_create_payload(unknown_group_id), headers=headers
+        )
+        assert resp.status_code == 404, resp.text
+        assert resp.json()["error_code"] == "GROUP_NOT_FOUND"
+
+        # Group that exists, but in another tenant: fkey is happy, tenant boundary is not.
+        resp = client.post(
+            "/api/v1/rules/assignment", json=_create_payload(foreign_group_id), headers=headers
+        )
+        assert resp.status_code == 404, resp.text
+        assert resp.json()["error_code"] == "GROUP_NOT_FOUND"
+
+        # No group at all: unaffected by the new check. Targets agents instead,
+        # since a rule must point at a group or at concrete agents.
+        no_group_payload = _create_payload(unknown_group_id)
+        no_group_payload["target_group_id"] = None
+        no_group_payload["target_agent_ids"] = [own_agent_id]
+        resp = client.post("/api/v1/rules/assignment", json=no_group_payload, headers=headers)
+        assert resp.status_code == 201, resp.text
+        rule_id = resp.json()["id"]
+
+        # PATCH reproduces the same check as POST.
+        resp = client.patch(
+            f"/api/v1/rules/assignment/{rule_id}",
+            json={"target_group_id": unknown_group_id},
+            headers=headers,
+        )
+        assert resp.status_code == 404, resp.text
+        assert resp.json()["error_code"] == "GROUP_NOT_FOUND"

@@ -59,24 +59,35 @@ def _get_owned_rule(uow: UnitOfWorkPort, tenant_id: UUID, rule_id: UUID) -> Assi
     return rule
 
 
+def _ensure_group_exists(uow: UnitOfWorkPort, tenant_id: UUID, group_id: UUID) -> None:
+    """Scoped to the tenant so a foreign-key violation on an unknown group
+    never escapes as a 500, and a group from another organization reads
+    back as missing rather than silently accepted."""
+    group = uow.groups.get_by_id(group_id)
+    if group is None or str(group.tenant_id) != str(tenant_id):
+        raise DomainException("El grupo no existe", error_code="GROUP_NOT_FOUND")
+
+
 class CreateAssignmentRuleUseCase(CreateAssignmentRuleInputPort):
     def __init__(self, uow: UnitOfWorkPort):
         self.uow = uow
 
     def execute(self, command: CreateAssignmentRuleCommand) -> AssignmentRule:
-        rule = AssignmentRule.create(
-            tenant_id=command.tenant_id,
-            name=command.name,
-            min_score=command.min_score,
-            max_score=command.max_score,
-            target_group_id=command.target_group_id,
-            target_agent_ids=command.target_agent_ids,
-            agent_match_mode=command.agent_match_mode,
-            strategy=command.strategy,
-            priority=command.priority,
-            conditions=command.conditions,
-        )
         with self.uow:
+            if command.target_group_id is not None:
+                _ensure_group_exists(self.uow, command.tenant_id, command.target_group_id)
+            rule = AssignmentRule.create(
+                tenant_id=command.tenant_id,
+                name=command.name,
+                min_score=command.min_score,
+                max_score=command.max_score,
+                target_group_id=command.target_group_id,
+                target_agent_ids=command.target_agent_ids,
+                agent_match_mode=command.agent_match_mode,
+                strategy=command.strategy,
+                priority=command.priority,
+                conditions=command.conditions,
+            )
             return self.uow.rules.save_assignment_rule(command.tenant_id, rule)
 
 
@@ -103,6 +114,7 @@ class UpdateAssignmentRuleUseCase(UpdateAssignmentRuleInputPort):
             if command.max_score is not None:
                 rule.max_score = command.max_score
             if command.target_group_id is not None:
+                _ensure_group_exists(self.uow, command.tenant_id, command.target_group_id)
                 rule.target_group_id = command.target_group_id
             if command.target_agent_ids is not None:
                 rule.target_agent_ids = list(command.target_agent_ids)

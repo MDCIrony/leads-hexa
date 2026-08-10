@@ -675,8 +675,9 @@ opcional y vacía por defecto — sin condiciones, la regla discrimina sólo por
 }
 ```
 
-Errores: `400 Bad Request` (`INVALID_RULE_NAME`; `INVALID_SCORE_BAND` si `max_score` es menor que
-`min_score`; `RULE_WITHOUT_TARGET` si no se indica ni grupo ni asesores; y las de `Criterion`
+Errores: `404 Not Found` (`GROUP_NOT_FOUND` si `target_group_id` no existe o pertenece a otra
+organización); `400 Bad Request` (`INVALID_RULE_NAME`; `INVALID_SCORE_BAND` si `max_score` es menor
+que `min_score`; `RULE_WITHOUT_TARGET` si no se indica ni grupo ni asesores; y las de `Criterion`
 —`INVALID_RULE_FIELD`, `FIELD_NOT_SCORABLE`, `INVALID_RULE_VALUE`— sobre cada condición).
 
 ### `GET /api/v1/rules/assignment`
@@ -689,10 +690,12 @@ página con todo.
 
 Todos los campos opcionales; los ausentes se dejan sin cambios. `rr_cursor` no es uno de ellos a
 propósito, así que una actualización parcial nunca reinicia una rotación en curso. Las condiciones
-se validan igual que en la creación (a través de `Criterion`), pero el nombre, la banda de
-puntuación y el destino **no** se vuelven a comprobar: se sobrescriben tal cual llegan.
+se validan igual que en la creación (a través de `Criterion`), y el nombre y la banda de puntuación
+**no** se vuelven a comprobar: se sobrescriben tal cual llegan. `target_group_id` es la excepción:
+se resuelve acotado a la organización del token, igual que en la creación.
 
-Errores: `404 Not Found` (`ASSIGNMENT_RULE_NOT_FOUND`); `400 Bad Request` (`INVALID_RULE_FIELD`,
+Errores: `404 Not Found` (`ASSIGNMENT_RULE_NOT_FOUND`; `GROUP_NOT_FOUND` si el nuevo
+`target_group_id` no existe o es de otra organización); `400 Bad Request` (`INVALID_RULE_FIELD`,
 `FIELD_NOT_SCORABLE`, `INVALID_RULE_VALUE`, si `conditions` viene en el cuerpo).
 
 ### `DELETE /api/v1/rules/assignment/{rule_id}`
