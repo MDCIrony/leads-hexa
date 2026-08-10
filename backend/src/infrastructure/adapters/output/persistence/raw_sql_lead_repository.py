@@ -152,12 +152,25 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             clauses.append("source_id = %s")
             params.append(source_id)
         if search:
+            # ILIKE treats % and _ in the value itself as wildcards, not just
+            # in the pattern we build: a literal "%" or "_" typed by the user
+            # must be escaped, or "50%" would match "anything containing 50".
+            escaped = self._escape_like(search)
             clauses.append(
-                "(first_name ILIKE '%%' || %s || '%%' OR last_name ILIKE '%%' || %s || '%%'"
-                " OR email ILIKE '%%' || %s || '%%' OR company ILIKE '%%' || %s || '%%')"
+                "(first_name ILIKE '%%' || %s || '%%' ESCAPE '\\'"
+                " OR last_name ILIKE '%%' || %s || '%%' ESCAPE '\\'"
+                " OR email ILIKE '%%' || %s || '%%' ESCAPE '\\'"
+                " OR company ILIKE '%%' || %s || '%%' ESCAPE '\\')"
             )
-            params += [search, search, search, search]
+            params += [escaped, escaped, escaped, escaped]
         return clauses, params
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        """Escape LIKE/ILIKE wildcards in a value that must be searched as
+        literal text. Order matters: backslash first, so the backslashes it
+        introduces for % and _ are not themselves re-escaped."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
     def list_by_tenant(
         self,

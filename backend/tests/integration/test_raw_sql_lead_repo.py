@@ -147,13 +147,20 @@ def test_active_load_by_agent_counts_only_currently_assigned_leads(test_db):
         assert loads == {ana: 3, beto: 1}
 
 
+_NO_DIGITS = str.maketrans("0123456789", "abcdefghij")
+
+
 def _seed_lead(connection, tenant_id, source_id, **overrides) -> Lead:
+    # Digits mapped out of the uuid4 hex: a raw hex email used to leak
+    # digits into the haystack that a "%50%"-style search could collide
+    # with by chance (~11% of the time), which is what made the search
+    # tests flaky before the ILIKE escaping was added.
     defaults = dict(
         tenant_id=tenant_id,
         source_id=source_id,
         first_name="Maria",
         last_name="Gomez",
-        email=f"{uuid.uuid4()}@example.com",
+        email=f"lead-{uuid.uuid4().hex.translate(_NO_DIGITS)}@example.test",
         company="TechCorp",
         budget=1000,
         industry="Tech",
@@ -282,18 +289,36 @@ def test_search_matches_name_email_and_company_but_not_unrelated_leads(test_db):
         assert repo.count_by_tenant(tenant_id, search="valentin") == 4
 
 
-def test_search_with_a_literal_percent_does_not_break_the_query(test_db):
+def test_search_with_a_literal_percent_is_not_treated_as_a_wildcard(test_db):
+    """"50%" must match the literal text "50%", not "anything containing
+    50" — ILIKE treats an unescaped % in the value itself as a wildcard."""
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
         source_id = _seed_source(connection, tenant_id)
 
         _seed_lead(connection, tenant_id, source_id, company="50% Off Corp")
-        _seed_lead(connection, tenant_id, source_id, company="Regular Corp")
+        _seed_lead(connection, tenant_id, source_id, company="Regular Corp 501")
 
         found = repo.list_by_tenant(tenant_id, search="50%")
         assert len(found) == 1
         assert found[0].company == "50% Off Corp"
+
+
+def test_search_with_a_literal_underscore_is_not_treated_as_a_wildcard(test_db):
+    """"_" is ILIKE's single-character wildcard: "a_b" unescaped would also
+    match "axb"."""
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+
+        _seed_lead(connection, tenant_id, source_id, company="a_b Corp")
+        _seed_lead(connection, tenant_id, source_id, company="axb Corp")
+
+        found = repo.list_by_tenant(tenant_id, search="a_b")
+        assert len(found) == 1
+        assert found[0].company == "a_b Corp"
 
 
 def test_pagination_with_a_filter_reports_the_full_total(test_db):
