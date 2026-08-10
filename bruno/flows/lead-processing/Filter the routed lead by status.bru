@@ -1,0 +1,50 @@
+meta {
+  name: Filter the routed lead by status
+  type: http
+  seq: 14
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads?status=ASSIGNED
+  body: none
+  auth: inherit
+}
+
+params:query {
+  status: ASSIGNED
+}
+
+script:post-response {
+  const url = `${bru.getEnvVar("apiBase")}/leads?status=DISCARDED`;
+  const headers = { Authorization: `Bearer ${bru.getVar("managerToken")}` };
+  const discarded = await bru.sendRequest({ method: "GET", url, headers });
+  const discardedIds = (discarded.data || discarded.body).items.map(item => item.id);
+  bru.setVar("leadNotAmongDiscarded", !discardedIds.includes(bru.getVar("leadId")));
+}
+
+tests {
+  test("status=ASSIGNED trae al lead de este recorrido", function() {
+    expect(res.status).to.equal(200);
+    const ids = res.body.items.map(item => item.id);
+    expect(ids).to.include(bru.getVar("leadId"));
+  });
+
+  test("status=DISCARDED no lo trae: el filtro filtra de verdad", function() {
+    expect(bru.getVar("leadNotAmongDiscarded")).to.equal(true);
+  });
+}
+
+docs {
+  # Filtrar por estado sobre datos reales
+
+  El flujo acaba de asignar el lead en `Read the routed lead`. Aquí se comprueba que `GET
+  /leads?status=ASSIGNED` lo trae de vuelta, y que `GET /leads?status=DISCARDED` no — sobre datos que
+  el propio flujo creó, no un fixture aparte.
+
+  Las dos aserciones buscan `{{leadId}}` dentro de `items`, nunca comparan `total` con un número
+  absoluto: la organización puede tener otros leads en cualquiera de los dos estados, de ejecuciones
+  anteriores.
+}

@@ -14,6 +14,11 @@ get {
 }
 
 params:query {
+  ~status: NEW
+  ~assigned_agent_id: {{agentId}}
+  ~group_id: {{groupId}}
+  ~source_id: {{sourceId}}
+  ~q: acme
   limit: 100
   offset: 0
 }
@@ -34,7 +39,22 @@ docs {
 
   ## Los parámetros
 
-  `params:query`: `limit` (100 por defecto) y `offset` (0 por defecto), para paginar.
+  | Parámetro | Tipo | Contra qué |
+  |---|---|---|
+  | `status` | string | `leads.status`: `NEW`, `QUALIFIED`, `DISQUALIFIED`, `UNASSIGNED`, `ASSIGNED`, `DISCARDED` |
+  | `assigned_agent_id` | UUID | `leads.assigned_agent_id`. No se valida contra la base: un id inexistente devuelve página vacía |
+  | `group_id` | UUID | El grupo del asesor asignado, por subconsulta |
+  | `source_id` | UUID | `leads.source_id` |
+  | `q` | string | Búsqueda literal (`ILIKE`, sin índice) sobre `first_name`, `last_name`, `email` y `company` |
+  | `limit` | número | Tamaño de página, por defecto `100` |
+  | `offset` | número | Desplazamiento de página, por defecto `0` |
+
+  Los cinco filtros son opcionales y se combinan con `AND`. `status` con un valor que no existe
+  responde `400 INVALID_LEAD_STATUS`, no lo ignora. `q` escapa `%` y `_` en el repositorio: buscar
+  `50%` no significa "cualquier cosa con 50".
+
+  Vienen desactivados en esta colección (`~status`, ...) para que la petición por defecto siga
+  listando todo, sin filtrar. `Filter leads.bru` muestra dos filtros activos a la vez.
 
   ## Qué devuelve
 

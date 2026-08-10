@@ -8,9 +8,13 @@ meta {
 }
 
 patch {
-  url: {{apiBase}}/sources/{{sourceId}}
+  url: {{apiBase}}/sources/:sourceId
   body: json
   auth: inherit
+}
+
+params:path {
+  sourceId: {{sourceId}}
 }
 
 body:json {

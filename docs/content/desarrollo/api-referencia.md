@@ -532,6 +532,22 @@ Ciclo de vida completo del lead: listado, las dos vistas de detalle, asignación
 alcanzara leería los leads de sus compañeros. Un `ADMIN` recibe `403`: el plano de plataforma no
 alcanza dato operativo.
 
+Filtra por `status`, `assigned_agent_id`, `group_id`, `source_id` y `q`, todos opcionales y
+combinables con `AND`:
+
+| Parámetro | Tipo | Contra qué |
+|---|---|---|
+| `status` | string | `NEW` · `QUALIFIED` · `DISQUALIFIED` · `UNASSIGNED` · `ASSIGNED` · `DISCARDED` |
+| `assigned_agent_id` | UUID | el asesor asignado. Un id inexistente devuelve página vacía, no `404` |
+| `group_id` | UUID | el grupo del asesor asignado, resuelto por subconsulta |
+| `source_id` | UUID | el origen del lead |
+| `q` | string | búsqueda literal (`ILIKE '%...%'`) sobre `first_name`, `last_name`, `email` y `company` |
+
+`q` no usa índice de texto completo ni `unaccent`: es un `ILIKE` sobre cuatro columnas, suficiente
+para el volumen de un MVP docente. `%` y `_` viajan escapados, así que buscar `50%` encuentra un
+`50%` literal, no "cualquier cosa que empiece por 50". Un `status` que no es uno de los seis
+valores responde `400 Bad Request` (`INVALID_LEAD_STATUS`) en vez de ignorarse.
+
 ```json
 {
   "items": [
@@ -556,6 +572,12 @@ alcanza dato operativo.
 sus propios leads. Declarada antes de `/{lead_id}` en el router: FastAPI resuelve rutas en el orden
 en que se declaran, y al revés `mine` caería en la ruta paramétrica y fallaría al interpretarse
 como UUID.
+
+Filtra por `status` y `q`, con el mismo significado que en `GET /api/v1/leads`. **No** admite
+`assigned_agent_id` ni `group_id`: aquí el asesor es siempre quien llama, y ofrecer un filtro que
+sólo puede devolver todo o nada engañaría más que ayudaría. El orden es
+`assigned_at DESC NULLS LAST, id` — no `created_at` — porque la vista es "mis leads por cuándo me
+llegaron", y la columna es nula hasta que el lead se asigna.
 
 ### `GET /api/v1/leads/{lead_id}`
 

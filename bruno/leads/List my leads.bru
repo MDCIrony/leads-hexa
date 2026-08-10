@@ -14,6 +14,8 @@ get {
 }
 
 params:query {
+  ~status: NEW
+  ~q: acme
   limit: 100
   offset: 0
 }
@@ -38,7 +40,18 @@ docs {
 
   ## Los parámetros
 
-  `params:query`: `limit` (100 por defecto) y `offset` (0 por defecto).
+  | Parámetro | Tipo | Contra qué |
+  |---|---|---|
+  | `status` | string | `leads.status`, igual que en `GET /leads` |
+  | `q` | string | Búsqueda literal (`ILIKE`, sin índice) sobre `first_name`, `last_name`, `email` y `company` |
+  | `limit` | número | Tamaño de página, por defecto `100` |
+  | `offset` | número | Desplazamiento de página, por defecto `0` |
+
+  **No** admite `assigned_agent_id` ni `group_id`: aquí el asesor es siempre quien pide, y ofrecer
+  un filtro que sólo puede devolver todo o nada engañaría. Un valor de `status` que no existe
+  responde `400 INVALID_LEAD_STATUS`.
+
+  Vienen desactivados en esta colección para que la petición por defecto siga listando todo.
 
   ## Qué devuelve
 

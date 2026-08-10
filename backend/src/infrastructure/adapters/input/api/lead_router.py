@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -96,6 +96,11 @@ def _paginate(items: List[Lead], total: int, limit: int, offset: int) -> Paginat
 @router.get("", response_model=PaginatedLeadsResponse, status_code=status.HTTP_200_OK)
 @router.get("/", response_model=PaginatedLeadsResponse, status_code=status.HTTP_200_OK, include_in_schema=False)
 def list_leads(
+    status: Optional[str] = None,
+    assigned_agent_id: Optional[UUID] = None,
+    group_id: Optional[UUID] = None,
+    source_id: Optional[UUID] = None,
+    q: Optional[str] = None,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     # Manager-only, and deliberately not "authenticated org member": this
@@ -105,7 +110,16 @@ def list_leads(
     context: RequestContext = Depends(require_organization_manager),
     use_case: GetLeadsInputPort = Depends(get_get_leads_use_case),
 ) -> PaginatedLeadsResponse:
-    query = GetLeadsQuery(tenant_id=context.tenant_id, limit=limit, offset=offset)
+    query = GetLeadsQuery(
+        tenant_id=context.tenant_id,
+        status=status,
+        assigned_agent_id=assigned_agent_id,
+        group_id=group_id,
+        source_id=source_id,
+        search=q,
+        limit=limit,
+        offset=offset,
+    )
     page = use_case.execute(query)
     return _paginate(page.items, page.total, limit, offset)
 
@@ -115,13 +129,20 @@ def list_leads(
 # an invalid UUID.
 @router.get("/mine", response_model=PaginatedLeadsResponse, status_code=status.HTTP_200_OK)
 def list_my_leads(
+    status: Optional[str] = None,
+    q: Optional[str] = None,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     context: RequestContext = Depends(require_organization_member),
     use_case: GetMyLeadsInputPort = Depends(get_get_my_leads_use_case),
 ) -> PaginatedLeadsResponse:
     query = GetMyLeadsQuery(
-        tenant_id=context.tenant_id, agent_id=context.actor.id.value, limit=limit, offset=offset
+        tenant_id=context.tenant_id,
+        agent_id=context.actor.id.value,
+        status=status,
+        search=q,
+        limit=limit,
+        offset=offset,
     )
     page = use_case.execute(query)
     return _paginate(page.items, page.total, limit, offset)

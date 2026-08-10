@@ -1,0 +1,38 @@
+meta {
+  name: Filter leads
+  type: http
+  seq: 6
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/leads?status=NEW&limit=100&offset=0
+  body: none
+  auth: inherit
+}
+
+params:query {
+  status: NEW
+  q: acme
+  limit: 100
+  offset: 0
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.has_more: isBoolean
+}
+
+docs {
+  # `GET /leads` con dos filtros a la vez
+
+  Combina `status` y `q` para dejar documentada la combinación, en vez de tener que deducirla de
+  `List leads.bru`. Los filtros se combinan con `AND`: sólo vuelven los leads en `NEW` cuyo nombre,
+  apellido, email o empresa contienen `acme`.
+
+  `total` y `has_more` reflejan el resultado ya filtrado, no el total de la organización.
+}
