@@ -231,7 +231,9 @@ organización es siempre la suya (no hay `tenant_id` en el cuerpo) y no puede cr
 ```
 
 Errores: `401 Unauthorized` (fuera del bootstrap, sin token); `403 Forbidden` (no es `MANAGER`, o
-intenta crear un `ADMIN`).
+intenta crear un `ADMIN`); `400 Bad Request` (`EMAIL_ALREADY_EXISTS`) si el correo ya está en uso —
+la unicidad es de toda la plataforma, no sólo de la organización, porque el login resuelve la
+cuenta por correo sin filtrar por organización.
 
 ### `GET /api/v1/agents`
 

@@ -15,6 +15,12 @@ firma y la caducidad del token, y **recarga el agente desde base de datos** por 
 lugar de confiar en lo que el token dice. Un asesor desactivado deja de poder operar en su siguiente
 petición, aunque su token todavía no haya caducado.
 
+El correo es único en **toda la plataforma**, no sólo dentro de una organización:
+`LoginUseCase.execute` resuelve la cuenta con `agents.get_by_email(email)` sin filtrar por
+`tenant_id`, así que dos organizaciones no pueden compartir un correo sin que el login se quede con
+«la fila que la base devuelva primero». `CreateAgentUseCase` comprueba lo mismo antes de guardar y
+responde `400 EMAIL_ALREADY_EXISTS` si el correo ya existe en cualquier organización.
+
 ```mermaid
 sequenceDiagram
     participant C as Cliente

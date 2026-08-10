@@ -42,16 +42,21 @@ class CreateAgentUseCase(CreateAgentInputPort):
         self.password_hasher = password_hasher
 
     def execute(self, command: CreateAgentCommand) -> Agent:
-        agent = Agent.create(
-            name=command.name,
-            email=command.email,
-            group_id=command.group_id,
-            is_active=command.is_active,
-            role=command.role,
-            hashed_password=self.password_hasher.hash(command.password),
-            tenant_id=command.tenant_id,
-        )
         with self.uow:
+            if self.uow.agents.get_by_email(command.email):
+                raise DomainException(
+                    "Ya existe un usuario con ese correo electrónico",
+                    error_code="EMAIL_ALREADY_EXISTS",
+                )
+            agent = Agent.create(
+                name=command.name,
+                email=command.email,
+                group_id=command.group_id,
+                is_active=command.is_active,
+                role=command.role,
+                hashed_password=self.password_hasher.hash(command.password),
+                tenant_id=command.tenant_id,
+            )
             return self.uow.agents.save(agent)
 
 

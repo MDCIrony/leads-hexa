@@ -143,3 +143,76 @@ def test_list_agents_returns_pagination_metadata():
         assert len(data["items"]) == 1
         assert data["has_more"] is False
 
+
+def test_create_agent_rejects_duplicate_email_in_same_tenant():
+    with TestClient(app) as client:
+        headers = _manager_auth_headers(client)
+        email = f"dup_{uuid.uuid4().hex[:6]}@example.com"
+        first = client.post(
+            "/api/v1/agents",
+            json={"name": "Agent A", "email": email, "password": "password123"},
+            headers=headers,
+        )
+        assert first.status_code == 201
+
+        second = client.post(
+            "/api/v1/agents",
+            json={"name": "Agent B", "email": email, "password": "password123"},
+            headers=headers,
+        )
+        assert second.status_code == 400
+        data = second.json()
+        assert data["error_code"] == "EMAIL_ALREADY_EXISTS"
+
+
+def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict:
+    """Creates a second organization under an already-bootstrapped Admin.
+
+    `_manager_auth_headers` bootstraps its own Admin, which only works once
+    the agents table is empty — calling it twice in one test fails the
+    second time with a real Manager `401`, not the scenario under test.
+    """
+    manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
+    tenant_resp = client.post(
+        "/api/v1/tenants",
+        json={
+            "name": f"Org {uuid.uuid4().hex[:6]}",
+            "manager": {"name": "Manager", "email": manager_email, "password": "manager-pass-123"},
+        },
+        headers=admin_headers,
+    )
+    assert tenant_resp.status_code == 201
+
+    manager_login = client.post(
+        "/api/v1/auth/login",
+        data={"username": manager_email, "password": "manager-pass-123"},
+    )
+    assert manager_login.status_code == 200
+    return {"Authorization": f"Bearer {manager_login.json()['access_token']}"}
+
+
+def test_create_agent_rejects_duplicate_email_across_tenants():
+    with TestClient(app) as client:
+        admin_headers = _get_auth_headers(client)
+        first_org_headers = _create_org_manager_headers(client, admin_headers)
+        second_org_headers = _create_org_manager_headers(client, admin_headers)
+        email = f"cross_{uuid.uuid4().hex[:6]}@example.com"
+
+        first = client.post(
+            "/api/v1/agents",
+            json={"name": "Agent A", "email": email, "password": "password123"},
+            headers=first_org_headers,
+        )
+        assert first.status_code == 201
+
+        # Same email, different organization: still rejected, because login
+        # resolves accounts by email alone (auth_use_cases.py:20-21).
+        second = client.post(
+            "/api/v1/agents",
+            json={"name": "Agent B", "email": email, "password": "password123"},
+            headers=second_org_headers,
+        )
+        assert second.status_code == 400
+        data = second.json()
+        assert data["error_code"] == "EMAIL_ALREADY_EXISTS"
+
