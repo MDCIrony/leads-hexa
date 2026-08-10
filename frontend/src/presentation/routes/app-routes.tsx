@@ -9,7 +9,6 @@ import { MyLeadsPage } from '../pages/MyLeadsPage';
 import { NewLeadPage } from '../pages/NewLeadPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { OrganizationsPage } from '../pages/OrganizationsPage';
-import { PlaceholderPage } from '../pages/PlaceholderPage';
 import { ScoringRulesPage } from '../pages/ScoringRulesPage';
 import { RoleRoute } from './role-guard';
 import { RootRedirect } from './root-redirect';
