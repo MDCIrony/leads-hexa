@@ -1,13 +1,13 @@
 {
   "items": [
     {
-      "id": "e51d5a49-625c-4774-82b0-4bf218972f8e",
-      "name": "Todo al asesor 1786388341645",
+      "id": "f8e05922-bdbf-47f9-aff6-56e7cc68e4f5",
+      "name": "Todo al asesor 1786388466241",
       "min_score": 0,
       "max_score": null,
       "target_group_id": null,
       "target_agent_ids": [
-        "5c4d6ddb-3b0d-4ee7-8a7b-4e45862b5f95"
+        "b51438ef-e4f1-4dc4-a6f1-c78db1cd0ba1"
       ],
       "agent_match_mode": "ANY",
       "strategy": "DIRECT_AGENT",

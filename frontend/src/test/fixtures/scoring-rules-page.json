@@ -1,8 +1,8 @@
 {
   "items": [
     {
-      "id": "428b66a6-10d2-4636-8689-0631f9990d1a",
-      "name": "Presupuesto alto 1786388341645",
+      "id": "d78a633a-0e4d-44b4-a5b9-91a72319bd5b",
+      "name": "Presupuesto alto 1786388466241",
       "conditions": [
         {
           "field": "budget",
@@ -15,8 +15,8 @@
       "is_active": true
     },
     {
-      "id": "f9805c75-84bc-4dc4-8806-d3ec1a052baa",
-      "name": "Sector tecnologico 1786388341645",
+      "id": "63d6ab3b-52fd-4713-a546-07032a983762",
+      "name": "Sector tecnologico 1786388466241",
       "conditions": [
         {
           "field": "industry",

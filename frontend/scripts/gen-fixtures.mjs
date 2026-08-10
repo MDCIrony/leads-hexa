@@ -128,7 +128,9 @@ async function main() {
   const leadId = records.data.items[0].lead_id;
   await save('lead-detail.json', (await call('GET', `/leads/${leadId}`, { token: managerToken })).data);
   await save('leads-page.json', (await call('GET', '/leads', { token: managerToken })).data);
-  await save('tenants-page.json', (await call('GET', '/tenants', { token: adminToken })).data);
+  // Capped: the dev database accumulates organizations across runs, and a
+  // fixture of a hundred rows buries the contract change its diff should show.
+  await save('tenants-page.json', (await call('GET', '/tenants?limit=5', { token: adminToken })).data);
   await save('agents-page.json', (await call('GET', '/agents', { token: managerToken })).data);
 
   // Errors, provoked on purpose — each fixture keeps its status alongside the envelope.
