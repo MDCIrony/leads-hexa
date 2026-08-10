@@ -42,10 +42,11 @@ class RawSqlTenantRepository(TenantRepositoryPort):
         return self._to_tenant(row) if row else None
 
     def list_all(self, limit: int = 100, offset: int = 0) -> List[Tenant]:
+        # Newest organization first, matching GET /leads and GET /notifications.
         # Ordering by id as a tiebreaker keeps pages stable when two rows share
         # a creation timestamp.
         rows = self.connection.execute(
-            "SELECT * FROM tenants ORDER BY created_at, id LIMIT %s OFFSET %s",
+            "SELECT * FROM tenants ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
             (limit, offset),
         ).fetchall()
         return [self._to_tenant(row) for row in rows]

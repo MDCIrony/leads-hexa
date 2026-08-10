@@ -186,7 +186,8 @@ alfanumérico con el que construir su identificador; `TENANT_ALREADY_EXISTS`;
 ### `GET /api/v1/tenants`
 
 Lista paginada. Cada elemento trae `agent_count` —el número de asesores activos— pero no
-`manager`: es un agregado, no una lista de identidades.
+`manager`: es un agregado, no una lista de identidades. El orden es `created_at DESC, id`: la
+organización más nueva sale primero, igual que `GET /leads` y `GET /notifications`.
 
 ### `PATCH /api/v1/tenants/{tenant_id}`
 

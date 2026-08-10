@@ -21,7 +21,10 @@ class InMemoryTenantRepository(TenantRepositoryPort):
         return next((t for t in self._tenants.values() if t.slug == slug), None)
 
     def list_all(self, limit: int = 100, offset: int = 0) -> List[Tenant]:
-        ordered = sorted(self._tenants.values(), key=lambda t: (t.created_at, str(t.id)))
+        # Matches "ORDER BY created_at DESC, id": id stays ascending as the
+        # tiebreaker, so two stable sorts (id first, then created_at desc).
+        ordered = sorted(self._tenants.values(), key=lambda t: str(t.id))
+        ordered.sort(key=lambda t: t.created_at, reverse=True)
         return ordered[offset : offset + limit]
 
     def count_all(self) -> int:

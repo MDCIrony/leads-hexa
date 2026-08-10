@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import psycopg
@@ -78,6 +79,21 @@ def test_listing_is_ordered_and_paginated(test_db):
         assert len(second_page) == 1
         # No overlap between pages: the ordering is deterministic.
         assert {str(t.id) for t in first_page}.isdisjoint({str(t.id) for t in second_page})
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_listing_orders_newest_first(test_db):
+    """Explicit timestamps avoid flakiness on systems fast enough to save all
+    three within the same microsecond."""
+    repo, ctx = _repo(test_db)
+    try:
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        first = repo.save(Tenant.create(name="Alpha", created_at=base))
+        second = repo.save(Tenant.create(name="Beta", created_at=base + timedelta(minutes=1)))
+        third = repo.save(Tenant.create(name="Gamma", created_at=base + timedelta(minutes=2)))
+        page = repo.list_all(limit=3, offset=0)
+        assert [str(t.id) for t in page] == [str(third.id), str(second.id), str(first.id)]
     finally:
         ctx.__exit__(None, None, None)
 
