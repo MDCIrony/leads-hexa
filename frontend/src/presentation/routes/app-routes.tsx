@@ -1,11 +1,13 @@
 import { Route, Routes } from 'react-router';
 import { AgentsPage } from '../pages/AgentsPage';
+import { AssignmentRulesPage } from '../pages/AssignmentRulesPage';
 import { BootstrapPage } from '../pages/BootstrapPage';
 import { LeadDetailPage } from '../pages/LeadDetailPage';
 import { LoginPage } from '../pages/LoginPage';
 import { MyLeadsPage } from '../pages/MyLeadsPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { PlaceholderPage } from '../pages/PlaceholderPage';
+import { ScoringRulesPage } from '../pages/ScoringRulesPage';
 import { RoleRoute } from './role-guard';
 import { RootRedirect } from './root-redirect';
 
@@ -27,8 +29,8 @@ export function AppRoutes() {
 
       <Route element={<RoleRoute allow={['MANAGER']} />}>
         <Route path="/asesores" element={<AgentsPage />} />
-        <Route path="/reglas/puntuacion" element={<PlaceholderPage title="Reglas de puntuación" />} />
-        <Route path="/reglas/asignacion" element={<PlaceholderPage title="Reglas de asignación" />} />
+        <Route path="/reglas/puntuacion" element={<ScoringRulesPage />} />
+        <Route path="/reglas/asignacion" element={<AssignmentRulesPage />} />
         <Route path="/leads/nuevo" element={<PlaceholderPage title="Alta de lead" />} />
         <Route path="/leads/carga" element={<PlaceholderPage title="Carga masiva" />} />
       </Route>
