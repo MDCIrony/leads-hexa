@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router';
+import { BootstrapPage } from '../pages/BootstrapPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { PlaceholderPage } from '../pages/PlaceholderPage';
@@ -14,7 +15,7 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<RootRedirect />} />
-      <Route path="/bootstrap" element={<PlaceholderPage title="Arranque de la plataforma" />} />
+      <Route path="/bootstrap" element={<BootstrapPage />} />
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<RoleRoute allow={['ADMIN']} />}>
