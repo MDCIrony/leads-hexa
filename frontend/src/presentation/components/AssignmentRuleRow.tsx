@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AssignmentRuleModel } from '../../domain/rule.model';
+import { formatAssignmentStrategyLabel, type AssignmentRuleModel } from '../../domain/rule.model';
 import type { AgentModel } from '../../domain/agent.model';
 import type { AssignmentRuleUpdate } from '../../application/services/rules.service';
 import { readApiError } from '../../infrastructure/api/api-error';
@@ -67,7 +67,7 @@ export function AssignmentRuleRow({ rule, agents, onUpdate, onDelete }: Assignme
           {rule.minScore} – {rule.maxScore ?? '∞'} pts → {targetNames.join(', ') || 'sin asesores'}
         </p>
         <p className="text-xs text-slate-500 mt-0.5">
-          Prioridad {rule.priority} • {rule.strategy ?? 'sin estrategia'}
+          Prioridad {rule.priority} • {rule.strategy ? formatAssignmentStrategyLabel(rule.strategy) : 'sin estrategia'}
         </p>
         {error && <p className="text-xs text-rose-400 mt-1">{error}</p>}
       </div>

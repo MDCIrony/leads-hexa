@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Target } from 'lucide-react';
-import { AssignmentStrategy, type CriterionModel } from '../../domain/rule.model';
+import { AssignmentStrategy, formatAssignmentStrategyLabel, type CriterionModel } from '../../domain/rule.model';
 import type { AgentModel } from '../../domain/agent.model';
 import type { AssignmentRuleCreate } from '../../application/services/rules.service';
 import { readApiError } from '../../infrastructure/api/api-error';
@@ -20,13 +20,6 @@ interface AssignmentRuleFormProps {
  * of named agents — the form blocks an empty pick instead of letting the API
  * reject it with 400 RULE_WITHOUT_TARGET.
  */
-// The API vocabulary is not the user's: a manager picks how leads are shared out.
-const STRATEGY_LABEL: Record<AssignmentStrategy, string> = {
-  [AssignmentStrategy.ROUND_ROBIN]: 'Por turnos',
-  [AssignmentStrategy.LOWEST_LOAD]: 'Al menos cargado',
-  [AssignmentStrategy.DIRECT_AGENT]: 'A los asesores elegidos',
-};
-
 export function AssignmentRuleForm({ agents, onCreate }: AssignmentRuleFormProps) {
   const [name, setName] = useState('');
   const [minScore, setMinScore] = useState(0);
@@ -114,7 +107,7 @@ export function AssignmentRuleForm({ agents, onCreate }: AssignmentRuleFormProps
         >
           {Object.values(AssignmentStrategy).map((s) => (
             <option key={s} value={s}>
-              {STRATEGY_LABEL[s]}
+              {formatAssignmentStrategyLabel(s)}
             </option>
           ))}
         </select>
