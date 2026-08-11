@@ -1,6 +1,7 @@
 import { Layers, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useSession } from '../../application/session/use-session';
+import { NotificationBell } from './NotificationBell';
 
 /** logout() only clears the session; navigating away is this call site's job. */
 export function Header() {
@@ -31,6 +32,7 @@ export function Header() {
             <p className="text-slate-500">{user.tenant_name ?? user.role}</p>
           </div>
         )}
+        <NotificationBell />
         <button
           onClick={handleLogout}
           className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
