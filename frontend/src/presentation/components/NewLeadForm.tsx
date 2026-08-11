@@ -69,6 +69,17 @@ export function NewLeadForm({ submitting, onSubmit }: NewLeadFormProps) {
       industry,
       custom_attributes: buildCustomAttributes(attributes),
     });
+
+    // Cleared on success so a second submit cannot silently duplicate the lead
+    // that was just ingested; the outcome card keeps the result on screen.
+    setFirstName('');
+    setLastName('');
+    setEmail('');
+    setPhone('');
+    setCompany('');
+    setIndustry('');
+    setBudget('');
+    setAttributes([]);
   }
 
   return (

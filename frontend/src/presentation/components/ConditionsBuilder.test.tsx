@@ -10,7 +10,7 @@ describe('ConditionsBuilder', () => {
   it('offers only operators from the generated Operator enum', () => {
     render(<ConditionsBuilder conditions={CONDITIONS} onChange={vi.fn()} />);
 
-    const select = screen.getByDisplayValue(Operator.GREATER_THAN);
+    const select = screen.getByRole('combobox');
     const options = Array.from(select.querySelectorAll('option')).map((o) => o.getAttribute('value'));
 
     expect(options.sort()).toEqual(Object.values(Operator).sort());
@@ -20,7 +20,7 @@ describe('ConditionsBuilder', () => {
     const onChange = vi.fn();
     render(<ConditionsBuilder conditions={CONDITIONS} onChange={onChange} />);
 
-    await userEvent.selectOptions(screen.getByDisplayValue(Operator.GREATER_THAN), Operator.IS_EMPTY);
+    await userEvent.selectOptions(screen.getByRole('combobox'), Operator.IS_EMPTY);
 
     expect(onChange).toHaveBeenCalledWith([{ field: 'budget', operator: Operator.IS_EMPTY, value: null }]);
   });

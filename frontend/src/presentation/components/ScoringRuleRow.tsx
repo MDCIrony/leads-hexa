@@ -59,7 +59,7 @@ export function ScoringRuleRow({ rule, onUpdate, onDelete }: ScoringRuleRowProps
           <Field label="Nombre" error={error ?? undefined}>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="Puntos (score_delta)">
+          <Field label="Puntos que suma o resta">
             <Input type="number" value={scoreDelta} onChange={(e) => setScoreDelta(Number(e.target.value))} />
           </Field>
           <Field label="Prioridad">

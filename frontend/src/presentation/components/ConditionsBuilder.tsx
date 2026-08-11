@@ -8,6 +8,18 @@ interface ConditionsBuilderProps {
 }
 
 const OPERATORS = Object.values(Operator);
+
+// The API vocabulary is not the user's: a manager reads conditions, not enum names.
+const OPERATOR_LABEL: Record<Operator, string> = {
+  [Operator.EQUALS]: 'es igual a',
+  [Operator.NOT_EQUALS]: 'no es igual a',
+  [Operator.GREATER_THAN]: 'es mayor que',
+  [Operator.LESS_THAN]: 'es menor que',
+  [Operator.CONTAINS]: 'contiene',
+  [Operator.IN]: 'está entre',
+  [Operator.IS_EMPTY]: 'está vacío',
+  [Operator.IS_NOT_EMPTY]: 'no está vacío',
+};
 const VALUELESS_OPERATORS: Operator[] = [Operator.IS_EMPTY, Operator.IS_NOT_EMPTY];
 
 function valueToInput(value: unknown): string {
@@ -63,7 +75,7 @@ export function ConditionsBuilder({ conditions, onChange }: ConditionsBuilderPro
           >
             {OPERATORS.map((op) => (
               <option key={op} value={op}>
-                {op}
+                {OPERATOR_LABEL[op]}
               </option>
             ))}
           </select>
