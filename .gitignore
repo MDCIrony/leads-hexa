@@ -30,3 +30,13 @@ docs/site/
 
 # Planes de trabajo de sesión: material de despacho para subagentes, no del proyecto.
 .plans/
+
+# Material de la presentación del MVP: guion, chuleta y ficheros de prueba.
+.mvp-presentacion/
+
+# Artefactos de la herramienta de navegador (capturas y trazas de sesiones de depuración).
+.playwright-mcp/
+
+# Presentación: el fuente se versiona, lo instalado y lo construido no.
+.slides/node_modules/
+.slides/dist/

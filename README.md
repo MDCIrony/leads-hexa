@@ -33,6 +33,7 @@ curl http://localhost:8001/health
 | API | <http://localhost:8001> |
 | API · OpenAPI | <http://localhost:8001/docs> |
 | Interfaz web | <http://localhost> |
+| Interfaz web · desarrollo | <http://localhost:5173> con `cd frontend && npm run dev` |
 | Documentación | <http://localhost:8002> |
 | PostgreSQL | `localhost:5433` |
 
@@ -48,7 +49,13 @@ Tres comandos, cada uno demuestra algo que los otros no:
 docker compose --profile test run --rm backend-test    # suite completa, todas las capas
 cd backend && uv run pytest -m unit -q                 # dominio aislado, sin base de datos
 ./scripts/verify-e2e.sh                                # el negocio sobre HTTP real
+cd frontend && npm run test                            # la interfaz, sin backend levantado
 ```
+
+La interfaz se prueba contra una API simulada, y sus respuestas **no están escritas a mano**: se
+capturan del backend real con `npm run gen:fixtures`. Una fixture inventada es una suposición; una
+capturada es una prueba de ayer. Los tipos salen de `/openapi.json` con `npm run gen:api`, así que un
+cambio de contrato **rompe la compilación** en vez de aparecer en pantalla.
 
 Ninguno necesita `--build` ni `restart`: el código va montado y la API recarga en caliente. Sólo se
 reconstruye si cambian `pyproject.toml`, `uv.lock` o un `Dockerfile`.
@@ -68,8 +75,13 @@ backend/
   src/infrastructure/  Adaptadores: API, persistencia, seguridad, ficheros, eventos
   migrations/          SQL numerado, idempotente, aplicado al arrancar
   tests/               unit · integration · e2e · architecture
-frontend/              Interfaz React. Ver la hoja de ruta
+frontend/
+  src/domain/          Modelos y enums de negocio. No conoce el contrato de la API
+  src/application/     Servicios, hooks de datos, sesión y mappers
+  src/infrastructure/  Cliente HTTP, tipos generados desde OpenAPI, almacenamiento
+  src/presentation/    Páginas, componentes, rutas y guardas por rol
 docs/                  Subproyecto MkDocs Material
+bruno/                 La API como colección ejecutable, agrupada por recurso y por flujo
 scripts/               verify-e2e.sh, la verificación de negocio
 ```
 
@@ -78,8 +90,10 @@ aplicación conoce al dominio, y el dominio no conoce a nadie.
 
 ## Estado
 
-El backend está funcionalmente completo salvo la integración entrante. Lo que falta para tener
-producto es la interfaz web.
+**El recorrido completo funciona de punta a punta desde la interfaz**: un administrador crea la
+organización con su gestor, el gestor da de alta asesores y escribe sus reglas, entra un lead —suelto
+o por fichero— y el sistema lo puntúa y se lo reparte al asesor que corresponde, que lo ve en su
+bandeja con el desglose de por qué le tocó.
 
 | | |
 |---|---|
@@ -88,8 +102,22 @@ producto es la interfaz web.
 | Autoasignación con carga, capacidad y turnos | Disponible |
 | Bandeja de revisión y reproceso | Disponible |
 | Avisos internos con contador de no leídos | Disponible |
+| Interfaz web para los tres roles | Disponible |
 | Integración entrante firmada | [Hoja de ruta](docs/content/roadmap/webhook-entrante.md) |
-| Interfaz web | [Hoja de ruta](docs/content/roadmap/frontend.md) |
+
+Lo que no está, no está por decisión: deduplicación de contactos, constructor visual de reglas y colas
+reales se discutieron y se dejaron fuera, cada uno con su razón escrita en la
+[hoja de ruta](docs/content/roadmap/).
+
+## Presentación
+
+El material de la sesión vive en [`.slides/`](.slides/), como proyecto Slidev independiente:
+
+```bash
+cd .slides && npm install && npm run dev
+```
+
+Se versiona el fuente —`slides.md`, los diseños y los estilos—; lo instalado y lo construido, no.
 
 ## Contribuir
 
