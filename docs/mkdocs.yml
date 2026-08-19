@@ -157,3 +157,9 @@ nav:
   - Otros:
       - otros/index.md
       - Dónde se valida lo que entra: otros/donde-se-valida-lo-que-entra.md
+
+  - Negocio:
+      - negocio/index.md
+      - Análisis de competidores: negocio/analisis-de-competidores.md
+      - Estrategia Open-Core: negocio/estrategia-open-core.md
+
