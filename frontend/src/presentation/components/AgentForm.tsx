@@ -1,26 +1,24 @@
 import { useState, type FormEvent } from 'react';
 import { UserPlus } from 'lucide-react';
 import type { AgentCreate } from '../../application/services/agents.service';
-import type { Group } from '../../application/services/groups.service';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from './ui/Button';
 import { Field } from './ui/Field';
 import { Input } from './ui/Input';
 
 interface AgentFormProps {
-  groups: Group[];
   onCreate: (body: AgentCreate) => Promise<void>;
 }
 
-const ROLES: AgentCreate['role'][] = ['AGENT', 'MANAGER', 'ADMIN'];
-
-/** Registers a new advisor — the API rejects a duplicate email with EMAIL_ALREADY_EXISTS. */
-export function AgentForm({ groups, onCreate }: AgentFormProps) {
+/**
+ * Registers a new advisor — the API rejects a duplicate email with EMAIL_ALREADY_EXISTS.
+ * A manager only ever mints advisors here, so the role is fixed instead of picked.
+ * No group either: there is no groups view in this MVP to fill one.
+ */
+export function AgentForm({ onCreate }: AgentFormProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<AgentCreate['role']>('AGENT');
-  const [groupId, setGroupId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,12 +27,10 @@ export function AgentForm({ groups, onCreate }: AgentFormProps) {
     setSubmitting(true);
     setError(null);
     try {
-      await onCreate({ name, email, password, role, is_active: true, group_id: groupId || null });
+      await onCreate({ name, email, password, role: 'AGENT', is_active: true });
       setName('');
       setEmail('');
       setPassword('');
-      setRole('AGENT');
-      setGroupId('');
     } catch (err) {
       setError(readApiError(err)?.message ?? 'No se pudo registrar al asesor.');
     } finally {
@@ -65,41 +61,6 @@ export function AgentForm({ groups, onCreate }: AgentFormProps) {
             required
           />
         </Field>
-        <div className="space-y-1">
-          <label htmlFor="agent-role" className="block text-sm font-medium text-slate-200">
-            Rol
-          </label>
-          <select
-            id="agent-role"
-            value={role}
-            onChange={(e) => setRole(e.target.value as AgentCreate['role'])}
-            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-          >
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="agent-group" className="block text-sm font-medium text-slate-200">
-            Grupo (opcional)
-          </label>
-          <select
-            id="agent-group"
-            value={groupId}
-            onChange={(e) => setGroupId(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-          >
-            <option value="">Sin grupo</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       <div className="flex justify-end">

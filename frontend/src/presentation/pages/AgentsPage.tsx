@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import * as agentsService from '../../application/services/agents.service';
-import * as groupsService from '../../application/services/groups.service';
-import { useAsync } from '../../application/data/use-async';
 import { usePaginated } from '../../application/data/use-paginated';
+import { useSession } from '../../application/session/use-session';
 import { AsyncView } from '../components/ui/AsyncView';
 import { AgentSettings } from '../components/AgentSettings';
 import { Button } from '../components/ui/Button';
@@ -13,16 +12,16 @@ import { Button } from '../components/ui/Button';
  */
 export function AgentsPage() {
   const [showInactive, setShowInactive] = useState(false);
-
-  // Groups are an optional selector, not a gate: a failed or slow fetch
-  // shouldn't block the agents list from rendering.
-  const { data: groupsPage } = useAsync(() => groupsService.list(100, 0), []);
-  const groups = groupsPage?.items ?? [];
+  const { user } = useSession();
 
   const paginated = usePaginated(
     (limit, offset) => agentsService.list(limit, offset, showInactive ? { isActive: false } : {}),
     { deps: [showInactive] }
   );
+
+  // The endpoint takes no role filter, so it hands back the whole organization,
+  // signed-in manager included. Nobody deactivates themselves from this screen.
+  const others = paginated.items.filter((agent) => agent.id !== user?.id);
 
   return (
     <div className="space-y-6">
@@ -43,7 +42,7 @@ export function AgentsPage() {
       </div>
 
       <AsyncView
-        state={{ data: paginated.items, error: paginated.error, loading: paginated.loading, refetch: paginated.refetch }}
+        state={{ data: others, error: paginated.error, loading: paginated.loading, refetch: paginated.refetch }}
         emptyText={showInactive ? 'No hay asesores desactivados.' : 'No hay asesores activos.'}
         isEmpty={(items) => items.length === 0}
       >
@@ -51,7 +50,6 @@ export function AgentsPage() {
           <div className="space-y-4">
             <AgentSettings
               agents={agents}
-              groups={groups}
               onCreate={async (body) => {
                 await agentsService.create(body);
                 paginated.refetch();
@@ -72,7 +70,8 @@ export function AgentsPage() {
 
             <div className="flex items-center justify-between text-sm text-slate-400">
               <span>
-                Página {paginated.page + 1} • {paginated.total} en total
+                {/* The signed-in manager is active by definition, so they only inflate the active listing. */}
+                Página {paginated.page + 1} • {showInactive ? paginated.total : paginated.total - 1} en total
               </span>
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={paginated.previousPage} disabled={paginated.page === 0}>

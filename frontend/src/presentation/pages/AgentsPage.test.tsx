@@ -6,29 +6,34 @@ import { apiClient } from '../../infrastructure/api/api-client';
 import { renderWithProviders } from '../../test/render';
 import { mockApiClient } from '../../test/mock-api';
 import agentsPageFixture from '../../test/fixtures/agents-page.json';
-import groupsPageFixture from '../../test/fixtures/groups-page.json';
 import { AgentsPage } from './AgentsPage';
 import { AppRoutes } from '../routes/app-routes';
 
-const [activeAgent] = agentsPageFixture.items;
-const inactiveAgent = { ...agentsPageFixture.items[1], is_active: false };
-const mixedFixture = { ...agentsPageFixture, items: [activeAgent, inactiveAgent] };
+const [activeAgent, signedInManager] = agentsPageFixture.items;
+// Derived from the advisor, not from items[1]: that one is the signed-in
+// manager, whom the page filters out of its own list.
+const inactiveAgent = {
+  ...activeAgent,
+  id: '2f0d6f4e-6a1b-4a0c-9d4d-0b6f2c1a8e77',
+  name: 'Fixture Agent Inactivo',
+  is_active: false,
+};
+const mixedFixture = { ...agentsPageFixture, items: [activeAgent, inactiveAgent, signedInManager] };
 
 function fakeResponse<T>(data: T): AxiosResponse<T> {
   return { data, status: 200, statusText: '', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } };
 }
 
-function mockAgentsAndGroups(overrides: Record<string, unknown> = {}) {
+function mockAgents(overrides: Record<string, unknown> = {}) {
   mockApiClient({
     'GET /api/v1/agents': { data: mixedFixture },
-    'GET /api/v1/groups': { data: groupsPageFixture },
     ...overrides,
   });
 }
 
 describe('AgentsPage', () => {
   it('deactivates through DELETE, with a warning instead of the word "eliminar"', async () => {
-    mockAgentsAndGroups();
+    mockAgents();
     renderWithProviders(<AgentsPage />, { role: 'MANAGER' });
 
     const deactivateButton = await screen.findByRole('button', { name: 'Desactivar' });
@@ -44,7 +49,7 @@ describe('AgentsPage', () => {
   });
 
   it('reactivates through PATCH {is_active: true}', async () => {
-    mockAgentsAndGroups();
+    mockAgents();
     renderWithProviders(<AgentsPage />, { role: 'MANAGER' });
 
     const reactivateButton = await screen.findByRole('button', { name: 'Reactivar' });
@@ -58,7 +63,7 @@ describe('AgentsPage', () => {
   });
 
   it('shows EMAIL_ALREADY_EXISTS as the message from a duplicate signup', async () => {
-    mockAgentsAndGroups({
+    mockAgents({
       'POST /api/v1/agents': {
         status: 400,
         error: { error: true, error_code: 'EMAIL_ALREADY_EXISTS', message: 'El correo ya está registrado.' },
@@ -73,6 +78,14 @@ describe('AgentsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar asesor' }));
 
     expect(await screen.findByText('El correo ya está registrado.')).toBeInTheDocument();
+  });
+
+  it('leaves the signed-in manager out of the list they administer', async () => {
+    mockAgents();
+    renderWithProviders(<AgentsPage />, { role: 'MANAGER' });
+
+    await screen.findByText(activeAgent.name);
+    expect(screen.queryByText(signedInManager.name)).not.toBeInTheDocument();
   });
 
   it('denies an AGENT session on this route', async () => {

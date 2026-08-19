@@ -211,7 +211,7 @@ sin `curl`.
 | Alta de lead **·MVP·** | Formulario individual que **valida en cliente lo que el esquema exige**, y espera al procesamiento antes de dar el alta por buena |
 | Carga masiva **·MVP·** | Subida real de fichero, seguimiento del trabajo hasta estado terminal, y resumen del resultado fila a fila |
 | Trabajos de entrada | Listado de cargas con su estado y contadores; reprocesar una que quedó a medias |
-| Asesores **·MVP·** | Alta, edición, asignación a grupo, **desactivar y reactivar**, y ver los desactivados con `?is_active=false` |
+| Asesores **·MVP·** | Alta, edición, **desactivar y reactivar**, y ver los desactivados con `?is_active=false`. Sin asignación a grupo: no hay vista de grupos que llene el selector |
 | Grupos | Alta, edición y borrado; estrategia por defecto, capacidad por asesor; ver sus miembros |
 | Orígenes | Alta, edición y borrado; mapeo de columnas del fichero a los campos de la plataforma |
 | Reglas de puntuación **·MVP·** | Alta, edición, activación y borrado; constructor de condiciones con campo, operador y valor; puntos y prioridad |

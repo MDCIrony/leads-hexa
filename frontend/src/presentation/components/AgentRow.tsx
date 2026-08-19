@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { AgentModel } from '../../domain/agent.model';
 import type { AgentUpdate } from '../../application/services/agents.service';
-import type { Group } from '../../application/services/groups.service';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from './ui/Button';
 import { Field } from './ui/Field';
@@ -9,17 +8,15 @@ import { Input } from './ui/Input';
 
 interface AgentRowProps {
   agent: AgentModel;
-  groups: Group[];
   onUpdate: (id: string, body: AgentUpdate) => Promise<void>;
   onDeactivate: (id: string) => Promise<void>;
   onReactivate: (id: string) => Promise<void>;
 }
 
-/** One advisor: view mode with status-aware actions, or an inline edit for name/group. */
-export function AgentRow({ agent, groups, onUpdate, onDeactivate, onReactivate }: AgentRowProps) {
+/** One advisor: view mode with status-aware actions, or an inline edit for the name. */
+export function AgentRow({ agent, onUpdate, onDeactivate, onReactivate }: AgentRowProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(agent.name);
-  const [groupId, setGroupId] = useState(agent.groupId ?? '');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,7 +33,7 @@ export function AgentRow({ agent, groups, onUpdate, onDeactivate, onReactivate }
   }
 
   async function handleSave() {
-    await runAction(() => onUpdate(agent.id, { name, group_id: groupId || null }));
+    await runAction(() => onUpdate(agent.id, { name }));
     setEditing(false);
   }
 
@@ -47,21 +44,6 @@ export function AgentRow({ agent, groups, onUpdate, onDeactivate, onReactivate }
           <Field label="Nombre completo" error={error ?? undefined}>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <div className="space-y-1">
-            <label className="block text-sm font-medium text-slate-200">Grupo</label>
-            <select
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100"
-            >
-              <option value="">Sin grupo</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={() => setEditing(false)} disabled={submitting}>
