@@ -1,16 +1,21 @@
 import uuid
 import pytest
 from application.dtos.queries import GetAgentQuery
-from application.dtos.commands import CreateAgentCommand, UpdateAgentCommand
+from application.dtos.commands import CreateAgentCommand, IssueIntegrationCredentialCommand, UpdateAgentCommand
 from application.use_cases.agent_use_cases import (
     CreateAgentUseCase,
     DeactivateAgentUseCase,
     GetAgentUseCase,
+    IssueIntegrationCredentialUseCase,
     UpdateAgentUseCase,
 )
+from domain.entities.agent import Agent
 from domain.entities.sales_group import SalesGroup
+from domain.entities.tenant import Tenant
+from domain.policies.authorization_policy import AuthorizationPolicy
 from domain.value_objects.enums import AgentRole
 from domain.exceptions import AgentNotFoundException, DomainException
+from tests.unit.mocks.fake_messaging_credential_provisioner import FakeMessagingCredentialProvisioner
 from tests.unit.mocks.fake_password_hasher import FakePasswordHasher
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
@@ -112,7 +117,7 @@ class TestDeactivateAgent:
             CreateAgentCommand(name="Ana", email="ana@acme.test", password="x", tenant_id=tenant)
         )
 
-        DeactivateAgentUseCase(uow=uow).execute(
+        DeactivateAgentUseCase(uow=uow, messaging_provisioner=FakeMessagingCredentialProvisioner()).execute(
             GetAgentQuery(tenant_id=tenant, agent_id=agent.id.value)
         )
 
@@ -121,3 +126,88 @@ class TestDeactivateAgent:
         survivor = uow.agents.get_by_id(agent.id.value)
         assert survivor is not None
         assert survivor.is_active is False
+
+    def test_deactivating_a_regular_agent_does_not_touch_the_broker(self):
+        uow = _uow()
+        tenant = uuid.uuid4()
+        agent = CreateAgentUseCase(uow=uow, password_hasher=FakePasswordHasher()).execute(
+            CreateAgentCommand(name="Ana", email="ana2@acme.test", password="x", tenant_id=tenant)
+        )
+        provisioner = FakeMessagingCredentialProvisioner()
+
+        DeactivateAgentUseCase(uow=uow, messaging_provisioner=provisioner).execute(
+            GetAgentQuery(tenant_id=tenant, agent_id=agent.id.value)
+        )
+
+        assert provisioner.revoked == []
+
+    def test_deactivating_an_integration_credential_revokes_its_kafka_credential(self):
+        uow = _uow()
+        tenant = uuid.uuid4()
+        agent = uow.agents.save(
+            Agent.create(
+                "Integración", "integration@acme.invalid", role=AgentRole.INTEGRATION, tenant_id=tenant
+            )
+        )
+        provisioner = FakeMessagingCredentialProvisioner()
+
+        DeactivateAgentUseCase(uow=uow, messaging_provisioner=provisioner).execute(
+            GetAgentQuery(tenant_id=tenant, agent_id=agent.id.value)
+        )
+
+        assert provisioner.revoked == [tenant]
+
+
+class TestIssueIntegrationCredential:
+    def _uow_with_tenant(self):
+        uow = _uow()
+        tenant = uow.tenants.save(Tenant.create(name="Acme"))
+        return uow, tenant
+
+    def test_first_call_creates_an_integration_agent_whose_api_key_verifies(self):
+        uow, tenant = self._uow_with_tenant()
+        hasher = FakePasswordHasher()
+        use_case = IssueIntegrationCredentialUseCase(
+            uow=uow, password_hasher=hasher, messaging_provisioner=FakeMessagingCredentialProvisioner()
+        )
+
+        result = use_case.execute(IssueIntegrationCredentialCommand(tenant_id=tenant.id.value))
+
+        assert result.agent.role == AgentRole.INTEGRATION
+        agent_id_str, secret = result.api_key.split(".", 1)
+        assert agent_id_str == str(result.agent.id)
+        assert hasher.verify(secret, result.agent.hashed_password)
+
+    def test_second_call_rotates_instead_of_creating_a_second_row(self):
+        uow, tenant = self._uow_with_tenant()
+        hasher = FakePasswordHasher()
+        use_case = IssueIntegrationCredentialUseCase(
+            uow=uow, password_hasher=hasher, messaging_provisioner=FakeMessagingCredentialProvisioner()
+        )
+
+        first = use_case.execute(IssueIntegrationCredentialCommand(tenant_id=tenant.id.value))
+        second = use_case.execute(IssueIntegrationCredentialCommand(tenant_id=tenant.id.value))
+
+        assert str(second.agent.id) == str(first.agent.id)
+        assert uow.agents.count() == 1
+        _, first_secret = first.api_key.split(".", 1)
+        assert not hasher.verify(first_secret, second.agent.hashed_password)
+
+    def test_a_broker_failure_leaves_no_agent_row_behind(self):
+        uow, tenant = self._uow_with_tenant()
+        use_case = IssueIntegrationCredentialUseCase(
+            uow=uow,
+            password_hasher=FakePasswordHasher(),
+            messaging_provisioner=FakeMessagingCredentialProvisioner(fail=True),
+        )
+
+        with pytest.raises(DomainException) as exc:
+            use_case.execute(IssueIntegrationCredentialCommand(tenant_id=tenant.id.value))
+
+        assert exc.value.error_code == "MESSAGING_UNAVAILABLE"
+        assert uow.agents.count() == 0
+
+
+def test_authorization_policy_rejects_integration_the_same_way_it_rejects_admin():
+    manager = Agent.create("M", "m@acme.test", role=AgentRole.MANAGER, tenant_id=uuid.uuid4())
+    assert AuthorizationPolicy.can_create_agent_with_role(manager, AgentRole.INTEGRATION) is False

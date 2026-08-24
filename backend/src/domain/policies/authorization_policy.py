@@ -58,9 +58,10 @@ class AuthorizationPolicy:
     def can_create_agent_with_role(actor: Agent, role: AgentRole) -> bool:
         if not AuthorizationPolicy.can_manage_organization(actor):
             return False
-        # The single platform administrator comes from bootstrap. No API path
-        # mints another one.
-        return role != AgentRole.ADMIN
+        # Neither mints through the generic form: ADMIN comes from bootstrap,
+        # INTEGRATION only from POST /agents/integration-credential, which
+        # generates its own secret instead of accepting one in the body.
+        return role not in (AgentRole.ADMIN, AgentRole.INTEGRATION)
 
     @staticmethod
     def ensure_can_create_agent_with_role(actor: Agent, role: AgentRole) -> None:

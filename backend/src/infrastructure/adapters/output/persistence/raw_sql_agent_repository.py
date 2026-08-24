@@ -24,7 +24,10 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         )
 
     def get_available_agents(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> List[Agent]:
-        sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = TRUE"
+        # INTEGRATION excluded here and in list_by_tenant (ADR-0028): a machine
+        # credential lives in `agents` to reuse the password hash and the
+        # deactivation path, not because it is a person to route work to.
+        sql = "SELECT * FROM agents WHERE tenant_id = %s AND is_active = TRUE AND role <> 'INTEGRATION'"
         params: list = [tenant_id]
         if group_id:
             sql += " AND group_id = %s"
@@ -109,7 +112,10 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         limit: int = 100,
         offset: int = 0,
     ) -> List[Agent]:
-        sql = "SELECT * FROM agents WHERE tenant_id = %s"
+        # role <> 'INTEGRATION' (ADR-0028): otherwise a machine credential
+        # shows up in the manager's advisor template and can end up named in
+        # an assignment rule, receiving leads nobody will work.
+        sql = "SELECT * FROM agents WHERE tenant_id = %s AND role <> 'INTEGRATION'"
         params: list = [tenant_id]
         # is_active is not None, never just "if is_active": is_active=False
         # is falsy, and the naive form would silently drop the clause and
@@ -129,7 +135,10 @@ class RawSqlAgentRepository(AgentRepositoryPort):
     def count_by_tenant(
         self, tenant_id: UUID, group_id: Optional[UUID] = None, is_active: Optional[bool] = True
     ) -> int:
-        sql = "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s"
+        # Paired with list_by_tenant's same exclusion (ADR-0028): GetAgentsUseCase
+        # calls both with identical filters, and a total that still counted the
+        # INTEGRATION row would contradict a page that no longer lists it.
+        sql = "SELECT COUNT(*) AS count FROM agents WHERE tenant_id = %s AND role <> 'INTEGRATION'"
         params: list = [tenant_id]
         if is_active is not None:
             sql += " AND is_active = %s"

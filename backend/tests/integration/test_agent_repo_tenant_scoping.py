@@ -93,3 +93,39 @@ def test_listing_is_deterministically_ordered(test_db):
         ]
     finally:
         ctx.__exit__(None, None, None)
+
+
+def test_list_by_tenant_excludes_the_integration_credential(test_db):
+    """A machine credential lives in `agents` to reuse the password hash and
+    the deactivation path (ADR-0028), not because it belongs in the manager's
+    advisor template."""
+    repo, ctx, _ = _seed(test_db)
+    try:
+        repo.save(
+            Agent.create(
+                "Integración", "integration@a.invalid", role=AgentRole.INTEGRATION, tenant_id=_TENANT_A
+            )
+        )
+        found = repo.list_by_tenant(_TENANT_A)
+        assert len(found) == 2
+        assert {a.email for a in found} == {"a1@a.test", "a2@a.test"}
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_get_available_agents_excludes_the_integration_credential(test_db):
+    """Same exclusion for the assignment engine's candidate pool: a machine
+    credential must never be nameable in a rule, or it would end up assigned
+    leads nobody works (ADR-0028)."""
+    repo, ctx, _ = _seed(test_db)
+    try:
+        repo.save(
+            Agent.create(
+                "Integración", "integration@a.invalid", role=AgentRole.INTEGRATION, tenant_id=_TENANT_A
+            )
+        )
+        found = repo.get_available_agents(_TENANT_A)
+        assert len(found) == 2
+        assert {a.email for a in found} == {"a1@a.test", "a2@a.test"}
+    finally:
+        ctx.__exit__(None, None, None)

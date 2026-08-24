@@ -1,11 +1,13 @@
 from typing import Optional
 from uuid import UUID
 from fastapi import Request, Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from application.dtos.context import RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.ports.output.token_service_port import TokenServicePort
 from application.ports.output.job_queue_port import JobQueuePort
+from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
+from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.intake_phase_use_case_ports import (
     ProcessIntakeJobInputPort, ReceiveIntakeInputPort,
@@ -15,7 +17,7 @@ from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
 from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInputPort
 from application.ports.input.agent_use_case_ports import (
     CreateAgentInputPort, DeactivateAgentInputPort, GetAgentsInputPort, GetAgentInputPort,
-    UpdateAgentInputPort,
+    IssueIntegrationCredentialInputPort, UpdateAgentInputPort,
 )
 from application.ports.input.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
@@ -53,7 +55,8 @@ from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
 from application.use_cases.get_lead_stats_use_case import GetLeadStatsUseCase
 from application.use_cases.agent_use_cases import (
-    CreateAgentUseCase, DeactivateAgentUseCase, GetAgentsUseCase, GetAgentUseCase, UpdateAgentUseCase,
+    CreateAgentUseCase, DeactivateAgentUseCase, GetAgentsUseCase, GetAgentUseCase,
+    IssueIntegrationCredentialUseCase, UpdateAgentUseCase,
 )
 from application.use_cases.rule_use_cases import (
     CreateAssignmentRuleUseCase, CreateScoringRuleUseCase, DeleteAssignmentRuleUseCase,
@@ -91,6 +94,7 @@ from application.use_cases.tenant_use_cases import CreateTenantUseCase, GetTenan
 from domain.entities.agent import Agent
 from domain.exceptions import UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
+from domain.value_objects.enums import AgentRole
 from infrastructure.di.container import Container
 
 def get_container(request: Request) -> Container:
@@ -185,8 +189,11 @@ def get_get_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetAgentIn
 def get_update_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateAgentInputPort:
     return UpdateAgentUseCase(uow=uow)
 
-def get_deactivate_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeactivateAgentInputPort:
-    return DeactivateAgentUseCase(uow=uow)
+def get_deactivate_agent_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> DeactivateAgentInputPort:
+    return DeactivateAgentUseCase(uow=uow, messaging_provisioner=container.messaging_credential_provisioner)
 
 def get_create_scoring_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateScoringRuleInputPort:
     return CreateScoringRuleUseCase(uow=uow)
@@ -309,6 +316,10 @@ def get_mark_all_notifications_read_use_case(
 
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 _optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+# Its own header, deliberately not a second scheme sniffed out of
+# Authorization: Bearer — that would make the two authentication paths
+# depend on parsing one shared header instead of staying visibly separate.
+_api_key_scheme = APIKeyHeader(name="X-Api-Key", auto_error=False)
 
 
 def resolve_current_agent(token: str, uow: UnitOfWorkPort, token_service: TokenServicePort) -> Agent:
@@ -378,3 +389,64 @@ def require_organization_member(
     which is the point: it must not reach operational data."""
     AuthorizationPolicy.ensure_can_access_tenant(context.actor, context.tenant_id)
     return context
+
+
+def resolve_integration_context(
+    api_key: str, uow: UnitOfWorkPort, password_hasher: PasswordHasherPort
+) -> RequestContext:
+    """Pure function, same shape as resolve_current_agent: testable without
+    FastAPI's dependency machinery."""
+    try:
+        agent_id_str, secret = api_key.split(".", 1)
+        agent_id = UUID(agent_id_str)
+    except ValueError as error:
+        raise UnauthorizedException("Malformed API key") from error
+
+    with uow:
+        agent = uow.agents.get_by_id(agent_id)
+
+    if (
+        not agent
+        or not agent.is_active
+        or agent.role != AgentRole.INTEGRATION
+        or not agent.hashed_password
+        or not password_hasher.verify(secret, agent.hashed_password)
+    ):
+        raise UnauthorizedException("Invalid API key")
+    return build_request_context(agent)
+
+
+def require_manager_or_integration(
+    api_key: Optional[str] = Depends(_api_key_scheme),
+    current_agent: Optional[Agent] = Depends(get_optional_current_agent),
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> RequestContext:
+    """Composes the two authentication paths at exactly one route (GET
+    /leads) instead of branching inside a shared handler — authorization by
+    routing, the same shape require_organization_member vs.
+    require_organization_manager already use."""
+    if api_key:
+        return resolve_integration_context(api_key, uow, container.password_hasher)
+    if current_agent is not None:
+        context = build_request_context(current_agent)
+        AuthorizationPolicy.ensure_can_manage_organization(context.actor)
+        return context
+    raise UnauthorizedException("Authentication required")
+
+
+def get_messaging_credential_provisioner(
+    container: Container = Depends(get_container),
+) -> MessagingCredentialProvisionerPort:
+    return container.messaging_credential_provisioner
+
+
+def get_issue_integration_credential_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow),
+    container: Container = Depends(get_container),
+) -> IssueIntegrationCredentialInputPort:
+    return IssueIntegrationCredentialUseCase(
+        uow=uow,
+        password_hasher=container.password_hasher,
+        messaging_provisioner=container.messaging_credential_provisioner,
+    )

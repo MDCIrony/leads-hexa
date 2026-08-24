@@ -658,6 +658,45 @@ verify_f31() {
   check "un asesor no puede reobtener la organización (403)" 403 "$(code "$r")"
 }
 
+verify_f41() {
+  local r api_key bad_key integration_id
+
+  section "4.1 · la credencial de máquina"
+
+  r=$(req -X POST "$API/agents/integration-credential" -H "Authorization: Bearer $MGR_A")
+  check "el gestor emite la credencial" 201 "$(code "$r")"
+  api_key=$(body "$r" | f 'd.get("api_key") or ""')
+  # Captured from this response, not looked up afterwards: GET /agents no
+  # longer lists this row at all (see the check below), so this is the only
+  # place the id is ever available over HTTP.
+  integration_id=$(body "$r" | f 'd.get("agent_id") or ""')
+
+  r=$(req "$API/leads?updated_since=2020-01-01T00:00:00Z" -H "X-Api-Key: $api_key")
+  check "la credencial de máquina lee el propio tenant" 200 "$(code "$r")"
+
+  r=$(req "$API/leads" -H "X-Api-Key: ${api_key}x")
+  check "una credencial alterada no autentica" 401 "$(code "$r")"
+
+  r=$(req "$API/leads" -H "Authorization: Bearer $TOKEN_1")
+  check "el JWT de un asesor sigue sin poder listar la organización" 403 "$(code "$r")"
+
+  r=$(req "$API/agents?is_active=true" -H "Authorization: Bearer $MGR_A")
+  check "la credencial de máquina no aparece en la plantilla del gestor" False \
+    "$(body "$r" | f 'any(a.get("role") == "INTEGRATION" for a in d.get("items") or [])')"
+
+  bad_key="$api_key"
+  r=$(req -X POST "$API/agents/integration-credential" -H "Authorization: Bearer $MGR_A")
+  api_key=$(body "$r" | f 'd.get("api_key") or ""')
+  r=$(req "$API/leads" -H "X-Api-Key: $bad_key")
+  check "rotar invalida la credencial anterior" 401 "$(code "$r")"
+  r=$(req "$API/leads" -H "X-Api-Key: $api_key")
+  check "la credencial rotada funciona" 200 "$(code "$r")"
+
+  req -X DELETE "$API/agents/$integration_id" -H "Authorization: Bearer $MGR_A" >/dev/null
+  r=$(req "$API/leads" -H "X-Api-Key: $api_key")
+  check "revocar corta el acceso" 401 "$(code "$r")"
+}
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -678,6 +717,7 @@ verify_f2d
 verify_f2c
 verify_f3a
 verify_f31
+verify_f41
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then

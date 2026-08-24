@@ -293,6 +293,22 @@ def test_agent_role_cannot_patch_another_agent():
         assert response.status_code == 403
 
 
+def test_issuing_an_integration_credential_without_kafka_fails_atomically():
+    """backend-test has no reachable Kafka (no KAFKA_BOOTSTRAP_SERVERS in its
+    compose environment, same hermetic reasoning as RabbitMQ in ADR-0027):
+    this is exactly the case the suite can exercise without a real broker —
+    that a failed provisioning never leaves an orphaned agent row behind."""
+    with TestClient(app) as client:
+        headers = _manager_auth_headers(client)
+
+        response = client.post("/api/v1/agents/integration-credential", headers=headers)
+        assert response.status_code == 503
+        assert response.json()["error_code"] == "MESSAGING_UNAVAILABLE"
+
+        agents = client.get("/api/v1/agents?is_active=true", headers=headers)
+        assert all(a["role"] != "INTEGRATION" for a in agents.json()["items"])
+
+
 def test_create_agent_rejects_duplicate_email_across_tenants():
     with TestClient(app) as client:
         admin_headers = _get_auth_headers(client)

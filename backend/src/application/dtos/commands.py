@@ -236,6 +236,20 @@ class AgentsPageResult:
 
 
 @dataclass(frozen=True)
+class IssueIntegrationCredentialCommand:
+    tenant_id: UUID
+
+
+@dataclass(frozen=True)
+class IntegrationCredentialResult:
+    agent: "Agent"
+    api_key: str
+    kafka_username: str
+    kafka_password: str
+    kafka_topic: str
+
+
+@dataclass(frozen=True)
 class CreateTenantCommand:
     name: str
     manager_name: str

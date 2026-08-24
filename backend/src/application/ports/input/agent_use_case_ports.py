@@ -1,7 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import List
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
-from application.dtos.commands import AgentsPageResult, CreateAgentCommand, UpdateAgentCommand
+from application.dtos.commands import (
+    AgentsPageResult,
+    CreateAgentCommand,
+    IntegrationCredentialResult,
+    IssueIntegrationCredentialCommand,
+    UpdateAgentCommand,
+)
 from domain.entities.agent import Agent
 
 class GetAgentsInputPort(ABC):
@@ -27,4 +33,9 @@ class UpdateAgentInputPort(ABC):
 class DeactivateAgentInputPort(ABC):
     @abstractmethod
     def execute(self, query: GetAgentQuery) -> Agent:
+        pass
+
+class IssueIntegrationCredentialInputPort(ABC):
+    @abstractmethod
+    def execute(self, command: IssueIntegrationCredentialCommand) -> IntegrationCredentialResult:
         pass

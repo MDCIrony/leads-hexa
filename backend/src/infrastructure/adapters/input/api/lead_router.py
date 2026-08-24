@@ -22,6 +22,7 @@ from infrastructure.adapters.input.api.dependencies import (
     get_get_lead_use_case,
     get_get_leads_use_case,
     get_get_my_leads_use_case,
+    require_manager_or_integration,
     require_organization_manager,
     require_organization_member,
 )
@@ -116,7 +117,10 @@ def list_leads(
     # endpoint returns the whole organization's pipeline, so a sales agent
     # reaching it would read its colleagues' leads. The agent's own view is
     # GET /leads/mine, a separate endpoint rather than a role branch in here.
-    context: RequestContext = Depends(require_organization_manager),
+    # A machine credential (X-Api-Key) is the other door in (ADR-0028): the
+    # only endpoint that opens for it, since a reobtaining integration is the
+    # one use case the encargo asks for, not a second kind of human session.
+    context: RequestContext = Depends(require_manager_or_integration),
     use_case: GetLeadsInputPort = Depends(get_get_leads_use_case),
 ) -> PaginatedLeadsResponse:
     query = GetLeadsQuery(

@@ -85,6 +85,16 @@ def test_login_fails_for_inactive_agent():
         use_case.execute(email="manager@test.com", password="correct-password")
 
 
+def test_login_fails_for_an_integration_credential_even_with_the_right_secret():
+    """A machine principal's only door in is POST /agents/integration-credential
+    (ADR-0028); the same secret must not also mint a JWT session."""
+    use_case, _ = _build_use_case(
+        "integration@acme.invalid", "correct-password", role=AgentRole.INTEGRATION
+    )
+    with pytest.raises(InvalidCredentialsException):
+        use_case.execute(email="integration@acme.invalid", password="correct-password")
+
+
 def test_unknown_email_and_wrong_password_are_indistinguishable():
     """Both paths must raise the same exception so the response does not leak
     whether an account exists."""

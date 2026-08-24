@@ -2,12 +2,12 @@ from uuid import UUID
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, status
 
-from application.dtos.commands import CreateAgentCommand, UpdateAgentCommand
+from application.dtos.commands import CreateAgentCommand, IssueIntegrationCredentialCommand, UpdateAgentCommand
 from application.dtos.context import RequestContext
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
 from application.ports.input.agent_use_case_ports import (
     CreateAgentInputPort, DeactivateAgentInputPort, GetAgentsInputPort, GetAgentInputPort,
-    UpdateAgentInputPort,
+    IssueIntegrationCredentialInputPort, UpdateAgentInputPort,
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent
@@ -15,13 +15,14 @@ from domain.exceptions import UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
 from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
-    get_create_agent_use_case, get_deactivate_agent_use_case, get_get_agents_use_case,
-    get_get_agent_use_case, get_update_agent_use_case,
+    get_container, get_create_agent_use_case, get_deactivate_agent_use_case, get_get_agents_use_case,
+    get_get_agent_use_case, get_issue_integration_credential_use_case, get_update_agent_use_case,
     build_request_context, get_optional_current_agent, get_uow, require_organization_manager,
 )
 from infrastructure.adapters.input.api.schemas import (
-    AgentCreate, AgentResponse, AgentUpdate, PaginatedAgentsResponse,
+    AgentCreate, AgentResponse, AgentUpdate, IntegrationCredentialResponse, PaginatedAgentsResponse,
 )
+from infrastructure.di.container import Container
 
 router = APIRouter()
 
@@ -71,6 +72,26 @@ def create_agent(
         tenant_id=tenant_id,
     )
     return _to_response(use_case.execute(command))
+
+
+@router.post(
+    "/integration-credential", response_model=IntegrationCredentialResponse, status_code=status.HTTP_201_CREATED
+)
+def issue_integration_credential(
+    context: RequestContext = Depends(require_organization_manager),
+    use_case: IssueIntegrationCredentialInputPort = Depends(get_issue_integration_credential_use_case),
+    container: Container = Depends(get_container),
+):
+    result = use_case.execute(IssueIntegrationCredentialCommand(tenant_id=context.tenant_id))
+    return IntegrationCredentialResponse(
+        agent_id=str(result.agent.id),
+        tenant_id=str(context.tenant_id),
+        api_key=result.api_key,
+        kafka_username=result.kafka_username,
+        kafka_password=result.kafka_password,
+        kafka_bootstrap_servers=container.settings.kafka_external_bootstrap_servers,
+        kafka_topic=result.kafka_topic,
+    )
 
 
 @router.get("", response_model=PaginatedAgentsResponse, status_code=status.HTTP_200_OK)

@@ -340,6 +340,18 @@ class PaginatedAgentsResponse(BaseModel):
     offset: int
     has_more: bool
 
+class IntegrationCredentialResponse(BaseModel):
+    """Deliberately not AgentResponse plus a field: the secrets here must
+    never be echoed back by GET /agents/{agent_id}, so the two shapes stay
+    separate on purpose."""
+    agent_id: str
+    tenant_id: str
+    api_key: str
+    kafka_username: str
+    kafka_password: str
+    kafka_bootstrap_servers: str
+    kafka_topic: str
+
 # --- Tenant Schemas ---
 class TenantManagerCreate(BaseModel):
     name: str

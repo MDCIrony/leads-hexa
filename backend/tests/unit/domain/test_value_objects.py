@@ -67,8 +67,10 @@ def test_score_operations():
     assert int(score) == 25
 
 
-def test_agent_role_has_exactly_three_members():
-    assert {r.value for r in AgentRole} == {"ADMIN", "MANAGER", "AGENT"}
+def test_agent_role_has_exactly_four_members():
+    # INTEGRATION added for the machine credential (ADR-0028): a closed set
+    # gaining a value, not a type change.
+    assert {r.value for r in AgentRole} == {"ADMIN", "MANAGER", "AGENT", "INTEGRATION"}
 
 
 def test_agent_role_is_string_enum():
