@@ -12,6 +12,9 @@ class GetLeadsQuery:
     group_id: Optional[UUID] = None
     source_id: Optional[UUID] = None
     search: Optional[str] = None
+    # What changed since an instant. A consumer that was away — or that lost
+    # messages — asks for the window instead of paging the organization.
+    updated_since: Optional[datetime] = None
     limit: int = 100
     offset: int = 0
 

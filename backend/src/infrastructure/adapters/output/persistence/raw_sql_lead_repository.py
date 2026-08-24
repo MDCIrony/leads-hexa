@@ -126,6 +126,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         group_id: Optional[UUID],
         source_id: Optional[UUID],
         search: Optional[str],
+        updated_since: Optional[datetime] = None,
     ) -> tuple[List[str], List[Any]]:
         # Built up rather than fully duplicated per filter combination: five
         # independent optional filters would otherwise mean many
@@ -133,6 +134,9 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         # through %s markers.
         clauses: List[str] = []
         params: List[Any] = []
+        if updated_since is not None:
+            clauses.append("updated_at >= %s")
+            params.append(updated_since)
         if status is not None:
             clauses.append("status = %s")
             params.append(status.value)
@@ -176,16 +180,26 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         group_id: Optional[UUID] = None,
         source_id: Optional[UUID] = None,
         search: Optional[str] = None,
+        updated_since: Optional[datetime] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Lead]:
-        clauses, params = self._filters(tenant_id, status, assigned_agent_id, group_id, source_id, search)
+        clauses, params = self._filters(
+            tenant_id, status, assigned_agent_id, group_id, source_id, search, updated_since
+        )
         query = "SELECT * FROM leads WHERE tenant_id = %s"
         query_params: List[Any] = [tenant_id]
         for clause in clauses:
             query += f" AND {clause}"
         query_params += params
-        query += " ORDER BY created_at DESC, id LIMIT %s OFFSET %s"
+        # Ordered by the very field being filtered when catching up: paging by
+        # creation date while filtering by update time skips rows that get
+        # touched between one page and the next, which is exactly the lead the
+        # consumer was asking about.
+        if updated_since is not None:
+            query += " ORDER BY updated_at, id LIMIT %s OFFSET %s"
+        else:
+            query += " ORDER BY created_at DESC, id LIMIT %s OFFSET %s"
         query_params += [limit, offset]
         rows = self.connection.execute(query, query_params).fetchall()
         return [self._row_to_lead(row) for row in rows]
@@ -198,8 +212,11 @@ class RawSqlLeadRepository(LeadRepositoryPort):
         group_id: Optional[UUID] = None,
         source_id: Optional[UUID] = None,
         search: Optional[str] = None,
+        updated_since: Optional[datetime] = None,
     ) -> int:
-        clauses, params = self._filters(tenant_id, status, assigned_agent_id, group_id, source_id, search)
+        clauses, params = self._filters(
+            tenant_id, status, assigned_agent_id, group_id, source_id, search, updated_since
+        )
         query = "SELECT COUNT(*) AS count FROM leads WHERE tenant_id = %s"
         query_params: List[Any] = [tenant_id]
         for clause in clauses:

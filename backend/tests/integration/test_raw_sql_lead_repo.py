@@ -411,3 +411,50 @@ def test_active_load_by_agent_with_names_only_counts_assigned_and_orders_by_load
         rows = repo.active_load_by_agent_with_names(tenant_id)
 
         assert rows == [(ana.id.value, "Ana Ruiz", 2), (beto.id.value, "Beto Cruz", 1)]
+
+
+def test_updated_since_returns_only_what_changed_after_the_instant(test_db):
+    """The replay a consumer runs after being away: give it the instant it
+    last saw and it gets what moved since, not the whole organization."""
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+        cutoff = datetime.now(timezone.utc)
+
+        stale = _seed_lead(connection, tenant_id, source_id, updated_at=cutoff - timedelta(hours=1))
+        fresh = _seed_lead(connection, tenant_id, source_id, updated_at=cutoff + timedelta(minutes=5))
+
+        page = repo.list_by_tenant(tenant_id, updated_since=cutoff)
+
+        assert [lead.id.value for lead in page] == [fresh.id.value]
+        assert stale.id.value not in [lead.id.value for lead in page]
+        # The total has to agree with the page, or paging lies about how much
+        # is left to catch up on.
+        assert repo.count_by_tenant(tenant_id, updated_since=cutoff) == 1
+
+
+def test_catching_up_pages_in_ascending_update_order(test_db):
+    """Ordered by the field it filters on. Paging by creation date while
+    filtering by update time skips a lead touched between two pages —
+    precisely the one the consumer was asking about."""
+    with test_db.get_connection(autocommit=True) as connection:
+        repo = RawSqlLeadRepository(connection)
+        tenant_id = uuid.uuid4()
+        source_id = _seed_source(connection, tenant_id)
+        cutoff = datetime.now(timezone.utc)
+
+        # Created newest-first, updated oldest-first: the two orders disagree,
+        # so a page ordered by the wrong one is visible.
+        newest_created = _seed_lead(
+            connection, tenant_id, source_id,
+            created_at=cutoff + timedelta(hours=2), updated_at=cutoff + timedelta(minutes=1),
+        )
+        oldest_created = _seed_lead(
+            connection, tenant_id, source_id,
+            created_at=cutoff, updated_at=cutoff + timedelta(minutes=2),
+        )
+
+        page = repo.list_by_tenant(tenant_id, updated_since=cutoff)
+
+        assert [lead.id.value for lead in page] == [newest_created.id.value, oldest_created.id.value]

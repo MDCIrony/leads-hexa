@@ -27,6 +27,7 @@ class LeadRepositoryPort(ABC):
         group_id: Optional[UUID] = None,
         source_id: Optional[UUID] = None,
         search: Optional[str] = None,
+        updated_since: Optional[datetime] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Lead]:
@@ -41,6 +42,7 @@ class LeadRepositoryPort(ABC):
         group_id: Optional[UUID] = None,
         source_id: Optional[UUID] = None,
         search: Optional[str] = None,
+        updated_since: Optional[datetime] = None,
     ) -> int:
         pass
 

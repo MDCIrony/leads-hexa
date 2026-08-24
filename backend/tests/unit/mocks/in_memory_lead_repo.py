@@ -35,8 +35,11 @@ class InMemoryLeadRepository(LeadRepositoryPort):
         group_id: Optional[UUID],
         source_id: Optional[UUID],
         search: Optional[str],
+        updated_since=None,
     ) -> bool:
         if lead.tenant_id.value != tenant_id:
+            return False
+        if updated_since is not None and lead.updated_at < updated_since:
             return False
         if status is not None and lead.status != status:
             return False
@@ -69,14 +72,20 @@ class InMemoryLeadRepository(LeadRepositoryPort):
         group_id: Optional[UUID] = None,
         source_id: Optional[UUID] = None,
         search: Optional[str] = None,
+        updated_since=None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Lead]:
         items = [
             l for l in self.leads.values()
-            if self._matches(l, tenant_id, status, assigned_agent_id, group_id, source_id, search)
+            if self._matches(l, tenant_id, status, assigned_agent_id, group_id, source_id, search, updated_since)
         ]
-        items.sort(key=lambda l: (l.created_at, l.id.value), reverse=True)
+        # Same two orders as the SQL adapter: catching up pages by the field
+        # it filters on, so a row touched between pages is not skipped.
+        if updated_since is not None:
+            items.sort(key=lambda l: (l.updated_at, l.id.value))
+        else:
+            items.sort(key=lambda l: (l.created_at, l.id.value), reverse=True)
         return items[offset:offset + limit]
 
     def count_by_tenant(
@@ -87,10 +96,11 @@ class InMemoryLeadRepository(LeadRepositoryPort):
         group_id: Optional[UUID] = None,
         source_id: Optional[UUID] = None,
         search: Optional[str] = None,
+        updated_since=None,
     ) -> int:
         return len([
             l for l in self.leads.values()
-            if self._matches(l, tenant_id, status, assigned_agent_id, group_id, source_id, search)
+            if self._matches(l, tenant_id, status, assigned_agent_id, group_id, source_id, search, updated_since)
         ])
 
     def count_by_source(self, tenant_id: UUID, source_id: UUID) -> int:

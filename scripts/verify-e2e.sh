@@ -618,6 +618,43 @@ verify_f3a() {
   req -X POST "$API/notifications/read-all" -H "Authorization: Bearer $MGR_A" >/dev/null
 }
 
+verify_f31() {
+  local r job cutoff lead_id
+
+  section "3.1 · la reobtención"
+
+  # The instant a consumer says it last saw. Ingested before it, so the lead
+  # only shows up once something actually moves it.
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d '{"first_name":"Reobtenible","last_name":"Uno","company":"Acme","industry":"Retail","budget":4000,"phone":"+573000000031"}')
+  check "el lead se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead_id=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+
+  cutoff=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  sleep 1
+
+  r=$(req "$API/leads?updated_since=$cutoff" -H "Authorization: Bearer $MGR_A")
+  check "sin cambios no devuelve nada" 0 "$(body "$r" | f 'd.get("total")')"
+
+  r=$(req -X POST "$API/leads/$lead_id/assign" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"agent_id\":\"$AGENT_1\"}")
+  check "el gestor lo asigna a mano" 200 "$(code "$r")"
+
+  r=$(req "$API/leads?updated_since=$cutoff" -H "Authorization: Bearer $MGR_A")
+  check "ahora sí aparece en la reobtención" True "$(body "$r" | f 'any(i.get("id") == "'"$lead_id"'" for i in d.get("items") or [])')"
+
+  # The other half of the same requirement: what nobody is working on.
+  r=$(req "$API/leads?status=UNASSIGNED" -H "Authorization: Bearer $MGR_A")
+  check "y los que no están asignados a nada se listan" 200 "$(code "$r")"
+  check "ninguno de ellos tiene asesor" True "$(body "$r" | f 'all(i.get("assigned_agent_id") is None for i in d.get("items") or [])')"
+
+  r=$(req "$API/leads?updated_since=$cutoff" -H "Authorization: Bearer $TOKEN_1")
+  check "un asesor no puede reobtener la organización (403)" 403 "$(code "$r")"
+}
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -637,6 +674,7 @@ verify_f2b
 verify_f2d
 verify_f2c
 verify_f3a
+verify_f31
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then

@@ -106,6 +106,10 @@ def list_leads(
     group_id: Optional[UUID] = None,
     source_id: Optional[UUID] = None,
     q: Optional[str] = None,
+    # What changed since an instant, for a consumer catching up on what it
+    # missed. Combined with status=UNASSIGNED it also answers "the ones nobody
+    # is working", which is the other half of the same question.
+    updated_since: Optional[datetime] = None,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     # Manager-only, and deliberately not "authenticated org member": this
@@ -122,6 +126,7 @@ def list_leads(
         group_id=group_id,
         source_id=source_id,
         search=q,
+        updated_since=updated_since,
         limit=limit,
         offset=offset,
     )

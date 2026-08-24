@@ -27,6 +27,7 @@ class GetLeadsUseCase(GetLeadsInputPort):
                 group_id=query.group_id,
                 source_id=query.source_id,
                 search=query.search,
+                updated_since=query.updated_since,
                 limit=query.limit,
                 offset=query.offset,
             )
@@ -37,5 +38,6 @@ class GetLeadsUseCase(GetLeadsInputPort):
                 group_id=query.group_id,
                 source_id=query.source_id,
                 search=query.search,
+                updated_since=query.updated_since,
             )
         return LeadsPageResult(items=items, total=total)
