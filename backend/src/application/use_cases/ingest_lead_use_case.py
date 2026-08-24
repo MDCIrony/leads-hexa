@@ -194,14 +194,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
             ))
             return
 
-        self.event_publisher.publish(LeadProcessedEvent(
-            tenant_id=str(lead.tenant_id.value),
-            lead_id=str(lead.id),
-            email=str(lead.email) if lead.email else None,
-            score=int(lead.score),
-            status=lead.status,
-            assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
-        ))
+        self.event_publisher.publish(LeadProcessedEvent.of(lead))
         if assigned_agent is not None:
             self.event_publisher.publish(LeadAssigned(
                 tenant_id=str(lead.tenant_id.value),

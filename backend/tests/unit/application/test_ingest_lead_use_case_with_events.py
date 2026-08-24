@@ -56,6 +56,12 @@ def test_ingest_lead_publishes_event() -> None:
     published = [call.args[0] for call in mock_event_publisher.publish.call_args_list]
     assert isinstance(published[0], LeadProcessedEvent)
     assert published[0].tenant_id == str(tenant_id_val)
+    # The whole lead travels, so the receiver never has to ask us who it is.
+    assert published[0].first_name == "Jane"
+    assert published[0].company == "Acme Corp"
+    assert published[0].industry == "Tech"
+    assert published[0].source_id == str(command.source_id)
+    assert published[0].budget == "5000.00"
     assert isinstance(published[1], LeadLeftUnassigned)
     assert published[1].tenant_id == str(tenant_id_val)
     assert not any(isinstance(event, LeadDisqualified) for event in published)

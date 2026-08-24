@@ -17,12 +17,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
 
     def save(self, lead: Lead) -> Lead:
         assigned_agent_id = lead.assigned_agent_id.value if lead.assigned_agent_id else None
-        breakdown = Jsonb(
-            [
-                {"rule_id": str(a.rule_id), "name": a.name, "score_delta": a.score_delta}
-                for a in lead.score_breakdown
-            ]
-        )
+        breakdown = Jsonb([applied.as_dict() for applied in lead.score_breakdown])
 
         sql = """
         INSERT INTO leads (

@@ -43,9 +43,10 @@ sequenceDiagram
 
 Cuando el destinatario son "los gestores", `NotificationHandler` resuelve la lista con
 `agents.list_by_tenant` y filtra por rol `MANAGER` activo: no hay una tabla de suscripciones, la
-regla vive en el manejador. `domain/events/lead_events.py` define un quinto evento,
-`LeadProcessedEvent`, pero su único consumidor es `WebhookEventHandler` —la integración saliente,
-fuera de este módulo—, no `NotificationHandler`.
+regla vive en el manejador. `domain/events/lead_events.py` define además los dos eventos del canal
+de salida —`LeadProcessedEvent` y `LeadDisqualified`, ver [ADR-0023](../decisiones/0023-eventos-del-canal-de-salida.md)—,
+que no pasan por `NotificationHandler`: describen lo que se publica hacia fuera, y de ellos hoy sólo
+`LeadProcessedEvent` tiene consumidor, `WebhookEventHandler`.
 
 ### El contador de no leídas
 

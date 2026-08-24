@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada |
+| **Estado** | Sustituida por [ADR-0024](0024-el-contrato-de-salida-se-construye-una-vez.md) |
 | **Fecha** | 2026-08-08 |
 | **Ámbito** | Backend · Aplicación |
 
@@ -42,5 +42,6 @@ revisar esto, más se acumula esa responsabilidad fuera de donde el modelo dice 
 
 ## Ver también
 
+- [ADR-0024 · El contrato de salida se construye una vez](0024-el-contrato-de-salida-se-construye-una-vez.md)
 - [ADR-0016 · Sólo eventos con consumidor](0016-solo-eventos-con-consumidor.md)
 - [Notificaciones](../modulos/notificaciones.md)

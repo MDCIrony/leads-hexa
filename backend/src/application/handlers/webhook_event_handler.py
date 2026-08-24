@@ -22,11 +22,25 @@ class WebhookEventHandler:
             event_type=WebhookEventType.LEAD_PROCESSED,
         )
 
+        # The whole contract, not an identifier: the receiver is outside this
+        # system and has no API call to make to find out who the lead is.
         payload = {
             "lead_id": event.lead_id,
+            "source_id": event.source_id,
+            "first_name": event.first_name,
+            "last_name": event.last_name,
             "email": event.email,
+            "phone": event.phone,
+            "company": event.company,
+            "industry": event.industry,
+            "budget": event.budget,
+            "custom_attributes": event.custom_attributes,
             "score": event.score,
+            "score_breakdown": event.score_breakdown,
             "status": event.status.value,
+            "assigned_agent_id": event.assigned_agent_id,
+            "assigned_at": event.assigned_at,
+            "created_at": event.created_at,
         }
 
         for config in configs:
