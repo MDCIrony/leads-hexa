@@ -129,6 +129,7 @@ nav:
       - "ADR-0022 · Agregados del panel": decisiones/0022-agregados-del-panel.md
       - "ADR-0023 · Los eventos del canal de salida": decisiones/0023-eventos-del-canal-de-salida.md
       - "ADR-0024 · El contrato de salida se construye una vez": decisiones/0024-el-contrato-de-salida-se-construye-una-vez.md
+      - "ADR-0025 · Outbox transaccional": decisiones/0025-outbox-transaccional.md
 
   - Módulos:
       - modulos/index.md

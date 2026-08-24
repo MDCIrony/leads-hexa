@@ -13,6 +13,7 @@ class Settings:
     jwt_secret: str
     jwt_expires_minutes: int = 60
     webhook_timeout_seconds: float = 5.0
+    outbox_relay_interval_seconds: float = 1.0
     cors_origins: List[str] = field(default_factory=list)
 
     @classmethod
@@ -33,5 +34,6 @@ class Settings:
             jwt_secret=jwt_secret,
             jwt_expires_minutes=int(os.getenv("JWT_EXPIRES_MINUTES", "60")),
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0")),
+            outbox_relay_interval_seconds=float(os.getenv("OUTBOX_RELAY_INTERVAL_SECONDS", "1.0")),
             cors_origins=origins,
         )

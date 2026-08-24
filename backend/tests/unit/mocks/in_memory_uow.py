@@ -10,14 +10,17 @@ from application.ports.output.intake_record_repository_port import IntakeRecordR
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from application.ports.output.lead_source_repository_port import LeadSourceRepositoryPort
 from application.ports.output.notification_repository_port import NotificationRepositoryPort
+from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.tenant_repository_port import TenantRepositoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from application.dtos.commands import OutboxEntry
 from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
 from domain.entities.notification import Notification
+from domain.events.lead_events import OutboundEvent
 from domain.value_objects.enums import IntakeJobStatus, IntakeRecordStatus
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
@@ -194,6 +197,38 @@ class InMemoryNotificationRepository(NotificationRepositoryPort):
         return count
 
 
+class InMemoryOutboxRepository(OutboxRepositoryPort):
+    """Kept inline (same convention as the other mocks above)."""
+
+    def __init__(self) -> None:
+        self._entries: Dict[UUID, OutboxEntry] = {}
+        self.published_ids: List[UUID] = []
+        self.failed_ids: List[UUID] = []
+
+    def record(self, event: OutboundEvent) -> None:
+        self._entries[event.event_id] = OutboxEntry(
+            id=event.event_id,
+            tenant_id=event.tenant_id,
+            partition_key=event.partition_key,
+            event_type=event.event_type,
+            payload=event.as_payload(),
+            occurred_on=event.occurred_on,
+        )
+
+    def list_unpublished(self, limit: int) -> List[OutboxEntry]:
+        items = [e for e in self._entries.values() if e.id not in self.published_ids]
+        items.sort(key=lambda e: e.occurred_on)
+        return items[:limit]
+
+    def mark_published(self, event_id: UUID) -> None:
+        self.published_ids.append(event_id)
+
+    def mark_failed(self, event_id: UUID, error: str) -> None:
+        # Left off both lists on purpose: a failed entry must still show up
+        # in the next list_unpublished() call, same as the real adapter.
+        self.failed_ids.append(event_id)
+
+
 class InMemoryUnitOfWork(UnitOfWorkPort):
     def __init__(
         self,
@@ -210,6 +245,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         intake_jobs: Optional[IntakeJobRepositoryPort] = None,
         disqualification_rules: Optional[DisqualificationRuleRepositoryPort] = None,
         notifications: Optional[NotificationRepositoryPort] = None,
+        outbox: Optional[OutboxRepositoryPort] = None,
     ) -> None:
         # Defaulting to a fresh in-memory repo (instead of None) is what lets
         # a test that only cares about leads and agents write
@@ -227,6 +263,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.intake_jobs = intake_jobs or InMemoryIntakeJobRepository()
         self.disqualification_rules = disqualification_rules or InMemoryDisqualificationRuleRepository()
         self.notifications = notifications or InMemoryNotificationRepository()
+        self.outbox = outbox or InMemoryOutboxRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self

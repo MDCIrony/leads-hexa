@@ -145,12 +145,23 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 saved_lead = self.uow.leads.save(lead)
                 record.promote(saved_lead.id)
                 self.uow.intake_records.save(record)
+                # Registered inside the transaction, not published after it
+                # (ADR-0025): a rollback must take the outbound fact with it.
+                self.uow.outbox.record(
+                    LeadDisqualified(
+                        tenant_id=str(saved_lead.tenant_id.value),
+                        lead_id=str(saved_lead.id),
+                        source_id=str(saved_lead.source_id.value),
+                        reason=saved_lead.disqualification_reason or "",
+                    ) if saved_lead.status == LeadStatus.DISQUALIFIED
+                    else LeadProcessedEvent.of(saved_lead)
+                )
 
         if rejection_result is not None:
             self._publish_rejection(record, rejection_result.error)
             return rejection_result
 
-        self._publish_outcome(saved_lead, assigned_agent, left_unassigned)
+        self._publish_notices(saved_lead, assigned_agent, left_unassigned)
 
         return LeadProcessedResult(
             lead_id=str(saved_lead.id),
@@ -170,31 +181,23 @@ class IngestLeadUseCase(IngestLeadInputPort):
             reason=reason or "",
         ))
 
-    def _publish_outcome(
+    def _publish_notices(
         self,
         lead: Lead,
         assigned_agent: Optional[Agent],
         left_unassigned: bool,
     ) -> None:
-        """Every event a processed lead emits, in one place.
+        """Internal-only notices: LeadAssigned / LeadLeftUnassigned.
 
         Called once the unit of work has committed, never inside it: a notice
-        that fails must not undo a lead that is already saved."""
+        that fails must not undo a lead that is already saved. The outbound
+        facts a customer receives (LeadProcessedEvent, LeadDisqualified) went
+        through the outbox already, inside the same transaction as the lead
+        (ADR-0025) — a disqualified lead reaches neither branch below, since
+        assigned_agent and left_unassigned are only ever set on the path
+        that skips disqualification."""
         if not self.event_publisher:
             return
-        if lead.status == LeadStatus.DISQUALIFIED:
-            # Two facts, not one ambiguous one: what cleared the filter is the
-            # product, what a rule ruled out is an audit trail. Sending both
-            # down the same event put our filtering on the customer's side.
-            self.event_publisher.publish(LeadDisqualified(
-                tenant_id=str(lead.tenant_id.value),
-                lead_id=str(lead.id),
-                source_id=str(lead.source_id.value),
-                reason=lead.disqualification_reason or "",
-            ))
-            return
-
-        self.event_publisher.publish(LeadProcessedEvent.of(lead))
         if assigned_agent is not None:
             self.event_publisher.publish(LeadAssigned(
                 tenant_id=str(lead.tenant_id.value),

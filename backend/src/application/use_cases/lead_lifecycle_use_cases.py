@@ -61,6 +61,11 @@ class AssignLeadUseCase(AssignLeadInputPort):
             else:
                 lead.assign_to(agent.id, agent.tenant_id)
             saved_lead = self.uow.leads.save(lead)
+            # The customer got this lead as UNASSIGNED when routing found
+            # nobody. Recording it here is what tells them it has an owner
+            # now; the transaction is what guarantees it is never lost
+            # (ADR-0025).
+            self.uow.outbox.record(LeadProcessedEvent.of(saved_lead))
 
         # Published after the transaction commits (N1): a failing notice must
         # not undo an assignment that already happened.
@@ -78,10 +83,6 @@ class AssignLeadUseCase(AssignLeadInputPort):
                     lead_id=str(saved_lead.id),
                     agent_id=str(agent.id),
                 ))
-            # The customer got this lead as UNASSIGNED when routing found
-            # nobody. Republishing is what tells them it has an owner now;
-            # without it their copy stays frozen at whatever ingestion left.
-            self.event_publisher.publish(LeadProcessedEvent.of(saved_lead))
 
         return saved_lead
 

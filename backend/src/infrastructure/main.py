@@ -8,9 +8,10 @@ from infrastructure.adapters.output.persistence.migration_runner import Migratio
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import RawSqlWebhookRepository
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
+from infrastructure.adapters.output.events.outbox_relay_thread import OutboxRelayThread
+from infrastructure.adapters.output.events.webhook_outbound_dispatcher import WebhookOutboundDispatcher
 from application.handlers.notification_handler import NotificationHandler
-from application.handlers.webhook_event_handler import WebhookEventHandler
-from domain.events.lead_events import LeadProcessedEvent
+from application.services.outbox_relay import OutboxRelay
 from domain.events.notification_events import IntakeRejected, LeadAssigned, LeadLeftUnassigned, LeadReassigned
 from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.intake_router import router as intake_router
@@ -41,11 +42,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # is now a pool-backed context manager, so it wraps everything up to and
     # including `yield`: the connection returns to the pool only at shutdown.
     with container.database.get_connection(autocommit=True) as webhook_connection:
-        webhook_handler = WebhookEventHandler(
-            webhook_repo=RawSqlWebhookRepository(webhook_connection),
-            webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
+        # The relay replaces the webhook handler's subscription to the
+        # in-process publisher (ADR-0025): delivery now reads from the
+        # outbox instead of running inside the use case's own call stack.
+        relay = OutboxRelay(
+            uow_factory=lambda: PostgresUnitOfWork(container.database),
+            dispatchers=[
+                WebhookOutboundDispatcher(
+                    webhook_repo=RawSqlWebhookRepository(webhook_connection),
+                    webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
+                ),
+            ],
         )
-        container.event_publisher.subscribe(LeadProcessedEvent, webhook_handler.handle_lead_processed)
+        relay_thread = OutboxRelayThread(relay, interval_seconds=settings.outbox_relay_interval_seconds)
+        relay_thread.start()
 
         notification_handler = NotificationHandler(uow_factory=lambda: PostgresUnitOfWork(container.database))
         for event_type, handler in (
@@ -58,6 +68,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         app.state.container = container
         yield
+        relay_thread.stop()
     container.database.close()
 
 app = FastAPI(

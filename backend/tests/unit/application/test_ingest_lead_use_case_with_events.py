@@ -4,7 +4,6 @@ from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payloa
 from application.dtos.commands import IngestLeadCommand
 from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.intake_record import IntakeRecord
-from domain.events.lead_events import LeadDisqualified, LeadProcessedEvent
 from domain.events.notification_events import LeadLeftUnassigned
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator
@@ -50,21 +49,24 @@ def test_ingest_lead_publishes_event() -> None:
     result = use_case.execute(command, existing_record=existing)
 
     assert result.error is None
-    # LeadProcessedEvent always, plus LeadLeftUnassigned (F3a): no rules and
-    # no available agent leaves the lead UNASSIGNED rather than routed.
-    assert mock_event_publisher.publish.call_count == 2
+    # LeadLeftUnassigned only (F3a): no rules and no available agent leaves
+    # the lead UNASSIGNED rather than routed. LeadProcessedEvent went through
+    # the outbox instead of the in-process publisher (ADR-0025).
+    assert mock_event_publisher.publish.call_count == 1
     published = [call.args[0] for call in mock_event_publisher.publish.call_args_list]
-    assert isinstance(published[0], LeadProcessedEvent)
+    assert isinstance(published[0], LeadLeftUnassigned)
     assert published[0].tenant_id == str(tenant_id_val)
+
+    outbox_entries = uow.outbox.list_unpublished(10)
+    assert len(outbox_entries) == 1
+    assert outbox_entries[0].event_type == "LeadProcessedEvent"
+    assert outbox_entries[0].tenant_id == str(tenant_id_val)
     # The whole lead travels, so the receiver never has to ask us who it is.
-    assert published[0].first_name == "Jane"
-    assert published[0].company == "Acme Corp"
-    assert published[0].industry == "Tech"
-    assert published[0].source_id == str(command.source_id)
-    assert published[0].budget == "5000.00"
-    assert isinstance(published[1], LeadLeftUnassigned)
-    assert published[1].tenant_id == str(tenant_id_val)
-    assert not any(isinstance(event, LeadDisqualified) for event in published)
+    assert outbox_entries[0].payload["first_name"] == "Jane"
+    assert outbox_entries[0].payload["company"] == "Acme Corp"
+    assert outbox_entries[0].payload["industry"] == "Tech"
+    assert outbox_entries[0].payload["source_id"] == str(command.source_id)
+    assert outbox_entries[0].payload["budget"] == "5000.00"
 
 
 def test_a_disqualified_lead_does_not_travel_as_processed() -> None:
@@ -105,7 +107,13 @@ def test_a_disqualified_lead_does_not_travel_as_processed() -> None:
     result = use_case.execute(command, existing_record=existing)
 
     assert result.status == "DISQUALIFIED"
-    published = [call.args[0] for call in mock_event_publisher.publish.call_args_list]
-    assert [type(event) for event in published] == [LeadDisqualified]
-    assert published[0].reason == "Sin forma de contactar"
-    assert published[0].lead_id == result.lead_id
+    # Nothing travels through the in-process publisher: a disqualified lead
+    # sets neither assigned_agent nor left_unassigned, so _publish_notices
+    # has no internal event to send. LeadDisqualified went through the
+    # outbox instead (ADR-0025).
+    assert mock_event_publisher.publish.call_count == 0
+
+    outbox_entries = uow.outbox.list_unpublished(10)
+    assert [entry.event_type for entry in outbox_entries] == ["LeadDisqualified"]
+    assert outbox_entries[0].payload["reason"] == "Sin forma de contactar"
+    assert outbox_entries[0].payload["lead_id"] == result.lead_id

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
@@ -363,3 +364,18 @@ class LeadStatsResult:
     unassigned: int
     pending_intake: int
     load_by_agent: List[AgentLoad]
+
+
+@dataclass(frozen=True)
+class OutboxEntry:
+    """One row of the transactional outbox, read back for delivery.
+
+    Delivery mechanics, not a domain concept — the outbox doesn't know what
+    a lead is, only that this payload needs to reach a transport."""
+
+    id: UUID
+    tenant_id: str
+    partition_key: str
+    event_type: str
+    payload: Dict[str, Any]
+    occurred_on: datetime

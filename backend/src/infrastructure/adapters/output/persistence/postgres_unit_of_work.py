@@ -21,6 +21,7 @@ from infrastructure.adapters.output.persistence.raw_sql_intake_job_repository im
 from infrastructure.adapters.output.persistence.raw_sql_notification_repository import (
     RawSqlNotificationRepository,
 )
+from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):
@@ -49,6 +50,7 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.intake_records = RawSqlIntakeRecordRepository(self.connection)
         self.intake_jobs = RawSqlIntakeJobRepository(self.connection)
         self.notifications = RawSqlNotificationRepository(self.connection)
+        self.outbox = RawSqlOutboxRepository(self.connection)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

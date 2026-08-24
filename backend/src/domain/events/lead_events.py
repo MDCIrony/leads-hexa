@@ -6,7 +6,20 @@ from domain.value_objects.enums import LeadStatus
 
 
 @dataclass(kw_only=True)
-class LeadProcessedEvent(DomainEvent):
+class OutboundEvent(DomainEvent):
+    """A fact the product publishes outside this system (ADR-0023)."""
+
+    tenant_id: str
+    lead_id: str
+
+    @property
+    def partition_key(self) -> str:
+        """Everything about one lead must reach the consumer in order."""
+        return self.lead_id
+
+
+@dataclass(kw_only=True)
+class LeadProcessedEvent(OutboundEvent):
     """Emitted when a Lead clears the filter — ASSIGNED or UNASSIGNED.
 
     What a rule ruled out travels as LeadDisqualified instead: the customer
@@ -15,8 +28,6 @@ class LeadProcessedEvent(DomainEvent):
     Carries the whole lead, not just its identifier: whoever receives it is
     outside this system and cannot call the API back to find out who it is."""
 
-    tenant_id: str
-    lead_id: str
     email: Optional[str] = None
     score: int
     status: LeadStatus
@@ -66,10 +77,8 @@ class LeadProcessedEvent(DomainEvent):
 
 
 @dataclass(kw_only=True)
-class LeadDisqualified(DomainEvent):
+class LeadDisqualified(OutboundEvent):
     """Emitted when a viability rule rules a lead out before it is scored."""
 
-    tenant_id: str
-    lead_id: str
     source_id: str
     reason: str

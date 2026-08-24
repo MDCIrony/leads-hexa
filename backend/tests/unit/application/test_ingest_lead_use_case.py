@@ -13,7 +13,6 @@ from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
-from tests.unit.mocks.in_memory_webhook_dispatcher import InMemoryWebhookDispatcher
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 import pytest
 from unittest.mock import MagicMock
@@ -24,7 +23,6 @@ def test_ingest_lead_use_case_successful_flow():
     rule_repo = InMemoryRuleRepository()
     agent_repo = InMemoryAgentRepository()
     group_repo = InMemorySalesGroupRepository()
-    webhook_dispatcher = InMemoryWebhookDispatcher()
 
     # Pre-cargar regla de scoring (+35 pts)
     rule_repo.save_scoring_rule(
@@ -59,33 +57,8 @@ def test_ingest_lead_use_case_successful_flow():
         ),
     )
 
-    from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
-    from application.handlers.webhook_event_handler import WebhookEventHandler
-    from domain.events.lead_events import LeadProcessedEvent
-    from domain.entities.webhook import WebhookConfig
-    from domain.value_objects.enums import WebhookEventType
-
-    event_publisher = InMemoryEventPublisher()
-    mock_webhook_repo = MagicMock()
-    mock_webhook_repo.get_by_tenant_and_event.return_value = [
-        WebhookConfig.create(
-            tenant_id=str(tenant_id),
-            event_type=WebhookEventType.LEAD_PROCESSED,
-            target_url="https://hooks.example.com/lead",
-            secret_token="secret",
-        )
-    ]
-    webhook_handler = WebhookEventHandler(
-        webhook_repo=mock_webhook_repo,
-        webhook_dispatcher=webhook_dispatcher,
-    )
-    event_publisher.subscribe(LeadProcessedEvent, webhook_handler.handle_lead_processed)
-
     uow = InMemoryUnitOfWork(lead_repo, rule_repo, agent_repo, groups=group_repo)
-    use_case = IngestLeadUseCase(
-        uow=uow,
-        event_publisher=event_publisher,
-    )
+    use_case = IngestLeadUseCase(uow=uow)
 
     cmd = IngestLeadCommand(
         tenant_id=tenant_id,
@@ -107,7 +80,12 @@ def test_ingest_lead_use_case_successful_flow():
     assert result.status == "ASSIGNED"
     assert result.score == 35
     assert result.assigned_agent_id == str(agent.id)
-    assert len(webhook_dispatcher.dispatched_events) == 1
+    # The outbound fact this flow must leave behind (ADR-0025): recorded in
+    # the outbox inside the same transaction, not dispatched to a webhook
+    # directly — WebhookOutboundDispatcher and OutboxRelay own delivery now.
+    outbox_entries = uow.outbox.list_unpublished(10)
+    assert [entry.event_type for entry in outbox_entries] == ["LeadProcessedEvent"]
+    assert outbox_entries[0].payload["assigned_agent_id"] == str(agent.id)
 
 def test_ingest_lead_use_case_invalid_email_error():
     tenant_id = uuid.uuid4()
