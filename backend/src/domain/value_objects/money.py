@@ -13,6 +13,12 @@ class Money:
         except Exception as e:
             raise InvalidBudgetException(f"Valor numérico inválido para Money: '{amount}'") from e
 
+        # Checked before the comparison below, not after: `Decimal('NaN') < 0`
+        # raises InvalidOperation instead of returning False, and that escapes
+        # every caller that only catches DomainException.
+        if not dec_amount.is_finite():
+            raise InvalidBudgetException(f"El presupuesto no es un número finito: '{amount}'")
+
         if dec_amount < Decimal("0"):
             raise InvalidBudgetException(f"El presupuesto no puede ser negativo: {dec_amount}")
 
