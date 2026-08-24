@@ -62,10 +62,16 @@ para lo que falla de forma persistente:
   él. `RabbitMQJobQueue` abre una conexión nueva por llamada en vez de mantener una abierta —
   FastAPI corre los endpoints síncronos en un pool de hilos, y `pika.BlockingConnection` no es segura
   para compartir entre hilos.
-- **El backend arranca sin RabbitMQ.** Si `enqueue_intake_job` devuelve `False`, el endpoint de
-  ingesta procesa el job con `BackgroundTasks`, exactamente como hacía antes de este ADR. Degradar es
-  preferible a rechazar el lead de un cliente porque nuestra cola interna está caída; no es un
-  descuido, es el comportamiento elegido.
+- **El backend arranca sin RabbitMQ.** Si `enqueue_intake_job` devuelve `False`, el trabajo se
+  procesa con `BackgroundTasks`, exactamente como hacía antes de este ADR. Degradar es preferible a
+  rechazar el lead de un cliente porque nuestra cola interna está caída; no es un descuido, es el
+  comportamiento elegido.
+- **La subida de un fichero se encola por su mitad larga, no entera.** Parsear el fichero necesita
+  sus bytes, que sólo viven en la memoria de la petición, así que eso sigue ocurriendo en el proceso
+  de la API. Pero cuando termina, cada fila ya es un `intake_record` duradero, y **puntuar y enrutar
+  diez mil de ellas —que es la parte que de verdad muere con el proceso— se encola igual que un lead
+  suelto**, con el mismo respaldo. Encolar el fichero completo habría exigido meter sus bytes en el
+  mensaje, contradiciendo la decisión de arriba sobre qué lleva dentro.
 - **El worker es un proceso aparte** (`infrastructure/workers/intake_worker.py`), servicio propio de
   compose que comparte imagen con el backend y difiere sólo en el comando que ejecuta. Es exactamente
   lo que el ADR-0019 excluía a propósito de este alcance, y lo que este cambio introduce ahora que hay

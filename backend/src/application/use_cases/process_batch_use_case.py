@@ -1,8 +1,10 @@
+from typing import Optional
 from uuid import UUID
 
 from application.ports.input.intake_phase_use_case_ports import ProcessIntakeJobInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.output.file_parser_port import FileParserPort
+from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.use_cases.ingest_lead_use_case import payload_of
 from domain.entities.intake_record import IntakeRecord
@@ -15,10 +17,12 @@ class ProcessBatchUseCase(ProcessBatchInputPort):
         uow: UnitOfWorkPort,
         file_parser: FileParserPort,
         process_job: ProcessIntakeJobInputPort,
+        job_queue: Optional[JobQueuePort] = None,
     ) -> None:
         self.uow = uow
         self.file_parser = file_parser
         self.process_job = process_job
+        self.job_queue = job_queue
 
     def execute(self, tenant_id: UUID, job_id: UUID, file_content: bytes, filename: str) -> None:
         with self.uow:
@@ -50,4 +54,11 @@ class ProcessBatchUseCase(ProcessBatchInputPort):
             job.set_total(len(commands))
             self.uow.intake_jobs.save(job)
 
-        self.process_job.execute(tenant_id, job_id)
+        # Parsing the file needs its bytes and so has to happen here, but the
+        # long half — scoring and routing ten thousand rows — is what actually
+        # dies with the process, and by now every row is a durable record a
+        # worker can pick up from its id alone. Same fallback as the
+        # single-lead endpoint: a broker that is down means doing the work
+        # here, not dropping the customer's file.
+        if self.job_queue is None or not self.job_queue.enqueue_intake_job(tenant_id, job_id):
+            self.process_job.execute(tenant_id, job_id)

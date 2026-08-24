@@ -134,7 +134,12 @@ def get_process_batch_use_case(
     container: Container = Depends(get_container),
     process_job: ProcessIntakeJobInputPort = Depends(get_process_intake_job_use_case),
 ) -> ProcessBatchInputPort:
-    return ProcessBatchUseCase(uow=uow, file_parser=container.file_parser, process_job=process_job)
+    return ProcessBatchUseCase(
+        uow=uow,
+        file_parser=container.file_parser,
+        process_job=process_job,
+        job_queue=container.job_queue,
+    )
 
 def get_promote_intake_record_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),
