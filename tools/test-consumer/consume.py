@@ -39,10 +39,12 @@ def main() -> None:
         "sasl.mechanism": "SCRAM-SHA-256",
         "sasl.username": args.sasl_username,
         "sasl.password": args.sasl_password,
-        # A fresh group per run, not a fixed one: reusing a group id would
-        # make a second --from-beginning resume from where the first run's
-        # committed offset left off instead of truly replaying from zero.
-        "group.id": f"test-consumer-{args.tenant}-{uuid.uuid4().hex[:8]}",
+        # Must start with "tenant-<uuid>": the broker's ACL only grants this
+        # principal its own group prefix, so a group named anything else is
+        # refused with GROUP_AUTHORIZATION_FAILED. A fresh suffix per run,
+        # because reusing a group id would make a second --from-beginning
+        # resume from the first run's committed offset instead of replaying.
+        "group.id": f"tenant-{args.tenant}-{uuid.uuid4().hex[:8]}",
         "auto.offset.reset": "earliest" if args.from_beginning else "latest",
     })
     consumer.subscribe([topic])

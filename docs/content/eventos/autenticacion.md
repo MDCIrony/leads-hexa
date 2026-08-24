@@ -50,11 +50,16 @@ el topic de cualquier otra.
 | Recurso | Patrón | Principal | Operaciones |
 |---|---|---|---|
 | Topic `leads.{tenant_id}` | `LITERAL` | `User:tenant-{tenant_id}` | `READ`, `DESCRIBE` |
-| Grupo `test-consumer-{tenant_id}-` | `PREFIXED` | `User:tenant-{tenant_id}` | `READ` |
+| Grupo `tenant-{tenant_id}…` | `PREFIXED` | `User:tenant-{tenant_id}` | `READ` |
 
-El grupo usa un ACL `PREFIXED` y no `LITERAL` porque `consume.py` genera un `group.id` con un sufijo
-aleatorio en cada ejecución —a propósito, para que un segundo `--from-beginning` no reanude desde el
-commit del primero—; un ACL literal se rompería en cada ejecución nueva.
+**El grupo de consumidor tiene que empezar por `tenant-{tenant_id}`**, que es el mismo principal con
+el que el cliente se autentica: es la única regla que hay que cumplir además de tener la credencial,
+y va escrita aquí porque un grupo con cualquier otro nombre se rechaza con
+`GROUP_AUTHORIZATION_FAILED` —no con un error de topic, que es lo que despista al diagnosticar—.
+
+Es `PREFIXED` y no `LITERAL` para que un cliente pueda tener varios grupos, y porque `consume.py`
+añade un sufijo aleatorio en cada ejecución, a propósito, para que un segundo `--from-beginning` no
+reanude desde el commit del primero.
 
 **Verificado en vivo, con la pila completa:** las credenciales de la organización A leen su propio
 topic y reciben el mensaje publicado; las mismas credenciales contra el topic de la organización B

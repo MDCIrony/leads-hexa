@@ -23,11 +23,14 @@ from application.ports.output.messaging_credential_provisioner_port import (
 )
 
 
-def _consumer_group_prefix(tenant_id: UUID) -> str:
-    """Matches the prefix test-consumer's random group.id already uses
-    (tools/test-consumer/consume.py) so a PREFIXED ACL covers every run
-    without a literal ACL breaking on the next random suffix."""
-    return f"test-consumer-{tenant_id}-"
+def consumer_group_prefix(tenant_id: UUID) -> str:
+    """The prefix every consumer group of this tenant must start with.
+
+    Its own principal, so the rule a customer has to follow is the same
+    string they already authenticate as. Naming it after a tool we ship
+    would mean a real client using their own group id — which is what a
+    real client does — could not consume at all."""
+    return kafka_username(tenant_id)
 
 
 class KafkaCredentialProvisioner(MessagingCredentialProvisionerPort):
@@ -57,7 +60,7 @@ class KafkaCredentialProvisioner(MessagingCredentialProvisionerPort):
                        principal, "*", AclOperation.READ, AclPermissionType.ALLOW),
             AclBinding(ResourceType.TOPIC, topic, ResourcePatternType.LITERAL,
                        principal, "*", AclOperation.DESCRIBE, AclPermissionType.ALLOW),
-            AclBinding(ResourceType.GROUP, _consumer_group_prefix(tenant_id), ResourcePatternType.PREFIXED,
+            AclBinding(ResourceType.GROUP, consumer_group_prefix(tenant_id), ResourcePatternType.PREFIXED,
                        principal, "*", AclOperation.READ, AclPermissionType.ALLOW),
         ]
         try:
@@ -75,7 +78,7 @@ class KafkaCredentialProvisioner(MessagingCredentialProvisionerPort):
         filters = [
             AclBindingFilter(ResourceType.TOPIC, f"leads.{tenant_id}", ResourcePatternType.LITERAL,
                               principal, "*", AclOperation.ANY, AclPermissionType.ANY),
-            AclBindingFilter(ResourceType.GROUP, _consumer_group_prefix(tenant_id), ResourcePatternType.PREFIXED,
+            AclBindingFilter(ResourceType.GROUP, consumer_group_prefix(tenant_id), ResourcePatternType.PREFIXED,
                               principal, "*", AclOperation.ANY, AclPermissionType.ANY),
         ]
         try:

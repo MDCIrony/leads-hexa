@@ -145,6 +145,10 @@ services:
       - JWT_SECRET=dev-secret-change-in-production
       - LOG_LEVEL=INFO
       - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
+      # Needed even though this process never publishes: the container it
+      # builds owns the Kafka admin client, and without this it dials
+      # localhost and logs a connection failure every few seconds.
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     command: ["python", "-m", "infrastructure.workers.intake_worker"]
     depends_on:
       db:

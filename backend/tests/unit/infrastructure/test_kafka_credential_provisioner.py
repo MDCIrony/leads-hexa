@@ -88,7 +88,9 @@ def test_issuing_upserts_the_scram_user_and_grants_the_three_acls(fake_admin):
         assert acl.permission_type == AclPermissionType.ALLOW
 
     assert len(group_acls) == 1
-    assert group_acls[0].name == f"test-consumer-{_TENANT}-"
+    # The principal itself: the rule a customer follows is the string they
+    # already authenticate as, not the name of a tool we happen to ship.
+    assert group_acls[0].name == f"tenant-{_TENANT}"
     assert group_acls[0].resource_pattern_type == ResourcePatternType.PREFIXED
     assert group_acls[0].operation == AclOperation.READ
     assert group_acls[0].principal == principal
@@ -109,7 +111,7 @@ def test_revoking_deletes_the_scram_user_and_the_matching_acl_filters(fake_admin
     assert topic_filter.name == f"leads.{_TENANT}"
     assert topic_filter.resource_pattern_type == ResourcePatternType.LITERAL
     assert topic_filter.principal == principal
-    assert group_filter.name == f"test-consumer-{_TENANT}-"
+    assert group_filter.name == f"tenant-{_TENANT}"
     assert group_filter.resource_pattern_type == ResourcePatternType.PREFIXED
     assert group_filter.principal == principal
 

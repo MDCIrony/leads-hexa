@@ -65,10 +65,13 @@ vende Kafka, y forzar el consumo a pasar por un intermediario HTTP la anularía.
   hay más de un proceso produciendo, así que no hace falta un usuario por organización ahí.
 - El consumo sí lo necesita: `ResourcePatternType.LITERAL` sobre `leads.{tenant_id}`, operaciones
   `READ` + `DESCRIBE`, principal `User:tenant-{tenant_id}`.
-- El grupo de consumidor lleva un ACL `PREFIXED` sobre `test-consumer-{tenant_id}-`, porque
-  `consume.py` genera un `group.id` con sufijo aleatorio en cada ejecución (a propósito, para que un
-  segundo `--from-beginning` no reanude desde el commit del primero) y un ACL literal se rompería en
-  cada ejecución nueva.
+- El grupo de consumidor lleva un ACL `PREFIXED` sobre **`tenant-{tenant_id}`**, que es el propio
+  principal: **la regla que el cliente tiene que cumplir es la misma cadena con la que ya se
+  autentica**, y no depende del nombre de ninguna herramienta nuestra. Nombrarlo a partir de
+  `consume.py` habría dejado sin poder consumir a cualquier cliente real que use su propio
+  `group.id` —que es lo que hace un cliente real—. Es `PREFIXED` y no `LITERAL` porque un consumidor
+  puede tener varios grupos, y porque `consume.py` añade un sufijo aleatorio en cada ejecución para
+  que un segundo `--from-beginning` no reanude desde el commit del primero.
 
 **Verificado en vivo, con la pila completa**: la credencial de la organización A lee su propio topic
 y recibe el mensaje publicado; las mismas credenciales contra el topic de la organización B fallan
