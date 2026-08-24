@@ -633,8 +633,11 @@ verify_f31() {
   r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
   lead_id=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
 
-  cutoff=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  # Slept before reading the clock, not after: `date` truncates to the second,
+  # so a lead written 300ms into the same second the cutoff names would fall
+  # inside `updated_at >= cutoff` and make this look broken when it is not.
   sleep 1
+  cutoff=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
   r=$(req "$API/leads?updated_since=$cutoff" -H "Authorization: Bearer $MGR_A")
   check "sin cambios no devuelve nada" 0 "$(body "$r" | f 'd.get("total")')"

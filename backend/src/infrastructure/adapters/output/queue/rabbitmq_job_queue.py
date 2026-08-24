@@ -38,13 +38,23 @@ class RabbitMQJobQueue(JobQueuePort):
     FastAPI runs sync endpoints in a thread pool, and pika's BlockingConnection
     is not safe to share across threads."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, timeout_seconds: float = 2.0) -> None:
         self._url = url
+        self._timeout_seconds = timeout_seconds
+
+    def _parameters(self) -> "pika.URLParameters":
+        parameters = pika.URLParameters(self._url)
+        # Bounded on purpose: an ingest request waits on this, and pika's
+        # defaults (three attempts, ten seconds each) would hang the caller
+        # for half a minute before the fallback it is entitled to.
+        parameters.connection_attempts = 1
+        parameters.socket_timeout = self._timeout_seconds
+        return parameters
 
     def enqueue_intake_job(self, tenant_id: UUID, job_id: UUID) -> bool:
         body = json.dumps({"tenant_id": str(tenant_id), "job_id": str(job_id)}).encode()
         try:
-            with pika.BlockingConnection(pika.URLParameters(self._url)) as connection:
+            with pika.BlockingConnection(self._parameters()) as connection:
                 channel = connection.channel()
                 declare_intake_topology(channel)
                 channel.basic_publish(
@@ -54,6 +64,11 @@ class RabbitMQJobQueue(JobQueuePort):
                     properties=pika.BasicProperties(delivery_mode=2),
                 )
             return True
-        except pika.exceptions.AMQPError:
+        except Exception:
+            # Every failure, not just pika.exceptions.AMQPError: a host that
+            # does not resolve — the broker simply not being up, which is the
+            # common case — surfaces as socket.gaierror, and pika re-raises it
+            # unwrapped. Catching only AMQPError let it escape as a 500 and
+            # the fallback this method exists for never ran.
             _LOGGER.warning("RabbitMQ unreachable, caller must fall back", exc_info=True)
             return False

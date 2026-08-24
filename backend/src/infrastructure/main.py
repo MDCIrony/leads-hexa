@@ -12,9 +12,7 @@ from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWe
 from infrastructure.adapters.output.events.kafka_outbound_dispatcher import KafkaOutboundDispatcher
 from infrastructure.adapters.output.events.outbox_relay_thread import OutboxRelayThread
 from infrastructure.adapters.output.events.webhook_outbound_dispatcher import WebhookOutboundDispatcher
-from application.handlers.notification_handler import NotificationHandler
 from application.services.outbox_relay import OutboxRelay
-from domain.events.notification_events import IntakeRejected, LeadAssigned, LeadLeftUnassigned, LeadReassigned
 from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.intake_router import router as intake_router
 from infrastructure.adapters.input.api.notification_router import router as notification_router
@@ -27,6 +25,7 @@ from infrastructure.adapters.input.api.tenant_router import router as tenant_rou
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
+from infrastructure.di.event_wiring import subscribe_notification_handlers
 from infrastructure.logging_config import configure_logging
 
 @asynccontextmanager
@@ -65,14 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         relay_thread = OutboxRelayThread(relay, interval_seconds=settings.outbox_relay_interval_seconds)
         relay_thread.start()
 
-        notification_handler = NotificationHandler(uow_factory=lambda: PostgresUnitOfWork(container.database))
-        for event_type, handler in (
-            (LeadAssigned, notification_handler.handle_lead_assigned),
-            (LeadReassigned, notification_handler.handle_lead_reassigned),
-            (LeadLeftUnassigned, notification_handler.handle_lead_left_unassigned),
-            (IntakeRejected, notification_handler.handle_intake_rejected),
-        ):
-            container.event_publisher.subscribe(event_type, handler)
+        subscribe_notification_handlers(container)
 
         app.state.container = container
         yield

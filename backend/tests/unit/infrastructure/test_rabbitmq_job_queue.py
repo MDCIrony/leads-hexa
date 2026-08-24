@@ -1,5 +1,7 @@
 import uuid
 
+import socket
+
 import pika
 import pytest
 
@@ -52,6 +54,37 @@ def test_returns_false_and_does_not_raise_when_the_broker_is_unreachable(monkeyp
     queue = RabbitMQJobQueue(url="amqp://guest:guest@nowhere:5672/%2F")
 
     assert queue.enqueue_intake_job(_TENANT, _JOB) is False
+
+
+def test_a_host_that_does_not_resolve_also_falls_back(monkeypatch):
+    """The broker simply not being up is the common case, and pika re-raises
+    the socket.gaierror unwrapped rather than as an AMQPError. Catching only
+    AMQPError let it escape as a 500 from the ingest endpoint, and the
+    fallback never ran — a real end-to-end run is what caught it."""
+
+    def _unresolvable(params):
+        raise socket.gaierror(-2, "Name or service not known")
+
+    monkeypatch.setattr(pika, "BlockingConnection", _unresolvable)
+    queue = RabbitMQJobQueue(url="amqp://leads:leadspassword@rabbitmq:5672/%2F")
+
+    assert queue.enqueue_intake_job(_TENANT, _JOB) is False
+
+
+def test_the_caller_is_not_left_waiting_on_pikas_defaults(monkeypatch):
+    """Three attempts of ten seconds each is half a minute of an ingest
+    request hanging before the fallback it is entitled to."""
+    captured = {}
+
+    def _capture(params):
+        captured["attempts"] = params.connection_attempts
+        captured["timeout"] = params.socket_timeout
+        raise socket.gaierror(-2, "Name or service not known")
+
+    monkeypatch.setattr(pika, "BlockingConnection", _capture)
+    RabbitMQJobQueue(url="amqp://leads:leadspassword@rabbitmq:5672/%2F").enqueue_intake_job(_TENANT, _JOB)
+
+    assert captured == {"attempts": 1, "timeout": 2.0}
 
 
 def test_publishes_persistently_to_the_intake_jobs_queue_when_it_works(monkeypatch):
