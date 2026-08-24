@@ -85,8 +85,8 @@ que no le corresponde:
 - `test_application_does_not_import_infrastructure` — la aplicación no importa `infrastructure`.
 - `test_domain_does_not_import_third_party_frameworks` — el dominio no importa nada fuera de la
   biblioteca estándar.
-- `test_application_does_not_import_web_frameworks` — la aplicación no importa FastAPI ni ningún
-  otro framework web.
+- `test_application_does_not_import_infrastructure_libraries` — la aplicación no importa ningún framework
+  web, ni psycopg, ni un cliente de mensajería: llega a todos por un puerto.
 
 Deben estar siempre 4/4. Si uno falla, algo cruzó una frontera que la arquitectura hexagonal existe
 para impedir — ver [Arquitectura](../arquitectura/index.md) y

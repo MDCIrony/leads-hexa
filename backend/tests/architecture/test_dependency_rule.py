@@ -24,15 +24,25 @@ _THIRD_PARTY_FORBIDDEN_IN_DOMAIN = {
     "pandas",
     "numpy",
     "openpyxl",
+    "confluent_kafka",
+    "kafka",
+    "pika",
+    "aio_pika",
 }
 
-_WEB_FRAMEWORKS_FORBIDDEN_IN_APPLICATION = {
+# Not just web frameworks: every concrete piece of infrastructure the
+# application layer must reach through a port instead of importing.
+_INFRASTRUCTURE_FORBIDDEN_IN_APPLICATION = {
     "fastapi",
     "starlette",
     "pydantic",
     "psycopg",
     "httpx",
     "pandas",
+    "confluent_kafka",
+    "kafka",
+    "pika",
+    "aio_pika",
 }
 
 
@@ -78,6 +88,6 @@ def test_domain_does_not_import_third_party_frameworks():
     assert violations == [], "Domain must depend only on the standard library:\n" + "\n".join(violations)
 
 
-def test_application_does_not_import_web_frameworks():
-    violations = _violations("application", _WEB_FRAMEWORKS_FORBIDDEN_IN_APPLICATION)
-    assert violations == [], "Application must not depend on frameworks:\n" + "\n".join(violations)
+def test_application_does_not_import_infrastructure_libraries():
+    violations = _violations("application", _INFRASTRUCTURE_FORBIDDEN_IN_APPLICATION)
+    assert violations == [], "Application must reach infrastructure through ports:\n" + "\n".join(violations)

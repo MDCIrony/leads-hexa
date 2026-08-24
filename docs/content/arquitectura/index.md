@@ -93,9 +93,11 @@ ejecutarlo. Son cuatro pruebas:
   `infrastructure`.
 - `test_application_does_not_import_infrastructure` — `application/` no importa `infrastructure`.
 - `test_domain_does_not_import_third_party_frameworks` — `domain/` no importa Pydantic, FastAPI,
-  Starlette, SQLAlchemy, psycopg, passlib, bcrypt, `jwt` (PyJWT), httpx, pandas, numpy ni openpyxl.
-- `test_application_does_not_import_web_frameworks` — `application/` no importa FastAPI,
-  Starlette, Pydantic, psycopg, httpx ni pandas.
+  Starlette, SQLAlchemy, psycopg, passlib, bcrypt, `jwt` (PyJWT), httpx, pandas, numpy, openpyxl
+  ni ningún cliente de mensajería.
+- `test_application_does_not_import_infrastructure_libraries` — `application/` no importa FastAPI,
+  Starlette, Pydantic, psycopg, httpx, pandas ni ningún cliente de mensajería: llega a todo eso
+  por un puerto.
 
 !!! note "Dónde se ejecuta"
     Las cuatro corren siempre, sin base de datos, como parte de la suite completa y de los tests
