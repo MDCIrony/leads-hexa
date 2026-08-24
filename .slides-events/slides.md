@@ -576,8 +576,8 @@ idea: "Un cambio que reparte procesos rompe cosas que ninguna prueba de un solo 
 
 ```mermaid {scale: 0.75}
 flowchart LR
-    S["599 tests<br/><i>un proceso, sin brókeres</i>"] -->|verde| X["✗ No ve el reparto<br/>entre procesos"]
-    E["verify-e2e.sh<br/><i>138 comprobaciones sobre HTTP real</i>"] -->|"pila completa"| Y["✓ API · worker<br/>Kafka · RabbitMQ"]
+    S["623 tests<br/><i>un proceso, sin brókeres</i>"] -->|verde| X["✗ No ve el reparto<br/>entre procesos"]
+    E["verify-e2e.sh<br/><i>146 comprobaciones sobre HTTP real</i>"] -->|"pila completa"| Y["✓ API · worker<br/>Kafka · RabbitMQ"]
 ```
 
 Los tres defectos de la diapositiva anterior **son del mismo tipo**: aparecen
@@ -585,9 +585,9 @@ sólo cuando el trabajo cruza de un proceso a otro.
 
 | Comprobación | Resultado |
 |---|---|
-| Suite completa | **599 passed** |
+| Suite completa | **623 passed** |
 | Guardián de la arquitectura | **4/4** |
-| `verify-e2e.sh` con la pila real | **138 verdes**, tres pasadas seguidas |
+| `verify-e2e.sh` con la pila real | **146 verdes**, pasadas repetidas |
 | Outbox tras el recorrido completo | 247 publicados, **0 pendientes** |
 
 ---
@@ -612,6 +612,113 @@ sustituye en vez de contradecirse por la puerta de atrás.**
 
 ---
 layout: blocked
+bloque: "9 · Autenticación"
+idea: "Un topic por organización sin autenticación no aísla nada: sólo lo documenta."
+---
+
+# El aislamiento que no aislaba
+
+Un topic por organización parecía resolver el aislamiento. **No resolvía nada
+mientras el bróker aceptara a cualquiera** — y en la API pasaba lo mismo por el
+otro lado: un sistema externo sólo podía llamar con el token de una persona.
+
+```mermaid {scale: 0.82}
+flowchart LR
+    X["<b>ANTES</b><br/>cualquiera<br/>en la red"] -->|"sin credencial"| K1["Kafka"]
+    K1 --> T1["leads.orgA"]
+    K1 --> T2["leads.orgB"]
+
+    A["<b>AHORA</b><br/>Org A"] -->|"SASL/SCRAM"| K2["Kafka"]
+    K2 --> U1["leads.orgA"]
+    K2 -.->|"DENEGADO"| U2["leads.orgB"]
+```
+
+---
+layout: blocked
+bloque: "9 · Autenticación"
+idea: "Cerrar una de las dos puertas y dejar la otra abierta deja escrito que el problema está resuelto."
+---
+
+# Las dos mitades van juntas
+
+| | Qué se cierra | Cómo |
+|---|---|---|
+| **Kafka** | El listener expuesto al exterior | `SASL_PLAINTEXT` + `SCRAM-SHA-256`, un usuario y una ACL por organización |
+| **La API** | La llamada de máquina | Cabecera `X-Api-Key`, con el secreto guardado como hash bcrypt |
+
+Emitir una credencial **aprovisiona Kafka primero**: una clave de API cuya
+contraparte en el bróker no existe es exactamente el teatro que esto cierra.
+
+<div class="destacado">
+<span class="destacado-tag">Lo que sigue abierto, a propósito</span>
+El listener <strong>interno</strong> (9092) no pide credencial: es donde viven
+el productor y el aprovisionamiento, y cerrarlo exigiría una credencial de
+arranque y reformatear el volumen. El perímetro pasa a ser la red de compose —
+<strong>el mismo que Postgres ya asumía</strong>. Escrito en el ADR-0028, no
+omitido.
+</div>
+
+---
+layout: blocked
+bloque: "9 · Autenticación"
+idea: "Una credencial de máquina no es una persona, y las consultas que la trataban como tal eran el defecto."
+---
+
+# La credencial es una fila en `agents`
+
+Con `role=INTEGRATION`, el mismo hash bcrypt que un humano, y revocar =
+desactivar. Reutiliza el repositorio, el hasher y `RequestContext` **sin tocar
+el camino del JWT**.
+
+Lo que la revisión del plan tuvo que añadir:
+
+| Consulta | Qué habría hecho |
+|---|---|
+| `list_by_tenant` · `count_by_tenant` | Mostrar una clave de API **en la plantilla del gestor** |
+| `get_available_agents` | Ofrecerla al motor de asignación como candidata |
+
+Nombrarla en una regla desde ese listado le habría asignado **leads que nadie
+trabaja**. Se filtra en SQL, con tests que lo fijan.
+
+<div class="destacado">
+<span class="destacado-tag">Y un defecto que sólo apareció al probarlo de verdad</span>
+La ACL del grupo de consumidor llevaba el prefijo del <strong>script de pruebas
+que enviamos</strong>. Un cliente real con su propio <code>group.id</code> no
+podía consumir — y el bróker lo rechaza con
+<code>GROUP_AUTHORIZATION_FAILED</code>, que parece un problema de topic y manda
+a buscar al sitio equivocado.
+</div>
+
+---
+layout: blocked
+bloque: "9 · Autenticación"
+idea: "Que la suite pase no dice nada sobre si un tercero puede leer los datos de otro."
+---
+
+# Cómo se valida esto
+
+Tres niveles, y **sólo el tercero demuestra el aislamiento**:
+
+| Nivel | Qué comprueba | Qué NO puede comprobar |
+|---|---|---|
+| **Unidad** (386) | Que se piden las ACL correctas al bróker, con dobles de prueba | Que el bróker las aplique |
+| **`verify-e2e.sh`** (146) | Emitir, leer, rotar, revocar sobre HTTP real; que la credencial no salga en la plantilla | Nada de Kafka: el harness no consume del topic |
+| **Prueba manual** | Que la credencial de A **lee su topic** y que contra el de B el bróker responde `TOPIC_AUTHORIZATION_FAILED` | — |
+
+```bash
+python consume.py --tenant <uuid> --from-beginning   --sasl-username tenant-<uuid> --sasl-password <la emitida>
+```
+
+<div class="destacado">
+<span class="destacado-tag">Por qué el tercero no está en la suite</span>
+Levantar un Kafka con SASL multiplicaría los ~2 minutos que cuesta hoy, y lo
+que demostraría —que la librería habla con el bróker— no es código nuestro. Lo
+que <strong>sí</strong> es nuestro son las ACL que se piden, y eso sí está en la
+suite.
+</div>
+
+---
+layout: blocked
 bloque: "10 · Cierre"
 idea: "Ninguno es un descuido: los cuatro están asumidos, escritos y con su razón."
 ---
@@ -626,12 +733,12 @@ idea: "Ninguno es un descuido: los cuatro están asumidos, escritos y con su raz
 | **Nadie mira la cola muerta** | Un trabajo que falla tres veces se queda ahí sin que nada avise |
 
 <div class="destacado">
-<span class="destacado-tag">Y el que impide desplegarlo fuera</span>
-<strong>Kafka está en PLAINTEXT, sin autenticación.</strong> Cualquiera con
-acceso a la red lee los topics de todas las organizaciones. Es el siguiente
-bloque de trabajo, y va junto con la credencial de máquina para la API: una
-credencial mientras el bróker está abierto de par en par es seguridad de
-teatro.
+<span class="destacado-tag">Lo que sí se cerró</span>
+La autenticación de Kafka y la credencial de máquina de la API, juntas
+(ADR-0028). Queda fuera el <strong>TLS de RabbitMQ</strong>: ya tiene
+autenticación, no tiene cliente externo y su tráfico no sale de la red de
+compose — el mismo perímetro que Postgres ya asumía. Aplazado con la razón
+escrita, no olvidado.
 </div>
 
 ---
@@ -649,10 +756,11 @@ idea: "El requisito que parecía un detalle —«poder reobtenerlos»— fue el 
 | **3** | Dos problemas con garantías incompatibles piden **dos tecnologías**. Meterlos en una obliga a emular en ella lo que la otra da gratis |
 | **4** | Guardar y publicar no pueden ser atómicos… **salvo que publicar se convierta en insertar una fila** |
 | **5** | Un cambio que reparte el trabajo entre procesos rompe cosas que **ninguna prueba de un solo proceso** puede ver |
+| **6** | Un topic por organización **no aísla nada** mientras el bróker acepte a cualquiera: separar sin autenticar sólo documenta la separación |
 
 <div class="destacado">
 <span class="destacado-tag">Lo que queda escrito</span>
-Cinco ADR, cinco páginas de documentación y un harness de 138 comprobaciones
+Seis ADR, seis páginas de documentación y un harness de 146 comprobaciones
 sobre HTTP real. La decisión de mañana empieza leyendo por qué se tomó la de
 hoy.
 </div>
