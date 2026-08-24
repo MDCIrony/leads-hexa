@@ -1,4 +1,7 @@
+import json
 import uuid
+from uuid import uuid4
+
 from application.dtos.commands import IngestLeadCommand
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
 from domain.entities import Agent, AssignmentRule, ScoringRule, SalesGroup
@@ -183,3 +186,24 @@ def test_rollback_on_persistence_error():
     # El UnitOfWorkPort debió hacer rollback
     mock_uow.rollback.assert_called_once()
     mock_uow.commit.assert_not_called()
+
+def test_payload_of_normalises_a_non_finite_budget_to_null():
+    """A blank budget cell reaches here as NaN, and json.dumps emits a bare
+    NaN token that PostgreSQL rejects as invalid JSONB — which fails the whole
+    batch insert instead of just this row."""
+    command = IngestLeadCommand(
+        tenant_id=uuid4(),
+        source_id=uuid4(),
+        first_name="Juan",
+        last_name="Perez",
+        company="SmallBiz Local",
+        budget=float("nan"),
+        industry="Retail",
+    )
+
+    payload = payload_of(command)
+
+    assert payload["budget"] is None
+    # allow_nan=False is what makes this assertion real: by default json.dumps
+    # emits the bare NaN token happily, and that token is what Postgres rejects.
+    json.dumps(payload, allow_nan=False)

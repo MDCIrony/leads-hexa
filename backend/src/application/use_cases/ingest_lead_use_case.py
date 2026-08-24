@@ -1,3 +1,4 @@
+import math
 from decimal import Decimal
 from typing import Any, Dict, Optional
 from uuid import UUID
@@ -198,13 +199,21 @@ def payload_of(command: IngestLeadCommand) -> Dict[str, Any]:
     runs before Lead.create, so it cannot re-run the validation that is
     about to happen and reject something the domain hasn't judged yet."""
     budget = command.budget
+    if isinstance(budget, Decimal):
+        budget = float(budget)
+    # NaN and ±Infinity are the two values json.dumps turns into bare tokens
+    # Postgres refuses as JSONB, which would fail the insert of a whole batch
+    # over one bad cell. The record must persist even when its budget is
+    # unusable; the domain rejects it on the next phase, with the field named.
+    if isinstance(budget, float) and not math.isfinite(budget):
+        budget = None
     return {
         "tenant_id": str(command.tenant_id),
         "source_id": str(command.source_id),
         "first_name": command.first_name,
         "last_name": command.last_name,
         "company": command.company,
-        "budget": float(budget) if isinstance(budget, Decimal) else budget,
+        "budget": budget,
         "industry": command.industry,
         "custom_attributes": command.custom_attributes,
         "phone": command.phone,
