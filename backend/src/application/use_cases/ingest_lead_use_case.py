@@ -7,6 +7,7 @@ from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPor
 from application.ports.output.domain_event_publisher_port import DomainEventPublisherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.dtos.commands import IngestLeadCommand, LeadProcessedResult
+from domain.entities.agent import Agent
 from domain.entities.intake_record import IntakeError, IntakeRecord
 from domain.entities.lead import Lead
 from domain.entities.sales_group import SalesGroup
@@ -100,8 +101,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
                     error=str(exc),
                     error_code=exc.error_code,
                 )
-
-            if rejection_result is None:
+            else:
                 # Viability runs first and cuts the flow: scoring and routing
                 # something nobody can work is wasted work with a misleading result.
                 breakdown = ScoreBreakdown(applied=[], total=0)
@@ -147,34 +147,10 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 self.uow.intake_records.save(record)
 
         if rejection_result is not None:
-            if self.event_publisher:
-                self.event_publisher.publish(IntakeRejected(
-                    tenant_id=str(record.tenant_id.value),
-                    intake_record_id=str(record.id),
-                    reason=rejection_result.error or "",
-                ))
+            self._publish_rejection(record, rejection_result.error)
             return rejection_result
 
-        if self.event_publisher:
-            self.event_publisher.publish(LeadProcessedEvent(
-                tenant_id=str(saved_lead.tenant_id.value),
-                lead_id=str(saved_lead.id),
-                email=str(saved_lead.email) if saved_lead.email else None,
-                score=int(saved_lead.score),
-                status=saved_lead.status,
-                assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
-            ))
-            if assigned_agent is not None:
-                self.event_publisher.publish(LeadAssigned(
-                    tenant_id=str(saved_lead.tenant_id.value),
-                    lead_id=str(saved_lead.id),
-                    agent_id=str(assigned_agent.id),
-                ))
-            elif left_unassigned:
-                self.event_publisher.publish(LeadLeftUnassigned(
-                    tenant_id=str(saved_lead.tenant_id.value),
-                    lead_id=str(saved_lead.id),
-                ))
+        self._publish_outcome(saved_lead, assigned_agent, left_unassigned)
 
         return LeadProcessedResult(
             lead_id=str(saved_lead.id),
@@ -184,6 +160,47 @@ class IngestLeadUseCase(IngestLeadInputPort):
             assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
             applied_rules_count=len(breakdown.applied),
         )
+
+    def _publish_rejection(self, record: IntakeRecord, reason: Optional[str]) -> None:
+        if not self.event_publisher:
+            return
+        self.event_publisher.publish(IntakeRejected(
+            tenant_id=str(record.tenant_id.value),
+            intake_record_id=str(record.id),
+            reason=reason or "",
+        ))
+
+    def _publish_outcome(
+        self,
+        lead: Lead,
+        assigned_agent: Optional[Agent],
+        left_unassigned: bool,
+    ) -> None:
+        """Every event a processed lead emits, in one place.
+
+        Called once the unit of work has committed, never inside it: a notice
+        that fails must not undo a lead that is already saved."""
+        if not self.event_publisher:
+            return
+        self.event_publisher.publish(LeadProcessedEvent(
+            tenant_id=str(lead.tenant_id.value),
+            lead_id=str(lead.id),
+            email=str(lead.email) if lead.email else None,
+            score=int(lead.score),
+            status=lead.status,
+            assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
+        ))
+        if assigned_agent is not None:
+            self.event_publisher.publish(LeadAssigned(
+                tenant_id=str(lead.tenant_id.value),
+                lead_id=str(lead.id),
+                agent_id=str(assigned_agent.id),
+            ))
+        elif left_unassigned:
+            self.event_publisher.publish(LeadLeftUnassigned(
+                tenant_id=str(lead.tenant_id.value),
+                lead_id=str(lead.id),
+            ))
 
     @staticmethod
     def _field_of(exc: DomainException) -> str:
