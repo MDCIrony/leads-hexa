@@ -131,6 +131,7 @@ nav:
       - "ADR-0024 · El contrato de salida se construye una vez": decisiones/0024-el-contrato-de-salida-se-construye-una-vez.md
       - "ADR-0025 · Outbox transaccional": decisiones/0025-outbox-transaccional.md
       - "ADR-0026 · Kafka como canal del producto": decisiones/0026-kafka-como-canal-del-producto.md
+      - "ADR-0027 · Una cola para el trabajo de fondo": decisiones/0027-cola-para-el-trabajo-de-fondo.md
 
   - Módulos:
       - modulos/index.md

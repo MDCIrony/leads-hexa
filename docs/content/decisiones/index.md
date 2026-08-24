@@ -75,7 +75,7 @@ hecho, no una decisión.
 | [0016](0016-solo-eventos-con-consumidor.md) | Sólo eventos con consumidor | Sustituida por [0023](0023-eventos-del-canal-de-salida.md) |
 | [0017](0017-retirada-de-webhook-dispatched.md) | Retirada de `webhook_dispatched` | Aceptada |
 | [0018](0018-dtos-sin-framework.md) | DTOs sin framework | Aceptada |
-| [0019](0019-trabajo-de-fondo-en-proceso.md) | Trabajo de fondo en el mismo proceso | Aceptada |
+| [0019](0019-trabajo-de-fondo-en-proceso.md) | Trabajo de fondo en el mismo proceso | Sustituida por [0027](0027-cola-para-el-trabajo-de-fondo.md) |
 | [0020](0020-eventos-desde-la-aplicacion.md) | Los eventos se construyen en la aplicación | Sustituida por [0024](0024-el-contrato-de-salida-se-construye-una-vez.md) |
 | [0021](0021-texto-explicativo-compuesto-al-escribir.md) | El texto explicativo se guarda compuesto | Aceptada |
 | [0022](0022-agregados-del-panel.md) | Agregados del panel | Aceptada |
@@ -83,3 +83,4 @@ hecho, no una decisión.
 | [0024](0024-el-contrato-de-salida-se-construye-una-vez.md) | El contrato de salida se construye una vez | Aceptada |
 | [0025](0025-outbox-transaccional.md) | Outbox transaccional | Aceptada |
 | [0026](0026-kafka-como-canal-del-producto.md) | Kafka como canal del producto | Aceptada |
+| [0027](0027-cola-para-el-trabajo-de-fondo.md) | Una cola para el trabajo de fondo | Aceptada |

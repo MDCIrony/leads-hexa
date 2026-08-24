@@ -21,6 +21,7 @@ from application.ports.input.intake_record_use_case_ports import (
     PromoteIntakeRecordInputPort,
 )
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
+from application.ports.output.job_queue_port import JobQueuePort
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.enums import IntakeJobKind, IntakeRecordStatus
@@ -29,6 +30,7 @@ from infrastructure.adapters.input.api.dependencies import (
     get_get_intake_job_use_case,
     get_get_intake_jobs_use_case,
     get_get_intake_records_use_case,
+    get_job_queue,
     get_process_batch_use_case,
     get_process_intake_job_use_case,
     get_promote_intake_record_use_case,
@@ -92,15 +94,20 @@ def ingest_lead(
     context: RequestContext = Depends(require_organization_manager),
     receive: ReceiveIntakeInputPort = Depends(get_receive_intake_use_case),
     process: ProcessIntakeJobInputPort = Depends(get_process_intake_job_use_case),
+    job_queue: JobQueuePort = Depends(get_job_queue),
 ):
     received = receive.execute(ReceiveIntakeCommand(
         tenant_id=context.tenant_id,
         kind=IntakeJobKind.SINGLE.value,
         payloads=[request.model_dump()],
     ))
+    job_id = UUID(received.job_id)
     # Queued after reception has confirmed: if the process dies here, the
     # record is already durable and the job stays visible to reprocess.
-    background.add_task(process.execute, context.tenant_id, UUID(received.job_id))
+    # A broker outage (ADR-0027) falls back to the same in-process path this
+    # replaced, rather than rejecting a lead over our queue being down.
+    if not job_queue.enqueue_intake_job(context.tenant_id, job_id):
+        background.add_task(process.execute, context.tenant_id, job_id)
     return IntakeAcceptedResponse(
         job_id=received.job_id,
         record_ids=received.record_ids,

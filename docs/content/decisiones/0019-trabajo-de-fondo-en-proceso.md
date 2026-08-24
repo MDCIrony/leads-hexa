@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada |
+| **Estado** | Sustituida por [ADR-0027](0027-cola-para-el-trabajo-de-fondo.md) |
 | **Fecha** | 2026-08-08 |
 | **Ámbito** | Backend · Aplicación |
 
@@ -40,5 +40,6 @@ no es trabajo perdido.
 
 ## Ver también
 
+- [ADR-0027 · Una cola para el trabajo de fondo](0027-cola-para-el-trabajo-de-fondo.md)
 - [ADR-0010 · Recepción y procesamiento separados](0010-recepcion-y-procesamiento-separados.md)
 - [Ingesta](../modulos/ingesta.md)

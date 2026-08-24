@@ -1,6 +1,7 @@
 from application.ports.output.clock_port import ClockPort
 from application.ports.output.file_parser_port import FileParserPort
 from application.ports.output.id_generator_port import IdGeneratorPort
+from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.token_service_port import TokenServicePort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
@@ -9,6 +10,7 @@ from infrastructure.adapters.output.events.in_memory_event_publisher import InMe
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.queue.rabbitmq_job_queue import RabbitMQJobQueue
 from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
 from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from infrastructure.adapters.output.system_clock import SystemClock
@@ -41,6 +43,9 @@ class Container:
         self._assignment_engine = AssignmentEngine()
         self._file_parser = PandasFileParser()
         self._event_publisher = InMemoryEventPublisher()
+        # Safe to build eagerly: connecting happens per enqueue call, not at
+        # construction (ADR-0027), so a RabbitMQ outage never blocks startup.
+        self._job_queue = RabbitMQJobQueue(settings.rabbitmq_url)
 
     @property
     def settings(self) -> Settings:
@@ -77,6 +82,10 @@ class Container:
     @property
     def event_publisher(self) -> InMemoryEventPublisher:
         return self._event_publisher
+
+    @property
+    def job_queue(self) -> JobQueuePort:
+        return self._job_queue
 
     def unit_of_work(self) -> UnitOfWorkPort:
         """A fresh unit of work per call: it owns a transaction, which must not

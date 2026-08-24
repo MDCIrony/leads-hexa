@@ -45,12 +45,13 @@ services:
       - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
       - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
     depends_on:
       db:
         condition: service_healthy
-      # No condition on kafka (ADR-0026): the outbox relay retries delivery,
-      # so the API must come up and keep serving leads whether or not the
-      # broker is reachable yet.
+      # No condition on kafka (ADR-0026) or rabbitmq (ADR-0027): both relays
+      # retry on their own schedule, so the API must come up and keep
+      # serving leads whether or not either broker is reachable yet.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -85,6 +86,51 @@ services:
       # 9094 on the host, for the test consumer and any other host tooling.
       # 9092 is the listener other compose services use.
       - "9094:9094"
+
+  rabbitmq:
+    image: rabbitmq:3.13-alpine
+    environment:
+      # Not "guest"/"guest": RabbitMQ refuses that account outside loopback,
+      # and both the backend and intake-worker reach this over the compose
+      # network, not localhost. Any other username sidesteps the restriction.
+      RABBITMQ_DEFAULT_USER: leads
+      RABBITMQ_DEFAULT_PASS: leadspassword
+    ports:
+      # 5672 on the host, for local tooling. Other compose services reach
+      # this by service name on the compose network.
+      - "5672:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  intake-worker:
+    # Same context, dockerfile and target as `backend` (ADR-0027): reuses
+    # its build instead of maintaining a second image for one process that
+    # differs only in which command it runs.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    working_dir: /app/src
+    volumes:
+      - ./backend/src:/app/src:ro
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
+      - JWT_SECRET=dev-secret-change-in-production
+      - LOG_LEVEL=INFO
+      - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
+    command: ["python", "-m", "infrastructure.workers.intake_worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+      # Blocking here, unlike on `backend`: this process has nothing to do
+      # without a broker, so waiting for it removes a connect-crash-restart
+      # cycle at cold start instead of degrading to it.
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
 
   frontend:
     build:
@@ -127,6 +173,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # No RABBITMQ_URL: it falls back to Settings' localhost default, which is
+    # unreachable from inside this container by construction. That keeps the
+    # suite hermetic (ADR-0027, same reasoning as no Kafka broker in 2.2) and
+    # exercises the enqueue-fails fallback path for free on every run.
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
       - TEST_DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test

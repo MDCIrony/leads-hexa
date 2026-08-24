@@ -18,6 +18,10 @@ class Settings:
     # leads even when no Kafka broker is reachable, and the relay is what
     # retries delivery once one is.
     kafka_bootstrap_servers: str = "localhost:9092"
+    # Same reasoning, same default-not-required shape (ADR-0027): an
+    # unreachable RabbitMQ degrades the ingest endpoint to in-process work
+    # instead of failing it.
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672/%2F"
     cors_origins: List[str] = field(default_factory=list)
 
     @classmethod
@@ -40,5 +44,6 @@ class Settings:
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0")),
             outbox_relay_interval_seconds=float(os.getenv("OUTBOX_RELAY_INTERVAL_SECONDS", "1.0")),
             kafka_bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+            rabbitmq_url=os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/%2F"),
             cors_origins=origins,
         )

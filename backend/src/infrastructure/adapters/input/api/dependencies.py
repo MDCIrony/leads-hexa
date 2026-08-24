@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from application.dtos.context import RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.ports.output.token_service_port import TokenServicePort
+from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.intake_phase_use_case_ports import (
     ProcessIntakeJobInputPort, ReceiveIntakeInputPort,
@@ -100,6 +101,9 @@ def get_uow(container: Container = Depends(get_container)) -> UnitOfWorkPort:
 
 def get_token_service(container: Container = Depends(get_container)) -> TokenServicePort:
     return container.token_service
+
+def get_job_queue(container: Container = Depends(get_container)) -> JobQueuePort:
+    return container.job_queue
 
 def get_ingest_lead_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),
