@@ -72,9 +72,11 @@ hecho, no una decisión.
 | [0013](0013-condiciones-en-jsonb.md) | Condiciones en JSONB | Aceptada |
 | [0014](0014-retirada-del-umbral-fijo.md) | Retirada del umbral fijo | Aceptada |
 | [0015](0015-notificaciones-por-sondeo.md) | Notificaciones por sondeo | Aceptada |
-| [0016](0016-solo-eventos-con-consumidor.md) | Sólo eventos con consumidor | Aceptada |
+| [0016](0016-solo-eventos-con-consumidor.md) | Sólo eventos con consumidor | Sustituida por [0023](0023-eventos-del-canal-de-salida.md) |
 | [0017](0017-retirada-de-webhook-dispatched.md) | Retirada de `webhook_dispatched` | Aceptada |
 | [0018](0018-dtos-sin-framework.md) | DTOs sin framework | Aceptada |
 | [0019](0019-trabajo-de-fondo-en-proceso.md) | Trabajo de fondo en el mismo proceso | Aceptada |
 | [0020](0020-eventos-desde-la-aplicacion.md) | Los eventos se construyen en la aplicación | Aceptada |
 | [0021](0021-texto-explicativo-compuesto-al-escribir.md) | El texto explicativo se guarda compuesto | Aceptada |
+| [0022](0022-agregados-del-panel.md) | Agregados del panel | Aceptada |
+| [0023](0023-eventos-del-canal-de-salida.md) | Los eventos del canal de salida | Aceptada |

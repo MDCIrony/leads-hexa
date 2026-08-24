@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada |
+| **Estado** | Sustituida por [ADR-0023](0023-eventos-del-canal-de-salida.md) |
 | **Fecha** | 2026-08-08 |
 | **Ámbito** | Backend · Aplicación |
 
@@ -40,5 +40,6 @@ añadirlo cuando llegue esa necesidad, en vez de encontrarlo ya preparado.
 
 ## Ver también
 
+- [ADR-0023 · Los eventos del canal de salida](0023-eventos-del-canal-de-salida.md)
 - [ADR-0015 · Notificaciones por sondeo](0015-notificaciones-por-sondeo.md)
 - [Notificaciones](../modulos/notificaciones.md)

@@ -17,7 +17,7 @@ from domain.services.assignment_engine import AssignmentEngine
 from domain.services.scoring_engine import ScoringEngine
 from domain.services.viability_engine import ViabilityEngine
 from domain.exceptions import DomainException
-from domain.events.lead_events import LeadProcessedEvent
+from domain.events.lead_events import LeadDisqualified, LeadProcessedEvent
 from domain.events.notification_events import IntakeRejected, LeadAssigned, LeadLeftUnassigned
 
 # Verified against domain/exceptions.py: these are the codes the entity's
@@ -182,6 +182,18 @@ class IngestLeadUseCase(IngestLeadInputPort):
         that fails must not undo a lead that is already saved."""
         if not self.event_publisher:
             return
+        if lead.status == LeadStatus.DISQUALIFIED:
+            # Two facts, not one ambiguous one: what cleared the filter is the
+            # product, what a rule ruled out is an audit trail. Sending both
+            # down the same event put our filtering on the customer's side.
+            self.event_publisher.publish(LeadDisqualified(
+                tenant_id=str(lead.tenant_id.value),
+                lead_id=str(lead.id),
+                source_id=str(lead.source_id.value),
+                reason=lead.disqualification_reason or "",
+            ))
+            return
+
         self.event_publisher.publish(LeadProcessedEvent(
             tenant_id=str(lead.tenant_id.value),
             lead_id=str(lead.id),
