@@ -44,9 +44,13 @@ services:
       - JWT_SECRET=dev-secret-change-in-production
       - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
       - LOG_LEVEL=INFO
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     depends_on:
       db:
         condition: service_healthy
+      # No condition on kafka (ADR-0026): the outbox relay retries delivery,
+      # so the API must come up and keep serving leads whether or not the
+      # broker is reachable yet.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -54,6 +58,33 @@ services:
       retries: 5
       start_period: 10s
 
+  kafka:
+    image: apache/kafka:3.7.0
+    environment:
+      # Single-node KRaft: one process is both broker and controller, so no
+      # ZooKeeper to run or keep in sync (ADR-0026).
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094
+      # Two audiences, two advertised addresses: other compose services reach
+      # this by service name on the compose network, the host (and the test
+      # consumer) can only reach it through the mapped port.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # MVP decision with an expiry date (ADR-0026): a tenant's topic appears
+      # on first publish instead of needing a provisioning step this MVP has
+      # nowhere to hang yet.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      # 9094 on the host, for the test consumer and any other host tooling.
+      # 9092 is the listener other compose services use.
+      - "9094:9094"
 
   frontend:
     build:

@@ -14,6 +14,10 @@ class Settings:
     jwt_expires_minutes: int = 60
     webhook_timeout_seconds: float = 5.0
     outbox_relay_interval_seconds: float = 1.0
+    # Defaulted, never required (ADR-0026): the backend must start and serve
+    # leads even when no Kafka broker is reachable, and the relay is what
+    # retries delivery once one is.
+    kafka_bootstrap_servers: str = "localhost:9092"
     cors_origins: List[str] = field(default_factory=list)
 
     @classmethod
@@ -35,5 +39,6 @@ class Settings:
             jwt_expires_minutes=int(os.getenv("JWT_EXPIRES_MINUTES", "60")),
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0")),
             outbox_relay_interval_seconds=float(os.getenv("OUTBOX_RELAY_INTERVAL_SECONDS", "1.0")),
+            kafka_bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
             cors_origins=origins,
         )

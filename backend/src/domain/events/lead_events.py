@@ -11,6 +11,9 @@ class OutboundEvent(DomainEvent):
 
     tenant_id: str
     lead_id: str
+    # Defaulted so no existing constructor call changes (ADR-0026); bumps
+    # only when the published shape breaks an existing external consumer.
+    schema_version: int = 1
 
     @property
     def partition_key(self) -> str:

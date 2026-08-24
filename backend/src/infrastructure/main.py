@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
+from confluent_kafka import Producer
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,6 +9,7 @@ from infrastructure.adapters.output.persistence.migration_runner import Migratio
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import RawSqlWebhookRepository
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
+from infrastructure.adapters.output.events.kafka_outbound_dispatcher import KafkaOutboundDispatcher
 from infrastructure.adapters.output.events.outbox_relay_thread import OutboxRelayThread
 from infrastructure.adapters.output.events.webhook_outbound_dispatcher import WebhookOutboundDispatcher
 from application.handlers.notification_handler import NotificationHandler
@@ -51,6 +53,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 WebhookOutboundDispatcher(
                     webhook_repo=RawSqlWebhookRepository(webhook_connection),
                     webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
+                ),
+                # Producer() does not connect synchronously (ADR-0026): a
+                # broker that is not reachable yet fails delivery, not
+                # construction, so this never blocks startup.
+                KafkaOutboundDispatcher(
+                    producer=Producer({"bootstrap.servers": settings.kafka_bootstrap_servers}),
                 ),
             ],
         )

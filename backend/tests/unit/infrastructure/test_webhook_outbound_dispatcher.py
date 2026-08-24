@@ -79,6 +79,7 @@ def test_the_customer_receives_the_whole_contract():
             # relay pass dies between delivering it and marking it published.
             "event_id": str(event.event_id),
             "occurred_on": event.occurred_on.isoformat(),
+            "schema_version": 1,
             "tenant_id": str(_TENANT),
             "lead_id": str(lead.id),
             "source_id": str(_SOURCE),

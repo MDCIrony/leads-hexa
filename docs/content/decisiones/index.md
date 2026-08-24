@@ -82,3 +82,4 @@ hecho, no una decisión.
 | [0023](0023-eventos-del-canal-de-salida.md) | Los eventos del canal de salida | Aceptada |
 | [0024](0024-el-contrato-de-salida-se-construye-una-vez.md) | El contrato de salida se construye una vez | Aceptada |
 | [0025](0025-outbox-transaccional.md) | Outbox transaccional | Aceptada |
+| [0026](0026-kafka-como-canal-del-producto.md) | Kafka como canal del producto | Aceptada |
