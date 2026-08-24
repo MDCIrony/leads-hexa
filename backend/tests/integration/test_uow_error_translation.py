@@ -63,6 +63,27 @@ def test_foreign_key_violation_is_translated_to_related_entity_not_found(test_db
     assert not isinstance(exc_info.value, psycopg.errors.ForeignKeyViolation)
 
 
+def test_not_null_violation_is_translated_to_missing_required_field(test_db):
+    """A required column left empty must reach the caller as a 400-shaped
+    domain error, not a 500. A message consumer reads a 500 as "retry me",
+    and this one fails identically on every redelivery — it belongs in the
+    dead-letter queue, not back in the queue."""
+    tenant = _tenant(test_db)
+    agent = Agent.create(name="A", email=f"{uuid4()}@a.test", tenant_id=tenant.id.value)
+    uow = PostgresUnitOfWork(test_db)
+    with uow:
+        uow.agents.save(agent)
+
+    with pytest.raises(DomainException) as exc_info:
+        with uow:
+            uow.connection.execute(
+                "UPDATE agents SET name = NULL WHERE id = %s", (agent.id.value,)
+            )
+
+    assert exc_info.value.error_code == "MISSING_REQUIRED_FIELD"
+    assert not isinstance(exc_info.value, psycopg.errors.NotNullViolation)
+
+
 def test_connection_returns_to_the_pool_after_a_translated_error(test_db):
     """A leaked connection only shows up under load; this is the cheapest
     signal that __exit__ still releases it back to the pool on the

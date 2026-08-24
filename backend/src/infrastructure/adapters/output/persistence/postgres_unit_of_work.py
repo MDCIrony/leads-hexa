@@ -64,9 +64,11 @@ class PostgresUnitOfWork(UnitOfWorkPort):
 
         # Translated only after rollback and pool return have both happened,
         # so a raw psycopg error never leaves a borrowed connection or an open
-        # transaction behind. Only the two constraint types a use case can
-        # forget to pre-check are covered; anything else keeps its original
-        # type and reaches unhandled_exception_handler as a 500, unchanged.
+        # transaction behind. Only the constraint types a use case can forget
+        # to pre-check are covered; anything else keeps its original type and
+        # reaches unhandled_exception_handler as a 500, unchanged. A message
+        # consumer needs the difference: a 500 reads as "retry me", and these
+        # three will fail exactly the same way on every redelivery.
         if isinstance(exc_val, psycopg.errors.UniqueViolation):
             raise DomainException(
                 "Ya existe un registro con ese valor", error_code="ALREADY_EXISTS"
@@ -74,6 +76,10 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         if isinstance(exc_val, psycopg.errors.ForeignKeyViolation):
             raise DomainException(
                 "Referencia a un registro que no existe", error_code="RELATED_ENTITY_NOT_FOUND"
+            ) from exc_val
+        if isinstance(exc_val, psycopg.errors.NotNullViolation):
+            raise DomainException(
+                "Falta un campo obligatorio", error_code="MISSING_REQUIRED_FIELD"
             ) from exc_val
 
     def commit(self) -> None:
