@@ -8,11 +8,6 @@ from application.dtos.commands import OutboxEntry
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from domain.events.lead_events import OutboundEvent
 
-# Past this, delivery has failed the same way often enough that the next
-# attempt will not go differently either.
-_MAX_ATTEMPTS = 10
-
-
 class RawSqlOutboxRepository(OutboxRepositoryPort):
     def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
@@ -43,19 +38,22 @@ class RawSqlOutboxRepository(OutboxRepositoryPort):
         # deduplicate — holding the transaction open across the network to
         # avoid it would cost the pool the API runs on.
         #
-        # attempts < %s keeps a permanently broken destination from holding
-        # the batch hostage: it sorts first forever, and a full batch of them
-        # would starve everything behind it. What it exceeds stays in the
-        # table with its last_error, which is what an operator needs to see.
+        # Fewest attempts first, and nothing is ever dropped for having been
+        # retried too often. Ordering by age alone let a permanently broken
+        # destination sort first forever and starve everything behind it; a
+        # retry cap would have been worse — a broker down for a few seconds
+        # would exhaust it and lose exactly the leads this table exists to
+        # protect. A failing entry sinks in the order instead, so new ones
+        # overtake it, and it keeps being retried for as long as it takes.
         rows = self.connection.execute(
             """
             SELECT id, tenant_id, partition_key, event_type, payload, occurred_on
             FROM outbox_events
-            WHERE published_at IS NULL AND attempts < %s
-            ORDER BY occurred_on
+            WHERE published_at IS NULL
+            ORDER BY attempts, occurred_on
             LIMIT %s
             """,
-            (_MAX_ATTEMPTS, limit),
+            (limit,),
         ).fetchall()
         return [
             OutboxEntry(

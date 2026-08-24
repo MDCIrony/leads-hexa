@@ -26,7 +26,12 @@ class OutboxRelayThread:
     def stop(self) -> None:
         self._stop_event.set()
         if self._thread is not None:
-            self._thread.join()
+            # Bounded: a pass mid-flush against an unresponsive broker can take
+            # minutes, and shutdown must not wait behind it. The thread is a
+            # daemon, so what it leaves unfinished dies with the process, and
+            # the next start picks those entries back up — they are still
+            # unpublished rows.
+            self._thread.join(timeout=self._interval_seconds + 5)
 
     def _run(self) -> None:
         while not self._stop_event.is_set():

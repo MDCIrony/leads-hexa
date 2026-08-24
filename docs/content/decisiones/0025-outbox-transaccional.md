@@ -53,10 +53,13 @@ puñado de receptores que agotan su tiempo de espera vaciaría el pool del que v
 es que dos relays en paralelo pueden entregar la misma entrada dos veces; es exactamente lo que
 significa *at-least-once*, y para eso el consumidor tiene el `event_id`.
 
-**Una entrada deja de reintentarse a los diez intentos.** Un destino roto de forma permanente ordena
-siempre primero —es el más antiguo sin publicar— y un lote lleno de ellos dejaría sin salir a todo
-lo que viene detrás. Lo que supera el tope se queda en la tabla con su `last_error`, que es lo que
-un operador necesita ver; no se borra ni se marca como entregado.
+**Nada se descarta por haberse reintentado demasiadas veces, y el lote se ordena por número de
+intentos.** Ordenar sólo por antigüedad dejaba que un destino roto de forma permanente saliera
+siempre primero y dejase sin sitio a todo lo de detrás. Un tope de reintentos habría sido peor: un
+bróker caído unos segundos lo agotaría, y se perderían exactamente los leads que esta tabla existe
+para no perder. Con `ORDER BY attempts, occurred_on`, una entrada que falla se hunde en el orden
+—las nuevas la adelantan— y se sigue reintentando el tiempo que haga falta, con su `last_error` a
+la vista de quien opere el sistema.
 
 Un `OutboxRelayThread` —hilo daemon, arrancado en el `lifespan` de la API y detenido antes de cerrar
 la base— llama a `OutboxRelay.drain()` cada segundo (configurable vía `OUTBOX_RELAY_INTERVAL_SECONDS`).

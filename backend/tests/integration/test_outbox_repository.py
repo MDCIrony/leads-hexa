@@ -141,3 +141,26 @@ def test_a_full_ingestion_leaves_exactly_one_unpublished_entry(test_db):
         assert entries[0].payload["lead_id"] == result.lead_id
     finally:
         ctx.__exit__(None, None, None)
+
+
+def test_a_repeatedly_failing_entry_is_never_dropped_and_never_starves_the_rest(test_db):
+    """A broker down for a few seconds must not cost a lead. The entry that
+    keeps failing sinks in the order so newer ones overtake it, but it stays
+    in the batch — this table exists so nothing gets lost."""
+    repo, _, ctx = _repo(test_db)
+    try:
+        stubborn = _event()
+        repo.record(stubborn)
+        for attempt in range(25):
+            repo.mark_failed(stubborn.event_id, f"broker unreachable (attempt {attempt})")
+
+        # Well past any cap a retry limit would have imposed.
+        assert [entry.id for entry in repo.list_unpublished(10)] == [stubborn.event_id]
+
+        fresh = _event()
+        repo.record(fresh)
+
+        # The newcomer goes first: the failing one no longer holds the batch.
+        assert [entry.id for entry in repo.list_unpublished(10)] == [fresh.event_id, stubborn.event_id]
+    finally:
+        ctx.__exit__(None, None, None)
