@@ -53,13 +53,14 @@ sequenceDiagram
     API-->>C: 200, o 401/403/404 según el fallo
 ```
 
-### Los tres roles
+### Los cuatro roles
 
 | Rol | Plano | Alcance |
 |---|---|---|
 | `ADMIN` | Plataforma | Da de alta organizaciones. Sin `tenant_id`: no pertenece a ninguna |
 | `MANAGER` | Organización | Administra asesores, grupos, reglas y fuentes de su organización |
 | `AGENT` | Organización | Sólo sus propios leads asignados y sus notificaciones |
+| `INTEGRATION` | Organización | Un principal de máquina, no una persona. Sólo `GET /leads`, vía `X-Api-Key`; nunca `POST /auth/login` ([ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md)) |
 
 ### La regla de bootstrap
 
@@ -72,6 +73,19 @@ impide crear un segundo `ADMIN` por esa vía: el único que existirá siempre es
 !!! warning
     La ventana de bootstrap depende únicamente del recuento de la tabla, no de un flag de entorno.
     Un despliegue que arranca con la base ya poblada no vuelve a abrirla.
+
+### La cabecera `X-Api-Key`
+
+`GET /leads` es el único endpoint que también acepta una credencial de máquina, además del JWT de
+un `MANAGER`. `POST /agents/integration-credential` la emite con el formato `{agent_id}.{secret}` —
+el identificador va en claro en la propia clave, igual que un JWT lleva el `sub` en claro en su
+payload firmado; sólo el secreto está protegido, con el mismo `BcryptPasswordHasher` que la
+contraseña de un agente humano. `resolve_integration_context` divide la clave, recarga el agente por
+`agent_id` y exige `role == INTEGRATION`, activo, y que el secreto verifique — cuatro condiciones que
+fallan todas con el mismo `401`, sin decir cuál. `require_manager_or_integration` es la única ruta
+que compone los dos caminos: si llega `X-Api-Key` la resuelve por ahí sin mirar el JWT; si no,
+exige el `MANAGER` de siempre. El resto de la API no cambia — `X-Api-Key` no abre ninguna otra
+puerta. Detalle completo en [Autenticación de la mensajería](../eventos/autenticacion.md).
 
 ### Los dos planos
 
@@ -95,6 +109,8 @@ organización responde `404`, no `403` —confirmar que existe en otro sitio ya 
 | `require_organization_manager` | Exige rol `MANAGER` sobre la organización del actor |
 | `require_platform_admin` | Exige rol `ADMIN` |
 | `require_organization_member` | Exige pertenecer a una organización, con cualquier rol |
+| `resolve_integration_context` | Verifica `X-Api-Key` y recarga el agente `INTEGRATION` en BD |
+| `require_manager_or_integration` | Compone JWT de `MANAGER` y `X-Api-Key`, sólo en `GET /leads` |
 | `RequestContext` | Actor y organización, resueltos una vez por petición desde el token |
 | `LoginUseCase` | Verifica credenciales y emite el JWT |
 | `JwtTokenService` | Adaptador PyJWT: firma y verifica el token |
@@ -105,6 +121,7 @@ organización responde `404`, no `403` —confirmar que existe en otro sitio ya 
 - [ADR-0003](../decisiones/0003-dos-planos-disjuntos.md): por qué no se mezclan los dos planos.
 - [ADR-0004](../decisiones/0004-organizacion-desde-el-token.md): nunca lo manda el cliente.
 - [ADR-0005](../decisiones/0005-404-en-vez-de-403.md): por qué un recurso ajeno responde 404.
+- [ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md): el rol `INTEGRATION` y `X-Api-Key`.
 
 ## Dónde vive
 

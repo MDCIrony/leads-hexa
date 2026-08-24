@@ -120,4 +120,6 @@ un fallo aquí no rompe nada visible hasta que el bróker cae de verdad.
 - **Nadie mira la DLQ.** Un mensaje que llega ahí se queda sin que nada avise.
 - **Sin apagado ordenado:** un `SIGTERM` a mitad de un mensaje lo mata, y es justo el caso que la
   reentrega ya cubre por diseño.
-- **Credenciales en claro** en el fichero de compose, sin TLS.
+- **Credenciales en claro** en el fichero de compose, sin TLS. Aplazado con razón escrita, no
+  olvidado: ver «Alternativas consideradas» en el
+  [ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md#alternativas-consideradas).

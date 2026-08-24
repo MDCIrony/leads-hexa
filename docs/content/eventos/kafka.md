@@ -108,9 +108,12 @@ hoy recibe webhooks de leads procesados no debe empezar a recibir de golpe el do
 ```bash
 cd tools/test-consumer
 
-python consume.py --tenant <uuid>                   # desde ahora
-python consume.py --tenant <uuid> --from-beginning  # todo lo retenido
+python consume.py --tenant <uuid> --sasl-username tenant-<uuid> --sasl-password <secreto>                  # desde ahora
+python consume.py --tenant <uuid> --sasl-username tenant-<uuid> --sasl-password <secreto> --from-beginning # todo lo retenido
 ```
+
+`--sasl-username`/`--sasl-password` los emite `POST /agents/integration-credential` — ver
+[Autenticación](autenticacion.md).
 
 El script no importa nada del backend **a propósito**: es lo que un cliente escribiría por su
 cuenta, y si necesitara una librería nuestra sería señal de que el contrato no se sostiene solo.
@@ -129,7 +132,7 @@ apagado, `/health` responde `200` y los leads se guardan.
 | **Retención de 168 h** (el valor por defecto, no elegido) | Reobtener funciona siete días |
 | **`num.partitions=1`** por defecto | La clave de partición está bien elegida, pero el reparto que justifica todavía no existe |
 | **`AUTO_CREATE_TOPICS_ENABLE=true`** | Un `tenant_id` mal escrito crea un topic fantasma en silencio |
-| **PLAINTEXT sin autenticación** | Cualquiera con acceso a la red lee los topics de todas las organizaciones |
 
-Los cuatro están asumidos como decisiones de MVP con fecha de caducidad, no como descuidos. El
-último es el que impide desplegar esto fuera de una máquina de desarrollo.
+Los tres están asumidos como decisiones de MVP con fecha de caducidad, no como descuidos. El cuarto
+límite que estaba aquí —el listener del host sin autenticación— ya se cerró:
+[ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md).

@@ -82,12 +82,12 @@ antes de llevar esto más allá de una máquina de desarrollo.
 
 | Hueco | Consecuencia |
 |---|---|
-| **Kafka en PLAINTEXT, sin autenticación** | Cualquiera con acceso a la red lee los topics de **todas** las organizaciones |
-| **Sin credencial de máquina en la API** | Un sistema externo sólo puede llamar a `GET /leads?updated_since=` con un token de persona |
-| **Credenciales de RabbitMQ en claro** en el compose, sin TLS | — |
+| ~~Kafka en PLAINTEXT, sin autenticación~~ | **Resuelto** — [ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md): sólo `PLAINTEXT_HOST` (9094) admitía esto, y ahora exige SASL/SCRAM con ACL por organización |
+| ~~Sin credencial de máquina en la API~~ | **Resuelto** — [ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md): `POST /agents/integration-credential` |
+| **Credenciales de RabbitMQ en claro** en el compose, sin TLS | Aplazado con razón escrita, no olvidado: ver «Alternativas consideradas» en el [ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md#alternativas-consideradas) |
 
-Las tres van juntas. Una credencial de API mientras el bróker está abierto de par en par es
-seguridad de teatro, y peor: deja escrito en el código que el asunto está resuelto.
+Las dos primeras iban juntas a propósito: una credencial de API mientras el bróker estaba abierto de
+par en par era seguridad de teatro. El ADR-0028 cierra ambas en la misma tanda.
 
 ### Configuración que nadie eligió
 

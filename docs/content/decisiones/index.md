@@ -84,3 +84,4 @@ hecho, no una decisión.
 | [0025](0025-outbox-transaccional.md) | Outbox transaccional | Aceptada |
 | [0026](0026-kafka-como-canal-del-producto.md) | Kafka como canal del producto | Aceptada |
 | [0027](0027-cola-para-el-trabajo-de-fondo.md) | Una cola para el trabajo de fondo | Aceptada |
+| [0028](0028-autenticacion-de-la-mensajeria.md) | Autenticación de la mensajería | Aceptada |

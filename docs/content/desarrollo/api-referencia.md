@@ -17,6 +17,7 @@ puede devolver cada endpoint.
 | Organizaciones | `GET /api/v1/tenants` | `ADMIN` | 200 |
 | Organizaciones | `PATCH /api/v1/tenants/{tenant_id}` | `ADMIN` | 200 |
 | Agentes | `POST /api/v1/agents` | Bootstrap sin auth; luego `MANAGER` | 201 |
+| Agentes | `POST /api/v1/agents/integration-credential` | `MANAGER` | 201 |
 | Agentes | `GET /api/v1/agents` | `MANAGER` | 200 |
 | Agentes | `GET /api/v1/agents/{agent_id}` | `MANAGER` | 200 |
 | Agentes | `PATCH /api/v1/agents/{agent_id}` | `MANAGER` | 200 |
@@ -37,7 +38,7 @@ puede devolver cada endpoint.
 | Trabajos de ingesta | `GET /api/v1/intake/jobs` | `MANAGER` | 200 |
 | Trabajos de ingesta | `GET /api/v1/intake/jobs/{job_id}` | `MANAGER` | 200 |
 | Trabajos de ingesta | `POST /api/v1/intake/jobs/{job_id}/reprocess` | `MANAGER` | 202 |
-| Leads | `GET /api/v1/leads` | `MANAGER` | 200 |
+| Leads | `GET /api/v1/leads` | `MANAGER` o `X-Api-Key` de integración | 200 |
 | Leads | `GET /api/v1/leads/mine` | `MANAGER` o `AGENT` | 200 |
 | Leads | `GET /api/v1/leads/stats` | `MANAGER` | 200 |
 | Leads | `GET /api/v1/leads/{lead_id}` | `MANAGER` o `AGENT` (el suyo) | 200 |
@@ -203,7 +204,7 @@ nota en [API · Errores](api-errores.md)), o si el nuevo nombre no deja caracter
 
 ## Agentes
 
-`MANAGER` en los cinco endpoints, siempre dentro de su propia organización. Un `ADMIN` o un
+`MANAGER` en los seis endpoints, siempre dentro de su propia organización. Un `ADMIN` o un
 `AGENT` reciben `403 Forbidden`.
 
 ### `POST /api/v1/agents`
@@ -239,6 +240,30 @@ Errores: `401 Unauthorized` (fuera del bootstrap, sin token); `403 Forbidden` (n
 intenta crear un `ADMIN`); `400 Bad Request` (`EMAIL_ALREADY_EXISTS`) si el correo ya está en uso —
 la unicidad es de toda la plataforma, no sólo de la organización, porque el login resuelve la
 cuenta por correo sin filtrar por organización.
+
+### `POST /api/v1/agents/integration-credential`
+
+Emite o rota la credencial de máquina de la propia organización — upsert, no dos rutas separadas
+para alta y rotación: si ya existe, sustituye el secreto en el acto, sin ventana de solape. Detalle
+completo en [Autenticación de la mensajería](../eventos/autenticacion.md).
+
+```json
+{
+  "agent_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  "api_key": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d.xR2k9F...",
+  "kafka_username": "tenant-a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  "kafka_password": "wL8pQ...",
+  "kafka_bootstrap_servers": "localhost:9094",
+  "kafka_topic": "leads.a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+}
+```
+
+`api_key` va en la cabecera `X-Api-Key` de `GET /api/v1/leads`, el único endpoint que la acepta.
+Revocar es `DELETE /api/v1/agents/{agent_id}` — el mismo endpoint de siempre, sin ruta especial.
+Errores: `403 Forbidden` (no es `MANAGER`); `503 Service Unavailable` (`MESSAGING_UNAVAILABLE`) si
+Kafka no admite la credencial en ese instante — la operación entera falla sin dejar un agente a
+medias.
 
 ### `GET /api/v1/agents`
 
@@ -546,12 +571,14 @@ Ciclo de vida completo del lead: listado, las dos vistas de detalle, asignación
 
 ### `GET /api/v1/leads`
 
-`MANAGER` únicamente: devuelve el flujo completo de la organización, así que un `AGENT` que lo
-alcanzara leería los leads de sus compañeros. Un `ADMIN` recibe `403`: el plano de plataforma no
-alcanza dato operativo.
+`MANAGER`, o una credencial de máquina por la cabecera `X-Api-Key` — la única ruta que la acepta
+(`POST /agents/integration-credential` la emite; ver
+[Autenticación de la mensajería](../eventos/autenticacion.md)). Devuelve el flujo completo de la
+organización, así que un `AGENT` que lo alcanzara leería los leads de sus compañeros. Un `ADMIN`
+recibe `403`: el plano de plataforma no alcanza dato operativo.
 
-Filtra por `status`, `assigned_agent_id`, `group_id`, `source_id` y `q`, todos opcionales y
-combinables con `AND`:
+Filtra por `status`, `assigned_agent_id`, `group_id`, `source_id`, `q` y `updated_since`, todos
+opcionales y combinables con `AND`:
 
 | Parámetro | Tipo | Contra qué |
 |---|---|---|
@@ -560,11 +587,17 @@ combinables con `AND`:
 | `group_id` | UUID | el grupo del asesor asignado, resuelto por subconsulta |
 | `source_id` | UUID | el origen del lead |
 | `q` | string | búsqueda literal (`ILIKE '%...%'`) sobre `first_name`, `last_name`, `email` y `company` |
+| `updated_since` | datetime ISO 8601 | `updated_at >= valor` — para que un consumidor recupere sólo lo que cambió desde la última vez que preguntó |
 
 `q` no usa índice de texto completo ni `unaccent`: es un `ILIKE` sobre cuatro columnas, suficiente
 para el volumen de un MVP docente. `%` y `_` viajan escapados, así que buscar `50%` encuentra un
 `50%` literal, no "cualquier cosa que empiece por 50". Un `status` que no es uno de los seis
 valores responde `400 Bad Request` (`INVALID_LEAD_STATUS`) en vez de ignorarse.
+
+`updated_since` cambia también el orden de la página: `ORDER BY updated_at, id` en vez del
+`created_at DESC, id` por defecto, para que paginar mientras se filtra por fecha de actualización no
+salte una fila que se toca entre una página y la siguiente — justo el lead que el consumidor estaba
+preguntando.
 
 ```json
 {
