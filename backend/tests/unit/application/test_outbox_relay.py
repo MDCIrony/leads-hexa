@@ -63,3 +63,33 @@ def test_a_published_entry_is_not_delivered_again():
     assert second_pass == 0
     assert len(dispatcher.calls) == 1
     assert outbox.list_unpublished(10) == []
+
+
+def test_delivery_happens_outside_the_reading_transaction():
+    """A dispatcher talks to the network. Doing it inside the transaction
+    that read the batch would hold a pooled connection open for as long as
+    the slowest receiver takes to answer, and a handful of timing-out
+    webhooks would drain the pool the API runs on."""
+    outbox = InMemoryOutboxRepository()
+    outbox.record(_event())
+    open_transactions = []
+
+    class _TransactionCountingUow(InMemoryUnitOfWork):
+        def __enter__(self):
+            open_transactions.append(1)
+            return super().__enter__()
+
+        def __exit__(self, *args):
+            open_transactions.pop()
+            return super().__exit__(*args)
+
+    class _AssertingDispatcher:
+        def dispatch(self, entry) -> None:
+            assert not open_transactions, "delivered while a transaction was open"
+
+    relay = OutboxRelay(
+        uow_factory=lambda: _TransactionCountingUow(outbox=outbox),
+        dispatchers=[_AssertingDispatcher()],
+    )
+
+    assert relay.drain() == 1

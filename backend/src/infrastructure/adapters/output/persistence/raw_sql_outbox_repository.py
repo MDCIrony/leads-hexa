@@ -8,6 +8,10 @@ from application.dtos.commands import OutboxEntry
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from domain.events.lead_events import OutboundEvent
 
+# Past this, delivery has failed the same way often enough that the next
+# attempt will not go differently either.
+_MAX_ATTEMPTS = 10
+
 
 class RawSqlOutboxRepository(OutboxRepositoryPort):
     def __init__(self, connection: psycopg.Connection) -> None:
@@ -32,19 +36,26 @@ class RawSqlOutboxRepository(OutboxRepositoryPort):
         )
 
     def list_unpublished(self, limit: int) -> List[OutboxEntry]:
-        # FOR UPDATE SKIP LOCKED: two relays (or two replicas of this
-        # process) racing this query must not both walk away with the same
-        # row, without one of them blocking on the other's lock.
+        # No row lock: the relay closes this transaction before it delivers,
+        # so a lock would be released long before the HTTP call it was meant
+        # to cover. Two relays racing may deliver the same entry twice, which
+        # is what at-least-once means and what event_id lets a consumer
+        # deduplicate — holding the transaction open across the network to
+        # avoid it would cost the pool the API runs on.
+        #
+        # attempts < %s keeps a permanently broken destination from holding
+        # the batch hostage: it sorts first forever, and a full batch of them
+        # would starve everything behind it. What it exceeds stays in the
+        # table with its last_error, which is what an operator needs to see.
         rows = self.connection.execute(
             """
             SELECT id, tenant_id, partition_key, event_type, payload, occurred_on
             FROM outbox_events
-            WHERE published_at IS NULL
+            WHERE published_at IS NULL AND attempts < %s
             ORDER BY occurred_on
             LIMIT %s
-            FOR UPDATE SKIP LOCKED
             """,
-            (limit,),
+            (_MAX_ATTEMPTS, limit),
         ).fetchall()
         return [
             OutboxEntry(

@@ -39,11 +39,24 @@ retrasaría lo único que hoy es inmediato.
 
 **El relay entrega, el caso de uso no.** Un `OutboxRelay` (capa de aplicación) recorre
 periódicamente las filas sin publicar y las reparte entre uno o más `OutboundDispatcherPort`. El
-primero es `WebhookOutboundDispatcher`, que envuelve el `WebhookRepositoryPort` y el
-`WebhookDispatcherPort` que ya existían; Kafka llegará como un segundo despachador en 2.2, sin tocar
-el relay ni el punto de registro. El `WebhookEventHandler` deja de estar suscrito al publicador en
-proceso — el webhook se vuelve asíncrono, hasta un ciclo del relay de retraso, y a cambio deja de
-perderse cuando el proceso muere entre el commit y la entrega.
+primero es `WebhookOutboundDispatcher`, que usa el `WebhookRepositoryPort` y el
+`WebhookDispatcherPort` que ya existían; Kafka llegará como un segundo despachador, sin tocar el
+relay ni el punto de registro. El `WebhookEventHandler` **se retira**: el relay es ahora el único
+camino a un webhook, y dejar la clase habría sido una segunda copia del mismo bucle de búsqueda y
+envío, alcanzable sólo desde su propia prueba. El webhook se vuelve asíncrono —hasta un ciclo del
+relay de retraso— y a cambio deja de perderse cuando el proceso muere entre el commit y la entrega.
+
+**Un ciclo del relay son tres pasos, no uno: leer, entregar, registrar.** La entrega ocurre con la
+transacción de lectura ya cerrada, y esto es deliberado: entregar dentro de ella mantendría una
+conexión del pool ocupada mientras se hacen tantas llamadas de red como entradas tenga el lote, y un
+puñado de receptores que agotan su tiempo de espera vaciaría el pool del que vive la API. El precio
+es que dos relays en paralelo pueden entregar la misma entrada dos veces; es exactamente lo que
+significa *at-least-once*, y para eso el consumidor tiene el `event_id`.
+
+**Una entrada deja de reintentarse a los diez intentos.** Un destino roto de forma permanente ordena
+siempre primero —es el más antiguo sin publicar— y un lote lleno de ellos dejaría sin salir a todo
+lo que viene detrás. Lo que supera el tope se queda en la tabla con su `last_error`, que es lo que
+un operador necesita ver; no se borra ni se marca como entregado.
 
 Un `OutboxRelayThread` —hilo daemon, arrancado en el `lifespan` de la API y detenido antes de cerrar
 la base— llama a `OutboxRelay.drain()` cada segundo (configurable vía `OUTBOX_RELAY_INTERVAL_SECONDS`).
@@ -74,7 +87,9 @@ al relay ni al punto de registro dentro de los casos de uso.
 `drain()` deja la fila sin publicar, y el siguiente ciclo la reintenta entera, incluidos los
 despachadores que ya habían tenido éxito. El `id` de la fila es el `event_id` del propio evento,
 precisamente para que el consumidor pueda deduplicar por él. El webhook, que hoy es síncrono, pasa a
-tener hasta un ciclo del relay de retraso.
+tener hasta un ciclo del relay de retraso. Y la tabla crece sin que nada la pode: las filas
+publicadas se quedan ahí. Es a propósito mientras sean el único registro de lo que salió, pero un
+despliegue con volumen real necesitará archivarlas, y ese trabajo todavía no existe.
 
 ## Ver también
 
