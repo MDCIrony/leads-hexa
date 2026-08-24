@@ -1,0 +1,245 @@
+/* One template repeated 25 times: header with the block tag, a single dominant
+   body element, and a one-line footer with the takeaway. */
+
+:root {
+  --lr-ink: #1c1c1f;
+  --lr-muted: #6a6a72;
+  --lr-accent: #3f51b5;
+  --lr-line: #e2e2e6;
+  --lr-bg: #fdfdfc;
+  --lr-soft: #f4f4f7;
+}
+
+.slidev-layout {
+  background: var(--lr-bg);
+  color: var(--lr-ink);
+}
+
+/* ---------- blocked: the shared template ---------- */
+
+.slidev-layout.blocked {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 1.6rem 2.4rem 1.2rem;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  gap: 0.6rem;
+}
+
+.blocked-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--lr-line);
+  padding-bottom: 0.45rem;
+}
+
+.blocked-tag {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lr-accent);
+  font-weight: 600;
+}
+
+.blocked-num {
+  font-size: 0.68rem;
+  color: var(--lr-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.blocked-body {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+/* Title stays put; the diagram floats in whatever space is left. Mermaid renders
+   into a shadow root, so outside CSS cannot resize it — each block carries the
+   scale it needs in slides.md. */
+.blocked-body > .mermaid {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin: auto 0;
+  display: flex;
+  justify-content: center;
+}
+
+.blocked-foot {
+  border-top: 1px solid var(--lr-line);
+  padding-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--lr-muted);
+  font-style: italic;
+}
+
+/* The first line of the body is the slide title. */
+.blocked-body h1 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 0 0 0.7rem;
+}
+
+.blocked-body h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--lr-accent);
+  margin: 0 0 0.4rem;
+}
+
+.blocked-body p {
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 0 0 0.5rem;
+}
+
+.blocked-body ul {
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+/* ---------- tables ---------- */
+
+.slidev-layout table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.slidev-layout th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--lr-accent);
+  border-bottom: 1.5px solid var(--lr-line);
+  padding: 0.35rem 0.6rem 0.35rem 0;
+}
+
+.slidev-layout td {
+  border-bottom: 1px solid var(--lr-line);
+  padding: 0.35rem 0.6rem 0.35rem 0;
+  vertical-align: top;
+}
+
+.slidev-layout tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---------- code ---------- */
+
+.slidev-layout pre {
+  font-size: 0.66rem !important;
+  line-height: 1.4 !important;
+  border-radius: 4px;
+  padding: 0.7rem 0.9rem !important;
+}
+
+.slidev-layout code {
+  font-size: 0.92em;
+}
+
+.slidev-layout :not(pre) > code {
+  background: var(--lr-soft);
+  padding: 0.05em 0.28em;
+  border-radius: 3px;
+}
+
+/* ---------- portada ---------- */
+
+.slidev-layout.portada {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 4rem;
+  background: linear-gradient(160deg, #fdfdfc 0%, #eef0f8 100%);
+}
+
+.portada h1 {
+  font-size: 2.9rem;
+  font-weight: 700;
+  line-height: 1.05;
+  margin: 0 0 0.6rem;
+}
+
+.portada h2 {
+  font-size: 1.15rem;
+  font-weight: 400;
+  color: var(--lr-muted);
+  margin: 0 0 1.6rem;
+  border: none;
+}
+
+.portada p {
+  font-size: 0.85rem;
+  color: var(--lr-muted);
+}
+
+/* ---------- dense tables: the full port inventories ---------- */
+
+.densa table {
+  font-size: 0.6rem;
+  line-height: 1.25;
+}
+
+.densa th,
+.densa td {
+  padding: 0.16rem 0.5rem 0.16rem 0;
+}
+
+.densa .blocked-body h1 {
+  margin-bottom: 0.45rem;
+}
+
+.densa .blocked-body p {
+  font-size: 0.72rem;
+  margin-top: 0.4rem;
+}
+
+/* ---------- highlighted takeaway box ---------- */
+
+.destacado {
+  margin-top: 0.9rem;
+  padding: 0.6rem 0.95rem;
+  border-left: 3px solid var(--lr-accent);
+  background: var(--lr-soft);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.destacado-tag {
+  display: block;
+  font-size: 0.66rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--lr-accent);
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+/* ---------- two-column helper, used where a diagram needs a caption ---------- */
+
+.par {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.4rem;
+  align-items: center;
+}
+
+.par-wide {
+  grid-template-columns: 1.35fr 1fr;
+}
+
+.nota {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--lr-muted);
+}
+
+.nota strong {
+  color: var(--lr-ink);
+}

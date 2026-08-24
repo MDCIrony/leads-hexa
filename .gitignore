@@ -40,6 +40,8 @@ docs/site/
 # Presentación: el fuente se versiona, lo instalado y lo construido no.
 .slides/node_modules/
 .slides/dist/
+.slides-events/node_modules/
+.slides-events/dist/
 
 # Planes de trabajo por punto pendiente: material de despacho, no del proyecto.
 .todo/

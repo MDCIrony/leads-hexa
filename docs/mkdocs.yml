@@ -142,6 +142,13 @@ nav:
       - Identidad y acceso: modulos/identidad-y-acceso.md
       - Organizaciones: modulos/organizaciones.md
 
+  - Eventos y mensajería:
+      - eventos/index.md
+      - El outbox transaccional: eventos/outbox.md
+      - "Kafka · el canal del producto": eventos/kafka.md
+      - "RabbitMQ · el trabajo interno": eventos/rabbitmq.md
+      - Operar la mensajería: eventos/operacion.md
+
   - Desarrollo:
       - desarrollo/index.md
       - Puesta en marcha: desarrollo/puesta-en-marcha.md
