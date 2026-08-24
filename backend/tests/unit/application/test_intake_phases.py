@@ -245,3 +245,26 @@ def test_an_unforeseen_failure_does_not_lose_the_record_and_the_run_continues():
 
     other = uow.intake_records.get_by_id_and_tenant(other_record_id, tenant_id)
     assert other.status == IntakeRecordStatus.PROMOTED
+
+
+def test_reprocessing_a_job_left_in_progress_does_not_duplicate_leads():
+    """What at-least-once delivery will look like: the same job processed
+    twice. Only PENDING records are read, so the lead promoted on the first
+    pass is not created again on the second."""
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+    received = ReceiveIntakeUseCase(uow=uow).execute(
+        ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_VALID_PAYLOAD])
+    )
+    process = ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow))
+    process.execute(tenant_id=tenant_id, job_id=UUID(received.job_id))
+
+    # The state a worker that died mid-run leaves behind, which is what a
+    # redelivered message finds.
+    job = uow.intake_jobs.get_by_id_and_tenant(UUID(received.job_id), tenant_id)
+    job.status = IntakeJobStatus.PROCESSING
+    uow.intake_jobs.save(job)
+
+    process.execute(tenant_id=tenant_id, job_id=UUID(received.job_id))
+
+    assert len(uow.leads.list_by_tenant(tenant_id)) == 1
