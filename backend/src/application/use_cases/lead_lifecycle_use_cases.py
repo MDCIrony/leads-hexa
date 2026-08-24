@@ -13,6 +13,7 @@ from application.ports.output.domain_event_publisher_port import DomainEventPubl
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent
 from domain.entities.lead import Lead
+from domain.events.lead_events import LeadProcessedEvent
 from domain.events.notification_events import LeadAssigned, LeadReassigned
 from domain.exceptions import DomainException
 from domain.value_objects.enums import LeadStatus
@@ -77,6 +78,10 @@ class AssignLeadUseCase(AssignLeadInputPort):
                     lead_id=str(saved_lead.id),
                     agent_id=str(agent.id),
                 ))
+            # The customer got this lead as UNASSIGNED when routing found
+            # nobody. Republishing is what tells them it has an owner now;
+            # without it their copy stays frozen at whatever ingestion left.
+            self.event_publisher.publish(LeadProcessedEvent.of(saved_lead))
 
         return saved_lead
 

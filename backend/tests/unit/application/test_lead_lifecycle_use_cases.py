@@ -1,4 +1,5 @@
 import uuid
+from unittest.mock import Mock
 
 import pytest
 
@@ -11,6 +12,8 @@ from application.use_cases.lead_lifecycle_use_cases import (
 )
 from domain.entities.agent import Agent
 from domain.entities.lead import Lead
+from domain.events.lead_events import LeadProcessedEvent
+from domain.events.notification_events import LeadAssigned
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole, LeadStatus
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
@@ -96,6 +99,29 @@ def test_reassigning_an_already_assigned_lead_lands_on_the_new_agent():
     assert result.assigned_agent_id.value == second_agent.id.value
     stored = uow.leads.get_by_id(lead.id.value)
     assert stored.assigned_agent_id.value == second_agent.id.value
+
+
+def test_assigning_by_hand_republishes_the_lead_to_the_customer():
+    """Ingestion published it as UNASSIGNED because routing found nobody. The
+    customer's copy stays frozen there unless the manual assignment publishes
+    the contract again, this time with an owner."""
+    uow = InMemoryUnitOfWork()
+    publisher = Mock()
+    lead, agent = _lead(), _agent()
+    uow.leads.save(lead)
+    uow.agents.save(agent)
+
+    AssignLeadUseCase(uow, event_publisher=publisher).execute(
+        AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=agent.id.value)
+    )
+
+    published = [call.args[0] for call in publisher.publish.call_args_list]
+    assert [type(event) for event in published] == [LeadAssigned, LeadProcessedEvent]
+    outbound = published[1]
+    assert outbound.status == LeadStatus.ASSIGNED
+    assert outbound.assigned_agent_id == str(agent.id)
+    assert outbound.assigned_at is not None
+    assert outbound.lead_id == str(lead.id)
 
 
 def test_discarding_records_the_reason():
