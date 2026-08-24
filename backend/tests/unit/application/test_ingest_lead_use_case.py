@@ -8,6 +8,7 @@ from domain.entities import Agent, AssignmentRule, ScoringRule, SalesGroup
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects import Operator, AssignmentStrategy
 from domain.value_objects.criterion import Criterion
+from domain.value_objects.enums import IntakeRecordStatus
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
@@ -207,3 +208,36 @@ def test_payload_of_normalises_a_non_finite_budget_to_null():
     # allow_nan=False is what makes this assertion real: by default json.dumps
     # emits the bare NaN token happily, and that token is what Postgres rejects.
     json.dumps(payload, allow_nan=False)
+
+def test_ingest_lead_use_case_rejects_a_non_finite_budget():
+    """Without the guard in ``Money``, a NaN budget escaped as
+    ``decimal.InvalidOperation`` and no caller could translate it into a
+    clean rejection. This exercises that translation directly -- calling the
+    use case with a raw NaN command, bypassing both ``payload_of`` and
+    PostgreSQL entirely."""
+    tenant_id = uuid.uuid4()
+    uow = InMemoryUnitOfWork(
+        InMemoryLeadRepository(), InMemoryRuleRepository(), InMemoryAgentRepository()
+    )
+    use_case = IngestLeadUseCase(
+        uow=uow,
+    )
+
+    cmd = IngestLeadCommand(
+        tenant_id=tenant_id,
+        source_id=uuid.uuid4(),
+        first_name="Bad",
+        last_name="Budget",
+        email="test@example.com",
+        company="Corp",
+        budget=float("nan"),
+        industry="Tech",
+    )
+    existing = uow.intake_records.save(
+        IntakeRecord.create(tenant_id=cmd.tenant_id, source_id=cmd.source_id, payload=payload_of(cmd))
+    )
+
+    result = use_case.execute(cmd, existing_record=existing)
+
+    assert result.status == IntakeRecordStatus.REJECTED.value
+    assert result.error_code == "INVALID_BUDGET"

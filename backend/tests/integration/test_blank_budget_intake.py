@@ -44,9 +44,7 @@ def test_a_blank_budget_cell_still_persists_its_intake_record(test_db):
     """The whole point of ADR-0009: what arrives is stored before anything
     tries to interpret it. A NaN budget used to make this insert fail, taking
     every other row of the batch down with it."""
-    ctx = test_db.get_connection(autocommit=True)
-    conn = ctx.__enter__()
-    try:
+    with test_db.get_connection(autocommit=True) as conn:
         tenant = _tenant(conn)
         source = _source(conn, tenant.id.value)
         commands = PandasFileParser().parse_leads_file(
@@ -66,8 +64,6 @@ def test_a_blank_budget_cell_still_persists_its_intake_record(test_db):
         assert read_back is not None
         assert read_back.payload["budget"] is None
         assert read_back.payload["first_name"] == "Juan"
-    finally:
-        ctx.__exit__(None, None, None)
 
 
 def test_that_stored_record_is_then_rejected_by_the_domain(test_db):
@@ -78,9 +74,7 @@ def test_that_stored_record_is_then_rejected_by_the_domain(test_db):
     itself -- the payload already round-tripped the blank cell to ``None``
     before this point; that guard is covered by the unit test
     ``test_money_rejects_non_finite_values``."""
-    ctx = test_db.get_connection(autocommit=True)
-    conn = ctx.__enter__()
-    try:
+    with test_db.get_connection(autocommit=True) as conn:
         tenant = _tenant(conn)
         source = _source(conn, tenant.id.value)
         commands = PandasFileParser().parse_leads_file(
@@ -108,5 +102,32 @@ def test_that_stored_record_is_then_rejected_by_the_domain(test_db):
             )
 
         assert exc_info.value.error_code == "INVALID_BUDGET"
-    finally:
-        ctx.__exit__(None, None, None)
+
+
+def test_a_payload_with_a_raw_nan_still_persists(test_db):
+    """Reproduces the manual-intake path: ReceiveIntakeUseCase.execute() saves
+    the payload exactly as it arrives from the HTTP endpoint, without routing
+    it through ``payload_of``. The repository is the only point both the
+    manual and the batch producers share, so that is where the guard has to
+    live. Also covers the recursive case, since custom_attributes is a
+    free-form dict fed by untrusted input."""
+    with test_db.get_connection(autocommit=True) as conn:
+        tenant = _tenant(conn)
+        source = _source(conn, tenant.id.value)
+
+        repo = RawSqlIntakeRecordRepository(conn)
+        saved = repo.save(
+            IntakeRecord.create(
+                tenant_id=tenant.id.value,
+                source_id=source.id.value,
+                payload={
+                    "budget": float("nan"),
+                    "custom_attributes": {"nested": float("nan")},
+                },
+            )
+        )
+
+        read_back = repo.get_by_id_and_tenant(saved.id.value, tenant.id.value)
+        assert read_back is not None
+        assert read_back.payload["budget"] is None
+        assert read_back.payload["custom_attributes"]["nested"] is None
