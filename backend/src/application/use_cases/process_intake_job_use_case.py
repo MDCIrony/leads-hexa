@@ -34,20 +34,27 @@ class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
         interrupted = False
         for record in pending:
             try:
-                result = self.ingest.execute(command_from_record(record), existing_record=record)
+                self.ingest.execute(command_from_record(record), existing_record=record)
             except Exception:
-                # An unforeseen failure counts and the run carries on. The record
-                # stays PENDING on purpose: it is the only state reprocessing
-                # reads, so a failure here is recoverable instead of lost.
-                job.record_failure()
+                # The record stays PENDING on purpose: it is the only state
+                # reprocessing reads, so a failure here is recoverable instead
+                # of lost. It is therefore not counted as failed either — it
+                # has not failed, it is still pending.
                 interrupted = True
                 continue
-            if result.status == IntakeRecordStatus.REJECTED.value:
-                job.record_failure()
-            else:
-                job.record_success()
 
         with self.uow:
+            # Counted off the records, not accumulated while looping: the
+            # records are what survives a process that dies mid-run, and two
+            # consumers of a redelivered message reach the same number.
+            job.set_counters(
+                succeeded=self.uow.intake_records.count_by_tenant(
+                    tenant_id, status=IntakeRecordStatus.PROMOTED, job_id=job_id
+                ),
+                failed=self.uow.intake_records.count_by_tenant(
+                    tenant_id, status=IntakeRecordStatus.REJECTED, job_id=job_id
+                ),
+            )
             # An interrupted run does NOT complete: a COMPLETED job refuses
             # reprocessing, which would strand its PENDING records forever.
             if not interrupted:

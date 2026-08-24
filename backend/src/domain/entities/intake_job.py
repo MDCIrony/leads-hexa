@@ -69,11 +69,15 @@ class IntakeJob:
             )
         self.total_items = total
 
-    def record_success(self) -> None:
-        self.succeeded += 1
+    def set_counters(self, succeeded: int, failed: int) -> None:
+        """Counted from the records, not accumulated in memory.
 
-    def record_failure(self) -> None:
-        self.failed += 1
+        A run that dies at item 9,000 used to lose all 9,000: the records
+        survived (they stay PENDING, which is what reprocessing reads) but
+        the job came back saying 0/0. A redelivered message would have had
+        two consumers counting separately, last writer winning."""
+        self.succeeded = succeeded
+        self.failed = failed
 
     def complete(self) -> None:
         if self.status in _TERMINAL:

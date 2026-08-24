@@ -76,7 +76,7 @@ def test_saving_twice_updates_instead_of_duplicating(test_db):
 
         job.start()
         job.set_total(5)
-        job.record_success()
+        job.set_counters(succeeded=1, failed=0)
         job.complete()
         repo.save(job)
 

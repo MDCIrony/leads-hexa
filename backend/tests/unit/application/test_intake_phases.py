@@ -235,7 +235,10 @@ def test_an_unforeseen_failure_does_not_lose_the_record_and_the_run_continues():
     # Interrupted, not COMPLETED: a completed job would refuse the reprocess
     # that is supposed to pick this record back up.
     assert job.status == IntakeJobStatus.PROCESSING
-    assert job.failed == 1
+    # Not counted as failed: the record is still PENDING, waiting for the
+    # reprocess that will pick it up. Counters are derived from the records,
+    # so they say "not done yet" rather than "failed" — which is the truth.
+    assert job.failed == 0
     assert job.succeeded == 1  # the other item was unaffected
 
     exploded = uow.intake_records.get_by_id_and_tenant(exploding_record_id, tenant_id)
@@ -245,6 +248,36 @@ def test_an_unforeseen_failure_does_not_lose_the_record_and_the_run_continues():
 
     other = uow.intake_records.get_by_id_and_tenant(other_record_id, tenant_id)
     assert other.status == IntakeRecordStatus.PROMOTED
+
+
+def test_a_run_that_dies_before_saving_recovers_its_counters():
+    """The counters used to live in memory for the whole loop and only reach
+    the database at the end: a process that died at item 9,000 lost all
+    9,000 and the job came back saying 0/0. Derived from the records, the
+    next pass reads the truth off what actually got promoted."""
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+    received = ReceiveIntakeUseCase(uow=uow).execute(
+        ReceiveIntakeCommand(
+            tenant_id=tenant_id,
+            kind=IntakeJobKind.BATCH.value,
+            payloads=[_VALID_PAYLOAD, dict(_VALID_PAYLOAD, email="second@techcorp.com")],
+        )
+    )
+    job_id = UUID(received.job_id)
+    process = ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow))
+    process.execute(tenant_id=tenant_id, job_id=job_id)
+
+    # The records were promoted one transaction at a time and survived; the
+    # counters are what a dead process would have taken with it.
+    job = uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
+    job.status, job.succeeded, job.failed, job.completed_at = IntakeJobStatus.PROCESSING, 0, 0, None
+    uow.intake_jobs.save(job)
+
+    process.execute(tenant_id=tenant_id, job_id=job_id)
+
+    recovered = uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
+    assert (recovered.succeeded, recovered.failed) == (2, 0)
 
 
 def test_reprocessing_a_job_left_in_progress_does_not_duplicate_leads():

@@ -79,15 +79,16 @@ def test_set_total_twice_is_rejected():
     assert exc_info.value.error_code == "INVALID_JOB_TRANSITION"
 
 
-# --- record_success / record_failure ---
+# --- set_counters ---
 
 
-def test_record_success_and_failure_increment_without_changing_status():
+def test_set_counters_overwrites_without_changing_status():
+    """Set, not incremented: a rerun of the same job must land on the count
+    the records show, not on that count added to what it remembered."""
     job = _job(IntakeJobStatus.PROCESSING)
+    job.set_counters(succeeded=2, failed=1)
 
-    job.record_success()
-    job.record_success()
-    job.record_failure()
+    job.set_counters(succeeded=2, failed=1)
 
     assert job.succeeded == 2
     assert job.failed == 1
@@ -131,8 +132,7 @@ def test_any_transition_from_a_terminal_status_is_rejected(method, status):
 
 def test_reset_counters_on_processing_returns_to_pending_zeroed():
     job = _job(IntakeJobStatus.PROCESSING)
-    job.record_success()
-    job.record_failure()
+    job.set_counters(succeeded=1, failed=1)
 
     job.reset_counters()
 
