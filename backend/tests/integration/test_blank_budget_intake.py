@@ -71,9 +71,13 @@ def test_a_blank_budget_cell_still_persists_its_intake_record(test_db):
 
 
 def test_that_stored_record_is_then_rejected_by_the_domain(test_db):
-    """Storing it is only half the fix: the phase that interprets it must
-    reject it as a domain error, so the record lands as REJECTED with the
-    budget field named, instead of crashing the run."""
+    """Storing it is only half the fix: the persisted record must reconstruct
+    via ``command_from_record`` and be rejected by the domain as a recoverable
+    ``InvalidBudgetException``, instead of escaping as an exception no caller
+    can translate. It does not exercise the non-finite guard in ``Money``
+    itself -- the payload already round-tripped the blank cell to ``None``
+    before this point; that guard is covered by the unit test
+    ``test_money_rejects_non_finite_values``."""
     ctx = test_db.get_connection(autocommit=True)
     conn = ctx.__enter__()
     try:
