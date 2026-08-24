@@ -37,6 +37,17 @@ def test_start_from_pending_moves_to_processing():
     assert job.status == IntakeJobStatus.PROCESSING
 
 
+def test_start_from_processing_is_idempotent():
+    """The state a worker that died mid-run leaves behind. A redelivered
+    message finds the job already started, and refusing it would nack and
+    redeliver forever instead of finishing the records still PENDING."""
+    job = _job(IntakeJobStatus.PROCESSING)
+
+    job.start()
+
+    assert job.status == IntakeJobStatus.PROCESSING
+
+
 @pytest.mark.parametrize("status", [IntakeJobStatus.COMPLETED, IntakeJobStatus.FAILED])
 def test_start_fails_from_a_terminal_status(status):
     job = _job(status)

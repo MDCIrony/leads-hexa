@@ -45,7 +45,12 @@ class IntakeJob:
         )
 
     def start(self) -> None:
-        if self.status != IntakeJobStatus.PENDING:
+        # PROCESSING is accepted as well as PENDING: an interrupted run leaves
+        # the job exactly there on purpose, and a retry that refused it would
+        # strand the records still PENDING instead of finishing them. Terminal
+        # stays refused — the same guard complete(), fail() and reset_counters()
+        # already use.
+        if self.status in _TERMINAL:
             raise DomainException(
                 f"Cannot start an intake job from status {self.status.value}",
                 error_code="INVALID_JOB_TRANSITION",
