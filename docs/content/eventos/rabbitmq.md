@@ -117,6 +117,11 @@ un fallo aquí no rompe nada visible hasta que el bróker cae de verdad.
 
 - **El worker no reconecta** por su cuenta: una conexión caída hace morir el proceso, y
   `restart: on-failure` lo recupera. Está marcado en el código como simplificación deliberada.
+- En desarrollo **sí recarga al cambiar `src/`**, con `watchfiles` —el mismo que usa uvicorn por
+  dentro— envolviendo su comando. Sin eso el worker seguía ejecutando lo que importó al arrancar
+  mientras el código decía otra cosa, y el síntoma era un trabajo parado en `PROCESSING` sin que
+  nada fallara a la vista. Reiniciar a mitad de un mensaje es seguro por lo de arriba: la reentrega
+  ya está resuelta.
 - **Nadie mira la DLQ.** Un mensaje que llega ahí se queda sin que nada avise.
 - **Sin apagado ordenado:** un `SIGTERM` a mitad de un mensaje lo mata, y es justo el caso que la
   reentrega ya cubre por diseño.

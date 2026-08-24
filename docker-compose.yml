@@ -149,7 +149,13 @@ services:
       # builds owns the Kafka admin client, and without this it dials
       # localhost and logs a connection failure every few seconds.
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-    command: ["python", "-m", "infrastructure.workers.intake_worker"]
+    # Reloaded on change, like the API is. Without this the worker keeps
+    # running whatever it imported at startup while src/ says otherwise, and
+    # the symptom is a job stuck in PROCESSING with nothing failing anywhere.
+    # Restarting mid-message is safe by design: RabbitMQ redelivers, start()
+    # accepts PROCESSING, only PENDING records are read, and the counters are
+    # derived from those records.
+    command: ["watchfiles", "python -m infrastructure.workers.intake_worker", "/app/src"]
     depends_on:
       db:
         condition: service_healthy

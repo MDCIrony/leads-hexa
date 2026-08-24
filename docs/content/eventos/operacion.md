@@ -105,7 +105,7 @@ par en par era seguridad de teatro. El ADR-0028 cierra ambas en la misma tanda.
 - **Nadie mira la DLQ.**
 - **Sin observabilidad**: ni retraso del consumidor, ni profundidad de cola, ni alerta por entradas
   atascadas en el outbox.
-- **El worker no reconecta** por su cuenta.
+- **El worker no reconecta** por su cuenta; `restart: on-failure` lo recupera.
 
 ## Lo que sí está demostrado
 
