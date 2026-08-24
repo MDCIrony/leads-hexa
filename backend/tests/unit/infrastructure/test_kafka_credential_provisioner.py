@@ -1,0 +1,130 @@
+import uuid
+
+import pytest
+from confluent_kafka import KafkaException
+from confluent_kafka.admin import AclOperation, AclPermissionType, ResourcePatternType, ResourceType
+
+import infrastructure.adapters.output.events.kafka_credential_provisioner as kcp_module
+from application.ports.output.messaging_credential_provisioner_port import MessagingProvisioningError
+from infrastructure.adapters.output.events.kafka_credential_provisioner import KafkaCredentialProvisioner
+
+_TENANT = uuid.uuid4()
+
+
+class _ResolvedFuture:
+    """Stands in for the concurrent.futures.Future the real AdminClient
+    returns: .result() either returns None or raises, same as the real one
+    once the broker responds."""
+
+    def __init__(self, error: Exception = None):
+        self._error = error
+
+    def result(self):
+        if self._error is not None:
+            raise self._error
+
+
+class _FakeAdminClient:
+    """Stands in for confluent_kafka.admin.AdminClient (same pattern
+    test_rabbitmq_job_queue.py uses for pika.BlockingConnection): records
+    what it was asked to alter/create/delete instead of touching a broker."""
+
+    def __init__(self, conf):
+        self.conf = conf
+        self.scram_alterations = []
+        self.acls_created = []
+        self.acl_filters_deleted = []
+        self.error: Exception = None
+
+    def alter_user_scram_credentials(self, alterations, **kwargs):
+        self.scram_alterations.extend(alterations)
+        return {a.user: _ResolvedFuture(self.error) for a in alterations}
+
+    def create_acls(self, acls, **kwargs):
+        self.acls_created.extend(acls)
+        return {acl: _ResolvedFuture(self.error) for acl in acls}
+
+    def delete_acls(self, acl_binding_filters, **kwargs):
+        self.acl_filters_deleted.extend(acl_binding_filters)
+        return {f: _ResolvedFuture(self.error) for f in acl_binding_filters}
+
+
+@pytest.fixture
+def fake_admin(monkeypatch):
+    """Captures the instance KafkaCredentialProvisioner.__init__ builds:
+    patching the class means every call the constructor makes to it is
+    visible to the test, without touching a broker."""
+    created = {}
+
+    def _factory(conf):
+        client = _FakeAdminClient(conf)
+        created["client"] = client
+        return client
+
+    monkeypatch.setattr(kcp_module, "AdminClient", _factory)
+    provisioner = KafkaCredentialProvisioner("kafka:9092")
+    return provisioner, created["client"]
+
+
+def test_issuing_upserts_the_scram_user_and_grants_the_three_acls(fake_admin):
+    provisioner, admin = fake_admin
+
+    secret = provisioner.issue_tenant_credential(_TENANT)
+
+    assert isinstance(secret, str) and secret
+    assert len(admin.scram_alterations) == 1
+    assert admin.scram_alterations[0].user == f"tenant-{_TENANT}"
+
+    assert len(admin.acls_created) == 3
+    principal = f"User:tenant-{_TENANT}"
+    topic_acls = [a for a in admin.acls_created if a.restype == ResourceType.TOPIC]
+    group_acls = [a for a in admin.acls_created if a.restype == ResourceType.GROUP]
+
+    assert {a.operation for a in topic_acls} == {AclOperation.READ, AclOperation.DESCRIBE}
+    for acl in topic_acls:
+        assert acl.name == f"leads.{_TENANT}"
+        assert acl.resource_pattern_type == ResourcePatternType.LITERAL
+        assert acl.principal == principal
+        assert acl.permission_type == AclPermissionType.ALLOW
+
+    assert len(group_acls) == 1
+    assert group_acls[0].name == f"test-consumer-{_TENANT}-"
+    assert group_acls[0].resource_pattern_type == ResourcePatternType.PREFIXED
+    assert group_acls[0].operation == AclOperation.READ
+    assert group_acls[0].principal == principal
+
+
+def test_revoking_deletes_the_scram_user_and_the_matching_acl_filters(fake_admin):
+    provisioner, admin = fake_admin
+
+    provisioner.revoke_tenant_credential(_TENANT)
+
+    assert len(admin.scram_alterations) == 1
+    assert admin.scram_alterations[0].user == f"tenant-{_TENANT}"
+
+    principal = f"User:tenant-{_TENANT}"
+    assert len(admin.acl_filters_deleted) == 2
+    topic_filter = next(f for f in admin.acl_filters_deleted if f.restype == ResourceType.TOPIC)
+    group_filter = next(f for f in admin.acl_filters_deleted if f.restype == ResourceType.GROUP)
+    assert topic_filter.name == f"leads.{_TENANT}"
+    assert topic_filter.resource_pattern_type == ResourcePatternType.LITERAL
+    assert topic_filter.principal == principal
+    assert group_filter.name == f"test-consumer-{_TENANT}-"
+    assert group_filter.resource_pattern_type == ResourcePatternType.PREFIXED
+    assert group_filter.principal == principal
+
+
+def test_a_broker_failure_on_issue_is_wrapped_not_propagated_raw(fake_admin):
+    provisioner, admin = fake_admin
+    admin.error = KafkaException("broker unreachable")
+
+    with pytest.raises(MessagingProvisioningError):
+        provisioner.issue_tenant_credential(_TENANT)
+
+
+def test_a_broker_failure_on_revoke_is_wrapped_not_propagated_raw(fake_admin):
+    provisioner, admin = fake_admin
+    admin.error = KafkaException("broker unreachable")
+
+    with pytest.raises(MessagingProvisioningError):
+        provisioner.revoke_tenant_credential(_TENANT)

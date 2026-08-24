@@ -18,6 +18,10 @@ class Settings:
     # leads even when no Kafka broker is reachable, and the relay is what
     # retries delivery once one is.
     kafka_bootstrap_servers: str = "localhost:9092"
+    # What an external client is told to connect to (ADR-0028): the internal
+    # kafka_bootstrap_servers above is unreachable from outside the compose
+    # network, so the two must stay separate settings.
+    kafka_external_bootstrap_servers: str = "localhost:9094"
     # Same reasoning, same default-not-required shape (ADR-0027): an
     # unreachable RabbitMQ degrades the ingest endpoint to in-process work
     # instead of failing it.
@@ -44,6 +48,7 @@ class Settings:
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0")),
             outbox_relay_interval_seconds=float(os.getenv("OUTBOX_RELAY_INTERVAL_SECONDS", "1.0")),
             kafka_bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+            kafka_external_bootstrap_servers=os.getenv("KAFKA_EXTERNAL_BOOTSTRAP_SERVERS", "localhost:9094"),
             rabbitmq_url=os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/%2F"),
             cors_origins=origins,
         )

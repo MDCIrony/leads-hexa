@@ -2,11 +2,13 @@ from application.ports.output.clock_port import ClockPort
 from application.ports.output.file_parser_port import FileParserPort
 from application.ports.output.id_generator_port import IdGeneratorPort
 from application.ports.output.job_queue_port import JobQueuePort
+from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.token_service_port import TokenServicePort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.services.assignment_engine import AssignmentEngine
 from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
+from infrastructure.adapters.output.events.kafka_credential_provisioner import KafkaCredentialProvisioner
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
@@ -46,6 +48,11 @@ class Container:
         # Safe to build eagerly: connecting happens per enqueue call, not at
         # construction (ADR-0027), so a RabbitMQ outage never blocks startup.
         self._job_queue = RabbitMQJobQueue(settings.rabbitmq_url)
+        # The internal, unauthenticated listener (ADR-0028): the same one
+        # KafkaOutboundDispatcher uses, where User:ANONYMOUS is a super.user,
+        # not the SASL one the host reaches — this adapter is the thing
+        # provisioning credentials, not a tenant consuming with one.
+        self._messaging_credential_provisioner = KafkaCredentialProvisioner(settings.kafka_bootstrap_servers)
 
     @property
     def settings(self) -> Settings:
@@ -86,6 +93,10 @@ class Container:
     @property
     def job_queue(self) -> JobQueuePort:
         return self._job_queue
+
+    @property
+    def messaging_credential_provisioner(self) -> MessagingCredentialProvisionerPort:
+        return self._messaging_credential_provisioner
 
     def unit_of_work(self) -> UnitOfWorkPort:
         """A fresh unit of work per call: it owns a transaction, which must not

@@ -24,6 +24,8 @@ def _parse_args() -> argparse.Namespace:
         "--from-beginning", action="store_true",
         help="Replay everything retained instead of only new messages",
     )
+    parser.add_argument("--sasl-username", required=True, help="Issued by POST /agents/integration-credential")
+    parser.add_argument("--sasl-password", required=True, help="Issued by POST /agents/integration-credential")
     return parser.parse_args()
 
 
@@ -33,6 +35,10 @@ def main() -> None:
 
     consumer = Consumer({
         "bootstrap.servers": args.bootstrap_servers,
+        "security.protocol": "SASL_PLAINTEXT",
+        "sasl.mechanism": "SCRAM-SHA-256",
+        "sasl.username": args.sasl_username,
+        "sasl.password": args.sasl_password,
         # A fresh group per run, not a fixed one: reusing a group id would
         # make a second --from-beginning resume from where the first run's
         # committed offset left off instead of truly replaying from zero.
