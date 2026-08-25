@@ -124,8 +124,38 @@ def now() -> str:
 
 # ------------------------------------------------------------- ingestion ---
 
-def store_event(payload: Dict[str, Any], event_type: str, arrived_by: str) -> bool:
+def _amount(value: Any) -> float:
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _ROUTER_FIELDS(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """What the router owns, in the shape both doors agree on."""
+    return {
+        "first_name": payload.get("first_name", ""),
+        "last_name": payload.get("last_name", ""),
+        "email": payload.get("email"),
+        "phone": payload.get("phone"),
+        "company": payload.get("company", ""),
+        "industry": payload.get("industry", ""),
+        # Numeric, never the text: Kafka sends "99000.00" and HTTP sends
+        # 99000.0 for the same amount, and comparing the strings marked every
+        # lead as changed on the first catch-up after it arrived live.
+        "budget": _amount(payload.get("budget")),
+        "score": int(payload.get("score") or 0),
+        "router_status": payload.get("status", ""),
+        "assigned_agent_id": payload.get("assigned_agent_id"),
+    }
+
+
+def store_event(payload: Dict[str, Any], event_type: str, arrived_by: str) -> str:
     """Upsert one lead, keeping whatever this office has already written on it.
+
+    Reports whether anything actually changed. The HTTP catch-up re-reads the
+    row that set its cursor on every run, by design, and counting that as one
+    more arrival said something false: nothing new had come in.
 
     Delivery is at-least-once: the same event arrives twice whenever a consumer
     restarts before committing. Overwriting work_state, owner and notes on the
@@ -133,19 +163,44 @@ def store_event(payload: Dict[str, Any], event_type: str, arrived_by: str) -> bo
     only the fields the router owns."""
     lead_id = payload.get("lead_id")
     if not lead_id:
-        return False
+        return "igual"
 
     event_id = payload.get("event_id")
+    body = json.dumps(payload, ensure_ascii=False)
     with _lock, db() as connection:
         if event_id:
             seen = connection.execute(
                 "SELECT 1 FROM deliveries WHERE event_id = ?", (event_id,)
             ).fetchone()
             if seen:
-                return False
+                return "igual"
             connection.execute(
                 "INSERT INTO deliveries (event_id, seen_at) VALUES (?, ?)", (event_id, now())
             )
+        previous = connection.execute(
+            "SELECT first_name, last_name, email, phone, company, industry, budget,"
+            " score, router_status, assigned_agent_id, arrived_by"
+            " FROM leads WHERE lead_id = ?", (lead_id,)
+        ).fetchone()
+        if previous is None:
+            outcome = "nuevo"
+        else:
+            # Field by field, never the raw payload: the same lead arrives with
+            # a different shape on each door — Kafka carries event_id and
+            # score_breakdown, HTTP carries id and updated_at — so comparing the
+            # documents marked every reconciled lead as changed.
+            actual = _ROUTER_FIELDS(payload)
+            guardado = dict(previous)
+            guardado["budget"] = _amount(guardado["budget"])
+            outcome = "igual" if all(
+                guardado[column] == value if column == "budget"
+                else str(guardado[column] or "") == str(value or "")
+                for column, value in actual.items()
+            ) else "actualizado"
+        # Kafka wins the arrival mark: a catch-up over HTTP must not erase the
+        # fact that the lead was pushed live, which is what the badge reports.
+        if previous is not None and previous["arrived_by"] == "kafka":
+            arrived_by = "kafka"
         connection.execute(
             """
             INSERT INTO leads (
@@ -179,10 +234,10 @@ def store_event(payload: Dict[str, Any], event_type: str, arrived_by: str) -> bo
                 str(payload.get("budget", "")), int(payload.get("score") or 0),
                 payload.get("status", ""), payload.get("assigned_agent_id"),
                 payload.get("assigned_at"), payload.get("reason", ""),
-                json.dumps(payload, ensure_ascii=False), now(),
+                body, now(),
             ),
         )
-    return True
+    return outcome
 
 
 # ------------------------------------------------------------- consumer ---
@@ -255,7 +310,7 @@ class KafkaListener:
                 except ValueError:
                     self.error = "un mensaje no era JSON"
                     continue
-                if store_event(payload, event_type, "kafka"):
+                if store_event(payload, event_type, "kafka") != "igual":
                     self.consumed += 1
                 self.last_message_at = now()
         except KafkaException as error:
@@ -470,7 +525,7 @@ def resync(since: Optional[str] = Body(default=None, embed=True)):
     # arrive once more next time — which the upsert absorbs.
     next_cursor = max((lead["updated_at"] for lead in items), default=None) or now()
 
-    stored = 0
+    tally = {"nuevo": 0, "actualizado": 0, "igual": 0}
     for lead in items:
         # No event_id on an HTTP row: it is a snapshot, not an event, so the
         # de-duplication table cannot apply and the upsert carries the work.
@@ -482,10 +537,15 @@ def resync(since: Optional[str] = Body(default=None, embed=True)):
         event_type = (
             "LeadDisqualified" if lead.get("status") == "DISQUALIFIED" else "LeadProcessedEvent"
         )
-        if store_event({**lead, "lead_id": lead["id"]}, event_type, "http"):
-            stored += 1
+        tally[store_event({**lead, "lead_id": lead["id"]}, event_type, "http")] += 1
     put_setting("resync_cursor", next_cursor)
-    return {"desde": cursor, "recibidos": len(items), "guardados": stored}
+    return {
+        "desde": cursor,
+        "revisados": len(items),
+        "nuevos": tally["nuevo"],
+        "actualizados": tally["actualizado"],
+        "sin_cambios": tally["igual"],
+    }
 
 
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")

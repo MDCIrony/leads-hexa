@@ -272,7 +272,9 @@ $('#btn-replay').addEventListener('click', async () => {
 });
 $('#btn-resync').addEventListener('click', async () => {
   const r = await api('/api/resync', { method: 'POST', body: '{}' });
-  alert(`Reconciliación desde ${r.desde}\nrecibidos: ${r.recibidos}\nguardados: ${r.guardados}`);
+  alert(r.nuevos || r.actualizados
+    ? `${r.nuevos} leads nuevos · ${r.actualizados} actualizados`
+    : 'Nada nuevo: la bandeja ya estaba al día.');
   await tick();
 });
 $('#btn-forget').addEventListener('click', async () => {
