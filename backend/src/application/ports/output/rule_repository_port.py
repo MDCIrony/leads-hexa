@@ -37,6 +37,18 @@ class RuleRepositoryPort(ABC):
         """Return every assignment rule of this organization."""
 
     @abstractmethod
+    def lock_assignment_rules_by_tenant(self, tenant_id: UUID) -> List[AssignmentRule]:
+        """The same rules, held for the caller's transaction.
+
+        Round-robin reads rr_cursor, advances it in memory and writes it back.
+        Two ingestions of the same organization running at once — several
+        workers draining the queue, which is the whole point of having a queue
+        — read the same cursor and the second write erases the first, so the
+        rotation stalls and consecutive leads land on the same advisor. Only
+        the path that advances the cursor takes this; listing rules for a
+        screen must not serialise on it."""
+
+    @abstractmethod
     def save_assignment_rule(self, tenant_id: UUID, rule: AssignmentRule) -> AssignmentRule:
         """Insert or update a rule, including its rotation cursor.
 

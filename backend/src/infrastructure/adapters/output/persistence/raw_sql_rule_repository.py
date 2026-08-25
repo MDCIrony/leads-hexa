@@ -74,6 +74,15 @@ class RawSqlRuleRepository(RuleRepositoryPort):
         ).fetchall()
         return [self._to_assignment_rule(row) for row in rows]
 
+    def lock_assignment_rules_by_tenant(self, tenant_id: UUID) -> List[AssignmentRule]:
+        # Same ORDER BY as the unlocked read, and that is what keeps this
+        # deadlock-free: every transaction takes the rows in one order.
+        rows = self.connection.execute(
+            "SELECT * FROM assignment_rules WHERE tenant_id = %s ORDER BY priority DESC, id FOR UPDATE",
+            (tenant_id,),
+        ).fetchall()
+        return [self._to_assignment_rule(row) for row in rows]
+
     def save_scoring_rule(self, tenant_id: UUID, rule: ScoringRule) -> ScoringRule:
         self.connection.execute(
             """

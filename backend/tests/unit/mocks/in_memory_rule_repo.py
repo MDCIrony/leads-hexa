@@ -43,6 +43,11 @@ class InMemoryRuleRepository(RuleRepositoryPort):
                 return True
         return False
 
+    def lock_assignment_rules_by_tenant(self, tenant_id: UUID) -> List[AssignmentRule]:
+        # Nothing to lock against in a single-threaded double; the locking is
+        # what the SQL adapter adds, and what its own test exercises.
+        return self.get_assignment_rules_by_tenant(tenant_id)
+
     def get_assignment_rules_by_tenant(self, tenant_id: UUID) -> List[AssignmentRule]:
         rules = [r for r in self.assignment_rules.values() if r.tenant_id == tenant_id]
         # Mirrors RawSqlRuleRepository's ORDER BY priority DESC, id.
