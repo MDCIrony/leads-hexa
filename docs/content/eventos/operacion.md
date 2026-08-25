@@ -23,6 +23,13 @@ sin bróker no tiene nada que hacer, y esperar evita un ciclo de arrancar y mori
 | `backend` | 8001 | La API |
 | `kafka` | 9094 | El consumidor de prueba, desde fuera de la red de compose |
 | `rabbitmq` | 5672 · 15672 | AMQP y el panel de administración |
+| `test-consumer` | 8003 | La aplicación del cliente, tras `--profile demo` |
+
+**Kafka tiene tres direcciones, no dos.** `9092` sin autenticación dentro de la red, `9094` con SASL
+para la máquina anfitriona, y `9095` con SASL **también dentro de la red**. El tercero existe porque
+el segundo se anuncia como `localhost`, que dentro de otro contenedor resuelve a ese contenedor: un
+consumidor que corre en esta red necesita una dirección que resuelva aquí *y* una credencial. Las
+ACL son por principal, así que aísla exactamente igual.
 
 ## Cuando un lead no llega al cliente
 
@@ -95,8 +102,16 @@ par en par era seguridad de teatro. El ADR-0028 cierra ambas en la misma tanda.
 |---|---|---|
 | Retención de **168 horas** | El valor por defecto de Kafka | Elegirse por cliente: hoy reobtener funciona siete días |
 | **`num.partitions=1`** | El valor por defecto | El ADR-0026 justifica `lead_id` como clave «para que el topic escale», y con una partición esa ventaja no existe |
-| **Volumen de Kafka anónimo** | Lo crea la imagen en `/var/lib/kafka/data` | Nombrarse en el compose: sobrevive a un `restart`, pero un `down` y recreación no está garantizado que reenganche |
 | **`AUTO_CREATE_TOPICS_ENABLE=true`** | El compose | Aprovisionamiento explícito: un `tenant_id` mal escrito crea un topic fantasma en silencio |
+
+### Resuelto desde entonces
+
+- **Kafka no conservaba nada.** El volumen que declara la imagen en `/var/lib/kafka/data` estaba
+  vacío: `log.dirs` apuntaba por defecto a `/tmp/kafka-logs`, en la capa de escritura del
+  contenedor. Cada recreación se llevaba por delante los topics, los mensajes retenidos y —por vivir
+  en `__cluster_metadata`— las credenciales SASL y las ACL. Una semana de historia reobtenible no se
+  sostiene sobre espacio de usar y tirar. Ahora `KAFKA_LOG_DIRS` apunta al volumen nombrado
+  `kafkadata`, verificado sobreviviendo a un `rm` del contenedor.
 
 ### Operación
 

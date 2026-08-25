@@ -69,18 +69,24 @@ services:
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094
-      # Two audiences, two advertised addresses: other compose services reach
-      # this by service name on the compose network, the host (and the test
-      # consumer) can only reach it through the mapped port.
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094,SASL_INTERNAL://0.0.0.0:9095
+      # Three audiences, three advertised addresses: compose services reach
+      # this by service name, the host only through the mapped port, and an
+      # authenticated client on this network by service name again — an
+      # address must resolve the same way for whoever is dialling it.
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094,SASL_INTERNAL://kafka:9095
       # PLAINTEXT_HOST is the only listener mapped to the host (ADR-0028): it
       # is where "anyone with network access" used to reach in without a
       # credential. PLAINTEXT stays open on purpose — it never leaves the
       # compose network, the same trust perimeter Postgres already assumes —
       # and it is also how the backend provisions credentials without
       # needing one of its own.
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:SASL_PLAINTEXT
+      # SASL_INTERNAL exists because PLAINTEXT_HOST cannot serve both
+      # audiences: it advertises `localhost`, which inside another container
+      # resolves to that container. A consumer running on this network needs
+      # an address that resolves here AND a credential, and the ACLs are
+      # per-principal, so it enforces exactly the same isolation.
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:SASL_PLAINTEXT,SASL_INTERNAL:SASL_PLAINTEXT
       KAFKA_SASL_ENABLED_MECHANISMS: SCRAM-SHA-256
       KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
       # User:ANONYMOUS is the principal of any connection without SASL — that
@@ -104,8 +110,17 @@ services:
       # set once any SASL_* listener is present — this is the JVM-standard way
       # a broker's SASL side reads its JAAS login module.
       KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/jaas/kafka_server_jaas.conf
+      # Verified by inspecting a running broker: this image defaults log.dirs
+      # to /tmp/kafka-logs, which lives in the container's writable layer and
+      # NOT in the volume the image declares at /var/lib/kafka/data — that one
+      # stays empty. Every `docker compose up` that recreated this container
+      # therefore threw away every topic, every retained message, and the SCRAM
+      # credentials and ACLs, which live in __cluster_metadata alongside them.
+      # A week of replayable history (ADR-0026) cannot survive on scratch space.
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
       - ./kafka/kafka_server_jaas.conf:/etc/kafka/jaas/kafka_server_jaas.conf:ro
+      - kafkadata:/var/lib/kafka/data
     ports:
       # 9094 on the host, for the test consumer and any other host tooling.
       # 9092 is the listener other compose services use.
@@ -222,3 +237,4 @@ services:
 
 volumes:
   pgdata:
+  kafkadata:

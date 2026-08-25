@@ -14,7 +14,14 @@ Decisión que lo fija: [ADR-0028](../decisiones/0028-autenticacion-de-la-mensaje
 |---|---|---|---|
 | `PLAINTEXT` | 9092 | Sólo la red de compose — nunca mapeado a `ports:` | Ninguna, a propósito |
 | `CONTROLLER` | 9093 | Tráfico interno de KRaft | Ninguna |
-| `PLAINTEXT_HOST` | 9094 | Mapeado al host — el consumidor de prueba y cualquier cliente externo | **SASL/SCRAM** |
+| `PLAINTEXT_HOST` | 9094 | Mapeado al host — cualquier cliente externo | **SASL/SCRAM** |
+| `SASL_INTERNAL` | 9095 | La red de compose, para un cliente que no sea el productor | **SASL/SCRAM** |
+
+`SASL_INTERNAL` se añadió al construir la aplicación consumidora de la demo: `PLAINTEXT_HOST` no
+puede servir a las dos audiencias, porque se anuncia como `localhost` y dentro de otro contenedor eso
+resuelve al propio contenedor. Un consumidor que corre en la red de compose necesita una dirección
+que resuelva ahí **y** una credencial; las ACL son por principal, no por listener, así que impone
+exactamente el mismo aislamiento que 9094.
 
 El hueco que cerraba este trabajo —«cualquiera con acceso a la red lee los topics de todas las
 organizaciones»— vivía únicamente en `PLAINTEXT_HOST`. `PLAINTEXT` se queda abierto: nunca sale de
@@ -29,6 +36,9 @@ flowchart LR
     end
     subgraph externa["Fuera de la red"]
         Cliente["Cliente externo<br/>(consume.py, un tercero)"] -->|"9094 · SASL/SCRAM"| Kafka
+    end
+    subgraph interna2["Otro contenedor de la red"]
+        Bandeja["test-consumer"] -->|"9095 · SASL/SCRAM"| Kafka
     end
 ```
 
