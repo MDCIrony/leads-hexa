@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bandeja · Nordwind Solar</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ctext y=%2726%27 font-size=%2726%27%3E%E2%98%80%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #14181f; --muted: #667085;
+    --line: #e3e7ee; --accent: #1f6feb; --ok: #157347; --warn: #b54708; --bad: #b42318;
+    --chip: #eef2f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10131a; --panel: #171b24; --ink: #e8ecf4; --muted: #94a0b4;
+      --line: #262c38; --accent: #4c8dff; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+      --chip: #1e2531;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 14px 22px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+  header h1 small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+  .spacer { flex: 1; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot.on { background: var(--ok); } .dot.off { background: var(--bad); } .dot.idle { background: var(--warn); }
+  main { padding: 22px; max-width: 1400px; margin: 0 auto; }
+  .cards { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 16px; min-width: 116px;
+  }
+  .card b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+  .card span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  button, select, input {
+    font: inherit; color: inherit; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px;
+  }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel);
+          border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td.tight { font-size: 13px; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .score { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chip { background: var(--chip); border-radius: 999px; padding: 2px 9px; font-size: 12px; white-space: nowrap; }
+  .via-http { color: var(--warn); } .via-kafka { color: var(--accent); }
+  .muted { color: var(--muted); }
+  .wrap { overflow-x: auto; }
+  .empty { padding: 44px; text-align: center; color: var(--muted); }
+  form.register {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 22px; max-width: 460px; display: grid; gap: 12px;
+  }
+  form.register h2 { margin: 0; font-size: 16px; }
+  .err { color: var(--bad); font-size: 13px; }
+  .ok { color: var(--ok); font-size: 13px; }
+  input.notes { width: 100%; min-width: 110px; }
+  select[data-state] { padding: 5px 7px; font-size: 13px; }
+  tabs { display: flex; gap: 6px; }
+  .tab { border-radius: 8px; padding: 7px 13px; border: 1px solid var(--line); background: var(--panel); }
+  .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bandeja de Nordwind Solar<small>Los leads llegan ya puntuados y asignados. Aquí se trabajan.</small></h1>
+  <div class="spacer"></div>
+  <div id="conn" class="muted">…</div>
+  <button id="btn-replay" title="Volver a leer el topic desde el principio">Releer desde el origen</button>
+  <button id="btn-resync" title="Pedir a la API lo que haya cambiado">Reconciliar por HTTP</button>
+  <button id="btn-forget" title="Olvidar la credencial">Desconectar</button>
+</header>
+
+<main>
+  <section id="register" hidden>
+    <form class="register" id="form-register">
+      <h2>Conectar con el router de leads</h2>
+      <p class="muted" style="margin:0">
+        Se pide una credencial de máquina a nombre de esta aplicación. La contraseña de la gestora
+        se usa una vez y no se guarda.
+      </p>
+      <input name="email" type="email" placeholder="gestor@nordwindsolar.test" required autocomplete="username">
+      <input name="password" type="password" placeholder="contraseña" required autocomplete="current-password">
+      <button class="primary" type="submit">Registrar esta aplicación</button>
+      <div id="register-msg"></div>
+    </form>
+  </section>
+
+  <section id="inbox" hidden>
+    <div class="cards" id="cards"></div>
+    <div class="bar">
+      <tabs>
+        <button class="tab" data-kind="assigned" aria-selected="true">Asignados a nosotros</button>
+        <button class="tab" data-kind="discarded" aria-selected="false">Filtrados por el router</button>
+      </tabs>
+      <span class="spacer"></span>
+      <select id="filter-state"><option value="">Todos los estados</option></select>
+      <input id="filter-q" type="search" placeholder="buscar empresa, nombre o correo">
+    </div>
+    <div class="wrap"><table>
+      <thead id="thead"></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <p class="muted" id="foot" style="margin-top:12px"></p>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let kind = 'assigned';
+let states = [];
+
+async function api(path, options) {
+  const response = await fetch(path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (response.status === 204) return null;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+  return data;
+}
+
+function dot(listener) {
+  if (listener === 'escuchando') return '<span class="dot on"></span>';
+  if (listener === 'error') return '<span class="dot off"></span>';
+  return '<span class="dot idle"></span>';
+}
+
+async function refreshStatus() {
+  const s = await api('/api/status');
+  $('#register').hidden = s.registered;
+  $('#inbox').hidden = !s.registered;
+  for (const id of ['btn-replay', 'btn-resync', 'btn-forget']) $('#' + id).hidden = !s.registered;
+
+  $('#conn').innerHTML = s.registered
+    ? `${dot(s.listener)} <span class="chip">${s.listener}</span>
+       <span class="muted" style="margin-left:8px">${s.topic || ''}</span>
+       ${s.listener_error ? `<span class="err" style="margin-left:8px">${s.listener_error}</span>` : ''}`
+    : '<span class="muted">sin registrar</span>';
+
+  if (!s.registered) return;
+
+  if (states.length === 0) {
+    states = s.work_states;
+    $('#filter-state').insertAdjacentHTML('beforeend',
+      states.map((x) => `<option value="${x}">${x}</option>`).join(''));
+  }
+
+  const cards = [
+    ['recibidos', s.total],
+    ['por Kafka', s.consumed],
+    ['filtrados', s.discarded],
+    ...states.map((x) => [x.toLowerCase(), s.by_state[x] || 0]),
+  ];
+  $('#cards').innerHTML = cards
+    .map(([label, value]) => `<div class="card"><b>${value}</b><span>${label}</span></div>`)
+    .join('');
+  $('#foot').textContent = s.last_message_at
+    ? `Último mensaje de Kafka: ${new Date(s.last_message_at).toLocaleString('es-ES')}`
+    : 'Todavía no ha llegado ningún mensaje por Kafka.';
+}
+
+const HEAD_ASSIGNED = `<tr>
+  <th class="num">Pts</th><th>Contacto</th><th>Empresa</th><th>Sector</th>
+  <th class="num">Presupuesto</th><th>Asesor</th>
+  <th>Estado</th><th>Responsable</th><th>Notas</th><th></th></tr>`;
+const HEAD_DISCARDED = `<tr><th>Lead</th><th>Motivo del descarte</th><th>Recibido</th><th></th></tr>`;
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+async function refreshLeads() {
+  const params = new URLSearchParams({ kind });
+  if ($('#filter-state').value) params.set('state', $('#filter-state').value);
+  if ($('#filter-q').value) params.set('q', $('#filter-q').value);
+  const { items } = await api('/api/leads?' + params);
+
+  $('#thead').innerHTML = kind === 'discarded' ? HEAD_DISCARDED : HEAD_ASSIGNED;
+  if (items.length === 0) {
+    $('#rows').innerHTML = `<tr><td colspan="11" class="empty">Nada por aquí todavía.</td></tr>`;
+    return;
+  }
+
+  $('#rows').innerHTML = items.map((l) => kind === 'discarded' ? `
+    <tr>
+      <td><span class="muted">${esc(l.lead_id)}</span></td>
+      <td>${esc(l.reason) || '<span class="muted">sin motivo</span>'}</td>
+      <td class="muted">${new Date(l.received_at).toLocaleString('es-ES')}</td>
+      <td><button data-del="${esc(l.lead_id)}">Quitar</button></td>
+    </tr>` : `
+    <tr>
+      <td class="num score">${l.score}</td>
+      <td class="tight">${esc(l.first_name)} ${esc(l.last_name)}<br><span class="muted">${esc(l.email || l.phone || '')}</span></td>
+      <td class="tight">${esc(l.company) || '<span class="muted">particular</span>'}</td>
+      <td class="tight">${esc(l.industry)}</td>
+      <td class="num">${Number(l.budget || 0).toLocaleString('es-ES')} €</td>
+      <td class="tight"><span class="muted">${esc((l.assigned_agent_id || '—').slice(0, 8))}</span>
+          <span class="via-${esc(l.arrived_by)}" title="cómo llegó">${l.arrived_by === 'kafka' ? '⚡' : '↻'}</span></td>
+      <td>
+        <select data-state="${esc(l.lead_id)}">
+          ${states.map((x) => `<option ${x === l.work_state ? 'selected' : ''}>${x}</option>`).join('')}
+        </select>
+      </td>
+      <td><input class="notes" data-owner="${esc(l.lead_id)}" value="${esc(l.owner)}" placeholder="quién lo lleva"></td>
+      <td><input class="notes" data-notes="${esc(l.lead_id)}" value="${esc(l.notes)}" placeholder="…"></td>
+      <td><button data-del="${esc(l.lead_id)}">Quitar</button></td>
+    </tr>`).join('');
+}
+
+async function patch(id, body) {
+  await api(`/api/leads/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+  await refreshStatus();
+}
+
+document.addEventListener('change', (event) => {
+  const t = event.target;
+  if (t.dataset.state) patch(t.dataset.state, { work_state: t.value });
+  if (t.dataset.owner) patch(t.dataset.owner, { owner: t.value });
+  if (t.dataset.notes) patch(t.dataset.notes, { notes: t.value });
+  if (t.id === 'filter-state') refreshLeads();
+});
+$('#filter-q').addEventListener('input', () => refreshLeads());
+
+document.addEventListener('click', async (event) => {
+  const t = event.target;
+  if (t.dataset.del && confirm('¿Quitar este lead de la bandeja?')) {
+    await api(`/api/leads/${t.dataset.del}`, { method: 'DELETE' });
+    await refreshLeads(); await refreshStatus();
+  }
+  if (t.classList.contains('tab')) {
+    kind = t.dataset.kind;
+    document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-selected', String(b === t)));
+    refreshLeads();
+  }
+});
+
+$('#form-register').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = new FormData(event.target);
+  $('#register-msg').innerHTML = '<span class="muted">registrando…</span>';
+  try {
+    const r = await api('/api/register', {
+      method: 'POST',
+      body: JSON.stringify({ email: form.get('email'), password: form.get('password') }),
+    });
+    $('#register-msg').innerHTML = `<span class="ok">Registrada. Escuchando ${esc(r.topic)}.</span>`;
+    await tick();
+  } catch (error) {
+    $('#register-msg').innerHTML = `<span class="err">${esc(error.message)}</span>`;
+  }
+});
+
+$('#btn-replay').addEventListener('click', async () => {
+  await api('/api/replay', { method: 'POST' });
+  setTimeout(tick, 1500);
+});
+$('#btn-resync').addEventListener('click', async () => {
+  const r = await api('/api/resync', { method: 'POST', body: '{}' });
+  alert(`Reconciliación desde ${r.desde}\nrecibidos: ${r.recibidos}\nguardados: ${r.guardados}`);
+  await tick();
+});
+$('#btn-forget').addEventListener('click', async () => {
+  if (!confirm('¿Olvidar la credencial y dejar de escuchar?')) return;
+  await api('/api/forget', { method: 'POST' });
+  await tick();
+});
+
+async function tick() {
+  try {
+    await refreshStatus();
+    if (!$('#inbox').hidden) await refreshLeads();
+  } catch (error) {
+    $('#conn').innerHTML = `<span class="err">${esc(error.message)}</span>`;
+  }
+}
+tick();
+setInterval(tick, 3000);
+</script>
+</body>
+</html>

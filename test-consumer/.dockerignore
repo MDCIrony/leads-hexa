@@ -1,0 +1,7 @@
+# Nothing of the product travels into this image: the point of this app is that
+# it works knowing only the published contract.
+__pycache__/
+*.pyc
+data/
+*.db
+README.md

@@ -206,6 +206,28 @@ services:
     # No dependency on db or backend: documentation must be readable when the
     # product does not start, which is exactly when it is needed most.
 
+  test-consumer:
+    # The customer's own system, kept behind a profile so the product's stack
+    # comes up without it: `docker compose --profile demo up -d test-consumer`.
+    # Its own build context and Dockerfile, sharing nothing with backend/ —
+    # if it needed the product's source it would not be proving the contract.
+    profiles: ["demo"]
+    build:
+      context: ./test-consumer
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+    environment:
+      # kafka:9095 and not the localhost:9094 the credential reports: that
+      # address is for clients on the host. Same broker, same per-tenant ACLs.
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9095
+      - LEADS_API_BASE=http://backend:8000/api/v1
+    volumes:
+      - inboxdata:/data
+    depends_on:
+      backend:
+        condition: service_healthy
+
   backend-test:
     profiles: ["test"]
     build:
@@ -238,3 +260,4 @@ services:
 volumes:
   pgdata:
   kafkadata:
+  inboxdata:

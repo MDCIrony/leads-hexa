@@ -1,0 +1,25 @@
+first_name,last_name,email,phone,company,industry,budget,campana,ciudad
+Alba,Ferreiro,alba.ferreiro@vitrasa.test,+34 600 111 201,Vitrasa Logística,Logística,84000,genera-2026,Vigo
+Rubén,Larrañaga,ruben.larranaga@metalnor.test,+34 600 111 202,Metalnor,Industrial,132000,genera-2026,Bilbao
+Cristina,Vela,cristina.vela@agrocampo.test,+34 600 111 203,Agrocampo del Sur,Agroalimentario,67500,,Sevilla
+Ignacio,Bermejo,ignacio.bermejo@navieraq.test,+34 600 111 204,Naviera Quintana,Logística,58000,,Algeciras
+Marta,Osuna,marta.osuna@fricasa.test,+34 600 111 205,Frigoríficos Casanova,Agroalimentario,51500,genera-2026,Murcia
+Jorge,Peñalver,jorge.penalver@textilbrs.test,+34 600 111 206,Textiles Barrios,Industrial,34000,,Alcoy
+Elisa,Mondragón,elisa.mondragon@clinicaeme.test,+34 600 111 207,Clínica EMe,Sanidad,29000,genera-2026,Valladolid
+Sergio,Alcaraz,sergio.alcaraz@hotelmirasol.test,+34 600 111 208,Hotel Mirasol,Hostelería,26400,,Málaga
+Noelia,Piedrahita,noelia.piedrahita@transpie.test,+34 600 111 209,Transportes Piedrahita,Logística,18900,,Zaragoza
+Álvaro,Sanchís,alvaro.sanchis@bodegasl.test,+34 600 111 210,Bodegas Sanchís,Agroalimentario,15200,,Requena
+Patricia,Quiroga,patricia.quiroga@gimnasioq.test,+34 600 111 211,Gimnasios Quiroga,Servicios,22000,genera-2026,A Coruña
+Fernando,Casares,fernando.casares@panaderiac.test,+34 600 111 212,Panadería Casares,Agroalimentario,9800,,Badajoz
+Beatriz,Olmedo,beatriz.olmedo@olmedoabg.test,+34 600 111 213,Olmedo Abogados,Servicios,13400,,Madrid
+Raúl,Herrán,raul.herran@tallerherran.test,,Taller Herrán,Industrial,11200,,Logroño
+Carmen,Bustelo,carmen.bustelo@floristeriab.test,+34 600 111 215,Floristería Bustelo,Comercio,4200,genera-2026,Oviedo
+Daniel,Iglesias,daniel.iglesias@particular.test,+34 600 111 216,,Particular,6800,,Getafe
+Lorena,Maeztu,lorena.maeztu@particular.test,+34 600 111 217,,Particular,5400,genera-2026,Pamplona
+Gonzalo,Trejo,gonzalo.trejo@particular.test,+34 600 111 218,,Particular,7900,,Cáceres
+Susana,Bilbao,susana.bilbao@particular.test,,,Particular,3100,,Santander
+Emilio,Narváez,emilio.narvaez@particular.test,+34 600 111 220,,Particular,2600,,Almería
+Vanesa,Alcolea,vanesa.alcolea@particular.test,+34 600 111 221,,Particular,1900,,Toledo
+Óscar,Guillén,oscar.guillen@solariadirecta.test,+34 600 111 222,Solaria Directa,Energía,95000,,Madrid
+Irene,Dopazo,irene.dopazo@particular.test,+34 600 111 223,,Particular,1200,,Lugo
+Andrés,Villaverde,,,Villaverde e Hijos,Industrial,24000,,Ourense

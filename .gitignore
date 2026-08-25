@@ -48,3 +48,11 @@ docs/site/
 
 # Estado de ejecución de planes por subagentes (ledger, briefs, informes).
 .superpowers/
+
+# Credenciales que emite el sembrado de la demo contra la pila local. Se
+# regeneran con `python3 demo/seed.py`; commitearlas sería publicar un secreto.
+demo/credenciales.local.json
+
+# Base de datos de la aplicación consumidora de prueba, cuando se ejecuta fuera
+# de su contenedor.
+test-consumer/data/
