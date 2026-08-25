@@ -1,0 +1,61 @@
+first_name,last_name,email,phone,company,industry,budget,campana,ciudad
+Lead01,Volumen,lead01.volumen@carga.test,+34 650 500 001,Carga 01 SL,Logística,3700,,Ciudad1
+Lead02,Volumen,lead02.volumen@carga.test,+34 650 500 002,Carga 02 SL,Agroalimentario,5400,,Ciudad2
+Lead03,Volumen,lead03.volumen@carga.test,+34 650 500 003,Carga 03 SL,Servicios,7100,genera-2026,Ciudad3
+Lead04,Volumen,lead04.volumen@carga.test,,Carga 04 SL,Comercio,8800,,Ciudad4
+Lead05,Volumen,lead05.volumen@carga.test,+34 650 500 005,Carga 05 SL,Hostelería,10500,,Ciudad5
+Lead06,Volumen,lead06.volumen@carga.test,+34 650 500 006,Carga 06 SL,Sanidad,12200,genera-2026,Ciudad6
+Lead07,Volumen,lead07.volumen@carga.test,+34 650 500 007,Carga 07 SL,Construcción,13900,,Ciudad7
+Lead08,Volumen,lead08.volumen@carga.test,,Carga 08 SL,Industrial,15600,,Ciudad8
+Lead09,Volumen,lead09.volumen@carga.test,+34 650 500 009,Carga 09 SL,Logística,17300,genera-2026,Ciudad9
+Lead10,Volumen,lead10.volumen@carga.test,+34 650 500 010,Carga 10 SL,Agroalimentario,19000,,Ciudad10
+Lead11,Volumen,lead11.volumen@carga.test,+34 650 500 011,Carga 11 SL,Servicios,20700,,Ciudad11
+Lead12,Volumen,lead12.volumen@carga.test,,Carga 12 SL,Comercio,22400,genera-2026,Ciudad0
+Lead13,Volumen,lead13.volumen@carga.test,+34 650 500 013,Carga 13 SL,Hostelería,24100,,Ciudad1
+Lead14,Volumen,lead14.volumen@carga.test,+34 650 500 014,Carga 14 SL,Sanidad,25800,,Ciudad2
+Lead15,Volumen,lead15.volumen@carga.test,+34 650 500 015,Carga 15 SL,Construcción,27500,genera-2026,Ciudad3
+Lead16,Volumen,lead16.volumen@carga.test,,Carga 16 SL,Industrial,29200,,Ciudad4
+Lead17,Volumen,lead17.volumen@carga.test,+34 650 500 017,Carga 17 SL,Logística,30900,,Ciudad5
+Lead18,Volumen,lead18.volumen@carga.test,+34 650 500 018,Carga 18 SL,Agroalimentario,32600,genera-2026,Ciudad6
+Lead19,Volumen,lead19.volumen@carga.test,+34 650 500 019,Carga 19 SL,Servicios,34300,,Ciudad7
+Lead20,Volumen,lead20.volumen@carga.test,,Carga 20 SL,Comercio,36000,,Ciudad8
+Lead21,Volumen,lead21.volumen@carga.test,+34 650 500 021,Carga 21 SL,Hostelería,37700,genera-2026,Ciudad9
+Lead22,Volumen,lead22.volumen@carga.test,+34 650 500 022,Carga 22 SL,Sanidad,39400,,Ciudad10
+Lead23,Volumen,lead23.volumen@carga.test,+34 650 500 023,Carga 23 SL,Construcción,41100,,Ciudad11
+Lead24,Volumen,lead24.volumen@carga.test,,Carga 24 SL,Industrial,42800,genera-2026,Ciudad0
+Lead25,Volumen,lead25.volumen@carga.test,+34 650 500 025,Carga 25 SL,Logística,44500,,Ciudad1
+Lead26,Volumen,lead26.volumen@carga.test,+34 650 500 026,Carga 26 SL,Agroalimentario,46200,,Ciudad2
+Lead27,Volumen,lead27.volumen@carga.test,+34 650 500 027,Carga 27 SL,Servicios,47900,genera-2026,Ciudad3
+Lead28,Volumen,lead28.volumen@carga.test,,Carga 28 SL,Comercio,49600,,Ciudad4
+Lead29,Volumen,lead29.volumen@carga.test,+34 650 500 029,Carga 29 SL,Hostelería,51300,,Ciudad5
+Lead30,Volumen,lead30.volumen@carga.test,+34 650 500 030,Carga 30 SL,Sanidad,53000,genera-2026,Ciudad6
+Lead31,Volumen,lead31.volumen@carga.test,+34 650 500 031,Carga 31 SL,Construcción,54700,,Ciudad7
+Lead32,Volumen,lead32.volumen@carga.test,,Carga 32 SL,Industrial,56400,,Ciudad8
+Lead33,Volumen,lead33.volumen@carga.test,+34 650 500 033,Carga 33 SL,Logística,58100,genera-2026,Ciudad9
+Lead34,Volumen,lead34.volumen@carga.test,+34 650 500 034,Carga 34 SL,Agroalimentario,59800,,Ciudad10
+Lead35,Volumen,lead35.volumen@carga.test,+34 650 500 035,Carga 35 SL,Servicios,61500,,Ciudad11
+Lead36,Volumen,lead36.volumen@carga.test,,Carga 36 SL,Comercio,63200,genera-2026,Ciudad0
+Lead37,Volumen,lead37.volumen@carga.test,+34 650 500 037,Carga 37 SL,Hostelería,64900,,Ciudad1
+Lead38,Volumen,lead38.volumen@carga.test,+34 650 500 038,Carga 38 SL,Sanidad,66600,,Ciudad2
+Lead39,Volumen,lead39.volumen@carga.test,+34 650 500 039,Carga 39 SL,Construcción,68300,genera-2026,Ciudad3
+Lead40,Volumen,lead40.volumen@carga.test,,Carga 40 SL,Industrial,70000,,Ciudad4
+Lead41,Volumen,lead41.volumen@carga.test,+34 650 500 041,Carga 41 SL,Logística,71700,,Ciudad5
+Lead42,Volumen,lead42.volumen@carga.test,+34 650 500 042,Carga 42 SL,Agroalimentario,73400,genera-2026,Ciudad6
+Lead43,Volumen,lead43.volumen@carga.test,+34 650 500 043,Carga 43 SL,Servicios,75100,,Ciudad7
+Lead44,Volumen,lead44.volumen@carga.test,,Carga 44 SL,Comercio,76800,,Ciudad8
+Lead45,Volumen,lead45.volumen@carga.test,+34 650 500 045,Carga 45 SL,Hostelería,78500,genera-2026,Ciudad9
+Lead46,Volumen,lead46.volumen@carga.test,+34 650 500 046,Carga 46 SL,Sanidad,80200,,Ciudad10
+Lead47,Volumen,lead47.volumen@carga.test,+34 650 500 047,Carga 47 SL,Construcción,81900,,Ciudad11
+Lead48,Volumen,lead48.volumen@carga.test,,Carga 48 SL,Industrial,83600,genera-2026,Ciudad0
+Lead49,Volumen,lead49.volumen@carga.test,+34 650 500 049,Carga 49 SL,Logística,85300,,Ciudad1
+Lead50,Volumen,lead50.volumen@carga.test,+34 650 500 050,Carga 50 SL,Agroalimentario,87000,,Ciudad2
+Lead51,Volumen,lead51.volumen@carga.test,+34 650 500 051,Carga 51 SL,Servicios,88700,genera-2026,Ciudad3
+Lead52,Volumen,lead52.volumen@carga.test,,Carga 52 SL,Comercio,90400,,Ciudad4
+Lead53,Volumen,lead53.volumen@carga.test,+34 650 500 053,Carga 53 SL,Hostelería,2100,,Ciudad5
+Lead54,Volumen,lead54.volumen@carga.test,+34 650 500 054,Carga 54 SL,Sanidad,3800,genera-2026,Ciudad6
+Lead55,Volumen,lead55.volumen@carga.test,+34 650 500 055,Carga 55 SL,Construcción,5500,,Ciudad7
+Lead56,Volumen,lead56.volumen@carga.test,,Carga 56 SL,Industrial,7200,,Ciudad8
+Lead57,Volumen,lead57.volumen@carga.test,+34 650 500 057,Carga 57 SL,Logística,8900,genera-2026,Ciudad9
+Lead58,Volumen,lead58.volumen@carga.test,+34 650 500 058,Carga 58 SL,Agroalimentario,10600,,Ciudad10
+Lead59,Volumen,lead59.volumen@carga.test,+34 650 500 059,Carga 59 SL,Servicios,12300,,Ciudad11
+Lead60,Volumen,lead60.volumen@carga.test,,Carga 60 SL,Comercio,14000,genera-2026,Ciudad0
