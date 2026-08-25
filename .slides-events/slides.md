@@ -22,23 +22,24 @@ transition: none
 
 ## De decidir sobre un lead a entregarlo
 
-Cuando el problema deja de ser el dominio y pasa a ser el transporte.
+Qué se publica, a dónde y con qué garantías.
 
 Outbox transaccional · Apache Kafka · RabbitMQ
 
 ---
 layout: blocked
-bloque: "1 · Dónde estábamos"
-idea: "Todo esto ya funciona. La sesión empieza donde termina esta diapositiva."
+bloque: "1 · Punto de partida"
+idea: "Contexto de la primera sesión. El sistema decidía sobre el lead y lo guardaba; ahí terminaba."
 ---
 
-# Lo que el sistema ya hacía
+# Punto de partida
 
-Un **lead** entra, y el sistema toma tres decisiones independientes sobre él.
+El sistema toma tres decisiones sobre cada lead que ingresa, con las reglas de
+cada organización, y guarda por qué decidió lo que decidió.
 
-```mermaid {scale: 0.72}
+```mermaid {scale: 0.68}
 flowchart LR
-    E["Formulario<br/>Fichero CSV"] --> V{"¿Viable?"}
+    E["Formulario<br/>Archivo CSV"] --> V{"¿Viable?"}
     V -->|no| D["DISQUALIFIED<br/><i>con el nombre de la regla</i>"]
     V -->|sí| P["Puntuar<br/><i>reglas de la organización</i>"]
     P --> A{"¿Hay asesor?"}
@@ -46,329 +47,274 @@ flowchart LR
     A -->|no| U["UNASSIGNED<br/><i>visible para el gestor</i>"]
 ```
 
+Arquitectura hexagonal: las dependencias apuntan al dominio, que no importa
+nada de las otras capas. Cuatro tests lo verifican en cada ejecución.
+
 <div class="destacado">
-<span class="destacado-tag">Damos por sabido</span>
-Cada organización define sus reglas y el sistema guarda <strong>por qué</strong>
-decidió lo que decidió. La arquitectura hexagonal, los puertos y los cuatro
-tests que la verifican son la <strong>primera</strong> sesión.
+<span class="destacado-tag">Límite del alcance previo</span>
+El recorrido terminaba con <strong>una fila guardada y un estado</strong>. Eso
+alcanza mientras el único consumidor sea la propia interfaz.
 </div>
 
 ---
 layout: blocked
-bloque: "1 · Dónde estábamos"
-idea: "El lead queda decidido, guardado y explicado. Ahí terminaba el sistema."
+bloque: "2 · Alcance"
+idea: "El sistema es multi-organización: cada organización opera con su propio CRM. Ese es el alcance que faltaba cubrir."
 ---
 
-# La arquitectura, en una diapositiva
+# Alcance pendiente: la entrega
 
-```mermaid {scale: 0.72}
-flowchart LR
-    API["<b>Infraestructura</b><br/>API REST"] --> UC["<b>Aplicación</b><br/>Casos de uso<br/>Puertos de salida"]
-    UC --> D["<b>Dominio</b><br/>Entidades · Motores<br/><i>sin dependencias externas</i>"]
-    AD["<b>Infraestructura</b><br/>PostgreSQL · HTTP"] -.->|implementa los puertos| UC
-```
-
-Las dependencias apuntan **hacia dentro**: el dominio no conoce a nadie.
-
-<div class="destacado">
-<span class="destacado-tag">El límite</span>
-El recorrido de un lead termina con <strong>una fila guardada y un estado</strong>.
-Eso basta mientras el único consumidor sea nuestra propia interfaz.
-</div>
-
----
-layout: blocked
-bloque: "2 · El problema cambia"
-idea: "El cliente no compra una aplicación: compra los leads ya filtrados dentro de su propio sistema."
----
-
-# Lo que el cliente pidió de verdad
-
-> «Que **nosotros** resolvamos y guardemos las reglas, y luego **ellos** tengan
-> todos los leads procesados que pasaron el procesamiento y no son basura.
->
-> Y si en algún punto necesitan los elementos, que puedan **reobtenerlos**.»
+El producto es multi-organización. Cada organización trabaja los leads en **su
+propio CRM**, no en esta interfaz. Faltaba el tramo final del recorrido:
 
 ```mermaid {scale: 0.78}
 flowchart LR
-    L["Leads<br/>en bruto"] --> N["Nuestras reglas<br/><i>filtran, puntúan, asignan</i>"]
-    N --> C["El CRM del cliente<br/><i>sólo lo aprovechable</i>"]
-    C -.->|"«necesito los de la semana pasada»"| N
+    L["Leads<br/>en bruto"] --> N["Reglas de la organización<br/><i>filtran, puntúan, asignan</i>"]
+    N --> C["Su CRM<br/><i>sólo lo aprovechable</i>"]
+    C -.->|"reobtener un rango anterior"| N
 ```
 
-Esa última frase —**reobtenerlos**— parece un detalle. Es el requisito que
-decide toda la arquitectura de esta sesión.
+Tres requisitos, y el tercero condiciona la tecnología:
+
+| | |
+|---|---|
+| **1** | Entregar sólo los leads que pasaron el filtro, ya puntuados y asignados |
+| **2** | Que la entrega no dependa de que el receptor esté disponible en ese instante |
+| **3** | **Poder reobtener** lo ya entregado, sin volver a procesarlo |
 
 ---
 layout: blocked
-bloque: "2 · El problema cambia"
-idea: "Ninguna se arregla escribiendo mejor la lógica del lead. Todas son de transporte."
+bloque: "2 · Alcance"
+idea: "Ninguno de los cinco se resuelve en la lógica del lead. Los cinco son de transporte."
 ---
 
-# Cinco preguntas que el sistema no sabía responder
+# Limitaciones del mecanismo de salida anterior
 
-| Pregunta | Quién la hace | Qué pasaba |
-|---|---|---|
-| ¿Cómo recibo los leads que pasaron el filtro? | El sistema del cliente | Un webhook con **cuatro campos**, o llamarnos a la API |
-| Perdí mensajes tres días, ¿cómo los recupero? | El sistema del cliente | **No se podía** |
-| Si vuestro proceso muere justo después de guardar, ¿me entero? | El sistema del cliente | **No** |
-| ¿Por qué me mandáis leads que vuestras reglas descartaron? | El sistema del cliente | Se publicaban **todos** por el mismo canal |
-| Un fichero de 10.000 leads y el contenedor se reinicia | El operador | El trabajo quedaba a medias, **sin que nadie lo retomara** |
+| Hueco | Estado previo |
+|---|---|
+| Cómo recibe una organización los leads que pasaron el filtro | Un webhook con **cuatro campos**, o consultar la API |
+| Cómo recupera lo que perdió durante una caída | **No era posible** |
+| Cómo se entera si el proceso muere justo después de guardar | **No se enteraba** |
+| Por qué recibía leads que las reglas ya habían descartado | Se publicaba **todo** por el mismo canal |
+| Qué pasa con un archivo de 10.000 leads si el contenedor se reinicia | El trabajo quedaba a medias, **sin que nadie lo retomara** |
 
 <div class="destacado">
-<span class="destacado-tag">El giro</span>
-El problema ya no es <strong>decidir sobre un lead</strong>. Es <strong>qué se
-publica, a dónde, con qué garantías y quién lo procesa</strong>.
+<span class="destacado-tag">Cambio de alcance</span>
+El problema deja de ser <strong>decidir sobre un lead</strong> y pasa a ser
+<strong>qué se publica, a dónde, con qué garantías y quién lo procesa</strong>.
 </div>
 
 ---
 layout: blocked
 bloque: "3 · Los defectos"
-idea: "El filtro que el cliente paga quedaba de su lado, y encima le facturábamos el tráfico."
+idea: "El filtro es el valor del producto. Publicar también lo descartado lo anula y agrega tráfico inútil."
 ---
 
-# Defecto 1 · Le mandábamos la basura que acabábamos de filtrar
+# Defecto 1 · Se publicaba lo que las reglas descartaban
 
-`LeadProcessedEvent` se publicaba para **todo** lead que la validación no
-hubiera rechazado — incluidos los que una regla de viabilidad acababa de
-descalificar.
-
-```mermaid {scale: 0.8}
-flowchart LR
-    subgraph antes["Antes"]
-        A1["Lead viable"] --> AE["LeadProcessedEvent"]
-        A2["Lead descartado<br/><i>por nuestra regla</i>"] --> AE
-        AE --> AC["El cliente<br/><i>vuelve a filtrar</i>"]
-    end
-    subgraph ahora["Ahora"]
-        B1["Lead viable"] --> BE["LeadProcessedEvent"]
-        B2["Lead descartado"] --> BD["LeadDisqualified<br/><i>+ nombre de la regla</i>"]
-        BE --> BC["El cliente"]
-        BD --> BA["Auditoría"]
-    end
-```
-
-Dos hechos distintos, no uno ambiguo. **Lo que pasó el filtro es el producto;
-lo que una regla descartó es una traza.**
-
----
-layout: blocked
-bloque: "3 · Los defectos"
-idea: "Un evento que obliga a preguntar quién es el lead no ha entregado nada."
----
-
-# Defecto 2 · El evento no decía quién era el lead
+| | Antes | Ahora |
+|---|---|---|
+| **Lead que pasa el filtro** | `LeadProcessedEvent` | `LeadProcessedEvent` |
+| **Lead que una regla descarta** | `LeadProcessedEvent`, el mismo | `LeadDisqualified`, con el nombre de la regla |
+| **Qué llega al CRM** | Ambos, mezclados | Sólo el primero |
+| **Quién vuelve a filtrar** | El receptor | Nadie |
 
 ```mermaid {scale: 0.85}
 flowchart LR
-    E["LeadProcessedEvent<br/><br/>tenant_id<br/>lead_id<br/>email<br/>score<br/>status<br/>assigned_agent_id"] -->|"«¿y quién es éste?»"| C["El CRM del cliente"]
-    C -->|"GET /leads/{id}<br/>con un token que no tiene"| API["Nuestra API"]
+    L["Lead"] --> V{"¿Una regla<br/>lo descarta?"}
+    V -->|"no"| P["LeadProcessedEvent"] --> R["CRM receptor"]
+    V -->|"sí"| D["LeadDisqualified"] --> A["Auditoría interna"]
 ```
-
-Seis campos: un identificador y poco más. Quien lo recibe **está fuera de este
-sistema** y no tiene una llamada que hacer para averiguar de quién se trata.
-
-El contrato pasó a llevar el lead entero: nombre, empresa, sector, presupuesto,
-atributos propios, **el desglose de la puntuación** y las fechas.
-
-<div class="destacado">
-<span class="destacado-tag">Un detalle que no es cosmético</span>
-<code>budget</code> viaja como <strong>cadena</strong>, nunca como número. La
-columna es <code>NUMERIC(14,2)</code> porque un presupuesto es dinero, y
-entregarlo como coma flotante tira la exactitud justo donde el dato sale de
-nuestras manos.
-</div>
 
 ---
 layout: blocked
 bloque: "3 · Los defectos"
-idea: "La copia del cliente se quedaba congelada en el estado que tuvo el primer día."
+idea: "Con seis campos el receptor no puede trabajar el lead: tendría que consultar la API, y no tiene credenciales para eso."
 ---
 
-# Defecto 3 · Asignar a mano no llegaba nunca
+# Defecto 2 · El evento no identificaba al lead
 
-Cuando el enrutamiento automático no encontraba asesor, el lead quedaba
-`UNASSIGNED` y el cliente lo recibía así. Después un gestor se lo asignaba a
-alguien… y el cliente **no se enteraba jamás**.
+| | Antes | Ahora |
+|---|---|---|
+| **Campos** | 6 | 17 |
+| **Qué llevaba** | `lead_id`, `email`, `score`, `status`, `assigned_agent_id` | Además: nombre, empresa, sector, presupuesto, teléfono, atributos propios, fechas |
+| **Explicar la puntuación** | Imposible: no venía el desglose | `score_breakdown` con cada regla aplicada |
+| **Para trabajar el lead** | `GET /leads/{id}`, con un token que el receptor no tiene | Nada: el evento se basta |
 
-```mermaid {scale: 0.72}
-sequenceDiagram
-    participant G as Gestor
-    participant S as Sistema
-    participant C as CRM del cliente
-
-    S->>C: LeadProcessedEvent · UNASSIGNED
-    note over C: "Nadie lo trabaja"
-    G->>S: Asignar a Ana
-    S->>S: LeadAssigned
-    note over S: sólo lo consume<br/>la notificación interna
-    S--xC: nada
-    note over C: sigue creyendo<br/>que está sin asignar
-```
-
-`LeadAssigned` existía, pero su único consumidor era el manejador de
-notificaciones **de dentro**. El canal de salida no se enteraba.
+El receptor está fuera del sistema y no tiene credenciales para consultar la
+API, de modo que un evento sin datos no es utilizable.
 
 ---
 layout: blocked
 bloque: "3 · Los defectos"
-idea: "Guardar y publicar son dos escrituras contra dos sistemas: el orden decide qué se pierde."
+idea: "El receptor sólo recibía el primer estado del lead. Todo lo posterior se quedaba dentro."
+---
+
+# Defecto 3 · La asignación manual no se publicaba
+
+| | Antes | Ahora |
+|---|---|---|
+| **Enrutamiento automático encuentra asesor** | Se publica `ASSIGNED` | Igual |
+| **No encuentra asesor** | Se publica `UNASSIGNED` | Igual |
+| **Un gestor lo asigna después** | `LeadAssigned`, sólo para la notificación interna | Se vuelve a publicar el lead completo |
+| **Qué registra el CRM** | `UNASSIGNED`, indefinidamente | El estado actual |
+
+```mermaid {scale: 0.82}
+flowchart LR
+    A["Lead sin asesor"] -->|"LeadProcessedEvent · UNASSIGNED"| C["CRM receptor"]
+    G["Gestor asigna a mano"] --> L["LeadAssigned"]
+    L --> N["Notificación interna"]
+    L -.->|"antes: no salía"| C
+    L -->|"ahora: LeadProcessedEvent · ASSIGNED"| C
+```
+
+---
+layout: blocked
+bloque: "3 · Los defectos"
+idea: "Guardar en PostgreSQL y publicar en un bróker son dos escrituras contra dos sistemas. Sin outbox, una de las dos puede quedarse sin la otra."
 ---
 
 # Defecto 4 · La ventana entre guardar y publicar
 
-```mermaid {scale: 0.66}
-flowchart TB
-    subgraph d["Publicar después del COMMIT — lo que había"]
-        A1["Guardar el lead"] --> A2["COMMIT"] --> A3["Publicar"]
-        A2 -.->|"el proceso muere aquí"| A4["Lead guardado.<br/><b>El cliente no se entera nunca.</b>"]
-    end
-    subgraph i["Publicar antes del COMMIT — peor"]
-        B1["Publicar"] --> B2["Guardar"] --> B3["ROLLBACK"]
-        B3 -.-> B4["El cliente recibió un lead<br/><b>que no existe.</b>"]
-    end
-```
+Cuando el **worker** termina de puntuar y asignar, tiene que guardar el lead y
+publicarlo. Son **dos escrituras contra dos sistemas** —PostgreSQL y el bróker—
+y sin transacción común el proceso puede morir en medio.
 
-Publicar **después** del commit era deliberado: un aviso que falla no debe
-deshacer un lead ya guardado. El precio era la ventana inversa.
+| Orden | Si el proceso muere en medio | Resultado |
+|---|---|---|
+| **Guardar → publicar** *(lo que había)* | Después del `COMMIT` | Lead guardado que el CRM nunca recibe |
+| **Publicar → guardar** | Después de publicar | El CRM tiene un lead que no existe |
+| **Outbox** *(ahora)* | En cualquier punto | El worker escribe **dos filas en la misma transacción**: el lead en `leads` y el evento **pendiente** en `outbox_events`. No habla con el bróker |
 
-Mientras el publicador vivía en memoria, esa ventana eran microsegundos. **En
-cuanto publicar es una llamada de red a un bróker que puede estar caído, deja
-de ser un caso de laboratorio.**
+Con el publicador en memoria la ventana era de microsegundos. Con un bróker
+remoto, que puede estar caído, pasa a ser de segundos o minutos.
 
 ---
 layout: blocked
 bloque: "3 · Los defectos"
-idea: "Un despliegue a mitad de fichero dejaba 6.000 leads sin procesar y a nadie encargado de terminarlos."
+idea: "El procesamiento de un archivo grande vivía en el proceso de la API. Un reinicio lo dejaba a medias."
 ---
 
-# Defecto 5 · El trabajo pesado moría con el proceso
+# Defecto 5 · El trabajo de fondo moría con el proceso
 
-Subir 10.000 leads devolvía `202` y dejaba el procesamiento en las tareas de
-fondo **del propio proceso de la API**.
-
-```mermaid {scale: 0.78}
-flowchart LR
-    U["POST /batch-upload"] --> API["API · BackgroundTasks"]
-    API --> P1["4.000 procesados"]
-    P1 -.->|"reinicio del contenedor"| X["6.000 a medias.<br/><b>Nadie los retoma.</b>"]
-    X -.->|"el usuario tiene que<br/>darle a reprocesar"| U
-```
+| | Antes | Ahora |
+|---|---|---|
+| **Dónde se procesan 10.000 leads** | `BackgroundTasks` de la API | Un worker aparte, por RabbitMQ |
+| **Si el contenedor se reinicia** | Las filas restantes quedan a medias | El mensaje se reentrega y otro worker sigue |
+| **Quién lo retoma** | Nadie: reproceso manual | El bróker |
+| **Si el bróker está caído** | — | Se procesa en la API, como antes |
 
 <div class="destacado">
-<span class="destacado-tag">Lo que tienen en común los cinco</span>
-Ninguno se arregla escribiendo mejor la lógica del lead. Los cinco son del
-<strong>transporte</strong>.
+<span class="destacado-tag">Causa común</span>
+Ninguno se resuelve mejorando la lógica del lead. Los cinco están en
+<strong>cómo sale el dato del sistema</strong>: qué se publica, cuándo, con qué
+garantías y quién lo procesa.
 </div>
 
 ---
 layout: blocked
-bloque: "4 · La decisión"
-idea: "Meter las dos cosas en una sola tecnología obliga a emular en ella lo que la otra da gratis."
+bloque: "4 · Selección de tecnología"
+idea: "A = entregar el lead al CRM. B = procesar el archivo. La tercera fila es la que separa las tecnologías: retener frente a consumir."
 ---
 
-# No es un problema, son dos
+# Dos casos de uso, dos tecnologías
 
-La tentación es elegir **una** tecnología de mensajería y meter dentro todo lo
-que se mueve. Aquí se descartó: los dos problemas piden garantías incompatibles.
+En este sistema hay **dos cosas distintas que se mueven**, y hasta ahora las dos
+vivían dentro del proceso de la API:
 
-| | El canal del producto | El trabajo interno |
+| | **A · Entregar un lead procesado**<br/>al CRM de la organización | **B · Procesar un archivo**<br/>de 10.000 filas |
 |---|---|---|
-| **Qué transporta** | Hechos: «este lead pasó el filtro» | Encargos: «procesa el trabajo 42» |
-| **Quién consume** | El sistema del cliente, **fuera de aquí** | Un trabajador **nuestro** |
-| **Al consumirlo** | Sigue ahí; otro consumidor lo lee igual | Desaparece: ya está hecho |
-| **¿Volver atrás?** | **Sí** — es la razón de existir | No tiene sentido |
-| **Si el consumidor muere** | Retoma por su cuenta desde su posición | Otro trabajador lo repite |
+| **Qué se transmite** | «El lead de Metalnor pasó el filtro: 115 pts, asignado a Iván Cadenas» | «Procesa el trabajo 42» |
+| **Quién lo lee** | El CRM de la organización, fuera de este sistema | Un worker propio, aquí dentro |
+| **Después de leerlo** | Debe **seguir disponible**: la organización puede pedir la semana pasada | Debe **desaparecer**: ya está hecho |
+| **Si el lector se cae** | Retoma en el punto donde quedó | Otro worker repite el trabajo entero |
+| **Tecnología que resulta** | **Kafka** · log con retención | **RabbitMQ** · cola con `ack` |
+
+La fila que decide es la tercera. **A** necesita que el mensaje persista después
+de leerse; **B** necesita lo contrario. Ninguna tecnología hace bien las dos.
 
 ---
 layout: blocked
-bloque: "4 · La decisión"
-idea: "El requisito de reobtención elige la tecnología. No es una preferencia."
+bloque: "4 · Selección de tecnología"
+idea: "El reparto entre trabajadores disponibles es lo que una cola resuelve de base."
 ---
 
-# Por qué Kafka para el producto
+# Selección de RabbitMQ para el trabajo interno
+
+| Lo que hace falta | Quién lo da |
+|---|---|
+| Un trabajo se toma, se ejecuta y **desaparece** | `ack` manual |
+| Si quien lo tomó muere, **otro lo repite** | Reentrega automática |
+| Lo que falla siempre, **se aparta** | Cola muerta (DLQ) |
+| Reparto entre trabajadores disponibles | Lo resuelve el bróker |
+
+En Kafka habría que emular las cuatro con offsets y grupos de consumidores, y
+el reparto quedaría limitado por el **número de particiones**, en lugar de
+resolverlo el bróker.
+
+<div class="destacado">
+<span class="destacado-tag">Criterio de selección</span>
+No es cuál tecnología es mejor, sino <strong>qué garantía pide cada
+problema</strong>: retención y replay para el producto; reparto, reintento y
+descarte para el trabajo.
+</div>
+
+---
+layout: blocked
+bloque: "4 · Selección de tecnología"
+idea: "El requisito de reobtención determina la tecnología. No es una preferencia de equipo."
+---
+
+# Selección de Kafka para el canal de salida
 
 ```mermaid {scale: 0.78}
 flowchart LR
     C1["<b>COLA</b><br/>Mensaje"] --> C2["Consumidor"] --> C3["ack"] --> C4["Borrado"]
-    C4 -.->|"«lo necesito otra vez»"| C5["Ya no está"]
+    C4 -.->|"se necesita de nuevo"| C5["Ya no está"]
 
-    L1["<b>LOG</b><br/>Mensaje"] --> L2["Se queda"]
+    L1["<b>LOG</b><br/>Mensaje"] --> L2["Se conserva"]
     L2 --> L3["Consumidor A<br/><i>offset 100</i>"]
     L2 --> L4["Consumidor B<br/><i>offset 0</i>"]
     L4 -.->|"vuelve atrás"| L2
 ```
 
-Una cola **borra el mensaje al confirmarlo**. Emularlo exigiría guardar una
-copia y exponer una API de reenvío: **reimplementar un log con retención,
-peor**. En un log cada consumidor lleva su propia posición, y reobtener es
-mover un número hacia atrás.
+Una cola **borra el mensaje al confirmarlo**. Emular la reobtención exigiría
+guardar una copia aparte y exponer una API de reenvío: reimplementar un log con
+retención, con menos garantías. En un log cada consumidor mantiene su propia
+posición, y reobtener es mover ese número hacia atrás.
 
 ---
 layout: blocked
-bloque: "4 · La decisión"
-idea: "El reparto entre trabajadores libres es exactamente lo que una cola resuelve sola."
+bloque: "5 · Diseño"
+idea: "El worker escribe lead y evento en PostgreSQL. Nadie habla con el bróker dentro de la transacción; de eso se encarga el relay, después."
 ---
 
-# Por qué RabbitMQ para el trabajo
+# Outbox transaccional
 
-| Lo que hace falta | Quién lo da |
-|---|---|
-| Un trabajo se coge, se hace y **desaparece** | `ack` manual |
-| Si quien lo cogió muere, **otro lo repite** | Reentrega automática |
-| Lo que falla siempre, **se aparta** | Cola muerta (DLQ) |
-| Reparto entre trabajadores libres | El bróker lo resuelve |
+PostgreSQL y Kafka son **dos sistemas**: no hay transacción que los abarque a
+los dos. La salida es que el worker no hable con el bróker: escribe el evento
+como una fila más, en la misma transacción que el lead.
 
-En Kafka habría que emular las cuatro con offsets y grupos de consumidores, y
-el reparto pasaría a depender del **número de particiones** en vez de
-resolverse solo.
-
-<div class="destacado">
-<span class="destacado-tag">El criterio</span>
-No es «¿cuál es mejor?». Es <strong>qué garantía pide cada problema</strong>.
-Retención y replay para el producto; reparto, reintento y descarte para el
-trabajo.
-</div>
-
----
-layout: blocked
-bloque: "5 · La solución"
-idea: "El bróker deja de participar en la transacción, y por eso deja de poder romperla."
----
-
-# El outbox · convertir dos escrituras en una
-
-Publicar deja de ser una escritura remota y pasa a ser **una fila más**.
-
-```mermaid {scale: 0.55}
-sequenceDiagram
-    participant UC as Caso de uso
-    participant DB as PostgreSQL
-    participant R as Relay
-    participant K as Kafka · Webhook
-
-    rect rgba(63,81,181,0.07)
-    note over UC,DB: Una sola transacción
-    UC->>DB: INSERT lead
-    UC->>DB: INSERT outbox_events
-    UC->>DB: COMMIT
-    end
-
-    R->>DB: SELECT lo no publicado
-    R->>K: Entregar
-    R->>DB: UPDATE published_at
+```mermaid {scale: 0.72}
+flowchart LR
+    W["<b>Worker</b>"] -->|"INSERT leads<br/>INSERT outbox_events<br/>COMMIT<br/><b>una transacción</b>"| DB[("PostgreSQL")]
+    DB -->|"SELECT lo no<br/>publicado"| R["<b>Relay</b><br/><i>en la API,<br/>cada segundo</i>"]
+    R -->|"entrega"| K["Kafka"]
+    R -->|"UPDATE<br/>published_at"| DB
 ```
 
-Un `ROLLBACK` se lleva el evento con el lead; una entrega que falla no toca el
-lead. **Las dos caras, con el mismo mecanismo.**
+| Si falla… | Qué pasa |
+|---|---|
+| El `COMMIT` | Se pierden **los dos**: no queda lead sin evento ni evento sin lead |
+| La entrega a Kafka | El lead ya está guardado. La fila del outbox sigue sin marcar y se reintenta |
 
 ---
 layout: blocked
-bloque: "5 · La solución"
-idea: "El id de la fila es el del evento, y por eso el consumidor puede deduplicar."
+bloque: "5 · Diseño"
+idea: "El id de la fila es el del evento. Eso es lo que permite deduplicar del lado del consumidor."
 ---
 
-# Qué guarda el outbox, y por qué cada columna
+# Esquema de `outbox_events`
 
 ```sql
 CREATE TABLE IF NOT EXISTS outbox_events (
@@ -385,69 +331,103 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 ```
 
 La entrega es **at-least-once**: si el relay muere entre entregar y marcar, el
-mensaje sale dos veces. Con el mismo `event_id`, para que el consumidor lo
+mensaje sale dos veces, con el mismo `event_id` para que el consumidor lo
 reconozca.
 
 <div class="destacado">
-<span class="destacado-tag">Nada se descarta por haber fallado</span>
+<span class="destacado-tag">Reintentos sin tope</span>
 El lote se ordena por <code>attempts, occurred_on</code>. Un tope de reintentos
-parecía razonable hasta que llegó Kafka: con el bróker caído fallan
-<strong>todas</strong> las entregas, y unos segundos de caída habrían
-descartado para siempre los leads que esta tabla existe para no perder.
+se descartó al integrar Kafka: con el bróker caído fallan <strong>todas</strong>
+las entregas, y unos segundos de caída habrían agotado el tope, descartando los
+leads que esta tabla existe para conservar.
 </div>
 
 ---
 layout: blocked
-bloque: "5 · La solución"
-idea: "El relay es el único que entrega; añadir un destino nuevo no toca ni el caso de uso ni el relay."
+bloque: "5 · Diseño"
+idea: "Tres tramos y tres dueños: la API recibe, el worker decide, el relay entrega. Cada frontera existe para que un fallo no cruce."
 ---
 
-# La arquitectura completa
+# Recorrido completo
 
-```mermaid {scale: 0.9}
+Tres tramos, tres procesos distintos. **Ninguno espera al siguiente.**
+
+```mermaid {scale: 0.6}
 flowchart LR
-    API["API"] -->|"misma<br/>transacción"| DB[("PostgreSQL<br/>leads + outbox")]
-    API -->|"encola"| RMQ["RabbitMQ<br/><i>intake.jobs</i>"]
-    RMQ --> W["Worker"]
-    W -->|"misma<br/>transacción"| DB
-    DB -.->|"lo no publicado"| Relay["Relay<br/><i>cada segundo</i>"]
-    Relay --> K["Kafka<br/><i>leads.{org}</i>"] --> CRM["CRM del<br/>cliente"]
-    Relay --> WH["Webhooks"]
+    F["CSV · XLSX<br/>Formulario"] --> API["<b>1 · RECIBIR</b><br/>API<br/><i>guarda la fila<br/>tal como llegó</i>"]
+    API --> RMQ(["RabbitMQ"])
+    RMQ --> W["<b>2 · DECIDIR</b><br/>Worker<br/><i>descarta, puntúa,<br/>asigna</i>"]
+    W --> DB[("PostgreSQL<br/>lead + evento<br/><i>una transacción</i>")]
+    DB --> RE["<b>3 · ENTREGAR</b><br/>Relay<br/><i>cada segundo</i>"]
+    RE --> K(["Kafka"])
+    K --> C["CRM de la organización"]
 ```
 
-**Outbox**: que no exista un lead del que el cliente nunca se entere ·
-**Kafka**: que reciba lo aprovechable y pueda volver a por ello ·
-**RabbitMQ**: que el trabajo pesado no muera con el contenedor de la API.
+| Tramo | Quién | Qué deja escrito | Si se cae |
+|---|---|---|---|
+| **1 · Recibir** | La API | La fila cruda. **Todavía no hay lead** | El cliente recibe error y reintenta |
+| **2 · Decidir** | El worker | El lead con su puntuación y su asesor, **y el evento**, juntos | RabbitMQ reentrega el trabajo a otro worker |
+| **3 · Entregar** | El relay | `published_at` en la fila del evento | La fila sigue sin marcar; el siguiente ciclo la reintenta |
 
 ---
 layout: blocked
-bloque: "5 · La solución"
-idea: "Un ciclo son tres pasos porque el del medio habla por la red."
+bloque: "6 · RabbitMQ en detalle"
+idea: "La reentrega es segura por tres piezas puestas antes, no por casualidad."
 ---
 
-# El relay · leer, entregar, registrar
+# Topología de `intake.jobs`
 
 ```mermaid {scale: 0.72}
 flowchart LR
-    T1["1 · Leer el lote<br/><i>transacción corta</i>"] --> T2["2 · Entregar<br/><b>sin transacción abierta</b>"]
-    T2 --> T3["3 · Registrar<br/><i>transacción corta</i>"]
+    API["API"] -->|"{tenant_id, job_id}"| Q["intake.jobs<br/><i>quorum · x-delivery-limit 3</i>"]
+    Q --> W1["Worker<br/><i>prefetch 1</i>"]
+    W1 -->|ack al terminar| Q
+    W1 -.->|"3 entregas fallidas"| DLQ["intake.jobs.dlq"]
 ```
 
-Entregar **dentro** de esa transacción retendría una conexión del pool durante
-tantas llamadas de red como entradas tenga el lote: un puñado de receptores
-agotando su plazo vacía el pool del que vive la API.
+| Pieza puesta antes | Qué hace segura la reentrega |
+|---|---|
+| `start()` acepta `PROCESSING` | Un mensaje reentregado encuentra el trabajo empezado y **no lo rechaza** |
+| Sólo se leen registros `PENDING` | Un lead ya promocionado no se crea dos veces |
+| Los contadores se **derivan** de los registros | Dos consumidores del mismo mensaje llegan al mismo número |
 
-<div class="destacado">
-<span class="destacado-tag">Qué entra en el outbox y qué no</span>
-Sólo el <strong>canal de salida</strong>. Las notificaciones internas siguen
-siendo síncronas: su consumidor está aquí dentro y el usuario espera verlas al
-recargar. Meterlas en el outbox retrasaría lo único que hoy es inmediato.
-</div>
+El mensaje lleva **sólo** `{tenant_id, job_id}`: el trabajo ya está en base de
+datos, e incluir también el payload lo dejaría en dos lugares que pueden
+divergir.
 
 ---
 layout: blocked
-bloque: "6 · Kafka en detalle"
-idea: "El aislamiento entre organizaciones es un invariante del sistema, no una cortesía del consumidor."
+bloque: "6 · RabbitMQ en detalle"
+idea: "El archivo no se guarda: se lee, se convierte en filas y se descarta. Lo reprocesable son los intake_records."
+---
+
+# Procesamiento de carga masiva
+
+El archivo viaja en el **cuerpo de la petición HTTP**, en formato
+`multipart/form-data` — el mismo con el que un formulario web sube un archivo:
+el cuerpo se divide en partes y una de ellas, llamada `file`, son los bytes.
+**No se almacena en ninguna parte y no entra en la cola.**
+
+```mermaid {scale: 0.66}
+flowchart LR
+    F["Archivo<br/><i>multipart/form-data</i>"] -->|"POST /batch-upload"| API["API<br/><b>lee los bytes a memoria</b><br/><i>y los descarta al responder</i>"]
+    API -->|"N filas"| R[("intake_records<br/>PENDING<br/><i>payload JSONB</i>")]
+    API -->|"{tenant_id, job_id}<br/><b>~80 bytes</b>"| Q(["intake.jobs"])
+    Q --> W["Worker<br/><i>puntúa y enruta<br/>las N filas</i>"]
+    W --> R
+```
+
+| Pregunta | Respuesta |
+|---|---|
+| ¿Dónde queda el archivo? | En ningún sitio. Ni disco, ni volumen, ni almacenamiento de objetos |
+| ¿Por qué se parsea en la API? | Los bytes sólo existen mientras dura la petición: el worker no los tendría |
+| ¿Qué se puede reprocesar? | Los `intake_records`, no el archivo. Por eso se guardan **antes** de interpretarlos |
+| ¿Por qué la cola no lleva el archivo? | Estaría en dos sitios que pueden divergir, y RabbitMQ no es un almacén |
+
+---
+layout: blocked
+bloque: "7 · Kafka en detalle"
+idea: "El aislamiento entre organizaciones es un invariante del sistema, no una responsabilidad del consumidor."
 ---
 
 # Un topic por organización
@@ -456,17 +436,17 @@ idea: "El aislamiento entre organizaciones es un invariante del sistema, no una 
 
 | Decisión | Alternativa descartada | Por qué |
 |---|---|---|
-| **Un topic por organización** | Uno compartido con `tenant_id` dentro | Obligaría a filtrar en el consumidor. Además abre la puerta a retención y credenciales distintas por cliente |
-| **Los dos hechos en el mismo topic** | Un topic por tipo de evento | Repartirlos rompería el orden entre «se procesó» y «se descartó» del mismo lead |
-| **`lead_id` como clave** | `tenant_id` como clave | Con `tenant_id`, una organización entera sería **una sola partición** |
+| **Un topic por organización** | Uno compartido con `tenant_id` dentro | Obligaría a filtrar en el consumidor. Además permite retención y credenciales distintas por organización |
+| **Los dos hechos en el mismo topic** | Un topic por tipo de evento | Separarlos rompería el orden entre «se procesó» y «se descartó» de un mismo lead |
+| **`lead_id` como clave** | `tenant_id` como clave | Con `tenant_id`, una organización entera quedaría en **una sola partición** |
 
 ---
 layout: blocked
-bloque: "6 · Kafka en detalle"
-idea: "Con el desglose dentro, el cliente explica la puntuación sin preguntarnos y sin que las reglas sigan existiendo."
+bloque: "7 · Kafka en detalle"
+idea: "Con el desglose incluido, el receptor puede explicar la puntuación sin consultar la API."
 ---
 
-# El contrato que sale por el topic
+# Contrato publicado
 
 ```json
 {
@@ -486,281 +466,99 @@ idea: "Con el desglose dentro, el cliente explica la puntuación sin preguntarno
 }
 ```
 
-Diecisiete campos construidos **en un solo sitio**: dos casos de uso lo publican
-—la ingesta y la asignación manual—, y un campo añadido en uno solo sería un
-contrato que se bifurca.
+Diecisiete campos construidos **en un solo lugar**: dos casos de uso lo publican
+—la ingesta y la asignación manual— y un campo agregado en uno solo produciría
+un contrato divergente.
 
 ---
 layout: blocked
-bloque: "7 · RabbitMQ en detalle"
-idea: "La reentrega no es segura por suerte: son tres piezas puestas antes, a propósito."
+bloque: "8 · Autenticación"
+idea: "SASL es el marco, SCRAM el mecanismo, la ACL la regla. Los tres términos definidos antes de usarlos."
 ---
 
-# La cola, el trabajador y la cola muerta
+# SASL, SCRAM y ACL
 
-```mermaid {scale: 0.72}
+| Término | Qué es |
+|---|---|
+| **SASL** | El marco con el que Kafka pide credenciales al conectarse. Define *que* hay autenticación, no *cómo* |
+| **SCRAM-SHA-256** | El mecanismo concreto: usuario y contraseña por **desafío-respuesta**. El servidor manda un reto, el cliente responde con un cálculo sobre su contraseña. **La contraseña nunca viaja por la red** |
+| **ACL** | Una regla del bróker: **qué principal** puede **qué operación** sobre **qué recurso** |
+
+Las reglas que se crean al emitir una credencial:
+
+| Principal | Operación | Recurso |
+|---|---|---|
+| `User:tenant-A` | `READ`, `DESCRIBE` | Topic `leads.orgA` |
+| `User:tenant-A` | `READ` | Grupos que empiecen por `tenant-A` |
+
+No existe ninguna regla que le dé acceso al topic de otra organización, y el
+bróker deniega por defecto lo que no está permitido: contra `leads.orgB`
+responde `TOPIC_AUTHORIZATION_FAILED`.
+
+---
+layout: blocked
+bloque: "8 · Autenticación"
+idea: "Dos puertas, dos mecanismos. El aislamiento entre organizaciones lo aplica el bróker mediante ACL, no el consumidor."
+---
+
+# Cómo se autentica cada extremo
+
+Dos puertas de entrada al sistema, cada una con su mecanismo.
+
+```mermaid {scale: 0.78}
 flowchart LR
-    API["API"] -->|"{tenant_id, job_id}"| Q["intake.jobs<br/><i>quorum · x-delivery-limit 3</i>"]
-    Q --> W1["Worker<br/><i>prefetch 1</i>"]
-    W1 -->|ack al terminar| Q
-    W1 -.->|"3 entregas fallidas"| DLQ["intake.jobs.dlq"]
+    A["Org A"] -->|"SASL/SCRAM<br/><i>usuario tenant-A</i>"| K["Kafka"]
+    K --> T1["leads.orgA"]
+    K -.->|"DENEGADO<br/>por ACL"| T2["leads.orgB"]
+    S["Sistema externo"] -->|"X-Api-Key"| API["API<br/><i>GET /leads</i>"]
 ```
 
-| Pieza puesta antes | Qué hace segura la reentrega |
-|---|---|
-| `start()` acepta `PROCESSING` | Un mensaje reentregado encuentra el trabajo empezado y **no lo rechaza** |
-| Sólo se leen registros `PENDING` | Un lead ya promocionado no se crea dos veces |
-| Los contadores se **derivan** de los registros | Dos consumidores del mismo mensaje llegan al mismo número |
+| Puerta | Quién entra | Mecanismo | Alcance |
+|---|---|---|---|
+| **Kafka** · listener externo | El CRM de cada organización | `SASL_PLAINTEXT` + `SCRAM-SHA-256` | Un usuario y una ACL por organización: sólo su propio topic |
+| **API** · `GET /leads` | Un sistema de integración | Cabecera `X-Api-Key`, secreto en hash bcrypt | Un solo endpoint. No obtiene sesión ni accede a nada más |
 
-El mensaje lleva **sólo** `{tenant_id, job_id}`: el trabajo ya está en base de
-datos, y meter el payload también sería tenerlo en dos sitios que discrepan.
 
 ---
 layout: blocked
-bloque: "7 · RabbitMQ en detalle"
-idea: "Degradar es preferible a rechazar los leads de un cliente porque nuestra cola está caída."
+bloque: "8 · Autenticación"
+idea: "Una llamada entrega las credenciales de las dos puertas. Rotar es la misma llamada; revocar corta ambas."
 ---
 
-# Qué se encola de un fichero, y qué no
+# Cómo se integra un sistema externo
 
 ```mermaid {scale: 0.7}
 flowchart LR
-    F["Fichero"] --> P["Parsear y materializar<br/><i>necesita los bytes</i><br/>en el proceso de la API"]
-    P --> R[("intake_records<br/>PENDING")]
-    P --> Q["intake.jobs"]
-    Q --> W["Worker · puntuar y enrutar<br/><i>10.000 filas</i>"]
-    W --> R
+    G["Gestor de la<br/>organización"] -->|"1 · POST /agents/<br/>integration-credential"| API["API"]
+    API -->|"2 · crea el usuario<br/>y su ACL"| K["Kafka"]
+    API -->|"3 · guarda el secreto<br/><i>en hash</i>"| DB[("agents")]
+    API -->|"4 · devuelve al gestor, una sola vez:<br/><b>api_key · usuario y contraseña de Kafka<br/>topic · bootstrap servers</b>"| G
+    G -.->|"5 · se la entrega<br/><i>fuera de banda</i>"| C["El sistema<br/>externo"]
+    K -->|"6 · le entrega los leads<br/>de su topic"| C
+    API -->|"6 · responde GET /leads"| C
 ```
-
-Parsear necesita los bytes, que sólo viven en la memoria de la petición. Pero
-cuando termina, **cada fila ya es un registro duradero** y la parte larga se
-encola igual que un lead suelto.
-
-```python
-if not job_queue.enqueue_intake_job(context.tenant_id, job_id):
-    background.add_task(process.execute, context.tenant_id, job_id)
-```
-
-`enqueue_intake_job` devuelve `bool` en vez de lanzar — el **único** puerto de
-salida del sistema que rompe ese patrón, y a propósito.
-
----
-layout: blocked
-bloque: "8 · Lo que se rompió"
-idea: "La suite corre todo en un proceso, y el cambio consistía justamente en repartirlo entre varios."
----
-
-# Tres defectos que sólo encontró el end-to-end
-
-| Qué falló | Por qué la suite no lo veía |
-|---|---|
-| **El respaldo de la cola nunca entraba.** El endpoint devolvía `500` con el bróker apagado | `socket.gaierror` no hereda de `AMQPError`, y el test usaba un doble que lanzaba `AMQPError` |
-| **Las notificaciones desaparecieron en silencio** | Al mover el trabajo al worker, los eventos internos se publican en el bus **de ese proceso**, donde nadie estaba suscrito. Nada falla: el manejador simplemente no existe |
-| **El batch seguía procesándose en la API** | La suite no distingue en qué proceso corre el trabajo |
-
-<div class="destacado">
-<span class="destacado-tag">Y uno de diseño, propio</span>
-El tope de reintentos del outbox se volvió <strong>pérdida de datos</strong> al
-llegar Kafka: con el bróker caído fallan todas las entregas, así que once
-segundos de caída agotaban el tope y descartaban los leads que el outbox existe
-para no perder.
-</div>
-
----
-layout: blocked
-bloque: "8 · Lo que se rompió"
-idea: "Un cambio que reparte procesos rompe cosas que ninguna prueba de un solo proceso puede ver."
----
-
-# Por qué el harness de negocio no es opcional
-
-```mermaid {scale: 0.75}
-flowchart LR
-    S["623 tests<br/><i>un proceso, sin brókeres</i>"] -->|verde| X["✗ No ve el reparto<br/>entre procesos"]
-    E["verify-e2e.sh<br/><i>146 comprobaciones sobre HTTP real</i>"] -->|"pila completa"| Y["✓ API · worker<br/>Kafka · RabbitMQ"]
-```
-
-Los tres defectos de la diapositiva anterior **son del mismo tipo**: aparecen
-sólo cuando el trabajo cruza de un proceso a otro.
-
-| Comprobación | Resultado |
-|---|---|
-| Suite completa | **623 passed** |
-| Guardián de la arquitectura | **4/4** |
-| `verify-e2e.sh` con la pila real | **146 verdes**, pasadas repetidas |
-| Outbox tras el recorrido completo | 247 publicados, **0 pendientes** |
-
----
-layout: blocked
-bloque: "9 · Decisiones"
-idea: "Contradecir un ADR está permitido; hacerlo en silencio, no."
----
-
-# Cinco decisiones, tres de ellas sustituyendo a otras
-
-| ADR | Qué decide | Sustituye a |
-|---|---|---|
-| **0023** | Un evento del canal de salida existe porque describe un hecho que el producto publica, no porque haya un manejador en este proceso | **0016** · «sólo eventos con consumidor» |
-| **0024** | El contrato se construye una sola vez, desde la entidad que describe | **0020** · «los eventos se construyen en la aplicación» |
-| **0025** | Outbox transaccional: el evento se registra dentro de la transacción del lead | — |
-| **0026** | Kafka, un topic por organización, con el contrato completo dentro | — |
-| **0027** | Cola y trabajador aparte para el trabajo de fondo | **0019** · «trabajo de fondo en el mismo proceso» |
-
-El 0019 decía literalmente: *«No hay cola externa —ni bróker, ni un proceso
-trabajador independiente— en este alcance»*. **El alcance cambió, y el ADR se
-sustituye en vez de contradecirse por la puerta de atrás.**
-
----
-layout: blocked
-bloque: "9 · Autenticación"
-idea: "Un topic por organización sin autenticación no aísla nada: sólo lo documenta."
----
-
-# El aislamiento que no aislaba
-
-Un topic por organización parecía resolver el aislamiento. **No resolvía nada
-mientras el bróker aceptara a cualquiera** — y en la API pasaba lo mismo por el
-otro lado: un sistema externo sólo podía llamar con el token de una persona.
-
-```mermaid {scale: 0.82}
-flowchart LR
-    X["<b>ANTES</b><br/>cualquiera<br/>en la red"] -->|"sin credencial"| K1["Kafka"]
-    K1 --> T1["leads.orgA"]
-    K1 --> T2["leads.orgB"]
-
-    A["<b>AHORA</b><br/>Org A"] -->|"SASL/SCRAM"| K2["Kafka"]
-    K2 --> U1["leads.orgA"]
-    K2 -.->|"DENEGADO"| U2["leads.orgB"]
-```
-
----
-layout: blocked
-bloque: "9 · Autenticación"
-idea: "Cerrar una de las dos puertas y dejar la otra abierta deja escrito que el problema está resuelto."
----
-
-# Las dos mitades van juntas
-
-| | Qué se cierra | Cómo |
-|---|---|---|
-| **Kafka** | El listener expuesto al exterior | `SASL_PLAINTEXT` + `SCRAM-SHA-256`, un usuario y una ACL por organización |
-| **La API** | La llamada de máquina | Cabecera `X-Api-Key`, con el secreto guardado como hash bcrypt |
-
-Emitir una credencial **aprovisiona Kafka primero**: una clave de API cuya
-contraparte en el bróker no existe es exactamente el teatro que esto cierra.
-
-<div class="destacado">
-<span class="destacado-tag">Lo que sigue abierto, a propósito</span>
-El listener <strong>interno</strong> (9092) no pide credencial: es donde viven
-el productor y el aprovisionamiento, y cerrarlo exigiría una credencial de
-arranque y reformatear el volumen. El perímetro pasa a ser la red de compose —
-<strong>el mismo que Postgres ya asumía</strong>. Escrito en el ADR-0028, no
-omitido.
-</div>
-
----
-layout: blocked
-bloque: "9 · Autenticación"
-idea: "Una credencial de máquina no es una persona, y las consultas que la trataban como tal eran el defecto."
----
-
-# La credencial es una fila en `agents`
-
-Con `role=INTEGRATION`, el mismo hash bcrypt que un humano, y revocar =
-desactivar. Reutiliza el repositorio, el hasher y `RequestContext` **sin tocar
-el camino del JWT**.
-
-Lo que la revisión del plan tuvo que añadir:
-
-| Consulta | Qué habría hecho |
-|---|---|
-| `list_by_tenant` · `count_by_tenant` | Mostrar una clave de API **en la plantilla del gestor** |
-| `get_available_agents` | Ofrecerla al motor de asignación como candidata |
-
-Nombrarla en una regla desde ese listado le habría asignado **leads que nadie
-trabaja**. Se filtra en SQL, con tests que lo fijan.
-
-<div class="destacado">
-<span class="destacado-tag">Y un defecto que sólo apareció al probarlo de verdad</span>
-La ACL del grupo de consumidor llevaba el prefijo del <strong>script de pruebas
-que enviamos</strong>. Un cliente real con su propio <code>group.id</code> no
-podía consumir — y el bróker lo rechaza con
-<code>GROUP_AUTHORIZATION_FAILED</code>, que parece un problema de topic y manda
-a buscar al sitio equivocado.
-</div>
-
----
-layout: blocked
-bloque: "9 · Autenticación"
-idea: "Que la suite pase no dice nada sobre si un tercero puede leer los datos de otro."
----
-
-# Cómo se valida esto
-
-Tres niveles, y **sólo el tercero demuestra el aislamiento**:
-
-| Nivel | Qué comprueba | Qué NO puede comprobar |
-|---|---|---|
-| **Unidad** (386) | Que se piden las ACL correctas al bróker, con dobles de prueba | Que el bróker las aplique |
-| **`verify-e2e.sh`** (146) | Emitir, leer, rotar, revocar sobre HTTP real; que la credencial no salga en la plantilla | Nada de Kafka: el harness no consume del topic |
-| **Prueba manual** | Que la credencial de A **lee su topic** y que contra el de B el bróker responde `TOPIC_AUTHORIZATION_FAILED` | — |
-
-```bash
-python consume.py --tenant <uuid> --from-beginning   --sasl-username tenant-<uuid> --sasl-password <la emitida>
-```
-
-<div class="destacado">
-<span class="destacado-tag">Por qué el tercero no está en la suite</span>
-Levantar un Kafka con SASL multiplicaría los ~2 minutos que cuesta hoy, y lo
-que demostraría —que la librería habla con el bróker— no es código nuestro. Lo
-que <strong>sí</strong> es nuestro son las ACL que se piden, y eso sí está en la
-suite.
-</div>
-
----
-layout: blocked
-bloque: "10 · Cierre"
-idea: "Ninguno es un descuido: los cuatro están asumidos, escritos y con su razón."
----
-
-# Qué no está resuelto
-
-| Hueco | Consecuencia |
-|---|---|
-| **Retención de 168 h**, el valor por defecto | Reobtener funciona **siete días** |
-| **`num.partitions=1`**, el valor por defecto | La clave de partición está bien elegida, pero el reparto que justifica todavía no existe |
-| **El outbox crece sin podarse** | Las filas publicadas se quedan. A propósito mientras sean el único registro de lo que salió |
-| **Nadie mira la cola muerta** | Un trabajo que falla tres veces se queda ahí sin que nada avise |
-
-<div class="destacado">
-<span class="destacado-tag">Lo que sí se cerró</span>
-La autenticación de Kafka y la credencial de máquina de la API, juntas
-(ADR-0028). Queda fuera el <strong>TLS de RabbitMQ</strong>: ya tiene
-autenticación, no tiene cliente externo y su tráfico no sale de la red de
-compose — el mismo perímetro que Postgres ya asumía. Aplazado con la razón
-escrita, no olvidado.
-</div>
-
----
-layout: blocked
-bloque: "10 · Cierre"
-idea: "El requisito que parecía un detalle —«poder reobtenerlos»— fue el que decidió toda la arquitectura."
----
-
-# Conclusiones
 
 | | |
 |---|---|
-| **1** | Cuando el consumidor deja de ser tu propia interfaz, el problema deja de ser el dominio y pasa a ser **el transporte y sus garantías** |
-| **2** | Una frase del cliente —«**poder reobtenerlos**»— elige la tecnología. Una cola no puede darlo; un log con retención sí |
-| **3** | Dos problemas con garantías incompatibles piden **dos tecnologías**. Meterlos en una obliga a emular en ella lo que la otra da gratis |
-| **4** | Guardar y publicar no pueden ser atómicos… **salvo que publicar se convierta en insertar una fila** |
-| **5** | Un cambio que reparte el trabajo entre procesos rompe cosas que **ninguna prueba de un solo proceso** puede ver |
-| **6** | Un topic por organización **no aísla nada** mientras el bróker acepte a cualquiera: separar sin autenticar sólo documenta la separación |
+| **Quién la pide** | El gestor, con su sesión. **No existe un endpoint donde el sistema externo pida la suya**: para pedirla ya tendría que estar autenticado |
+| **Qué recibe** | `api_key`, usuario y contraseña de Kafka, y el nombre del topic. **Sólo se muestran una vez**: después se guardan en hash |
+| **Rotar** | La misma llamada. Emite un secreto nuevo e invalida el anterior |
+| **Revocar** | `DELETE /agents/{id}`. Corta las dos puertas a la vez |
+| **La regla a cumplir** | El grupo de consumidor debe empezar por `tenant-{uuid}`. Con otro nombre, el bróker responde `GROUP_AUTHORIZATION_FAILED` |
 
-<div class="destacado">
-<span class="destacado-tag">Lo que queda escrito</span>
-Seis ADR, seis páginas de documentación y un harness de 146 comprobaciones
-sobre HTTP real. La decisión de mañana empieza leyendo por qué se tomó la de
-hoy.
-</div>
+---
+layout: blocked
+bloque: "9 · Cierre"
+idea: "El requisito de reobtención fue el que determinó la arquitectura de toda esta fase."
+---
+
+# Qué hace el sistema ahora
+
+| | |
+|---|---|
+| **Entrega** | Cada organización recibe en su CRM los leads que pasaron el filtro, con el lead completo: datos, puntuación, desglose de reglas y asesor asignado |
+| **Reobtención** | Puede volver a leer los últimos siete días desde donde quiera, sin pedirle nada a nadie |
+| **Durabilidad** | El evento se guarda en la misma transacción que el lead. No existe un lead cuyo evento se quede sin salir |
+| **Procesamiento** | Un archivo de 10.000 filas lo procesa un worker aparte. Un reinicio no lo pierde: el trabajo se reentrega |
+| **Aislamiento** | Cada organización lee sólo su topic, con su usuario y su ACL. Lo aplica el bróker |
+| **Integración** | Una llamada entrega la clave de API y la credencial de Kafka. Rotar es la misma llamada; revocar corta las dos |
