@@ -57,5 +57,13 @@ export async function waitForJob(
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
     job = await get(jobId);
   }
+  // Returning a non-terminal job as if it were the answer is what let a screen
+  // read `succeeded` off a job still PENDING and report "0 rows loaded" as a
+  // success. The caller has to be able to tell the two apart.
   return job;
+}
+
+/** True when waitForJob gave up rather than the job reaching a terminal state. */
+export function stillRunning(job: IntakeJob): boolean {
+  return !TERMINAL_STATUSES.has(job.status);
 }

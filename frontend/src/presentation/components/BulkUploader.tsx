@@ -4,6 +4,8 @@ import { UploadCloud, CheckCircle2, AlertTriangle, FileSpreadsheet } from 'lucid
 export interface BulkUploadResult {
   succeeded: number;
   failed: number;
+  /** The job was accepted but had not finished within the polling window. */
+  pending?: boolean;
 }
 
 interface BulkUploaderProps {
@@ -76,14 +78,16 @@ export function BulkUploader({ onUpload }: BulkUploaderProps) {
         <div
           className={`flex items-center justify-center gap-2 text-sm p-3 rounded-lg border ${
             result.failed > 0
+              || result.pending
               ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
               : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
           }`}
         >
           {result.failed > 0 ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
           <span>
-            {result.succeeded} {result.succeeded === 1 ? 'fila cargada' : 'filas cargadas'}, {result.failed}{' '}
-            {result.failed === 1 ? 'rechazada' : 'rechazadas'}.
+            {result.pending
+              ? 'Archivo recibido y en proceso.'
+              : `${result.succeeded} ${result.succeeded === 1 ? 'fila cargada' : 'filas cargadas'}, ${result.failed} ${result.failed === 1 ? 'rechazada' : 'rechazadas'}.`}
           </span>
         </div>
       )}
