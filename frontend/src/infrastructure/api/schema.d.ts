@@ -385,6 +385,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/integration-credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue Integration Credential */
+        post: operations["issue_integration_credential_api_v1_agents_integration_credential_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/{agent_id}": {
         parameters: {
             query?: never;
@@ -658,7 +675,7 @@ export interface components {
          * AgentRole
          * @enum {string}
          */
-        AgentRole: "ADMIN" | "MANAGER" | "AGENT";
+        AgentRole: "ADMIN" | "MANAGER" | "AGENT" | "INTEGRATION";
         /** AgentUpdate */
         AgentUpdate: {
             /** Name */
@@ -984,6 +1001,28 @@ export interface components {
             offset: number;
             /** Has More */
             has_more: boolean;
+        };
+        /**
+         * IntegrationCredentialResponse
+         * @description Deliberately not AgentResponse plus a field: the secrets here must
+         *     never be echoed back by GET /agents/{agent_id}, so the two shapes stay
+         *     separate on purpose.
+         */
+        IntegrationCredentialResponse: {
+            /** Agent Id */
+            agent_id: string;
+            /** Tenant Id */
+            tenant_id: string;
+            /** Api Key */
+            api_key: string;
+            /** Kafka Username */
+            kafka_username: string;
+            /** Kafka Password */
+            kafka_password: string;
+            /** Kafka Bootstrap Servers */
+            kafka_bootstrap_servers: string;
+            /** Kafka Topic */
+            kafka_topic: string;
         };
         /** LeadDetailResponse */
         LeadDetailResponse: {
@@ -1489,6 +1528,7 @@ export interface operations {
                 group_id?: string | null;
                 source_id?: string | null;
                 q?: string | null;
+                updated_since?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -2394,6 +2434,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_integration_credential_api_v1_agents_integration_credential_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationCredentialResponse"];
                 };
             };
         };

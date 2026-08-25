@@ -61,6 +61,10 @@ class LeadResponse(BaseModel):
     status: str
     assigned_agent_id: Optional[str]
     created_at: str
+    # The cursor `?updated_since=` filters on. Without it a consumer catching
+    # up has to guess the next cursor from its own clock, and anything
+    # committed between its query and the answer falls into the gap.
+    updated_at: str
 
 class PaginatedLeadsResponse(BaseModel):
     items: List[LeadResponse]

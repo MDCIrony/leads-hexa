@@ -58,6 +58,7 @@ def _to_lead_response(lead: Lead) -> LeadResponse:
         status=lead.status.value,
         assigned_agent_id=str(lead.assigned_agent_id) if lead.assigned_agent_id else None,
         created_at=lead.created_at.isoformat(),
+        updated_at=lead.updated_at.isoformat(),
     )
 
 
