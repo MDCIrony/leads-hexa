@@ -70,7 +70,7 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         # to pre-check are covered; anything else keeps its original type and
         # reaches unhandled_exception_handler as a 500, unchanged. A message
         # consumer needs the difference: a 500 reads as "retry me", and these
-        # three will fail exactly the same way on every redelivery.
+        # four will fail exactly the same way on every redelivery.
         if isinstance(exc_val, psycopg.errors.UniqueViolation):
             raise DomainException(
                 "Ya existe un registro con ese valor", error_code="ALREADY_EXISTS"
@@ -82,6 +82,14 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         if isinstance(exc_val, psycopg.errors.NotNullViolation):
             raise DomainException(
                 "Falta un campo obligatorio", error_code="MISSING_REQUIRED_FIELD"
+            ) from exc_val
+        # Money accepts any finite non-negative amount, but leads.budget is
+        # NUMERIC(14, 2): a figure above 10^12 clears the domain and dies at
+        # the insert. Untranslated it reached the client as a 500, which reads
+        # as "try again" for a value that will overflow on every attempt.
+        if isinstance(exc_val, psycopg.errors.NumericValueOutOfRange):
+            raise DomainException(
+                "El importe excede el máximo admitido", error_code="AMOUNT_OUT_OF_RANGE"
             ) from exc_val
 
     def commit(self) -> None:

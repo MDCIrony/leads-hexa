@@ -104,3 +104,24 @@ def test_connection_returns_to_the_pool_after_a_translated_error(test_db):
             "SELECT email FROM agents WHERE tenant_id = %s", (tenant.id.value,)
         ).fetchall()
     assert {r["email"] for r in row} == {"ok@a.test"}
+
+
+def test_a_budget_beyond_the_column_is_a_domain_error_not_a_500(test_db):
+    """Money accepts any finite non-negative amount, but leads.budget is
+    NUMERIC(14, 2): a figure above 10^12 clears the domain and dies at the
+    insert. Untranslated it left through the generic handler as a 500, which a
+    client reads as "try again" for a value that overflows every time."""
+    tenant = _tenant(test_db)
+    uow = PostgresUnitOfWork(test_db)
+
+    with pytest.raises(DomainException) as exc_info:
+        with uow:
+            uow.connection.execute(
+                "INSERT INTO leads (id, tenant_id, source_id, first_name, last_name, "
+                "company, budget, industry, score, status) "
+                "VALUES (%s, %s, %s, 'A', 'B', 'C', %s, 'tech', 0, 'NEW')",
+                (uuid4(), tenant.id.value, uuid4(), 10 ** 13),
+            )
+
+    assert exc_info.value.error_code == "AMOUNT_OUT_OF_RANGE"
+    assert not isinstance(exc_info.value, psycopg.errors.NumericValueOutOfRange)
