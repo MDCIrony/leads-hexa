@@ -14,6 +14,18 @@ class IntakeRecordRepositoryPort(abc.ABC):
     def get_by_id_and_tenant(self, record_id: UUID, tenant_id: UUID) -> Optional[IntakeRecord]: ...
 
     @abc.abstractmethod
+    def claim_unpromoted(self, record_id: UUID, tenant_id: UUID) -> Optional[IntakeRecord]:
+        """Take this record for the caller's transaction, or None if it has
+        already become a lead.
+
+        The one guard against processing the same record twice at once. Two
+        concurrent runs over one job — a manual reprocess landing on a job the
+        RabbitMQ worker is already draining — used to read the same PENDING
+        rows and each create its own Lead from them: the same person, twice,
+        under two identifiers, published twice on the outbound channel where no
+        event_id can reconcile them."""
+
+    @abc.abstractmethod
     def list_by_tenant(
         self,
         tenant_id: UUID,

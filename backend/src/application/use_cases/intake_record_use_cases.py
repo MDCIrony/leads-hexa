@@ -61,6 +61,16 @@ class PromoteIntakeRecordUseCase(PromoteIntakeRecordInputPort):
     def execute(self, command: PromoteIntakeRecordCommand) -> LeadProcessedResult:
         with self.uow:
             record = _get_owned_record(self.uow, command.tenant_id, command.record_id)
+            # Refused here rather than deeper down: a manager promoting a
+            # record that already became a lead is asking for something that
+            # cannot happen, and deserves to be told. Downstream the same
+            # situation means something else entirely — a run that lost a race
+            # to a concurrent one — and there it is answered idempotently.
+            if record.status == IntakeRecordStatus.PROMOTED:
+                raise DomainException(
+                    f"Cannot promote an intake record from status {record.status.value}",
+                    error_code="INVALID_INTAKE_TRANSITION",
+                )
 
         # Same pipeline as first ingestion, over the channel the lead actually
         # arrived on (record.source_id) rather than one resolved fresh here.

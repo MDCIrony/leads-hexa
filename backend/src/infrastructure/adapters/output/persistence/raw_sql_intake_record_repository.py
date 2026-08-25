@@ -85,6 +85,21 @@ class RawSqlIntakeRecordRepository(IntakeRecordRepositoryPort):
         ).fetchone()
         return self._row_to_record(row) if row else None
 
+    def claim_unpromoted(self, record_id: UUID, tenant_id: UUID) -> Optional[IntakeRecord]:
+        # FOR UPDATE, and the status in the WHERE: a second transaction blocks
+        # here until the first commits and then re-evaluates the condition
+        # under READ COMMITTED, so it sees PROMOTED and gets nothing back
+        # instead of building a second lead from the same payload.
+        row = self.connection.execute(
+            """
+            SELECT * FROM intake_records
+            WHERE id = %s AND tenant_id = %s AND status <> 'PROMOTED'
+            FOR UPDATE
+            """,
+            (record_id, tenant_id),
+        ).fetchone()
+        return self._row_to_record(row) if row else None
+
     def list_by_tenant(
         self,
         tenant_id: UUID,

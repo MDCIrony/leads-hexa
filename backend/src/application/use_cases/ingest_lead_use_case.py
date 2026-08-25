@@ -71,7 +71,18 @@ class IngestLeadUseCase(IngestLeadInputPort):
             # The record always exists by now: ReceiveIntakeUseCase (or the
             # batch pipeline) persisted it on arrival, so this use case only
             # ever marks what already landed — it no longer creates rows.
-            record = existing_record
+            # Claimed rather than trusted: whoever calls this may be racing
+            # another run over the same job, and the loser has to find out
+            # here, before it builds a second lead out of the same payload.
+            record = self.uow.intake_records.claim_unpromoted(
+                existing_record.id.value, command.tenant_id
+            )
+            if record is None:
+                # Read inside this same transaction: opening a second one from
+                # in here would nest the unit of work, which it does not model.
+                return self._already_promoted(self.uow.intake_records.get_by_id_and_tenant(
+                    existing_record.id.value, command.tenant_id
+                ) or existing_record)
 
             try:
                 lead = Lead.create(
@@ -119,7 +130,10 @@ class IngestLeadUseCase(IngestLeadInputPort):
                     lead.qualify()
 
                     if lead.status == LeadStatus.QUALIFIED:
-                        assignment_rules = self.uow.rules.get_assignment_rules_by_tenant(lead.tenant_id.value)
+                        # Locked, not just read: this branch advances the
+                        # rotation cursor, and a plain read lets a concurrent
+                        # ingestion overwrite the increment.
+                        assignment_rules = self.uow.rules.lock_assignment_rules_by_tenant(lead.tenant_id.value)
                         available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
                         groups_by_id: Dict[UUID, SalesGroup] = {
                             group.id.value: group
@@ -170,6 +184,20 @@ class IngestLeadUseCase(IngestLeadInputPort):
             score=int(saved_lead.score),
             assigned_agent_id=str(assigned_agent.id) if assigned_agent else None,
             applied_rules_count=len(breakdown.applied),
+        )
+
+    @staticmethod
+    def _already_promoted(record: IntakeRecord) -> LeadProcessedResult:
+        """Another run got here first. Report its lead, publish nothing.
+
+        Returning the winner's identifier rather than an error is what keeps a
+        redelivered message idempotent: the caller sees the same answer it
+        would have got had it won the race."""
+        return LeadProcessedResult(
+            lead_id=str(record.lead_id.value) if record.lead_id else "",
+            intake_record_id=str(record.id),
+            status=IntakeRecordStatus.PROMOTED.value,
+            score=0,
         )
 
     def _publish_rejection(self, record: IntakeRecord, reason: Optional[str]) -> None:

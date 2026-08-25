@@ -7,6 +7,9 @@ from domain.entities.lead_source import LeadSource
 from domain.events.lead_events import LeadDisqualified
 from domain.value_objects.enums import LeadSourceKind
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import (
+    RawSqlIntakeRecordRepository,
+)
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
     RawSqlLeadSourceRepository,
 )
@@ -129,6 +132,11 @@ def test_a_full_ingestion_leaves_exactly_one_unpublished_entry(test_db):
         custom_attributes={},
     )
     existing = IntakeRecord.create(tenant_id=tenant_id, source_id=source_id, payload=payload_of(command))
+    # Persisted before the call, as the real pipeline does: the use case claims
+    # its record with a locking read, which a row that only exists in memory
+    # cannot answer.
+    with test_db.get_connection(autocommit=True) as conn:
+        RawSqlIntakeRecordRepository(conn).save(existing)
 
     result = IngestLeadUseCase(uow=PostgresUnitOfWork(test_db)).execute(command, existing_record=existing)
 
