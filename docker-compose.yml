@@ -127,7 +127,7 @@ services:
       - "9094:9094"
 
   rabbitmq:
-    image: rabbitmq:3.13-alpine
+    image: rabbitmq:3.13-management-alpine
     environment:
       # Not "guest"/"guest": RabbitMQ refuses that account outside loopback,
       # and both the backend and intake-worker reach this over the compose
@@ -138,11 +138,27 @@ services:
       # 5672 on the host, for local tooling. Other compose services reach
       # this by service name on the compose network.
       - "5672:5672"
+      # 15672: the management plugin's web console — queue depth, the DLQ, and
+      # message rates, which is what an operator actually looks at.
+      - "15672:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  kafka-ui:
+    # Reads the broker over the internal listener, where no credential is
+    # needed: this console is for whoever operates the stack, not for a tenant.
+    image: provectuslabs/kafka-ui:latest
+    environment:
+      KAFKA_CLUSTERS_0_NAME: leads
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8004:8080"
+    depends_on:
+      - kafka
 
   intake-worker:
     # Same context, dockerfile and target as `backend` (ADR-0027): reuses
