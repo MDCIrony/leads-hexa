@@ -11,6 +11,9 @@ import { TargetAgentsPicker } from './TargetAgentsPicker';
 interface AssignmentRuleEditFormProps {
   rule: AssignmentRuleModel;
   agents: AgentModel[];
+  /** Set when the rule routes to a sales team. This screen cannot change it —
+   *  there is no groups view — but hiding it made the rule look targetless. */
+  groupName?: string;
   error: string | null;
   submitting: boolean;
   onSave: (body: AssignmentRuleUpdate) => void;
@@ -18,7 +21,7 @@ interface AssignmentRuleEditFormProps {
 }
 
 /** The inline edit for one assignment rule, preloaded with its current values. */
-export function AssignmentRuleEditForm({ rule, agents, error, submitting, onSave, onCancel }: AssignmentRuleEditFormProps) {
+export function AssignmentRuleEditForm({ rule, agents, groupName, error, submitting, onSave, onCancel }: AssignmentRuleEditFormProps) {
   const [name, setName] = useState(rule.name);
   const [minScore, setMinScore] = useState(rule.minScore);
   const [noMaxScore, setNoMaxScore] = useState(rule.maxScore === null);
@@ -61,6 +64,12 @@ export function AssignmentRuleEditForm({ rule, agents, error, submitting, onSave
       <Field label="Prioridad">
         <Input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
       </Field>
+      {groupName && (
+        <p className="text-xs text-slate-400">
+          Reparte al equipo <span className="text-slate-200">{groupName}</span>. Los asesores que
+          elijas aquí se suman a ese equipo; el equipo se mantiene aunque no elijas ninguno.
+        </p>
+      )}
       <TargetAgentsPicker agents={agents} selected={targetAgentIds} onChange={setTargetAgentIds} />
       <ConditionsBuilder conditions={conditions} onChange={setConditions} />
       <div className="flex justify-end gap-2">

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatAssignmentStrategyLabel, type AssignmentRuleModel } from '../../domain/rule.model';
 import type { AgentModel } from '../../domain/agent.model';
+import type { Group } from '../../application/services/groups.service';
 import type { AssignmentRuleUpdate } from '../../application/services/rules.service';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from './ui/Button';
@@ -9,12 +10,13 @@ import { AssignmentRuleEditForm } from './AssignmentRuleEditForm';
 interface AssignmentRuleRowProps {
   rule: AssignmentRuleModel;
   agents: AgentModel[];
+  groups: Group[];
   onUpdate: (id: string, body: AssignmentRuleUpdate) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
 /** One assignment rule: view mode with toggle/delete, or the full inline editor. */
-export function AssignmentRuleRow({ rule, agents, onUpdate, onDelete }: AssignmentRuleRowProps) {
+export function AssignmentRuleRow({ rule, agents, groups, onUpdate, onDelete }: AssignmentRuleRowProps) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +35,9 @@ export function AssignmentRuleRow({ rule, agents, onUpdate, onDelete }: Assignme
   }
 
   async function handleSave(body: AssignmentRuleUpdate) {
-    if (body.target_agent_ids && body.target_agent_ids.length === 0) {
+    // A rule that routes to a team needs no named advisor: demanding one here
+    // made a group-targeted rule impossible to edit at all, not even its name.
+    if (!rule.targetGroupId && body.target_agent_ids && body.target_agent_ids.length === 0) {
       setError('Elige al menos un asesor destino.');
       return;
     }
@@ -44,11 +48,16 @@ export function AssignmentRuleRow({ rule, agents, onUpdate, onDelete }: Assignme
   // Same partial-PATCH discipline as scoring rules: a toggle sends is_active alone.
   const toggleActive = () => runAction(() => onUpdate(rule.id, { is_active: !rule.isActive }));
 
+  const targetNames = agents.filter((a) => rule.targetAgentIds.includes(a.id)).map((a) => a.name);
+  const groupName = groups.find((g) => g.id === rule.targetGroupId)?.name;
+  const target = [groupName && `equipo ${groupName}`, ...targetNames].filter(Boolean).join(', ');
+
   if (editing) {
     return (
       <AssignmentRuleEditForm
         rule={rule}
         agents={agents}
+        groupName={groupName}
         error={error}
         submitting={submitting}
         onSave={handleSave}
@@ -57,14 +66,12 @@ export function AssignmentRuleRow({ rule, agents, onUpdate, onDelete }: Assignme
     );
   }
 
-  const targetNames = agents.filter((a) => rule.targetAgentIds.includes(a.id)).map((a) => a.name);
-
   return (
     <div className="p-4 flex items-center justify-between gap-4">
       <div>
         <h4 className="font-semibold text-slate-200 text-sm">{rule.name}</h4>
         <p className="text-xs text-slate-400 font-mono">
-          {rule.minScore} – {rule.maxScore ?? '∞'} pts → {targetNames.join(', ') || 'sin asesores'}
+          {rule.minScore} – {rule.maxScore ?? '∞'} pts → {target || 'sin destino'}
         </p>
         <p className="text-xs text-slate-500 mt-0.5">
           Prioridad {rule.priority} • {rule.strategy ? formatAssignmentStrategyLabel(rule.strategy) : 'sin estrategia'}

@@ -1,5 +1,6 @@
 import * as rulesService from '../../application/services/rules.service';
 import * as agentsService from '../../application/services/agents.service';
+import * as groupsService from '../../application/services/groups.service';
 import { useAsync } from '../../application/data/use-async';
 import { usePaginated } from '../../application/data/use-paginated';
 import { AsyncView } from '../components/ui/AsyncView';
@@ -9,10 +10,14 @@ import { AssignmentRuleRow } from '../components/AssignmentRuleRow';
 
 /** Rules evaluate by priority and the list already arrives sorted that way — never re-sorted here. */
 export function AssignmentRulesPage() {
-  // Agents are the only reachable target — there's no groups view in this MVP.
-  // A failed or slow fetch shouldn't block the rules list from rendering.
+  // Agents are the only target this screen can SET — there is no groups view
+  // in this MVP. Groups are still read: a rule created through the API can
+  // point at one, and showing "sin asesores" for it made a rule that routes
+  // correctly look broken. A failed or slow fetch shouldn't block the list.
   const { data: agentsPage } = useAsync(() => agentsService.list(100, 0), []);
   const agents = agentsPage?.items ?? [];
+  const { data: groupsPage } = useAsync(() => groupsService.list(100, 0), []);
+  const groups = groupsPage?.items ?? [];
 
   const paginated = usePaginated((limit, offset) => rulesService.assignment.list(limit, offset));
 
@@ -50,6 +55,7 @@ export function AssignmentRulesPage() {
                     key={rule.id}
                     rule={rule}
                     agents={agents}
+                    groups={groups}
                     onUpdate={async (id, body) => {
                       await rulesService.assignment.update(id, body);
                       paginated.refetch();

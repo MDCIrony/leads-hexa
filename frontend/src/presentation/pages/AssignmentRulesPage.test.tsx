@@ -6,15 +6,18 @@ import { renderWithProviders } from '../../test/render';
 import { mockApiClient } from '../../test/mock-api';
 import assignmentRulesFixture from '../../test/fixtures/assignment-rules-page.json';
 import agentsPageFixture from '../../test/fixtures/agents-page.json';
+import groupsPageFixture from '../../test/fixtures/groups-page.json';
 import { AssignmentRulesPage } from './AssignmentRulesPage';
 
 const [directAgentRule] = assignmentRulesFixture.items;
 const [fixtureAgent] = agentsPageFixture.items;
+const [fixtureGroup] = groupsPageFixture.items;
 
 function mockAssignmentRules(overrides: Record<string, unknown> = {}) {
   mockApiClient({
     'GET /api/v1/rules/assignment': { data: assignmentRulesFixture },
     'GET /api/v1/agents': { data: agentsPageFixture },
+    'GET /api/v1/groups': { data: groupsPageFixture },
     ...overrides,
   });
 }
@@ -102,5 +105,44 @@ describe('AssignmentRulesPage', () => {
     await waitFor(() =>
       expect(patchSpy).toHaveBeenCalledWith(`/api/v1/rules/assignment/${directAgentRule.id}`, { is_active: false })
     );
+  });
+
+  it('names the team a rule routes to instead of calling it targetless', async () => {
+    // A rule created through the API can point at a sales group. This screen
+    // cannot set one, and it used to render "sin asesores" for it — a rule
+    // routing every lead correctly, reading as broken.
+    mockAssignmentRules({
+      'GET /api/v1/rules/assignment': {
+        data: {
+          ...assignmentRulesFixture,
+          items: [{ ...directAgentRule, target_agent_ids: [], target_group_id: fixtureGroup.id }],
+        },
+      },
+    });
+    renderWithProviders(<AssignmentRulesPage />, { role: 'MANAGER' });
+
+    expect(await screen.findByText(new RegExp(`equipo ${fixtureGroup.name}`))).toBeInTheDocument();
+  });
+
+  it('lets a team-targeted rule be saved without naming any advisor', async () => {
+    mockAssignmentRules({
+      'GET /api/v1/rules/assignment': {
+        data: {
+          ...assignmentRulesFixture,
+          items: [{ ...directAgentRule, target_agent_ids: [], target_group_id: fixtureGroup.id }],
+        },
+      },
+    });
+    const patchSpy = vi.spyOn(apiClient, 'patch').mockResolvedValue({
+      data: directAgentRule, status: 200, statusText: '', headers: {}, config: {},
+    } as never);
+    renderWithProviders(<AssignmentRulesPage />, { role: 'MANAGER' });
+
+    await screen.findByText(directAgentRule.name);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() => expect(patchSpy).toHaveBeenCalled());
+    expect(screen.queryByText('Elige al menos un asesor destino.')).not.toBeInTheDocument();
   });
 });
