@@ -697,6 +697,91 @@ verify_f41() {
   check "revocar corta el acceso" 401 "$(code "$r")"
 }
 
+# ------------------------------------------------------------------- F5 ---
+# What a real file does to the intake: cells that are empty, cells that carry
+# text where a number belongs, and an amount the column cannot hold. Every one
+# of these was found by running the demo, and none of them shows up without a
+# background task on real HTTP.
+
+verify_f5() {
+  local r job record
+  section "F5 · un fichero de verdad"
+
+  # pandas reads a blank cell as NaN, and str(NaN) is the word "nan": it used
+  # to reach the customer as a company name.
+  {
+    printf 'first_name,last_name,email,phone,company,budget,industry\n'
+    printf 'Ana,Buena,ana-%s@x.test,+34600000001,Buena SL,12000,Tech\n' "$STAMP"
+    printf 'Sin,Empresa,sin-%s@x.test,+34600000002,,9000,\n' "$STAMP"
+    printf 'Mala,Cifra,mala-%s@x.test,+34600000003,Mala SL,por determinar,Tech\n' "$STAMP"
+    printf 'Neg,Ativo,neg-%s@x.test,+34600000004,Neg SL,-500,Tech\n' "$STAMP"
+  } > "/tmp/e2e-sucio-$STAMP.csv"
+
+  r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" \
+    -F "file=@/tmp/e2e-sucio-$STAMP.csv")
+  check "el lote se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+
+  # COMPLETED, never FAILED: one bad cell used to abort the parse, and the use
+  # case reads any parse failure as an unreadable file — the two good rows
+  # disappeared with the bad ones, without a record left to show for it.
+  check "una celda mala no tumba el lote" COMPLETED "$(await_job "$MGR_A" "$job")"
+
+  r=$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")
+  check "cuatro filas contadas" 4 "$(body "$r" | f 'd.get("total_items")')"
+  check "las dos buenas entran" 2 "$(body "$r" | f 'd.get("succeeded")')"
+  check "las dos malas se rechazan, no se pierden" 2 "$(body "$r" | f 'd.get("failed")')"
+
+  r=$(req "$API/intake/records?job_id=$job&limit=50" -H "Authorization: Bearer $MGR_A")
+  check "el rechazo nombra el campo" budget \
+    "$(body "$r" | f 'next((e["field"] for i in (d.get("items") or []) for e in (i.get("errors") or [])), "")')"
+
+  r=$(req "$API/leads?q=sin-$STAMP&limit=5" -H "Authorization: Bearer $MGR_A")
+  check "una celda vacía queda vacía, no dice nan" "" \
+    "$(body "$r" | f '(d.get("items") or [{}])[0].get("company")')"
+
+  # The cursor a consumer advances with: filtering by updated_since needs the
+  # field to come back, or the client has to guess it from its own clock.
+  check "el lead trae su updated_at" True \
+    "$(body "$r" | f '(d.get("items") or [{}])[0].get("updated_at") is not None')"
+
+  r=$(req "$API/leads?updated_since=2999-01-01T00:00:00Z" -H "Authorization: Bearer $MGR_A")
+  check "updated_since filtra de verdad" 0 "$(body "$r" | f 'd.get("total")')"
+
+  section "F5 · lo que el dominio no llega a ver"
+
+  r=$(req "$API/intake/records?status=REJECTED&job_id=$job&limit=5" -H "Authorization: Bearer $MGR_A")
+  record=$(body "$r" | f '(d.get("items") or [{}])[0].get("id") or ""')
+
+  # Above NUMERIC(14,2). Money accepts it, the column does not: untranslated it
+  # left as a 500, which a client reads as "retry me" for a value that fails
+  # identically on every attempt.
+  r=$(req -X POST "$API/intake/records/$record/promote" -H "Authorization: Bearer $MGR_A" \
+    -H 'Content-Type: application/json' \
+    -d "{\"payload\":{\"first_name\":\"Enorme\",\"last_name\":\"Cifra\",\"email\":\"enorme-$STAMP@x.test\",\"company\":\"X\",\"industry\":\"Tech\",\"budget\":9999999999999}}")
+  check "un importe fuera de rango es 400, no 500" 400 "$(code "$r")"
+  check "y lleva su código" AMOUNT_OUT_OF_RANGE "$(body "$r" | f 'd.get("error_code")')"
+
+  r=$(req -X POST "$API/intake/records/$record/promote" -H "Authorization: Bearer $MGR_A" \
+    -H 'Content-Type: application/json' \
+    -d "{\"payload\":{\"first_name\":\"Cifra\",\"last_name\":\"Corregida\",\"email\":\"corregida-$STAMP@x.test\",\"company\":\"X\",\"industry\":\"Tech\",\"budget\":15000}}")
+  check "corregido, el registro promociona" 200 "$(code "$r")"
+
+  # Not idempotent here on purpose: a manager asking for something that already
+  # happened deserves to be told, and no second lead appears either way.
+  r=$(req -X POST "$API/intake/records/$record/promote" -H "Authorization: Bearer $MGR_A" \
+    -H 'Content-Type: application/json' \
+    -d "{\"payload\":{\"first_name\":\"Cifra\",\"last_name\":\"Corregida\",\"email\":\"corregida-$STAMP@x.test\",\"company\":\"X\",\"industry\":\"Tech\",\"budget\":15000}}")
+  check "promocionar dos veces se rechaza" 400 "$(code "$r")"
+  check "con la transición nombrada" INVALID_INTAKE_TRANSITION "$(body "$r" | f 'd.get("error_code")')"
+
+  r=$(req "$API/leads?q=corregida-$STAMP&limit=5" -H "Authorization: Bearer $MGR_A")
+  check "y no aparece un segundo lead" 1 "$(body "$r" | f 'd.get("total")')"
+
+  rm -f "/tmp/e2e-sucio-$STAMP.csv"
+}
+
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -718,6 +803,7 @@ verify_f2c
 verify_f3a
 verify_f31
 verify_f41
+verify_f5
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then
