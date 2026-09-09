@@ -142,7 +142,9 @@ services:
       # message rates, which is what an operator actually looks at.
       - "15672:15672"
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # `ping` only proves that the Erlang node is alive; it can succeed before
+      # AMQP starts listening and release the worker into a failed cold start.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 5s
       timeout: 5s
       retries: 5

@@ -36,6 +36,8 @@ curl http://localhost:8001/health
 | Interfaz web · desarrollo | <http://localhost:5173> con `cd frontend && npm run dev` |
 | Documentación | <http://localhost:8002> |
 | PostgreSQL | `localhost:5433` |
+| RabbitMQ · AMQP / consola | `localhost:5672` / <http://localhost:15672> |
+| Kafka · clientes externos / consola | `localhost:9094` / <http://localhost:8004> |
 
 El primer usuario se crea sin autenticación y recibe el rol de administrador de plataforma; a partir
 de ahí todo exige credencial. El recorrido completo —crear la organización, su gestor, y el primer
@@ -103,11 +105,14 @@ bandeja con el desglose de por qué le tocó.
 | Bandeja de revisión y reproceso | Disponible |
 | Avisos internos con contador de no leídos | Disponible |
 | Interfaz web para los tres roles | Disponible |
+| Trabajo durable en segundo plano con RabbitMQ | Disponible |
+| Eventos por organización mediante Kafka | Disponible |
 | Integración entrante firmada | [Hoja de ruta](docs/content/roadmap/webhook-entrante.md) |
 
-Lo que no está, no está por decisión: deduplicación de contactos, constructor visual de reglas y colas
-reales se discutieron y se dejaron fuera, cada uno con su razón escrita en la
-[hoja de ruta](docs/content/roadmap/).
+Lo que no está, no está por decisión: deduplicación de contactos y constructor visual de reglas se
+discutieron y se dejaron fuera, cada uno con su razón escrita en la
+[hoja de ruta](docs/content/roadmap/). El trabajo en segundo plano usa RabbitMQ y los eventos de
+producto salen por Kafka; su operación está documentada en [eventos](docs/content/eventos/).
 
 ## Presentación
 
