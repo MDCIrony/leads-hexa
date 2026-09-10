@@ -40,7 +40,9 @@ print($1)
 }
 
 login() {
-  curl -s -X POST "$API/auth/login" -d "username=$1&password=$2" |
+  curl -s -X POST "$API/auth/login" \
+    --data-urlencode "username=$1" \
+    --data-urlencode "password=$2" |
     python3 -c 'import sys,json;print(json.load(sys.stdin).get("access_token",""))'
 }
 
@@ -92,22 +94,26 @@ bootstrap() {
   [ -n "$ADMIN_TOKEN" ] || { printf '  \033[31m✗ sin token de admin: abortando\033[0m\n'; exit 1; }
 
   r=$(req -X POST "$API/tenants" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
-    -d "{\"name\":\"OrgA-$STAMP\",\"manager\":{\"name\":\"MgrA\",\"email\":\"mgr-a-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\"}}")
+    -d "{\"name\":\"OrgA-$STAMP\",\"manager\":{\"name\":\"MgrA\",\"email\":\"  MGR-A-$STAMP@X.TEST  \",\"password\":\"$ADMIN_PASS\"}}")
   check "organización A creada" 201 "$(code "$r")"
+  check "correo del gestor canonicalizado" "mgr-a-$STAMP@x.test" "$(body "$r" | f 'd["manager"]["email"]')"
   TENANT_A=$(body "$r" | f 'd["id"]')
-  MGR_A=$(login "mgr-a-$STAMP@x.test" "$ADMIN_PASS")
+  MGR_A=$(login " mGr-A-$STAMP@x.Test " "$ADMIN_PASS")
+  check "gestor entra con correo normalizado" True "$(test -n "$MGR_A" && printf True || printf False)"
 
   r=$(req -X POST "$API/agents/" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
-    -d "{\"name\":\"Uno\",\"email\":\"uno-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
+    -d "{\"name\":\"Uno\",\"email\":\"  UNO-$STAMP@X.TEST  \",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
   AGENT_1=$(body "$r" | f 'd["id"]')
   check "asesor uno" 201 "$(code "$r")"
+  check "correo del asesor canonicalizado" "uno-$STAMP@x.test" "$(body "$r" | f 'd["email"]')"
 
   r=$(req -X POST "$API/agents/" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
     -d "{\"name\":\"Dos\",\"email\":\"dos-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
   AGENT_2=$(body "$r" | f 'd["id"]')
   check "asesor dos" 201 "$(code "$r")"
 
-  TOKEN_1=$(login "uno-$STAMP@x.test" "$ADMIN_PASS")
+  TOKEN_1=$(login " uNo-$STAMP@X.Test " "$ADMIN_PASS")
+  check "asesor entra con correo normalizado" True "$(test -n "$TOKEN_1" && printf True || printf False)"
   TOKEN_2=$(login "dos-$STAMP@x.test" "$ADMIN_PASS")
 
   # Second organization: the control that proves isolation.
@@ -120,6 +126,25 @@ bootstrap() {
     -d "{\"name\":\"Beto\",\"email\":\"beto-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
   AGENT_B=$(body "$r" | f 'd["id"]')
   check "asesor de la organización B" 201 "$(code "$r")"
+}
+
+# -------------------------------------------------------------------- F0 ---
+# Email identity is canonical globally: it is the login key, not a label a
+# different organization may reuse.
+
+verify_f0_identity() {
+  local r
+  section "F0 · identidad por correo"
+
+  r=$(req -X POST "$API/agents/" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"Duplicado A\",\"email\":\" uNo-$STAMP@x.test \",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
+  check "duplicado normalizado en la misma organización" 400 "$(code "$r")"
+  check "duplicado local informa su código" EMAIL_ALREADY_EXISTS "$(body "$r" | f 'd.get("error_code")')"
+
+  r=$(req -X POST "$API/agents/" -H "Authorization: Bearer $MGR_B" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"Duplicado B\",\"email\":\"UNO-$STAMP@X.TEST\",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
+  check "duplicado normalizado en otra organización" 400 "$(code "$r")"
+  check "duplicado global informa su código" EMAIL_ALREADY_EXISTS "$(body "$r" | f 'd.get("error_code")')"
 }
 
 # ------------------------------------------------------------------- F2a ---
@@ -796,6 +821,7 @@ if [ "${1:-}" = "--reset" ]; then
 fi
 
 bootstrap
+verify_f0_identity
 verify_f2a
 verify_f2b
 verify_f2d
