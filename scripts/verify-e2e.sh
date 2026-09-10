@@ -3,7 +3,7 @@
 # End-to-end business verification against a running stack.
 #
 # This is the trust harness: it asserts what the pytest suite cannot, namely
-# that the whole circuit behaves over real HTTP with real tokens. It is meant to
+# that the whole circuit behaves over real HTTP with real sessions. It is meant to
 # GROW — each phase appends its own verify_fN function and calls it from main.
 # Never rewrite it from scratch; extend it.
 #
@@ -22,7 +22,34 @@ FAILURES=0
 
 # ---------------------------------------------------------------- helpers ---
 
-req() { curl -s -w '\n%{http_code}' "$@"; }
+req() {
+  local args=() arg session
+  while [ "$#" -gt 0 ]; do
+    arg=$1
+    if [ "$arg" = "-H" ] && [ "$#" -ge 2 ] && [[ "$2" == 'Authorization: Bearer '* ]]; then
+      session=${2#Authorization: Bearer }
+      if [ -f "$session" ]; then
+        args+=(-b "$session")
+      else
+        args+=(-H "$2")
+      fi
+      shift 2
+      continue
+    fi
+    if [[ "$arg" == 'Authorization: Bearer '* ]]; then
+      session=${arg#Authorization: Bearer }
+      if [ -f "$session" ]; then
+        args+=(-b "$session")
+      else
+        args+=("$arg")
+      fi
+    else
+      args+=("$arg")
+    fi
+    shift
+  done
+  curl -s -w '\n%{http_code}' "${args[@]}"
+}
 code() { printf '%s' "$1" | tail -1; }
 body() { printf '%s' "$1" | sed '$d'; }
 
@@ -40,10 +67,17 @@ print($1)
 }
 
 login() {
-  curl -s -X POST "$API/auth/login" \
+  local jar body_file status
+  jar=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.cookies")
+  body_file="${jar}.login"
+  status=$(curl -s -o "$body_file" -w '%{http_code}' -c "$jar" -X POST "$API/auth/login" \
     --data-urlencode "username=$1" \
-    --data-urlencode "password=$2" |
-    python3 -c 'import sys,json;print(json.load(sys.stdin).get("access_token",""))'
+    --data-urlencode "password=$2")
+  if [[ "$status" =~ ^2 ]] && grep -q $'\tleads_session\t' "$jar"; then
+    printf '%s' "$jar"
+  else
+    rm -f "$jar" "$body_file"
+  fi
 }
 
 # check <description> <expected> <actual>
@@ -58,7 +92,7 @@ check() {
 
 section() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 
-# await_job <token> <job_id> — waits until a job reaches a terminal status.
+# await_job <session> <job_id> — waits until a job reaches a terminal status.
 # Bounded polling, never a fixed sleep: a short one makes the harness flaky,
 # a long one makes it useless. Unlike TestClient in the pytest suite, this
 # script talks to a real running container, where the background task genuinely
@@ -91,7 +125,7 @@ bootstrap() {
     *) printf '  · admin de plataforma ya existía\n' ;;
   esac
   ADMIN_TOKEN=$(login root@plat.test "$ADMIN_PASS")
-  [ -n "$ADMIN_TOKEN" ] || { printf '  \033[31m✗ sin token de admin: abortando\033[0m\n'; exit 1; }
+  [ -n "$ADMIN_TOKEN" ] || { printf '  \033[31m✗ sin sesión de admin: abortando\033[0m\n'; exit 1; }
 
   r=$(req -X POST "$API/tenants" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
     -d "{\"name\":\"OrgA-$STAMP\",\"manager\":{\"name\":\"MgrA\",\"email\":\"  MGR-A-$STAMP@X.TEST  \",\"password\":\"$ADMIN_PASS\"}}")
