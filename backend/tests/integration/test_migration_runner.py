@@ -1,4 +1,8 @@
 from pathlib import Path
+from uuid import uuid4
+
+import psycopg
+import pytest
 
 from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
 
@@ -44,3 +48,33 @@ def test_creates_the_expected_tables(test_db):
         "leads", "scoring_rules", "agents", "webhook_configs",
         "sales_groups", "assignment_rules",
     } <= names
+
+
+def test_email_normalization_migration_rolls_back_historical_collisions(test_db):
+    migration = (_MIGRATIONS_DIR / "011_normalize_agent_emails.sql").read_text(encoding="utf-8")
+    first_id, second_id = uuid4(), uuid4()
+
+    with test_db.get_connection(autocommit=True) as conn:
+        conn.execute("DROP INDEX IF EXISTS idx_agents_email_normalized")
+        conn.execute(
+            "INSERT INTO agents (id, name, email, is_active, role, tenant_id) VALUES (%s, %s, %s, %s, %s, %s)",
+            (first_id, "First", " Legacy@Example.Test ", True, "AGENT", uuid4()),
+        )
+        conn.execute(
+            "INSERT INTO agents (id, name, email, is_active, role, tenant_id) VALUES (%s, %s, %s, %s, %s, %s)",
+            (second_id, "Second", "legacy@example.test", True, "AGENT", uuid4()),
+        )
+        try:
+            with pytest.raises(psycopg.errors.RaiseException, match="duplicate normalized email") as exc_info:
+                conn.execute(migration)
+            conn.execute("ROLLBACK")
+
+            assert "legacy@example.test" in str(exc_info.value)
+            emails = conn.execute(
+                "SELECT email FROM agents WHERE id IN (%s, %s) ORDER BY id", (first_id, second_id)
+            ).fetchall()
+            assert {row["email"] for row in emails} == {" Legacy@Example.Test ", "legacy@example.test"}
+            assert conn.execute("SELECT to_regclass('public.idx_agents_email_normalized') AS name").fetchone()["name"] is None
+        finally:
+            conn.execute("DELETE FROM agents WHERE id IN (%s, %s)", (first_id, second_id))
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_email_normalized ON agents (lower(email))")

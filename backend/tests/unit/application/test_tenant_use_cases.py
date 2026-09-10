@@ -76,6 +76,17 @@ class TestCreateTenant:
         with pytest.raises(DomainException):
             use_case.execute(_command(name="Other Corp"))
 
+    def test_normalizes_the_manager_email_and_rejects_its_normalized_duplicate(self):
+        uow = _uow()
+        use_case = CreateTenantUseCase(uow=uow, password_hasher=FakePasswordHasher())
+
+        result = use_case.execute(_command(email="  Ana@Acme.Test "))
+
+        assert result.manager.email == "ana@acme.test"
+        with pytest.raises(DomainException) as exc_info:
+            use_case.execute(_command(name="Other Corp", email="ANA@acme.test"))
+        assert exc_info.value.error_code == "EMAIL_ALREADY_EXISTS"
+
     def test_a_rejected_creation_leaves_no_organization_behind(self):
         """Both writes share one transaction: a failed manager must not leave an
         unreachable organization."""

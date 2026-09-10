@@ -2,6 +2,7 @@ from application.ports.input.auth_use_case_port import LoginInputPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.token_service_port import TokenClaims, TokenServicePort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from domain.entities.agent import normalize_email
 from domain.exceptions import InvalidCredentialsException
 from domain.value_objects.enums import AgentRole
 
@@ -19,7 +20,7 @@ class LoginUseCase(LoginInputPort):
 
     def execute(self, email: str, password: str) -> str:
         with self.uow:
-            agent = self.uow.agents.get_by_email(email)
+            agent = self.uow.agents.get_by_email(normalize_email(email))
 
         # One exception for every failure path: a caller must not be able to
         # tell an unknown account from a wrong password. INTEGRATION is

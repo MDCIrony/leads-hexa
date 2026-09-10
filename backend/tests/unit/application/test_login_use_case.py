@@ -46,6 +46,14 @@ def test_login_succeeds_with_correct_credentials():
     assert isinstance(token, str) and token
 
 
+def test_login_normalizes_email_before_lookup():
+    use_case, _ = _build_use_case("manager@test.com", "correct-password")
+
+    token = use_case.execute(email="  MANAGER@Test.Com ", password="correct-password")
+
+    assert isinstance(token, str) and token
+
+
 def test_issued_token_carries_the_agent_identity_role_and_tenant():
     """The claims are the contract the API layer relies on to build the
     request context, so they are asserted explicitly."""

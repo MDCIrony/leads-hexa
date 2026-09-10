@@ -8,6 +8,10 @@ from domain.value_objects.tenant_id import TenantId
 from domain.value_objects.enums import AgentRole
 
 
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
 @dataclass
 class Agent:
     id: AgentId
@@ -50,11 +54,10 @@ class Agent:
         return cls(
             id=aid,
             name=name,
-            email=email,
+            email=normalize_email(email),
             group_id=gid,
             is_active=is_active,
             role=agent_role,
             hashed_password=hashed_password,
             tenant_id=tid,
         )
-

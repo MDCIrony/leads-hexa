@@ -1,5 +1,8 @@
 from uuid import uuid4
 
+import psycopg
+import pytest
+
 from domain.entities.agent import Agent
 from domain.entities.sales_group import SalesGroup
 from domain.entities.tenant import Tenant
@@ -127,5 +130,19 @@ def test_get_available_agents_excludes_the_integration_credential(test_db):
         found = repo.get_available_agents(_TENANT_A)
         assert len(found) == 2
         assert {a.email for a in found} == {"a1@a.test", "a2@a.test"}
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_email_lookup_is_case_insensitive_and_unique_globally(test_db):
+    ctx = test_db.get_connection(autocommit=True)
+    conn = ctx.__enter__()
+    try:
+        repo = RawSqlAgentRepository(conn)
+        first = repo.save(Agent.create("A", "  Agent@Acme.Test ", tenant_id=uuid4()))
+
+        assert repo.get_by_email("AGENT@acme.test").id == first.id
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            repo.save(Agent.create("B", "agent@ACME.test", tenant_id=uuid4()))
     finally:
         ctx.__exit__(None, None, None)

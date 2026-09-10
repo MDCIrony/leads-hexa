@@ -68,6 +68,18 @@ def test_create_agent_defaults_role_to_agent_and_tenant_to_none():
     assert saved.tenant_id is None
 
 
+def test_create_agent_normalizes_email_and_rejects_its_normalized_duplicate():
+    uow = _uow()
+    use_case = CreateAgentUseCase(uow=uow, password_hasher=FakePasswordHasher())
+
+    saved = use_case.execute(CreateAgentCommand(name="Jane", email="  Jane@Example.Test ", password="x"))
+
+    assert saved.email == "jane@example.test"
+    with pytest.raises(DomainException) as exc_info:
+        use_case.execute(CreateAgentCommand(name="Other", email="JANE@example.test", password="x"))
+    assert exc_info.value.error_code == "EMAIL_ALREADY_EXISTS"
+
+
 class TestUpdateAgent:
     def test_moves_an_agent_to_another_group_of_the_same_organization(self):
         uow = _uow()

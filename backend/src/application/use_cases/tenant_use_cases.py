@@ -13,7 +13,7 @@ from application.ports.input.tenant_use_case_ports import (
 )
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.entities.agent import Agent
+from domain.entities.agent import Agent, normalize_email
 from domain.entities.lead_source import LeadSource
 from domain.entities.tenant import Tenant, slugify
 from domain.exceptions import DomainException
@@ -31,13 +31,14 @@ class CreateTenantUseCase(CreateTenantInputPort):
         self.password_hasher = password_hasher
 
     def execute(self, command: CreateTenantCommand) -> TenantWithManagerResult:
+        manager_email = normalize_email(command.manager_email)
         with self.uow:
             if self.uow.tenants.get_by_slug(slugify(command.name)):
                 raise DomainException(
                     "Ya existe una organización con ese nombre",
                     error_code="TENANT_ALREADY_EXISTS",
                 )
-            if self.uow.agents.get_by_email(command.manager_email):
+            if self.uow.agents.get_by_email(manager_email):
                 raise DomainException(
                     "Ya existe un usuario con ese correo electrónico",
                     error_code="EMAIL_ALREADY_EXISTS",
@@ -57,7 +58,7 @@ class CreateTenantUseCase(CreateTenantInputPort):
             manager = self.uow.agents.save(
                 Agent.create(
                     name=command.manager_name,
-                    email=command.manager_email,
+                    email=manager_email,
                     role=AgentRole.MANAGER,
                     hashed_password=self.password_hasher.hash(command.manager_password),
                     tenant_id=tenant.id,

@@ -37,7 +37,7 @@ class InMemoryAgentRepository(AgentRepositoryPort):
         return len(self._filter_by_group(agents, group_id))
 
     def get_by_email(self, email: str) -> Optional[Agent]:
-        return next((a for a in self.agents.values() if a.email == email), None)
+        return next((a for a in self.agents.values() if a.email.lower() == email.lower()), None)
 
     def count(self) -> int:
         return len(self.agents)

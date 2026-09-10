@@ -24,7 +24,7 @@ from application.ports.output.messaging_credential_provisioner_port import (
 )
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.entities.agent import Agent
+from domain.entities.agent import Agent, normalize_email
 from domain.exceptions import AgentNotFoundException, DomainException
 from domain.value_objects.enums import AgentRole
 from domain.value_objects.group_id import GroupId
@@ -68,15 +68,16 @@ class CreateAgentUseCase(CreateAgentInputPort):
         self.password_hasher = password_hasher
 
     def execute(self, command: CreateAgentCommand) -> Agent:
+        email = normalize_email(command.email)
         with self.uow:
-            if self.uow.agents.get_by_email(command.email):
+            if self.uow.agents.get_by_email(email):
                 raise DomainException(
                     "Ya existe un usuario con ese correo electrónico",
                     error_code="EMAIL_ALREADY_EXISTS",
                 )
             agent = Agent.create(
                 name=command.name,
-                email=command.email,
+                email=email,
                 group_id=command.group_id,
                 is_active=command.is_active,
                 role=command.role,

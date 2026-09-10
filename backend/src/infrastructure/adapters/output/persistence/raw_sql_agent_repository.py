@@ -96,7 +96,7 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         return row["count"]
 
     def get_by_email(self, email: str) -> Optional[Agent]:
-        cursor = self.connection.execute("SELECT * FROM agents WHERE email = %s", (email,))
+        cursor = self.connection.execute("SELECT * FROM agents WHERE lower(email) = lower(%s)", (email,))
         r = cursor.fetchone()
         return self._row_to_agent(r) if r else None
 
