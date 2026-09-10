@@ -1,8 +1,8 @@
 {
-  "id": "e799831a-1d3e-4335-8e96-a31dd051ee87",
+  "id": "05891528-e388-4a1c-9f43-02bc52259f99",
   "name": "Fixture Manager",
-  "email": "mgr-1786390701184@fixtures.test",
+  "email": "mgr-1789001696214@fixtures.test",
   "role": "MANAGER",
-  "tenant_id": "3fde8067-83d8-4cc0-89b1-1a321e35db85",
-  "tenant_name": "Fixtures Org 1786390701184"
+  "tenant_id": "b7e57ed3-c2a3-4b24-b0f4-a33ad97ae043",
+  "tenant_name": "Fixtures Org 1789001696214"
 }

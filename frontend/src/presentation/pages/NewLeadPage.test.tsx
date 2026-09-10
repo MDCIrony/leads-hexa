@@ -73,10 +73,10 @@ describe('NewLeadPage outcomes', () => {
   it('waits for the terminal job state before declaring an outcome', async () => {
     mockApiClient({
       'POST /api/v1/intake/leads/ingest': { status: 202, data: intakeAcceptedFixture },
-      'GET /api/v1/intake/jobs/de88f66a-ff78-4630-bf2a-e1afcc6f387e': { data: intakeJobCompletedFixture },
+      [`GET /api/v1/intake/jobs/${intakeAcceptedFixture.job_id}`]: { data: intakeJobCompletedFixture },
       'GET /api/v1/intake/records': { data: recordsPage() },
-      'GET /api/v1/leads/02447540-bc70-4f39-9a2b-42c2c4adf7b7': { data: leadDetailFixture },
-      'GET /api/v1/agents/cdc44a50-543b-4bf1-91f6-1abbaf16a94f': { data: agentsPageFixture.items[0] },
+      [`GET /api/v1/leads/${leadDetailFixture.id}`]: { data: leadDetailFixture },
+      [`GET /api/v1/agents/${agentsPageFixture.items[0].id}`]: { data: agentsPageFixture.items[0] },
     });
     renderWithProviders(<NewLeadPage />, { role: 'MANAGER' });
 
@@ -97,9 +97,9 @@ describe('NewLeadPage outcomes', () => {
     const unassignedLead = { ...leadDetailFixture, status: 'UNASSIGNED', assigned_agent_id: null, assigned_at: null };
     mockApiClient({
       'POST /api/v1/intake/leads/ingest': { status: 202, data: intakeAcceptedFixture },
-      'GET /api/v1/intake/jobs/de88f66a-ff78-4630-bf2a-e1afcc6f387e': { data: intakeJobCompletedFixture },
+      [`GET /api/v1/intake/jobs/${intakeAcceptedFixture.job_id}`]: { data: intakeJobCompletedFixture },
       'GET /api/v1/intake/records': { data: recordsPage() },
-      'GET /api/v1/leads/02447540-bc70-4f39-9a2b-42c2c4adf7b7': { data: unassignedLead },
+      [`GET /api/v1/leads/${leadDetailFixture.id}`]: { data: unassignedLead },
     });
     renderWithProviders(<NewLeadPage />, { role: 'MANAGER' });
 
@@ -120,9 +120,9 @@ describe('NewLeadPage outcomes', () => {
     };
     mockApiClient({
       'POST /api/v1/intake/leads/ingest': { status: 202, data: intakeAcceptedFixture },
-      'GET /api/v1/intake/jobs/de88f66a-ff78-4630-bf2a-e1afcc6f387e': { data: intakeJobCompletedFixture },
+      [`GET /api/v1/intake/jobs/${intakeAcceptedFixture.job_id}`]: { data: intakeJobCompletedFixture },
       'GET /api/v1/intake/records': { data: recordsPage() },
-      'GET /api/v1/leads/02447540-bc70-4f39-9a2b-42c2c4adf7b7': { data: disqualifiedLead },
+      [`GET /api/v1/leads/${leadDetailFixture.id}`]: { data: disqualifiedLead },
     });
     renderWithProviders(<NewLeadPage />, { role: 'MANAGER' });
 
@@ -136,7 +136,7 @@ describe('NewLeadPage outcomes', () => {
   it('shows the per-field reason for a rejected record', async () => {
     mockApiClient({
       'POST /api/v1/intake/leads/ingest': { status: 202, data: intakeAcceptedFixture },
-      'GET /api/v1/intake/jobs/de88f66a-ff78-4630-bf2a-e1afcc6f387e': { data: intakeJobCompletedFixture },
+      [`GET /api/v1/intake/jobs/${intakeAcceptedFixture.job_id}`]: { data: intakeJobCompletedFixture },
       'GET /api/v1/intake/records': {
         data: recordsPage({
           status: 'REJECTED',

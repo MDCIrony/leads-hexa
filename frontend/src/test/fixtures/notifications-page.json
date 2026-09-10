@@ -1,13 +1,13 @@
 {
   "items": [
     {
-      "id": "2ee268ae-0056-4555-82b9-c3d49f9f8fde",
+      "id": "53daa35a-b9b9-4f8b-a672-e1a2d7c57435",
       "kind": "LEAD_ASSIGNED",
       "message": "Tienes un lead nuevo asignado",
-      "lead_id": "02447540-bc70-4f39-9a2b-42c2c4adf7b7",
+      "lead_id": "551f3ea4-06f0-452b-84d3-3e4031b8f3f8",
       "intake_record_id": null,
       "is_read": false,
-      "created_at": "2026-08-10T19:38:22.833230Z"
+      "created_at": "2026-09-10T00:54:57.875115Z"
     }
   ],
   "total": 1,

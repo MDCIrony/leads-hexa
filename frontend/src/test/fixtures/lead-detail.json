@@ -1,10 +1,10 @@
 {
-  "id": "02447540-bc70-4f39-9a2b-42c2c4adf7b7",
-  "tenant_id": "3fde8067-83d8-4cc0-89b1-1a321e35db85",
-  "source_id": "768f63d3-5b41-40d7-aff1-25dd0f9537ca",
+  "id": "551f3ea4-06f0-452b-84d3-3e4031b8f3f8",
+  "tenant_id": "b7e57ed3-c2a3-4b24-b0f4-a33ad97ae043",
+  "source_id": "53aaf96e-ff17-4e03-adce-d6bbf531fd2a",
   "first_name": "Marta",
   "last_name": "Iglesias",
-  "email": "marta-1786390701184@northwind.test",
+  "email": "marta-1789001696214@northwind.test",
   "company": "Northwind",
   "budget": 42000,
   "industry": "Technology",
@@ -13,20 +13,20 @@
   "score": 40,
   "score_breakdown": [
     {
-      "rule_id": "49571876-6e2e-4305-8dd1-4e56da8c400e",
-      "name": "Presupuesto alto 1786390701184",
+      "rule_id": "6ef972a1-7ed5-425f-9d1b-22951360feaf",
+      "name": "Presupuesto alto 1789001696214",
       "score_delta": 25
     },
     {
-      "rule_id": "e6f800cd-674b-4e23-9789-aa990c3e6a17",
-      "name": "Sector tecnologico 1786390701184",
+      "rule_id": "6e44cbea-6b3e-462d-9bff-6e6b012976da",
+      "name": "Sector tecnologico 1789001696214",
       "score_delta": 15
     }
   ],
   "status": "ASSIGNED",
-  "assigned_agent_id": "cdc44a50-543b-4bf1-91f6-1abbaf16a94f",
-  "assigned_at": "2026-08-10T19:38:22.828318+00:00",
+  "assigned_agent_id": "2b2985b9-8ad9-4fbe-981e-8ca9f2916898",
+  "assigned_at": "2026-09-10T00:54:57.870751+00:00",
   "discard_reason": null,
   "disqualification_reason": null,
-  "created_at": "2026-08-10T19:38:22.821565+00:00"
+  "created_at": "2026-09-10T00:54:57.866833+00:00"
 }

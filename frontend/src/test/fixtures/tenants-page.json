@@ -1,52 +1,52 @@
 {
   "items": [
     {
-      "id": "3fde8067-83d8-4cc0-89b1-1a321e35db85",
-      "name": "Fixtures Org 1786390701184",
-      "slug": "fixtures-org-1786390701184",
+      "id": "b7e57ed3-c2a3-4b24-b0f4-a33ad97ae043",
+      "name": "Fixtures Org 1789001696214",
+      "slug": "fixtures-org-1789001696214",
       "is_active": true,
-      "created_at": "2026-08-10T19:38:21.477205+00:00",
+      "created_at": "2026-09-10T00:54:56.501009+00:00",
       "agent_count": 2,
       "manager": null
     },
     {
-      "id": "bdfc3065-80de-4601-9220-0e57e1842dbb",
-      "name": "Verify Org 1786389173",
-      "slug": "verify-org-1786389173",
+      "id": "ab02c186-4683-4452-92ae-c49ed9183713",
+      "name": "OrgB-1789001586",
+      "slug": "orgb-1789001586",
       "is_active": true,
-      "created_at": "2026-08-10T19:12:53.675157+00:00",
+      "created_at": "2026-09-10T00:53:08.486947+00:00",
+      "agent_count": 2,
+      "manager": null
+    },
+    {
+      "id": "9fb4c05e-4923-43ec-93b2-7a4e6ebc34e4",
+      "name": "OrgA-1789001586",
+      "slug": "orga-1789001586",
+      "is_active": true,
+      "created_at": "2026-09-10T00:53:06.900665+00:00",
+      "agent_count": 3,
+      "manager": null
+    },
+    {
+      "id": "ee8cae33-6ba2-44f5-8054-cb810d8cf7b0",
+      "name": "Y-1789001564",
+      "slug": "y-1789001564",
+      "is_active": true,
+      "created_at": "2026-09-10T00:52:44.807062+00:00",
       "agent_count": 1,
       "manager": null
     },
     {
-      "id": "feb367ee-2b3a-4fe0-b7be-e713574e7fdf",
-      "name": "Fixtures Org 1786388466241",
-      "slug": "fixtures-org-1786388466241",
+      "id": "a440c251-da9b-45d4-ab3f-eea5a40eda72",
+      "name": "X-1789001564",
+      "slug": "x-1789001564",
       "is_active": true,
-      "created_at": "2026-08-10T19:01:06.549633+00:00",
-      "agent_count": 2,
-      "manager": null
-    },
-    {
-      "id": "df2e68ca-57e7-4bf4-b276-787f27b6d307",
-      "name": "Fixtures Org 1786388341645",
-      "slug": "fixtures-org-1786388341645",
-      "is_active": true,
-      "created_at": "2026-08-10T18:59:02.030869+00:00",
-      "agent_count": 2,
-      "manager": null
-    },
-    {
-      "id": "71b73c34-8a8f-40d0-aad2-1de7faed0ef9",
-      "name": "Fixtures Org 1786388076907",
-      "slug": "fixtures-org-1786388076907",
-      "is_active": true,
-      "created_at": "2026-08-10T18:54:37.186148+00:00",
-      "agent_count": 2,
+      "created_at": "2026-09-10T00:52:44.568744+00:00",
+      "agent_count": 1,
       "manager": null
     }
   ],
-  "total": 241,
+  "total": 329,
   "limit": 5,
   "offset": 0,
   "has_more": true

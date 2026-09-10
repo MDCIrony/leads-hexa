@@ -12,7 +12,7 @@ const PASSWORD = 'Secret123';
 
 async function call(method, url, { token, body, form } = {}) {
   const headers = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers.Cookie = token;
   let payload;
   if (form) {
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
@@ -23,7 +23,8 @@ async function call(method, url, { token, body, form } = {}) {
   }
   const res = await fetch(`${BASE}${url}`, { method, headers, body: payload });
   const data = await res.json().catch(() => null);
-  return { status: res.status, data };
+  const setCookie = res.headers.get('set-cookie');
+  return { status: res.status, data, cookie: setCookie?.split(';', 1)[0] };
 }
 
 async function save(name, value) {
@@ -32,8 +33,9 @@ async function save(name, value) {
 }
 
 async function login(email, password) {
-  const { data } = await call('POST', '/auth/login', { form: { username: email, password } });
-  return data.access_token;
+  const { cookie } = await call('POST', '/auth/login', { form: { username: email, password } });
+  if (!cookie) throw new Error(`login did not set a session cookie for ${email}`);
+  return cookie;
 }
 
 // Bounded polling, same reasoning as scripts/verify-e2e.sh: processing runs
@@ -64,7 +66,8 @@ async function main() {
   const managerEmail = tenant.data.manager.email;
   const loginResponse = await call('POST', '/auth/login', { form: { username: managerEmail, password: PASSWORD } });
   await save('login.json', loginResponse.data);
-  const managerToken = loginResponse.data.access_token;
+  const managerToken = loginResponse.cookie;
+  if (!managerToken) throw new Error('manager login did not set a session cookie');
   await save('me-manager.json', (await call('GET', '/auth/me', { token: managerToken })).data);
 
   const agent = await call('POST', '/agents', {

@@ -19,7 +19,7 @@ describe('mapAssignmentRule', () => {
   it('maps a real AssignmentRuleResponse, including target and strategy', () => {
     const rule = mapAssignmentRule(assignmentRulesPage.items[0] as components['schemas']['AssignmentRuleResponse']);
 
-    expect(rule.targetAgentIds).toEqual(['cdc44a50-543b-4bf1-91f6-1abbaf16a94f']);
+    expect(rule.targetAgentIds).toEqual(assignmentRulesPage.items[0].target_agent_ids);
     expect(rule.strategy).toBe(AssignmentStrategy.DIRECT_AGENT);
     expect(rule.maxScore).toBeNull();
     expect(rule.conditions).toEqual([]);

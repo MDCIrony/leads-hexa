@@ -3,8 +3,9 @@ import { LeadStatus, type LeadModel } from '../../domain/lead.model';
 
 type LeadResponse = components['schemas']['LeadResponse'];
 type LeadDetailResponse = components['schemas']['LeadDetailResponse'];
+type LeadBaseResponse = Omit<LeadResponse, 'updated_at'>;
 
-export function mapLead(response: LeadResponse): LeadModel {
+export function mapLead(response: LeadBaseResponse): LeadModel {
   return {
     id: response.id,
     sourceId: response.source_id,

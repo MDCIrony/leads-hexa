@@ -3,6 +3,6 @@
   "data": {
     "error": true,
     "error_code": "UNAUTHORIZED",
-    "message": "Invalid or expired token"
+    "message": "Authentication required"
   }
 }
