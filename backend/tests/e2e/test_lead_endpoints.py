@@ -1,13 +1,11 @@
-import os
 import uuid
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
-from application.ports.output.token_service_port import TokenClaims
-from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from domain.value_objects.enums import AgentRole, LeadSourceKind
 
 from _intake_helpers import ingest_and_resolve
+from auth_helpers import session_headers
 
 
 def _manager_auth_headers(tenant_id: str) -> dict:
@@ -28,11 +26,7 @@ def _manager_auth_headers(tenant_id: str) -> dict:
     with uow:
         uow.agents.save(manager)
 
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    token = token_service.issue(
-        TokenClaims(agent_id=str(manager.id), role="MANAGER", tenant_id=str(tenant_id))
-    )
-    return {"Authorization": f"Bearer {token}"}
+    return session_headers(manager)
 
 
 def _agent_auth_headers(tenant_id: str, group_id: str = None) -> dict:
@@ -53,11 +47,7 @@ def _agent_auth_headers(tenant_id: str, group_id: str = None) -> dict:
     with uow:
         uow.agents.save(agent)
 
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    token = token_service.issue(
-        TokenClaims(agent_id=str(agent.id), role="AGENT", tenant_id=str(tenant_id))
-    )
-    return {"Authorization": f"Bearer {token}"}, str(agent.id)
+    return session_headers(agent), str(agent.id)
 
 
 def _admin_auth_headers() -> dict:
@@ -76,9 +66,7 @@ def _admin_auth_headers() -> dict:
     with uow:
         uow.agents.save(admin)
 
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    token = token_service.issue(TokenClaims(agent_id=str(admin.id), role="ADMIN", tenant_id=None))
-    return {"Authorization": f"Bearer {token}"}
+    return session_headers(admin)
 
 
 def _create_group(tenant_id: str) -> str:

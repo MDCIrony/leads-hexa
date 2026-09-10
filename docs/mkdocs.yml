@@ -133,6 +133,7 @@ nav:
       - "ADR-0026 · Kafka como canal del producto": decisiones/0026-kafka-como-canal-del-producto.md
       - "ADR-0027 · Una cola para el trabajo de fondo": decisiones/0027-cola-para-el-trabajo-de-fondo.md
       - "ADR-0028 · Autenticación de la mensajería": decisiones/0028-autenticacion-de-la-mensajeria.md
+      - "ADR-0029 · Sesiones humanas opacas": decisiones/0029-sesiones-opacas.md
 
   - Módulos:
       - modulos/index.md
@@ -179,4 +180,3 @@ nav:
       - negocio/index.md
       - Análisis de competidores: negocio/analisis-de-competidores.md
       - Estrategia Open-Core: negocio/estrategia-open-core.md
-

@@ -1,14 +1,14 @@
 # Identidad y acceso
 
-Autentica cada petición con JWT, recarga la identidad del actor desde base de datos y decide qué
+Autentica cada petición humana con una sesión opaca en cookie, recarga la identidad del actor desde base de datos y decide qué
 puede hacer según su rol y su organización.
 
 ## Cómo funciona
 
 `POST /auth/login` recibe correo y contraseña, y `LoginUseCase` responde con un único fallo
 —`InvalidCredentialsException`— tanto si la cuenta no existe como si la contraseña no coincide: un
-llamante no puede distinguir un caso del otro. Si coincide, `JwtTokenService` firma un JWT (HS256)
-con el identificador del asesor, su rol y su organización como reclamaciones.
+llamante no puede distinguir un caso del otro. Si coincide, crea una sesión aleatoria de 256 bits y
+guarda únicamente su SHA-256 en PostgreSQL.
 
 Cada petición posterior vuelve a resolver la identidad completa: `get_current_agent` verifica la
 firma y la caducidad del token, y **recarga el agente desde base de datos** por su identificador en

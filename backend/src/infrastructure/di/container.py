@@ -4,7 +4,6 @@ from application.ports.output.id_generator_port import IdGeneratorPort
 from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
-from application.ports.output.token_service_port import TokenServicePort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.services.assignment_engine import AssignmentEngine
 from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
@@ -14,7 +13,6 @@ from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.queue.rabbitmq_job_queue import RabbitMQJobQueue
 from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
-from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from infrastructure.adapters.output.system_clock import SystemClock
 from infrastructure.adapters.output.uuid_generator import UuidGenerator
 from infrastructure.config.settings import Settings
@@ -32,10 +30,6 @@ class Container:
         self._settings = settings
         self._database = RawSqlDatabase(dsn=settings.database_url)
         self._password_hasher = BcryptPasswordHasher()
-        self._token_service = JwtTokenService(
-            secret=settings.jwt_secret,
-            expires_minutes=settings.jwt_expires_minutes,
-        )
         self._clock = SystemClock()
         self._id_generator = UuidGenerator()
         # The engine is stateless (the rotation cursor lives on the
@@ -65,10 +59,6 @@ class Container:
     @property
     def password_hasher(self) -> PasswordHasherPort:
         return self._password_hasher
-
-    @property
-    def token_service(self) -> TokenServicePort:
-        return self._token_service
 
     @property
     def clock(self) -> ClockPort:

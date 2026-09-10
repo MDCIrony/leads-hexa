@@ -1,5 +1,4 @@
 import axios, { type AxiosRequestConfig } from 'axios';
-import { clearToken, getToken } from '../session/token-storage';
 import type { components } from './schema';
 
 // baseURL empty: every call passes the full '/api/v1/...' path, the same
@@ -7,19 +6,10 @@ import type { components } from './schema';
 // between client and call would force reconstructing it just to type it.
 export const apiClient = axios.create({
   baseURL: '',
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
-});
-
-// Login has no token yet, but every other call needs one; reading it fresh
-// per request (instead of once at client creation) picks up login/logout.
-apiClient.interceptors.request.use((config) => {
-  const token = getToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
 });
 
 let sessionExpiredListener: (() => void) | null = null;
@@ -33,15 +23,10 @@ export function setSessionExpiredListener(listener: (() => void) | null): void {
  * Exported (not inlined in the interceptor) so it can be tested without
  * driving a real request through axios.
  *
- * A 401 only means "your session expired" when the failing request actually
- * carried a token. POST /api/v1/agents from BootstrapPage gets a 401 too,
- * for the opposite reason — no admin is logged in yet, and the platform
- * already has one — with no token in storage to check. That's what keeps
- * this from hijacking it into "session expired".
+ * A 401 on an authenticated request removes the browser session state.
  */
 export function handleUnauthorizedResponse(error: unknown): Promise<never> {
-  if (axios.isAxiosError(error) && error.response?.status === 401 && getToken()) {
-    clearToken();
+  if (axios.isAxiosError(error) && error.response?.status === 401 && error.config?.url !== '/api/v1/auth/login') {
     sessionExpiredListener?.();
   }
   return Promise.reject(error);

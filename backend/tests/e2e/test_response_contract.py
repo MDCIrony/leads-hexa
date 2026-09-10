@@ -18,29 +18,22 @@ When this test goes red, the fix is filling the field in the router — never
 widening `NULLABLE_BY_DESIGN`. An entry there needs a reason; a reason-less
 entry is exactly how the fifth case gets back in.
 """
-import os
 import uuid
 
 from fastapi.testclient import TestClient
 
 from infrastructure.main import app
-from application.ports.output.token_service_port import TokenClaims
-from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from domain.value_objects.enums import AgentRole, AssignmentStrategy, LeadSourceKind, Operator
 from infrastructure.adapters.input.api import schemas
 
 from _intake_helpers import ingest_and_resolve
+from auth_helpers import session_headers
 
 
 # --- Auth / seeding helpers, same shortcuts as test_lead_endpoints.py ---
 
 def _token_headers(agent) -> dict:
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    tenant_id = str(agent.tenant_id) if agent.tenant_id else None
-    token = token_service.issue(
-        TokenClaims(agent_id=str(agent.id), role=agent.role.value, tenant_id=tenant_id)
-    )
-    return {"Authorization": f"Bearer {token}"}
+    return session_headers(agent)
 
 
 def _manager_auth_headers(tenant_id: str) -> dict:

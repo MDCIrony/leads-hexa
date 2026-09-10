@@ -1,11 +1,9 @@
-import os
 import uuid
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
-from application.ports.output.token_service_port import TokenClaims
-from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from domain.value_objects.enums import AgentRole
+from auth_helpers import session_headers
 
 
 def _get_auth_headers(client: TestClient) -> dict:
@@ -41,9 +39,9 @@ def _get_auth_headers(client: TestClient) -> dict:
         assert bootstrap_resp.status_code == 201
         admin_id = bootstrap_resp.json()["id"]
 
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    admin_token = token_service.issue(TokenClaims(agent_id=admin_id, role="ADMIN", tenant_id=None))
-    return {"Authorization": f"Bearer {admin_token}"}
+    with PostgresUnitOfWork(db) as uow:
+        admin_agent = uow.agents.get_by_id(uuid.UUID(admin_id))
+    return session_headers(admin_agent)
 
 
 def _manager_auth_headers(client: TestClient) -> dict:
@@ -66,7 +64,7 @@ def _manager_auth_headers(client: TestClient) -> dict:
         "/api/v1/auth/login",
         data={"username": bootstrap_resp.json()["email"], "password": "admin-pass-123"},
     )
-    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+    admin_headers = {"Cookie": f"leads_session={admin_login.cookies['leads_session']}"}
 
     manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
     tenant_resp = client.post(
@@ -84,7 +82,7 @@ def _manager_auth_headers(client: TestClient) -> dict:
         data={"username": manager_email, "password": "manager-pass-123"},
     )
     assert manager_login.status_code == 200
-    return {"Authorization": f"Bearer {manager_login.json()['access_token']}"}
+    return {"Cookie": f"leads_session={manager_login.cookies['leads_session']}"}
 
 
 def test_get_agent_not_found_returns_domain_error_shape():
@@ -188,7 +186,7 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
         data={"username": manager_email, "password": "manager-pass-123"},
     )
     assert manager_login.status_code == 200
-    return {"Authorization": f"Bearer {manager_login.json()['access_token']}"}
+    return {"Cookie": f"leads_session={manager_login.cookies['leads_session']}"}
 
 
 def test_reactivating_an_agent_restores_login_and_default_listing():
@@ -230,7 +228,7 @@ def test_reactivating_an_agent_restores_login_and_default_listing():
             "/api/v1/auth/login", data={"username": email, "password": password}
         )
         assert login_resp.status_code == 200
-        assert "access_token" in login_resp.json()
+        assert login_resp.json() == {"status": "AUTHENTICATED"}
 
         # Reactivated: back in the default listing.
         default_list_after = client.get("/api/v1/agents", headers=headers)
@@ -285,7 +283,7 @@ def test_agent_role_cannot_patch_another_agent():
             "/api/v1/auth/login",
             data={"username": create_resp.json()["email"], "password": "password123"},
         )
-        agent_headers = {"Authorization": f"Bearer {agent_login.json()['access_token']}"}
+        agent_headers = {"Cookie": f"leads_session={agent_login.cookies['leads_session']}"}
 
         response = client.patch(
             f"/api/v1/agents/{agent_id}", json={"is_active": True}, headers=agent_headers
@@ -333,4 +331,3 @@ def test_create_agent_rejects_duplicate_email_across_tenants():
         assert second.status_code == 400
         data = second.json()
         assert data["error_code"] == "EMAIL_ALREADY_EXISTS"
-

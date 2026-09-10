@@ -21,7 +21,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
         data={"username": resp.json()["email"], "password": "bootstrap-pass-123"},
     )
     assert login.status_code == 200, login.text
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
 def _create_org(client: TestClient, admin_headers: dict, name: str) -> dict:
@@ -42,7 +42,7 @@ def _create_org(client: TestClient, admin_headers: dict, name: str) -> dict:
     assert login.status_code == 200, login.text
     return {
         "tenant_id": resp.json()["id"],
-        "manager_headers": {"Authorization": f"Bearer {login.json()['access_token']}"},
+        "manager_headers": {"Cookie": f"leads_session={login.cookies['leads_session']}"},
     }
 
 
@@ -216,7 +216,7 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
             data={"username": plain_agent.json()["email"], "password": "plain-pass-123"},
         )
         assert plain_login.status_code == 200, plain_login.text
-        plain_headers = {"Authorization": f"Bearer {plain_login.json()['access_token']}"}
+        plain_headers = {"Cookie": f"leads_session={plain_login.cookies['leads_session']}"}
 
         assert client.post("/api/v1/groups", json={"name": "Nope"}, headers=plain_headers).status_code == 403
         assert (

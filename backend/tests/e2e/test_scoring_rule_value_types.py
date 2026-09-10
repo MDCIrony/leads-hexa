@@ -22,7 +22,7 @@ def _bootstrap_admin(client: TestClient) -> str:
         data={"username": response.json()["email"], "password": "admin-pass-123"},
     )
     assert login.status_code == 200, login.text
-    return login.json()["access_token"]
+    return login.cookies["leads_session"]
 
 
 def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) -> dict:
@@ -32,7 +32,7 @@ def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) 
             "name": name,
             "manager": {"name": "Manager", "email": email, "password": "manager-pass-123"},
         },
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers={"Cookie": f"leads_session={admin_token}"},
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -41,7 +41,7 @@ def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) 
 def _login(client: TestClient, email: str, password: str) -> str:
     response = client.post("/api/v1/auth/login", data={"username": email, "password": password})
     assert response.status_code == 200, response.text
-    return response.json()["access_token"]
+    return response.cookies["leads_session"]
 
 
 def _manager_token(client: TestClient) -> str:
@@ -57,7 +57,7 @@ def test_a_list_valued_rule_survives_the_round_trip(test_db):
         manager_token = _manager_token(client)
         created = client.post(
             "/api/v1/rules/scoring",
-            headers={"Authorization": f"Bearer {manager_token}"},
+            headers={"Cookie": f"leads_session={manager_token}"},
             json={
                 "name": "Sectores objetivo",
                 "conditions": [{"field": "industry", "operator": "IN", "value": ["tech", "finance"]}],
@@ -67,7 +67,7 @@ def test_a_list_valued_rule_survives_the_round_trip(test_db):
         assert created.status_code == 201
 
         listed = client.get(
-            "/api/v1/rules/scoring", headers={"Authorization": f"Bearer {manager_token}"}
+            "/api/v1/rules/scoring", headers={"Cookie": f"leads_session={manager_token}"}
         )
         rule = next(r for r in listed.json()["items"] if r["name"] == "Sectores objetivo")
         assert rule["conditions"][0]["value"] == ["tech", "finance"]
@@ -78,7 +78,7 @@ def test_a_numeric_rule_keeps_its_number(test_db):
         manager_token = _manager_token(client)
         created = client.post(
             "/api/v1/rules/scoring",
-            headers={"Authorization": f"Bearer {manager_token}"},
+            headers={"Cookie": f"leads_session={manager_token}"},
             json={
                 "name": "Presupuesto alto",
                 "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 5000}],
@@ -94,7 +94,7 @@ def test_a_field_outside_the_allow_list_is_refused(test_db):
         manager_token = _manager_token(client)
         refused = client.post(
             "/api/v1/rules/scoring",
-            headers={"Authorization": f"Bearer {manager_token}"},
+            headers={"Cookie": f"leads_session={manager_token}"},
             json={
                 "name": "Fuga",
                 "conditions": [{"field": "tenant_id", "operator": "EQUALS", "value": "x"}],

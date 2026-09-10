@@ -1,10 +1,11 @@
 from typing import Optional
+from datetime import datetime, timezone
+from hashlib import sha256
 from uuid import UUID
 from fastapi import Request, Depends
-from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
+from fastapi.security import APIKeyHeader
 from application.dtos.context import RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.ports.output.token_service_port import TokenServicePort
 from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
@@ -102,9 +103,6 @@ def get_container(request: Request) -> Container:
 
 def get_uow(container: Container = Depends(get_container)) -> UnitOfWorkPort:
     return container.unit_of_work()
-
-def get_token_service(container: Container = Depends(get_container)) -> TokenServicePort:
-    return container.token_service
 
 def get_job_queue(container: Container = Depends(get_container)) -> JobQueuePort:
     return container.job_queue
@@ -285,7 +283,7 @@ def get_login_use_case(
     return LoginUseCase(
         uow=uow,
         password_hasher=container.password_hasher,
-        token_service=container.token_service,
+        session_hours=container.settings.session_hours,
     )
 
 def get_create_tenant_use_case(
@@ -314,20 +312,17 @@ def get_mark_all_notifications_read_use_case(
     return MarkAllNotificationsReadUseCase(uow=uow)
 
 
-_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
-_optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 # Its own header, deliberately not a second scheme sniffed out of
 # Authorization: Bearer — that would make the two authentication paths
 # depend on parsing one shared header instead of staying visibly separate.
 _api_key_scheme = APIKeyHeader(name="X-Api-Key", auto_error=False)
 
 
-def resolve_current_agent(token: str, uow: UnitOfWorkPort, token_service: TokenServicePort) -> Agent:
+def resolve_current_agent(token: str, uow: UnitOfWorkPort) -> Agent:
     """Pure function so it can be tested without FastAPI's dependency machinery."""
-    claims = token_service.verify(token)
-
     with uow:
-        agent = uow.agents.get_by_id(UUID(claims.agent_id))
+        session = uow.sessions.get_active(sha256(token.encode()).hexdigest(), datetime.now(timezone.utc))
+        agent = uow.agents.get_by_id(session.agent_id) if session else None
 
     if not agent or not agent.is_active:
         raise UnauthorizedException("Agent no longer exists or is inactive")
@@ -335,22 +330,24 @@ def resolve_current_agent(token: str, uow: UnitOfWorkPort, token_service: TokenS
 
 
 def get_current_agent(
-    token: str = Depends(_oauth2_scheme),
+    request: Request,
     uow: UnitOfWorkPort = Depends(get_uow),
-    token_service: TokenServicePort = Depends(get_token_service),
 ) -> Agent:
-    return resolve_current_agent(token=token, uow=uow, token_service=token_service)
+    token = request.cookies.get("leads_session")
+    if not token:
+        raise UnauthorizedException("Authentication required")
+    return resolve_current_agent(token=token, uow=uow)
 
 
 def get_optional_current_agent(
-    token: Optional[str] = Depends(_optional_oauth2_scheme),
+    request: Request,
     uow: UnitOfWorkPort = Depends(get_uow),
-    token_service: TokenServicePort = Depends(get_token_service),
 ) -> Optional[Agent]:
+    token = request.cookies.get("leads_session")
     if not token:
         return None
     try:
-        return resolve_current_agent(token=token, uow=uow, token_service=token_service)
+        return resolve_current_agent(token=token, uow=uow)
     except UnauthorizedException:
         return None
 

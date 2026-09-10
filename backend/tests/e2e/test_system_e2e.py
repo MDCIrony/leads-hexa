@@ -1,13 +1,11 @@
-import os
 import uuid
 from typing import Tuple
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
-from application.ports.output.token_service_port import TokenClaims
-from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 
 from _intake_helpers import ingest_and_resolve
+from auth_helpers import session_headers
 
 
 def _bootstrap_admin_headers(client: TestClient) -> dict:
@@ -24,9 +22,10 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
         },
     )
     assert resp.status_code == 201
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    token = token_service.issue(TokenClaims(agent_id=resp.json()["id"], role="ADMIN", tenant_id=None))
-    return {"Authorization": f"Bearer {token}"}
+    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+    with PostgresUnitOfWork(app.state.container.database) as uow:
+        admin = uow.agents.get_by_id(uuid.UUID(resp.json()["id"]))
+    return session_headers(admin)
 
 
 def _create_tenant_and_manager_headers(client: TestClient, admin_headers: dict) -> Tuple[str, dict]:
@@ -52,7 +51,7 @@ def _create_tenant_and_manager_headers(client: TestClient, admin_headers: dict) 
         data={"username": manager_email, "password": "manager-pass-123"},
     )
     assert login_resp.status_code == 200
-    headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+    headers = {"Cookie": f"leads_session={login_resp.cookies['leads_session']}"}
     return tenant_id, headers
 
 

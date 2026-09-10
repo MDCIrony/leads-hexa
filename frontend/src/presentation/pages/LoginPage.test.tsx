@@ -30,11 +30,13 @@ function renderApp(initialPath: string) {
 }
 
 describe('LoginPage', () => {
-  // A real login writes the token to localStorage, which jsdom keeps across
-  // tests; without this, the next test's SessionProvider rehydrates against
-  // a stale token and calls GET /auth/me before it's mocked.
   beforeEach(() => {
-    localStorage.clear();
+    mockApiClient({
+      'GET /api/v1/auth/me': {
+        status: 401,
+        error: { error: true, error_code: 'UNAUTHORIZED', message: 'No autenticado.' },
+      },
+    });
   });
 
   it('shows the bootstrap notice passed via location state, without touching the session', async () => {
@@ -58,7 +60,12 @@ describe('LoginPage', () => {
   ] as const)('lands %s on its own panel after login', async (_role, meFixture, panelTitle) => {
     mockApiClient({
       'POST /api/v1/auth/login': { data: loginFixture },
-      'GET /api/v1/auth/me': { data: meFixture },
+      'GET /api/v1/auth/me': {
+        responses: [
+          { status: 401, error: { error: true, error_code: 'UNAUTHORIZED', message: 'No autenticado.' } },
+          { data: meFixture },
+        ],
+      },
     });
     renderApp('/login');
 
@@ -70,7 +77,12 @@ describe('LoginPage', () => {
   it('returns to the protected route it redirected from once logged in', async () => {
     mockApiClient({
       'POST /api/v1/auth/login': { data: loginFixture },
-      'GET /api/v1/auth/me': { data: meAgent },
+      'GET /api/v1/auth/me': {
+        responses: [
+          { status: 401, error: { error: true, error_code: 'UNAUTHORIZED', message: 'No autenticado.' } },
+          { data: meAgent },
+        ],
+      },
     });
     renderApp('/mis-leads');
 
@@ -87,7 +99,12 @@ describe('LoginPage', () => {
     // page as the first thing a brand-new session shows.
     mockApiClient({
       'POST /api/v1/auth/login': { data: loginFixture },
-      'GET /api/v1/auth/me': { data: meAgent },
+      'GET /api/v1/auth/me': {
+        responses: [
+          { status: 401, error: { error: true, error_code: 'UNAUTHORIZED', message: 'No autenticado.' } },
+          { data: meAgent },
+        ],
+      },
     });
     render(
       <MemoryRouter initialEntries={[{ pathname: '/login', state: { from: { pathname: '/asesores' } } }]}>
@@ -116,7 +133,13 @@ describe('LoginPage', () => {
       error_code: 'INVALID_CREDENTIALS',
       message: 'El correo o la contraseña no coinciden.',
     };
-    mockApiClient({ 'POST /api/v1/auth/login': { status: 401, error: invalidCredentials } });
+    mockApiClient({
+      'POST /api/v1/auth/login': { status: 401, error: invalidCredentials },
+      'GET /api/v1/auth/me': {
+        status: 401,
+        error: { error: true, error_code: 'UNAUTHORIZED', message: 'No autenticado.' },
+      },
+    });
     renderApp('/login');
 
     await fillAndSubmit('unknown@plat.test', 'whatever');

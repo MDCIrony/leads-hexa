@@ -6,7 +6,8 @@ import type { ApiErrorEnvelope } from '../infrastructure/api/api-error';
 type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 /** One scripted response: a captured fixture, or the error envelope a status provokes. */
-export type MockedRoute<T> = { status?: number; data: T } | { status: number; error: ApiErrorEnvelope };
+export type MockedResponse<T> = { status?: number; data: T } | { status: number; error: ApiErrorEnvelope };
+export type MockedRoute<T> = MockedResponse<T> | { responses: MockedResponse<T>[] };
 
 function toAxiosResponse<T>(data: T, status: number): AxiosResponse<T> {
   return { data, status, statusText: '', headers: new AxiosHeaders(), config: { headers: new AxiosHeaders() } };
@@ -30,7 +31,8 @@ function toAxiosError(status: number, error: ApiErrorEnvelope): AxiosError<ApiEr
 function makeHandler(method: HttpMethod, routes: Record<string, MockedRoute<unknown>>) {
   return (url: string): Promise<AxiosResponse<unknown>> => {
     const key = `${method.toUpperCase()} ${url}`;
-    const route = routes[key];
+    const configuredRoute = routes[key];
+    const route = configuredRoute && ('responses' in configuredRoute ? configuredRoute.responses.shift() : configuredRoute);
     if (!route) {
       return Promise.reject(new Error(`mockApiClient: no route registered for ${key}`));
     }

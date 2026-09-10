@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 from confluent_kafka import Producer
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
@@ -96,6 +97,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def reject_untrusted_browser_origins(request: Request, call_next):
+    """SameSite protects ordinary browser navigation; Origin closes CORS gaps for writes."""
+    origin = request.headers.get("origin")
+    if request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"} and origin and origin not in _settings.cors_origins:
+        return JSONResponse(status_code=403, content={"error": "FORBIDDEN", "error_code": "FORBIDDEN", "message": "Origen no permitido"})
+    return await call_next(request)
 
 # Include Routers
 app.include_router(lead_router, prefix="/api/v1/leads", tags=["Leads"])

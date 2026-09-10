@@ -2,13 +2,11 @@ from typing import Optional
 
 import pytest
 
-from application.ports.output.token_service_port import TokenClaims
 from application.use_cases.auth_use_cases import LoginUseCase
 from domain.entities.agent import Agent
 from domain.exceptions import InvalidCredentialsException
 from domain.value_objects.enums import AgentRole
 from tests.unit.mocks.fake_password_hasher import FakePasswordHasher
-from tests.unit.mocks.fake_token_service import FakeTokenService
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
@@ -36,7 +34,7 @@ def _build_use_case(
     )
     agent_repo.save(agent)
     uow = InMemoryUnitOfWork(InMemoryLeadRepository(), InMemoryRuleRepository(), agent_repo)
-    use_case = LoginUseCase(uow=uow, password_hasher=hasher, token_service=FakeTokenService())
+    use_case = LoginUseCase(uow=uow, password_hasher=hasher)
     return use_case, agent
 
 
@@ -54,25 +52,12 @@ def test_login_normalizes_email_before_lookup():
     assert isinstance(token, str) and token
 
 
-def test_issued_token_carries_the_agent_identity_role_and_tenant():
-    """The claims are the contract the API layer relies on to build the
-    request context, so they are asserted explicitly."""
-    use_case, agent = _build_use_case("manager@test.com", "correct-password")
+def test_issued_session_is_stored_only_as_a_hash():
+    use_case, _ = _build_use_case("manager@test.com", "correct-password")
     token = use_case.execute(email="manager@test.com", password="correct-password")
-    claims = FakeTokenService().verify(token)
-    assert claims == TokenClaims(
-        agent_id=str(agent.id),
-        role="MANAGER",
-        tenant_id=_TENANT_ID,
-    )
-
-
-def test_platform_admin_gets_a_null_tenant_claim():
-    use_case, _ = _build_use_case(
-        "admin@test.com", "correct-password", role=AgentRole.ADMIN, tenant_id=None
-    )
-    token = use_case.execute(email="admin@test.com", password="correct-password")
-    assert FakeTokenService().verify(token).tenant_id is None
+    from hashlib import sha256
+    assert token not in use_case.uow.sessions.items
+    assert sha256(token.encode()).hexdigest() in use_case.uow.sessions.items
 
 
 def test_login_fails_with_wrong_password():
@@ -94,8 +79,7 @@ def test_login_fails_for_inactive_agent():
 
 
 def test_login_fails_for_an_integration_credential_even_with_the_right_secret():
-    """A machine principal's only door in is POST /agents/integration-credential
-    (ADR-0028); the same secret must not also mint a JWT session."""
+    """A machine principal's only door in is its integration credential."""
     use_case, _ = _build_use_case(
         "integration@acme.invalid", "correct-password", role=AgentRole.INTEGRATION
     )

@@ -28,6 +28,54 @@ from tests.unit.mocks.in_memory_lead_source_repo import InMemoryLeadSourceReposi
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
 from tests.unit.mocks.in_memory_tenant_repo import InMemoryTenantRepository
+from application.ports.output.auth_session_repository_port import AuthSessionRepositoryPort
+from application.ports.output.auth_challenge_repository_port import AuthChallengeRepositoryPort
+from domain.entities.auth_session import AuthSession
+from domain.entities.auth_challenge import AuthChallenge
+from datetime import datetime
+
+
+class InMemoryAuthSessionRepository(AuthSessionRepositoryPort):
+    def __init__(self) -> None:
+        self.items: Dict[str, AuthSession] = {}
+
+    def save(self, session: AuthSession) -> None:
+        self.items[session.token_hash] = session
+
+    def get_active(self, token_hash: str, now: datetime) -> Optional[AuthSession]:
+        session = self.items.get(token_hash)
+        return session if session and session.revoked_at is None and session.expires_at > now else None
+
+    def revoke(self, token_hash: str, now: datetime) -> None:
+        session = self.items.get(token_hash)
+        if session and session.revoked_at is None:
+            self.items[token_hash] = AuthSession(**{**session.__dict__, "revoked_at": now})
+
+
+class InMemoryAuthChallengeRepository(AuthChallengeRepositoryPort):
+    def __init__(self) -> None:
+        self.items: Dict[str, AuthChallenge] = {}
+
+    def save(self, challenge: AuthChallenge) -> None:
+        self.items[challenge.token_hash] = challenge
+
+    def resolve_active(self, token_hash: str, now: datetime) -> Optional[AuthChallenge]:
+        challenge = self.items.get(token_hash)
+        return challenge if challenge and challenge.consumed_at is None and challenge.expires_at > now else None
+
+    def increment_attempts(self, token_hash: str, now: datetime) -> bool:
+        challenge = self.resolve_active(token_hash, now)
+        if not challenge:
+            return False
+        self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "attempts": challenge.attempts + 1})
+        return True
+
+    def consume(self, token_hash: str, now: datetime) -> bool:
+        challenge = self.resolve_active(token_hash, now)
+        if not challenge:
+            return False
+        self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "consumed_at": now})
+        return True
 
 
 class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
@@ -270,6 +318,8 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.disqualification_rules = disqualification_rules or InMemoryDisqualificationRuleRepository()
         self.notifications = notifications or InMemoryNotificationRepository()
         self.outbox = outbox or InMemoryOutboxRepository()
+        self.sessions = InMemoryAuthSessionRepository()
+        self.challenges = InMemoryAuthChallengeRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self

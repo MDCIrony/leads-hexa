@@ -35,8 +35,8 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
             data={"username": admin_email, "password": "bootstrap-pass-123"},
         )
         assert login_resp.status_code == 200
-        admin_token = login_resp.json()["access_token"]
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        admin_token = login_resp.cookies["leads_session"]
+        admin_headers = {"Cookie": f"leads_session={admin_token}"}
 
         # 3. Wrong password is rejected.
         bad_login_resp = client.post(
@@ -71,8 +71,8 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
             "/api/v1/auth/login",
             data={"username": manager_email, "password": "manager-pass-123"},
         )
-        manager_token = manager_login_resp.json()["access_token"]
-        manager_headers = {"Authorization": f"Bearer {manager_token}"}
+        manager_token = manager_login_resp.cookies["leads_session"]
+        manager_headers = {"Cookie": f"leads_session={manager_token}"}
 
         # 6. The Manager can create a scoring rule; it is filed under their own
         # tenant, taken from the token — there is no tenant_id left to pass.
@@ -107,7 +107,7 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
             "/api/v1/auth/login",
             data={"username": other_manager_email, "password": "manager-pass-123"},
         )
-        other_manager_headers = {"Authorization": f"Bearer {other_manager_login_resp.json()['access_token']}"}
+        other_manager_headers = {"Cookie": f"leads_session={other_manager_login_resp.cookies['leads_session']}"}
 
         other_rules_resp = client.get("/api/v1/rules/scoring", headers=other_manager_headers)
         assert other_rules_resp.status_code == 200
@@ -125,7 +125,7 @@ def test_full_auth_flow_bootstrap_login_and_role_enforcement():
         )
         assert agent_resp.status_code == 201
         agent_login_resp = client.post("/api/v1/auth/login", data={"username": agent_email, "password": "agent-pass-123"})
-        agent_headers = {"Authorization": f"Bearer {agent_login_resp.json()['access_token']}"}
+        agent_headers = {"Cookie": f"leads_session={agent_login_resp.cookies['leads_session']}"}
         agent_rule_resp = client.post(
             "/api/v1/rules/scoring",
             json={

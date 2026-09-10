@@ -22,7 +22,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
         data={"username": bootstrap_resp.json()["email"], "password": "admin-pass-123"},
     )
     assert login.status_code == 200
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
 def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict:
@@ -43,7 +43,7 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
         data={"username": manager_email, "password": "manager-pass-123"},
     )
     assert manager_login.status_code == 200
-    return {"Authorization": f"Bearer {manager_login.json()['access_token']}"}
+    return {"Cookie": f"leads_session={manager_login.cookies['leads_session']}"}
 
 
 def _agent_headers(client: TestClient, manager_headers: dict) -> dict:
@@ -60,7 +60,7 @@ def _agent_headers(client: TestClient, manager_headers: dict) -> dict:
         data={"username": email, "password": "agent-pass-123"},
     )
     assert login.status_code == 200
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
 def _budget_rule_payload(name: str = "Presupuesto alto") -> dict:

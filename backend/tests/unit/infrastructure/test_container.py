@@ -1,7 +1,7 @@
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
 
-_SETTINGS = Settings(database_url="postgresql://u:p@host:5432/db", jwt_secret="a-secret")
+_SETTINGS = Settings(database_url="postgresql://u:p@host:5432/db")
 
 
 def test_stateless_adapters_are_shared_across_the_container_lifetime():
@@ -13,7 +13,6 @@ def test_stateless_adapters_are_shared_across_the_container_lifetime():
 
     assert container.assignment_engine is container.assignment_engine
     assert container.password_hasher is container.password_hasher
-    assert container.token_service is container.token_service
     assert container.event_publisher is container.event_publisher
 
 

@@ -22,7 +22,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
         data={"username": resp.json()["email"], "password": "admin-pass-123"},
     )
     assert login.status_code == 200, login.text
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
 def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict:
@@ -41,7 +41,7 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
         data={"username": manager_email, "password": "manager-pass-123"},
     )
     assert login.status_code == 200, login.text
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
 def _create_agent(client: TestClient, manager_headers: dict, group_id: Optional[str] = None) -> tuple[str, dict]:
@@ -54,7 +54,7 @@ def _create_agent(client: TestClient, manager_headers: dict, group_id: Optional[
     agent_id = resp.json()["id"]
     login = client.post("/api/v1/auth/login", data={"username": email, "password": "agent-pass-123"})
     assert login.status_code == 200, login.text
-    return agent_id, {"Authorization": f"Bearer {login.json()['access_token']}"}
+    return agent_id, {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
 def _route_everything_to(client: TestClient, manager_headers: dict, agent_id: str) -> None:

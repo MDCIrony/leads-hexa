@@ -10,8 +10,8 @@ _DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost,http://localhost
 @dataclass(frozen=True)
 class Settings:
     database_url: str
-    jwt_secret: str
-    jwt_expires_minutes: int = 60
+    session_hours: int = 8
+    session_cookie_secure: bool = False
     webhook_timeout_seconds: float = 5.0
     outbox_relay_interval_seconds: float = 1.0
     # Defaulted, never required (ADR-0026): the backend must start and serve
@@ -34,17 +34,13 @@ class Settings:
         if not database_url:
             raise ValueError("DATABASE_URL is required and has no default")
 
-        jwt_secret = os.getenv("JWT_SECRET")
-        if not jwt_secret:
-            raise ValueError("JWT_SECRET is required and has no default")
-
         raw_origins = os.getenv("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS)
         origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 
         return cls(
             database_url=database_url,
-            jwt_secret=jwt_secret,
-            jwt_expires_minutes=int(os.getenv("JWT_EXPIRES_MINUTES", "60")),
+            session_hours=int(os.getenv("SESSION_HOURS", "8")),
+            session_cookie_secure=os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true",
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0")),
             outbox_relay_interval_seconds=float(os.getenv("OUTBOX_RELAY_INTERVAL_SECONDS", "1.0")),
             kafka_bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),

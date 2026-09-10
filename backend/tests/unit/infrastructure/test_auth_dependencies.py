@@ -2,7 +2,6 @@ from uuid import uuid4
 
 import pytest
 
-from application.ports.output.token_service_port import TokenClaims
 from domain.entities.agent import Agent
 from domain.exceptions import ForbiddenException, UnauthorizedException
 from domain.value_objects.enums import AgentRole
@@ -12,7 +11,6 @@ from infrastructure.adapters.input.api.dependencies import (
     resolve_integration_context,
 )
 from tests.unit.mocks.fake_password_hasher import FakePasswordHasher
-from tests.unit.mocks.fake_token_service import FakeTokenService
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
@@ -49,29 +47,31 @@ def _uow_with(agent: Agent) -> InMemoryUnitOfWork:
 
 
 def _token_for(agent: Agent) -> str:
-    return FakeTokenService().issue(
-        TokenClaims(
-            agent_id=str(agent.id),
-            role=agent.role.value,
-            tenant_id=str(agent.tenant_id) if agent.tenant_id else None,
-        )
-    )
+    from hashlib import sha256
+    from datetime import datetime, timedelta, timezone
+    from domain.entities.auth_session import AuthSession
+    token = "opaque-session"
+    uow = _uow_with(agent)
+    uow.sessions.save(AuthSession(sha256(token.encode()).hexdigest(), agent.id.value, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(hours=1)))
+    return token
 
 
 def test_valid_token_resolves_the_agent():
     agent = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
-    resolved = resolve_current_agent(
-        token=_token_for(agent), uow=_uow_with(agent), token_service=FakeTokenService()
-    )
+    uow = _uow_with(agent)
+    from hashlib import sha256
+    from datetime import datetime, timedelta, timezone
+    from domain.entities.auth_session import AuthSession
+    token = "opaque-session"
+    uow.sessions.save(AuthSession(sha256(token.encode()).hexdigest(), agent.id.value, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(hours=1)))
+    resolved = resolve_current_agent(token=token, uow=uow)
     assert str(resolved.id) == str(agent.id)
 
 
 def test_malformed_token_is_unauthorized():
     agent = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
     with pytest.raises(UnauthorizedException):
-        resolve_current_agent(
-            token="garbage", uow=_uow_with(agent), token_service=FakeTokenService()
-        )
+        resolve_current_agent(token="garbage", uow=_uow_with(agent))
 
 
 def test_deactivated_agent_is_unauthorized_even_with_a_valid_token():
@@ -81,9 +81,7 @@ def test_deactivated_agent_is_unauthorized_even_with_a_valid_token():
         "M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A, is_active=False
     )
     with pytest.raises(UnauthorizedException):
-        resolve_current_agent(
-            token=_token_for(agent), uow=_uow_with(agent), token_service=FakeTokenService()
-        )
+        resolve_current_agent(token="opaque-session", uow=_uow_with(agent))
 
 
 def test_context_carries_the_agent_own_tenant():

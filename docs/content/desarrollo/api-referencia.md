@@ -11,7 +11,7 @@ puede devolver cada endpoint.
 | Recurso | Método y ruta | Rol | Éxito |
 |---|---|---|---|
 | Salud | `GET /health` | Público | 200 |
-| Autenticación | `POST /api/v1/auth/login` | Público | 200 |
+| Autenticación | `POST /api/v1/auth/login`, `POST /api/v1/auth/logout` | Público/cookie | 200/204 |
 | Autenticación | `GET /api/v1/auth/me` | Cualquiera autenticado | 200 |
 | Organizaciones | `POST /api/v1/tenants` | `ADMIN` | 201 |
 | Organizaciones | `GET /api/v1/tenants` | `ADMIN` | 200 |
@@ -62,7 +62,7 @@ puede devolver cada endpoint.
 
 ## Convenciones comunes
 
-**Autenticación.** `Authorization: Bearer <token>`, obtenido de `POST /api/v1/auth/login`. La
+**Autenticación humana.** Cookie HttpOnly `leads_session`, fijada por `POST /api/v1/auth/login`. La
 organización de quien llama sale siempre del token — nunca de la URL ni del cuerpo de la petición;
 ver [ADR-0004](../decisiones/0004-organizacion-desde-el-token.md). Todo endpoint fuera de `GET
 /health` y `POST /api/v1/auth/login` responde `401 Unauthorized` sin un token válido; las listas de
@@ -121,7 +121,7 @@ username=ana%40acme.test&password=Secret123
 ```
 
 ```json
-{"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", "token_type": "bearer"}
+{"status": "AUTHENTICATED"}
 ```
 
 Errores: `401 Unauthorized` (`INVALID_CREDENTIALS`).

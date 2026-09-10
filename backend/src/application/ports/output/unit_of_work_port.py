@@ -13,6 +13,8 @@ from application.ports.output.intake_record_repository_port import IntakeRecordR
 from application.ports.output.intake_job_repository_port import IntakeJobRepositoryPort
 from application.ports.output.notification_repository_port import NotificationRepositoryPort
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
+from application.ports.output.auth_session_repository_port import AuthSessionRepositoryPort
+from application.ports.output.auth_challenge_repository_port import AuthChallengeRepositoryPort
 
 class UnitOfWorkPort(abc.ABC):
     leads: LeadRepositoryPort
@@ -26,6 +28,8 @@ class UnitOfWorkPort(abc.ABC):
     intake_jobs: IntakeJobRepositoryPort
     notifications: NotificationRepositoryPort
     outbox: OutboxRepositoryPort
+    sessions: AuthSessionRepositoryPort
+    challenges: AuthChallengeRepositoryPort
 
     def __enter__(self) -> UnitOfWorkPort:
         return self

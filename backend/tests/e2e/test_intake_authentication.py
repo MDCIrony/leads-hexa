@@ -1,14 +1,12 @@
-import os
 import uuid
 
 from fastapi.testclient import TestClient
 from infrastructure.main import app
-from application.ports.output.token_service_port import TokenClaims
-from infrastructure.adapters.output.security.jwt_token_service import JwtTokenService
 from domain.value_objects.enums import AgentRole
 
 from test_lead_endpoints import _manager_auth_headers, _seed_tenant_with_sources
 from _intake_helpers import ingest_and_resolve
+from auth_helpers import session_headers
 
 _PAYLOAD = {
     "first_name": "Ana",
@@ -38,9 +36,7 @@ def _agent_auth_headers(tenant_id: str) -> dict:
     with uow:
         uow.agents.save(agent)
 
-    token_service = JwtTokenService(secret=os.environ["JWT_SECRET"])
-    token = token_service.issue(TokenClaims(agent_id=str(agent.id), role="AGENT", tenant_id=str(tenant_id)))
-    return {"Authorization": f"Bearer {token}"}
+    return session_headers(agent)
 
 
 def test_ingest_without_credential_is_rejected():

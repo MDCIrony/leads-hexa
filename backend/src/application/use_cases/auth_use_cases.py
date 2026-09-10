@@ -1,7 +1,10 @@
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
-from application.ports.output.token_service_port import TokenClaims, TokenServicePort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+import secrets
+from domain.entities.auth_session import AuthSession
 from domain.entities.agent import normalize_email
 from domain.exceptions import InvalidCredentialsException
 from domain.value_objects.enums import AgentRole
@@ -12,11 +15,11 @@ class LoginUseCase(LoginInputPort):
         self,
         uow: UnitOfWorkPort,
         password_hasher: PasswordHasherPort,
-        token_service: TokenServicePort,
+        session_hours: int = 8,
     ) -> None:
         self.uow = uow
         self.password_hasher = password_hasher
-        self.token_service = token_service
+        self.session_hours = session_hours
 
     def execute(self, email: str, password: str) -> str:
         with self.uow:
@@ -36,10 +39,13 @@ class LoginUseCase(LoginInputPort):
         if not self.password_hasher.verify(password, agent.hashed_password):
             raise InvalidCredentialsException()
 
-        return self.token_service.issue(
-            TokenClaims(
-                agent_id=str(agent.id),
-                role=agent.role.value,
-                tenant_id=str(agent.tenant_id) if agent.tenant_id else None,
-            )
-        )
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        with self.uow:
+            self.uow.sessions.save(AuthSession(
+                token_hash=sha256(token.encode()).hexdigest(),
+                agent_id=agent.id.value,
+                created_at=now,
+                expires_at=now + timedelta(hours=self.session_hours),
+            ))
+        return token

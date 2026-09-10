@@ -464,8 +464,7 @@ class NotificationsPageResponse(BaseModel):
 
 # --- Auth Schemas ---
 class LoginResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    status: str
 
 class CurrentUserResponse(BaseModel):
     id: str

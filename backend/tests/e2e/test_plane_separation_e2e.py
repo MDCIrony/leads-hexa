@@ -22,7 +22,7 @@ def _bootstrap_admin(client: TestClient) -> str:
         data={"username": response.json()["email"], "password": "admin-pass-123"},
     )
     assert login.status_code == 200, login.text
-    return login.json()["access_token"]
+    return login.cookies["leads_session"]
 
 
 def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) -> dict:
@@ -32,7 +32,7 @@ def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) 
             "name": name,
             "manager": {"name": "Manager", "email": email, "password": "manager-pass-123"},
         },
-        headers={"Authorization": f"Bearer {admin_token}"},
+        headers={"Cookie": f"leads_session={admin_token}"},
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -41,13 +41,13 @@ def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) 
 def _login(client: TestClient, email: str, password: str) -> str:
     response = client.post("/api/v1/auth/login", data={"username": email, "password": password})
     assert response.status_code == 200, response.text
-    return response.json()["access_token"]
+    return response.cookies["leads_session"]
 
 
 def test_platform_admin_creates_organizations_but_reaches_no_data():
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        admin_headers = {"Cookie": f"leads_session={admin_token}"}
 
         created = _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
         assert created["slug"] == "acme-corp"
@@ -69,7 +69,7 @@ def test_manager_works_inside_its_organization_only():
         _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
         _create_tenant(client, admin_token, "Other Corp", "bob@other.test")
 
-        ana = {"Authorization": f"Bearer {_login(client, 'ana@acme.test', 'manager-pass-123')}"}
+        ana = {"Cookie": f"leads_session={_login(client, 'ana@acme.test', 'manager-pass-123')}"}
 
         assert client.get("/api/v1/leads", headers=ana).status_code == 200
         assert client.post("/api/v1/tenants", json={}, headers=ana).status_code == 403
@@ -86,7 +86,7 @@ def test_sales_agent_cannot_list_agents_but_knows_who_it_is():
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
         _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
-        ana = {"Authorization": f"Bearer {_login(client, 'ana@acme.test', 'manager-pass-123')}"}
+        ana = {"Cookie": f"leads_session={_login(client, 'ana@acme.test', 'manager-pass-123')}"}
 
         created = client.post(
             "/api/v1/agents",
@@ -102,7 +102,7 @@ def test_sales_agent_cannot_list_agents_but_knows_who_it_is():
         assert created.status_code == 201
         assert created.json()["tenant_id"] is not None
 
-        sales = {"Authorization": f"Bearer {_login(client, 'sales@acme.test', 'sales-pass-123')}"}
+        sales = {"Cookie": f"leads_session={_login(client, 'sales@acme.test', 'sales-pass-123')}"}
         assert client.get("/api/v1/agents", headers=sales).status_code == 403
 
         me = client.get("/api/v1/auth/me", headers=sales)
@@ -122,7 +122,7 @@ def test_sales_agent_cannot_read_the_whole_organization_pipeline():
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
         _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
-        ana = {"Authorization": f"Bearer {_login(client, 'ana@acme.test', 'manager-pass-123')}"}
+        ana = {"Cookie": f"leads_session={_login(client, 'ana@acme.test', 'manager-pass-123')}"}
 
         created = client.post(
             "/api/v1/agents",
@@ -137,7 +137,7 @@ def test_sales_agent_cannot_read_the_whole_organization_pipeline():
         )
         assert created.status_code == 201
 
-        sales = {"Authorization": f"Bearer {_login(client, 'sales@acme.test', 'sales-pass-123')}"}
+        sales = {"Cookie": f"leads_session={_login(client, 'sales@acme.test', 'sales-pass-123')}"}
         assert client.get("/api/v1/leads", headers=sales).status_code == 403
         assert client.get("/api/v1/leads", headers=ana).status_code == 200
 
@@ -145,7 +145,7 @@ def test_sales_agent_cannot_read_the_whole_organization_pipeline():
 def test_identity_of_the_platform_admin_has_no_organization():
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
-        me = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {admin_token}"})
+        me = client.get("/api/v1/auth/me", headers={"Cookie": f"leads_session={admin_token}"})
         assert me.status_code == 200
         assert me.json()["role"] == "ADMIN"
         assert me.json()["tenant_id"] is None
@@ -155,7 +155,7 @@ def test_identity_of_the_platform_admin_has_no_organization():
 def test_deactivating_an_organization_locks_its_users_out():
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        admin_headers = {"Cookie": f"leads_session={admin_token}"}
         created = _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
 
         assert _login(client, "ana@acme.test", "manager-pass-123")
@@ -178,7 +178,7 @@ def test_deactivating_an_organization_locks_its_users_out():
 def test_creating_a_tenant_with_a_taken_email_leaves_nothing_behind():
     with TestClient(app) as client:
         admin_token = _bootstrap_admin(client)
-        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        admin_headers = {"Cookie": f"leads_session={admin_token}"}
         _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
 
         before = client.get("/api/v1/tenants", headers=admin_headers).json()["total"]

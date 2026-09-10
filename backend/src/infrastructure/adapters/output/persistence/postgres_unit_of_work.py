@@ -22,6 +22,8 @@ from infrastructure.adapters.output.persistence.raw_sql_notification_repository 
     RawSqlNotificationRepository,
 )
 from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
+from infrastructure.adapters.output.persistence.raw_sql_auth_session_repository import RawSqlAuthSessionRepository
+from infrastructure.adapters.output.persistence.raw_sql_auth_challenge_repository import RawSqlAuthChallengeRepository
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):
@@ -51,6 +53,8 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.intake_jobs = RawSqlIntakeJobRepository(self.connection)
         self.notifications = RawSqlNotificationRepository(self.connection)
         self.outbox = RawSqlOutboxRepository(self.connection)
+        self.sessions = RawSqlAuthSessionRepository(self.connection)
+        self.challenges = RawSqlAuthChallengeRepository(self.connection)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

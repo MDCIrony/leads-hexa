@@ -48,9 +48,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Navigating away on logout is the router's job; this only clears the
   // session state.
   const logout = useCallback(() => {
-    logoutRequest();
     setUser(null);
     setStatus('anonymous');
+    void logoutRequest();
   }, []);
 
   // A token that dies mid-session (expiry, revocation) is reported by
