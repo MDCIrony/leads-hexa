@@ -162,6 +162,63 @@ bootstrap() {
   check "asesor de la organización B" 201 "$(code "$r")"
 }
 
+# -------------------------------------------------------------- sessions ---
+# Opaque browser sessions (ADR-0029, Fase 1): cookie flags, rehydration via
+# /auth/me, idempotent logout, per-session independence and hostile-Origin
+# rejection. Small on purpose: the full matrix lives in the pytest suite.
+
+verify_sessions() {
+  local r jar2 headers_file
+  section "Sesiones opacas"
+
+  headers_file=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.headers")
+  r=$(curl -s -D "$headers_file" -o /dev/null -w '%{http_code}' -c "$headers_file.cookies" \
+    -X POST "$API/auth/login" \
+    --data-urlencode "username=mgr-a-$STAMP@x.test" \
+    --data-urlencode "password=$ADMIN_PASS")
+  check "el login responde 200" 200 "$r"
+  check "la cookie es HttpOnly" True "$(grep -qi 'httponly' "$headers_file" && printf True || printf False)"
+  check "la cookie es SameSite=Lax" True "$(grep -qi 'samesite=lax' "$headers_file" && printf True || printf False)"
+  check "la cookie cubre Path=/" True "$(grep -qi 'path=/' "$headers_file" && printf True || printf False)"
+  rm -f "$headers_file" "$headers_file.cookies"
+
+  r=$(req -X POST "$API/auth/login" \
+    --data-urlencode "username=mgr-a-$STAMP@x.test" \
+    --data-urlencode "password=$ADMIN_PASS")
+  check "el cuerpo es solo el estado" '{"status": "AUTHENTICATED"}' "$(body "$r" | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin), sort_keys=True))' 2>/dev/null)"
+  check "el cuerpo no trae token" "" "$(body "$r" | f 'd.get("access_token") or ""')"
+
+  r=$(req "$API/auth/me" -H "Authorization: Bearer $MGR_A")
+  check "la sesión rehidrata en /me" 200 "$(code "$r")"
+  check "la identidad sale de la sesión" "mgr-a-$STAMP@x.test" "$(body "$r" | f 'd.get("email")')"
+
+  jar2=$(login "mgr-a-$STAMP@x.test" "$ADMIN_PASS")
+  r=$(req -X POST "$API/auth/logout" -H "Authorization: Bearer $MGR_A")
+  check "el logout responde 204" 204 "$(code "$r")"
+  r=$(req "$API/auth/me" -H "Authorization: Bearer $MGR_A")
+  check "la cookie usada no rehidrata" 401 "$(code "$r")"
+  r=$(req "$API/auth/me" -H "Authorization: Bearer $jar2")
+  check "la otra sesión sigue viva" 200 "$(code "$r")"
+  MGR_A=$jar2
+
+  r=$(req -X POST "$API/auth/login" -H "Origin: https://evil.test" \
+    --data-urlencode "username=mgr-a-$STAMP@x.test" \
+    --data-urlencode "password=$ADMIN_PASS")
+  check "el origen hostil no entra" 403 "$(code "$r")"
+  check "el rechazo lleva su código" FORBIDDEN "$(body "$r" | f 'd.get("error_code")')"
+
+  r=$(req -X POST "$API/rules/scoring" -H "Authorization: Bearer $MGR_A" -H "Origin: https://evil.test" \
+    -H 'Content-Type: application/json' -d '{"name":"x","conditions":[],"score_delta":1}')
+  check "el origen hostil no muta" 403 "$(code "$r")"
+  r=$(req "$API/auth/me" -H "Authorization: Bearer $MGR_A")
+  check "la sesión sobrevive al rechazo" 200 "$(code "$r")"
+
+  r=$(req -X POST "$API/auth/logout" -H "Authorization: Bearer $MGR_A" -H "Origin: https://evil.test")
+  check "el logout hostil no revoca" 403 "$(code "$r")"
+  r=$(req "$API/auth/me" -H "Authorization: Bearer $MGR_A")
+  check "la sesión sigue tras el logout hostil" 200 "$(code "$r")"
+}
+
 # -------------------------------------------------------------------- F0 ---
 # Email identity is canonical globally: it is the login key, not a label a
 # different organization may reuse.
@@ -855,6 +912,7 @@ if [ "${1:-}" = "--reset" ]; then
 fi
 
 bootstrap
+verify_sessions
 verify_f0_identity
 verify_f2a
 verify_f2b

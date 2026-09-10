@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from uuid import uuid4
 
 import pytest
 
 from domain.entities.agent import Agent
+from domain.entities.auth_session import AuthSession
 from domain.exceptions import ForbiddenException, UnauthorizedException
 from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
@@ -77,11 +80,38 @@ def test_malformed_token_is_unauthorized():
 def test_deactivated_agent_is_unauthorized_even_with_a_valid_token():
     """Identity is revalidated against the database on every request, so
     deactivating an account cuts an outstanding token immediately."""
-    agent = Agent.create(
-        "M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A, is_active=False
-    )
+    agent = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
+    uow = _uow_with(agent)
+    token = "opaque-session"
+    uow.sessions.save(AuthSession(sha256(token.encode()).hexdigest(), agent.id.value, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(hours=1)))
+    agent.is_active = False
     with pytest.raises(UnauthorizedException):
-        resolve_current_agent(token="opaque-session", uow=_uow_with(agent))
+        resolve_current_agent(token=token, uow=uow)
+
+
+def test_expired_session_is_unauthorized_even_with_an_active_agent():
+    agent = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
+    uow = _uow_with(agent)
+    token = "opaque-session"
+    uow.sessions.save(AuthSession(sha256(token.encode()).hexdigest(), agent.id.value, datetime.now(timezone.utc) - timedelta(hours=2), datetime.now(timezone.utc) - timedelta(hours=1)))
+    with pytest.raises(UnauthorizedException):
+        resolve_current_agent(token=token, uow=uow)
+
+
+def test_revoked_session_is_unauthorized_even_before_expiry():
+    agent = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
+    uow = _uow_with(agent)
+    token = "opaque-session"
+    uow.sessions.save(AuthSession(sha256(token.encode()).hexdigest(), agent.id.value, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(hours=1)))
+    uow.sessions.revoke(sha256(token.encode()).hexdigest(), datetime.now(timezone.utc))
+    with pytest.raises(UnauthorizedException):
+        resolve_current_agent(token=token, uow=uow)
+
+
+def test_well_formed_but_unknown_token_is_unauthorized():
+    agent = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
+    with pytest.raises(UnauthorizedException):
+        resolve_current_agent(token="never-issued-session-value", uow=_uow_with(agent))
 
 
 def test_context_carries_the_agent_own_tenant():

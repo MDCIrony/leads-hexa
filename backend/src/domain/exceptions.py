@@ -71,3 +71,10 @@ class ForbiddenException(DomainException):
 
     def __init__(self, message: str = "You do not have permission to perform this action"):
         super().__init__(message, error_code="FORBIDDEN")
+
+
+class InvalidAuthChallengeException(DomainException):
+    """Raised when an auth challenge is created outside its contract."""
+
+    def __init__(self, message: str = "Auth challenge is invalid"):
+        super().__init__(message, error_code="INVALID_CHALLENGE")

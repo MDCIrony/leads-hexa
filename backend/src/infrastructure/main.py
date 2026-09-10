@@ -104,7 +104,7 @@ async def reject_untrusted_browser_origins(request: Request, call_next):
     """SameSite protects ordinary browser navigation; Origin closes CORS gaps for writes."""
     origin = request.headers.get("origin")
     if request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"} and origin and origin not in _settings.cors_origins:
-        return JSONResponse(status_code=403, content={"error": "FORBIDDEN", "error_code": "FORBIDDEN", "message": "Origen no permitido"})
+        return JSONResponse(status_code=403, content={"error": True, "error_code": "FORBIDDEN", "message": "Origen no permitido"})
     return await call_next(request)
 
 # Include Routers

@@ -35,6 +35,17 @@ def test_cors_origins_default_covers_the_bare_localhost_origin(monkeypatch):
     assert "http://localhost" in Settings.from_environment().cors_origins
 
 
+def test_session_defaults_are_eight_hours_without_secure_flag(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
+    monkeypatch.delenv("SESSION_HOURS", raising=False)
+    monkeypatch.delenv("SESSION_COOKIE_SECURE", raising=False)
+
+    settings = Settings.from_environment()
+
+    assert settings.session_hours == 8
+    assert settings.session_cookie_secure is False
+
+
 def test_whitespace_around_origins_is_trimmed(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
     monkeypatch.setenv("CORS_ORIGINS", " http://a.test , http://b.test ")
