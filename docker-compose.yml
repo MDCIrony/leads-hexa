@@ -41,7 +41,7 @@ services:
       - "8001:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
-      - JWT_SECRET=dev-secret-change-in-production
+      - JWT_SECRET=dev-only-jwt-signing-key-not-for-production-2026
       - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
       - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -175,7 +175,7 @@ services:
       - ./backend/src:/app/src:ro
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
-      - JWT_SECRET=dev-secret-change-in-production
+      - JWT_SECRET=dev-only-jwt-signing-key-not-for-production-2026
       - LOG_LEVEL=INFO
       - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
       # Needed even though this process never publishes: the container it
