@@ -86,3 +86,8 @@ class InvalidAuthChallengeException(DomainException):
 
     def __init__(self, message: str = "Auth challenge is invalid"):
         super().__init__(message, error_code="INVALID_CHALLENGE")
+
+
+class InvalidSocialIdentityException(DomainException):
+    def __init__(self, message: str = "Social identity is invalid"):
+        super().__init__(message, error_code="INVALID_SOCIAL_IDENTITY")

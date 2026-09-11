@@ -16,6 +16,7 @@ from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from application.ports.output.auth_session_repository_port import AuthSessionRepositoryPort
 from application.ports.output.auth_challenge_repository_port import AuthChallengeRepositoryPort
 from application.ports.output.agent_mfa_repository_port import AgentMfaRepositoryPort
+from application.ports.output.social_identity_repository_port import SocialIdentityRepositoryPort
 
 class UnitOfWorkPort(abc.ABC):
     leads: LeadRepositoryPort
@@ -32,6 +33,7 @@ class UnitOfWorkPort(abc.ABC):
     sessions: AuthSessionRepositoryPort
     challenges: AuthChallengeRepositoryPort
     mfa: AgentMfaRepositoryPort
+    social_identities: SocialIdentityRepositoryPort
 
     def __enter__(self) -> UnitOfWorkPort:
         return self

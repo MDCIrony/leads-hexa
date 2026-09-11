@@ -23,4 +23,9 @@ class AuthChallengeRepositoryPort(abc.ABC):
     def consume(self, token_hash: str, now: datetime) -> bool: ...
 
     @abc.abstractmethod
+    def consume_oauth(
+        self, token_hash: str, provider: str, state_hash: str, now: datetime
+    ) -> Optional[AuthChallenge]: ...
+
+    @abc.abstractmethod
     def invalidate_active_for_agent(self, agent_id: UUID, purpose: str, now: datetime) -> Optional[AuthChallenge]: ...

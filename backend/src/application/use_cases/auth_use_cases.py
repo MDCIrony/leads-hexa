@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.ports.output.mfa_crypto_port import MfaCryptoPort
@@ -13,6 +13,7 @@ from domain.entities.auth_challenge import AuthChallenge
 from domain.entities.agent_mfa import AgentMfa
 from domain.entities.agent import Agent
 from domain.entities.agent import normalize_email
+from domain.entities.social_identity import SocialIdentity
 from domain.exceptions import InvalidCredentialsException, InvalidMfaFactorException
 from domain.value_objects.enums import AgentRole
 
@@ -39,6 +40,43 @@ class _LostMfaChallenge(Exception):
     pass
 
 
+class PrimaryAuthentication:
+    """Apply the shared session-or-MFA decision after a factor is verified."""
+
+    def __init__(self, uow: UnitOfWorkPort, session_hours: int) -> None:
+        self.uow = uow
+        self.session_hours = session_hours
+
+    @staticmethod
+    def eligible(agent: Agent | None) -> bool:
+        return bool(agent and agent.is_active and agent.role != AgentRole.INTEGRATION)
+
+    def authenticate(self, agent: Agent, now: datetime) -> LoginResult:
+        if not self.eligible(agent):
+            raise InvalidCredentialsException()
+        enrollment = self.uow.mfa.get(agent.id.value)
+        token = secrets.token_urlsafe(32)
+        previous_challenge = self.uow.challenges.invalidate_active_for_agent(
+            agent.id.value, MFA_CHALLENGE_PURPOSE, now
+        )
+        if enrollment and enrollment.enabled_at is not None:
+            self.uow.challenges.save(AuthChallenge(
+                token_hash=sha256(token.encode()).hexdigest(), agent_id=agent.id.value,
+                purpose=MFA_CHALLENGE_PURPOSE,
+                attempts=previous_challenge.attempts if previous_challenge else 0,
+                expires_at=previous_challenge.expires_at if previous_challenge else now + timedelta(minutes=MFA_CHALLENGE_MINUTES),
+                consumed_at=None, created_at=now,
+            ))
+            return LoginResult(status="MFA_REQUIRED", token=token)
+        self.uow.sessions.save(AuthSession(
+            token_hash=sha256(token.encode()).hexdigest(),
+            agent_id=agent.id.value,
+            created_at=now,
+            expires_at=now + timedelta(hours=self.session_hours),
+        ))
+        return LoginResult(status="AUTHENTICATED", token=token)
+
+
 class LoginUseCase(LoginInputPort):
     def __init__(
         self,
@@ -48,7 +86,7 @@ class LoginUseCase(LoginInputPort):
     ) -> None:
         self.uow = uow
         self.password_hasher = password_hasher
-        self.session_hours = session_hours
+        self.primary_authentication = PrimaryAuthentication(uow, session_hours)
 
     def execute(self, email: str, password: str) -> LoginResult:
         now = datetime.now(timezone.utc)
@@ -67,27 +105,46 @@ class LoginUseCase(LoginInputPort):
             ):
                 raise InvalidCredentialsException()
 
-            enrollment = self.uow.mfa.get(agent.id.value)
-            token = secrets.token_urlsafe(32)
-            previous_challenge = self.uow.challenges.invalidate_active_for_agent(
-                agent.id.value, MFA_CHALLENGE_PURPOSE, now
+            return self.primary_authentication.authenticate(agent, now)
+
+
+class SocialLoginUseCase:
+    """Resolve an already exchanged OAuth identity without keeping its HTTP call open."""
+
+    def __init__(self, uow: UnitOfWorkPort, session_hours: int) -> None:
+        self.uow = uow
+        self.primary_authentication = PrimaryAuthentication(uow, session_hours)
+
+    def execute(
+        self,
+        provider: str,
+        provider_subject: str,
+        email: str | None,
+        email_verified: bool,
+    ) -> LoginResult:
+        now = datetime.now(timezone.utc)
+        if provider not in {"GOOGLE", "GITHUB"} or not provider_subject.strip():
+            raise InvalidCredentialsException()
+        with self.uow:
+            identity = self.uow.social_identities.get_by_provider_subject(provider, provider_subject)
+            if identity:
+                agent = self.uow.agents.get_by_id(identity.agent_id)
+                if not self.primary_authentication.eligible(agent) or not self.uow.social_identities.touch_last_login(identity.id, now):
+                    raise InvalidCredentialsException()
+                return self.primary_authentication.authenticate(agent, now)
+
+            normalized_email = normalize_email(email or "")
+            agent = self.uow.agents.get_by_email(normalized_email) if email_verified and normalized_email else None
+            if not self.primary_authentication.eligible(agent):
+                raise InvalidCredentialsException()
+            identity = SocialIdentity(
+                id=uuid4(), agent_id=agent.id.value, provider=provider,
+                provider_subject=provider_subject, email_at_link=normalized_email,
+                created_at=now, last_login_at=now,
             )
-            if enrollment and enrollment.enabled_at is not None:
-                self.uow.challenges.save(AuthChallenge(
-                    token_hash=sha256(token.encode()).hexdigest(), agent_id=agent.id.value,
-                    purpose=MFA_CHALLENGE_PURPOSE,
-                    attempts=previous_challenge.attempts if previous_challenge else 0,
-                    expires_at=previous_challenge.expires_at if previous_challenge else now + timedelta(minutes=MFA_CHALLENGE_MINUTES),
-                    consumed_at=None, created_at=now,
-                ))
-                return LoginResult(status="MFA_REQUIRED", token=token)
-            self.uow.sessions.save(AuthSession(
-                token_hash=sha256(token.encode()).hexdigest(),
-                agent_id=agent.id.value,
-                created_at=now,
-                expires_at=now + timedelta(hours=self.session_hours),
-            ))
-            return LoginResult(status="AUTHENTICATED", token=token)
+            if not self.uow.social_identities.save(identity):
+                raise InvalidCredentialsException()
+            return self.primary_authentication.authenticate(agent, now)
 
 
 class MfaUseCase:

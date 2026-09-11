@@ -34,6 +34,8 @@ from application.ports.output.agent_mfa_repository_port import AgentMfaRepositor
 from domain.entities.auth_session import AuthSession
 from domain.entities.auth_challenge import AuthChallenge
 from domain.entities.agent_mfa import AgentMfa
+from domain.entities.social_identity import SocialIdentity
+from application.ports.output.social_identity_repository_port import SocialIdentityRepositoryPort
 from datetime import datetime
 
 
@@ -91,6 +93,13 @@ class InMemoryAuthChallengeRepository(AuthChallengeRepositoryPort):
         self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "consumed_at": now})
         return True
 
+    def consume_oauth(self, token_hash: str, provider: str, state_hash: str, now: datetime) -> Optional[AuthChallenge]:
+        challenge = self.resolve_active(token_hash, now)
+        if not challenge or not challenge.matches_oauth(provider, state_hash):
+            return None
+        self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "consumed_at": now})
+        return self.items[token_hash]
+
     def invalidate_active_for_agent(self, agent_id: object, purpose: str, now: datetime) -> Optional[AuthChallenge]:
         active = [
             challenge for token_hash, challenge in self.items.items()
@@ -140,6 +149,36 @@ class InMemoryAgentMfaRepository(AgentMfaRepositoryPort):
     def delete(self, agent_id: UUID) -> None:
         self.items.pop(agent_id, None)
         self.recovery_codes = {key: value for key, value in self.recovery_codes.items() if key[0] != agent_id}
+
+
+class InMemorySocialIdentityRepository(SocialIdentityRepositoryPort):
+    def __init__(self) -> None:
+        self.items: Dict[UUID, SocialIdentity] = {}
+
+    def get_by_provider_subject(self, provider: str, provider_subject: str) -> Optional[SocialIdentity]:
+        return next(
+            (
+                identity for identity in self.items.values()
+                if identity.provider == provider and identity.provider_subject == provider_subject
+            ),
+            None,
+        )
+
+    def save(self, identity: SocialIdentity) -> bool:
+        if self.get_by_provider_subject(identity.provider, identity.provider_subject) or any(
+            item.agent_id == identity.agent_id and item.provider == identity.provider
+            for item in self.items.values()
+        ):
+            return False
+        self.items[identity.id] = identity
+        return True
+
+    def touch_last_login(self, identity_id: UUID, now: datetime) -> bool:
+        identity = self.items.get(identity_id)
+        if not identity:
+            return False
+        self.items[identity_id] = SocialIdentity(**{**identity.__dict__, "last_login_at": now})
+        return True
 
 
 class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
@@ -385,6 +424,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.sessions = InMemoryAuthSessionRepository()
         self.challenges = InMemoryAuthChallengeRepository()
         self.mfa = InMemoryAgentMfaRepository()
+        self.social_identities = InMemorySocialIdentityRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self

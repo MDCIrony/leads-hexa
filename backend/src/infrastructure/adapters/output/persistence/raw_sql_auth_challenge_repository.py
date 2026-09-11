@@ -14,13 +14,13 @@ class RawSqlAuthChallengeRepository(AuthChallengeRepositoryPort):
 
     def save(self, challenge: AuthChallenge) -> None:
         self.connection.execute(
-            "INSERT INTO auth_challenges (token_hash, agent_id, purpose, attempts, expires_at, consumed_at, created_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (challenge.token_hash, challenge.agent_id, challenge.purpose, challenge.attempts, challenge.expires_at, challenge.consumed_at, challenge.created_at),
+            "INSERT INTO auth_challenges (token_hash, agent_id, purpose, attempts, expires_at, consumed_at, created_at, provider, state_hash, pkce_verifier, return_path) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (challenge.token_hash, challenge.agent_id, challenge.purpose, challenge.attempts, challenge.expires_at, challenge.consumed_at, challenge.created_at, challenge.provider, challenge.state_hash, challenge.pkce_verifier, challenge.return_path),
         )
 
     def resolve_active(self, token_hash: str, now: datetime) -> Optional[AuthChallenge]:
         row = self.connection.execute(
-            "SELECT token_hash, agent_id, purpose, attempts, expires_at, consumed_at, created_at FROM auth_challenges WHERE token_hash = %s AND consumed_at IS NULL AND expires_at > %s",
+            "SELECT token_hash, agent_id, purpose, attempts, expires_at, consumed_at, created_at, provider, state_hash, pkce_verifier, return_path FROM auth_challenges WHERE token_hash = %s AND consumed_at IS NULL AND expires_at > %s",
             (token_hash, now),
         ).fetchone()
         return AuthChallenge(**dict(row)) if row else None
@@ -45,11 +45,22 @@ class RawSqlAuthChallengeRepository(AuthChallengeRepositoryPort):
             (now, token_hash, now),
         ).rowcount == 1
 
+    def consume_oauth(self, token_hash: str, provider: str, state_hash: str, now: datetime) -> Optional[AuthChallenge]:
+        row = self.connection.execute(
+            "UPDATE auth_challenges SET consumed_at = %s "
+            "WHERE token_hash = %s AND purpose = 'OAUTH_LOGIN' AND provider = %s AND state_hash = %s "
+            "AND consumed_at IS NULL AND expires_at > %s "
+            "RETURNING token_hash, agent_id, purpose, attempts, expires_at, consumed_at, created_at, provider, state_hash, pkce_verifier, return_path",
+            (now, token_hash, provider, state_hash, now),
+        ).fetchone()
+        challenge = AuthChallenge(**dict(row)) if row else None
+        return challenge if challenge and challenge.matches_oauth(provider, state_hash) else None
+
     def invalidate_active_for_agent(self, agent_id: UUID, purpose: str, now: datetime) -> Optional[AuthChallenge]:
         rows = self.connection.execute(
             "UPDATE auth_challenges SET consumed_at = %s WHERE agent_id = %s AND purpose = %s "
             "AND consumed_at IS NULL AND expires_at > %s "
-            "RETURNING token_hash, agent_id, purpose, attempts, expires_at, consumed_at, created_at",
+            "RETURNING token_hash, agent_id, purpose, attempts, expires_at, consumed_at, created_at, provider, state_hash, pkce_verifier, return_path",
             (now, agent_id, purpose, now),
         ).fetchall()
         return max((AuthChallenge(**dict(row)) for row in rows), key=lambda challenge: challenge.attempts, default=None)

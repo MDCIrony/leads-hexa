@@ -144,3 +144,29 @@ def test_validation_errors_carry_no_secret():
 
     assert "s3cr3t" not in str(empty.value)
     assert "s3cr3t" not in str(negative.value)
+
+
+def test_oauth_challenge_requires_its_metadata_and_is_consumed_only_for_matching_state():
+    now = datetime.now(timezone.utc)
+    with pytest.raises(InvalidAuthChallengeException):
+        AuthChallenge("hash", None, "OAUTH_LOGIN", 0, now + timedelta(minutes=5), None, now)
+    challenge = AuthChallenge(
+        "hash", None, "OAUTH_LOGIN", 0, now + timedelta(minutes=5), None, now,
+        provider="GOOGLE", state_hash="state", pkce_verifier="verifier", return_path="/home",
+    )
+    repo = InMemoryAuthChallengeRepository()
+    repo.save(challenge)
+
+    assert repo.consume_oauth("hash", "GOOGLE", "other", now) is None
+    assert repo.consume_oauth("hash", "GOOGLE", "state", now) is not None
+    assert repo.consume_oauth("hash", "GOOGLE", "state", now) is None
+
+
+@pytest.mark.parametrize("return_path", ["//other.test", "https://other.test", "/home?next=x", "/home#top", "/home\\other", "/home\x00"])
+def test_oauth_challenge_rejects_non_internal_return_paths(return_path):
+    now = datetime.now(timezone.utc)
+    with pytest.raises(InvalidAuthChallengeException):
+        AuthChallenge(
+            "hash", None, "OAUTH_LOGIN", 0, now + timedelta(minutes=5), None, now,
+            provider="GOOGLE", state_hash="state", pkce_verifier="verifier", return_path=return_path,
+        )

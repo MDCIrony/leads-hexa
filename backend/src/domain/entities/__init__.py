@@ -3,6 +3,7 @@ from domain.entities.rule import AssignmentRule, ScoringRule
 from domain.entities.agent import Agent
 from domain.entities.sales_group import SalesGroup
 from domain.entities.webhook import WebhookConfig
+from domain.entities.social_identity import SocialIdentity
 
 __all__ = [
     "Lead",
@@ -11,4 +12,5 @@ __all__ = [
     "SalesGroup",
     "Agent",
     "WebhookConfig",
+    "SocialIdentity",
 ]
