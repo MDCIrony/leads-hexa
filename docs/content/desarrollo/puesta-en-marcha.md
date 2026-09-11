@@ -112,6 +112,15 @@ GITHUB_REDIRECT_URI=http://localhost:8001/api/v1/auth/oauth/github/callback
 `FRONTEND_ORIGIN` debe estar incluido exactamente en `CORS_ORIGINS`. Al completar las tres variables
 de un proveedor aparece su botón en el login; sólo permite entrar a agentes humanos ya existentes con
 correo de proveedor verificado. La vuelta conserva PKCE y, si MFA está activo, continúa en `/mfa`.
+No hay auto-registro: crea antes el `Agent` activo de prueba con el mismo correo. `SESSION_COOKIE_SECURE=false`
+sirve sólo para este localhost HTTP; en cualquier entorno HTTPS debe ser `true`.
+
+Para una demostración manual, registra las dos callback exactas de arriba en Google Cloud y GitHub,
+abre `http://localhost/login`, inicia con la cuenta de prueba y comprueba `GET /api/v1/auth/me` tras
+la vuelta. Repite la entrada para comprobar el subject enlazado; una cuenta sin `Agent` o sin correo
+verificado vuelve al login sin sesión. Activa MFA en ese `Agent` para comprobar la transición a `/mfa`.
+Borra las cookies entre intentos y no copies credenciales, códigos, tokens ni secretos a documentación,
+capturas o commits: viven exclusivamente en el `.env` local no versionado.
 
 Para encadenar comandos, conserva las cookies con un jar:
 

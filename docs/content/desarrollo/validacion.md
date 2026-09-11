@@ -74,6 +74,12 @@ El script se amplía, nunca se reescribe: cada fase de trabajo añade su propia 
 la llama desde `main`, de modo que las comprobaciones anteriores siguen corriendo y probando que lo
 que ya funcionaba sigue funcionando.
 
+La comprobación social OAuth ya está integrada. Conserva la API habitual y arranca un backend efímero
+en `127.0.0.1` con `APP_ENV=test` y `OAUTH_TEST_MODE=true`; ese único proceso usa un adaptador
+determinista y sin red para el callback. Verifica start/PKCE/cookie, el primer enlace y el subject
+repetido, el rechazo de correo no verificado, la transición a MFA y el replay. El modo rechaza cualquier
+entorno que no sea `test`, no usa credenciales de proveedor y el contenedor temporal se elimina al final.
+
 ## Los cuatro tests de arquitectura
 
 Dentro de la suite completa, `backend/tests/architecture/test_dependency_rule.py` analiza el árbol

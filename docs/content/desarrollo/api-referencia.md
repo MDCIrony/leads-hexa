@@ -146,7 +146,9 @@ desafío de cinco minutos ligado a una cookie HttpOnly y responde `303` al prove
 Code + PKCE S256. El callback también responde `303`: para una cuenta humana existente, activa y con
 correo verificado crea la cookie de sesión opaca o el desafío MFA existente. Nunca registra cuentas,
 persiste tokens del proveedor ni devuelve `code`, `state` o correo en la URL final. Un fallo redirige
-de forma genérica a `/login`.
+de forma genérica a `/login?oauth_error=1`. `return_path` sólo admite una ruta interna sin consulta ni
+fragmento; el destino final siempre empieza en `FRONTEND_ORIGIN`. Un proveedor incompleto no aparece
+en `/oauth/providers` y sus rutas responden `404`.
 
 ### `GET /api/v1/auth/me`
 

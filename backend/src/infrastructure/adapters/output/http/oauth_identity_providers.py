@@ -79,3 +79,16 @@ class GitHubOAuthIdentityProvider(_HttpxOAuthIdentityProvider):
             return OAuthIdentity(str(subject), email, True, name if isinstance(name, str) else None)
         except (httpx.HTTPError, ValueError, TypeError, OAuthIdentityProviderError):
             raise OAuthIdentityProviderError() from None
+
+
+class TestOAuthIdentityProvider(OAuthIdentityProviderPort):
+    """Deterministic identity double, available only with APP_ENV=test."""
+
+    def exchange(self, code: str, pkce_verifier: str) -> OAuthIdentity:
+        try:
+            email, verified, subject = code.split("|", 2)
+            if not email or not subject or verified not in {"verified", "unverified"}:
+                raise ValueError
+        except ValueError:
+            raise OAuthIdentityProviderError() from None
+        return OAuthIdentity(subject, email, verified == "verified", "OAuth E2E")

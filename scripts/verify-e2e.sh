@@ -897,6 +897,106 @@ verify_f5() {
   rm -f "/tmp/e2e-sucio-$STAMP.csv"
 }
 
+# ------------------------------------------------------------- social OAuth ---
+# OAuth's real providers must never be part of this harness. A short-lived,
+# loopback-only backend gets the explicit test adapter; the normal stack and
+# its configuration remain untouched.
+verify_social_oauth() {
+  local r start_headers jar bad_jar mfa_jar mfa_headers location state port container health secret totp logs
+  section "OAuth social · adaptador determinista"
+
+  port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+  container="leads-oauth-e2e-$STAMP"
+  docker compose run --no-deps -d --name "$container" -p "127.0.0.1:$port:8000" \
+    -e APP_ENV=test -e OAUTH_TEST_MODE=true backend \
+    uvicorn infrastructure.main:app --host 0.0.0.0 --port 8000 --app-dir src --no-access-log >/dev/null 2>&1
+
+  health=
+  for _ in $(seq 1 30); do
+    health=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/health")
+    [ "$health" = 200 ] && break
+    sleep 0.2
+  done
+  check "el adaptador OAuth de prueba arranca en loopback" 200 "$health"
+  if [ "$health" != 200 ]; then
+    docker rm -f "$container" >/dev/null 2>&1 || true
+    return
+  fi
+
+  start_headers=$(mktemp "/tmp/leads-oauth-e2e-${STAMP}-XXXXXX.headers")
+  jar="${start_headers}.cookies"
+  r=$(curl -s -D "$start_headers" -o /dev/null -w '%{http_code}' -c "$jar" \
+    "http://127.0.0.1:$port/api/v1/auth/oauth/google/start?return_path=/mis-leads")
+  location=$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers" | tr -d '\r')
+  state=$(printf '%s' "$location" | f '(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).parse_qs(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).urlsplit(d).query).get("state") or [""])[0]')
+  check "OAuth start responde 303" 303 "$r"
+  check "OAuth start deja state y PKCE S256" True "$(printf '%s' "$location" | python3 -c 'import sys; from urllib.parse import parse_qs,urlsplit; q=parse_qs(urlsplit(sys.stdin.read()).query); print(bool(q.get("state")) and q.get("code_challenge_method") == ["S256"])')"
+  check "OAuth start fija la cookie de desafío" True "$(grep -qi 'leads_oauth_challenge=.*HttpOnly' "$start_headers" && printf True || printf False)"
+
+  r=$(curl -s -D "$start_headers.callback" -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" -G \
+    --data-urlencode "code=uno-$STAMP@x.test|verified|google-$STAMP" \
+    --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
+  check "primer callback enlaza al agente existente" 303 "$r"
+  check "primer callback crea sesión opaca" True "$(grep -qi 'leads_session=' "$start_headers.callback" && printf True || printf False)"
+  check "primer callback vuelve a la ruta interna" "http://localhost/mis-leads" "$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.callback" | tr -d '\r')"
+  r=$(curl -s -o /dev/null -w '%{http_code}' -b "$jar" "http://127.0.0.1:$port/api/v1/auth/me")
+  check "la sesión social rehidrata al agente enlazado" 200 "$r"
+
+  r=$(curl -s -o /dev/null -w '%{http_code}' -b "$jar" -X POST "http://127.0.0.1:$port/api/v1/auth/logout")
+  check "la sesión social se puede cerrar" 204 "$r"
+  r=$(curl -s -D "$start_headers.repeat" -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" \
+    "http://127.0.0.1:$port/api/v1/auth/oauth/google/start?return_path=/mis-leads")
+  state=$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.repeat" | tr -d '\r' | f '(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).parse_qs(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).urlsplit(d).query).get("state") or [""])[0]')
+  r=$(curl -s -D "$start_headers.repeat.callback" -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" -G \
+    --data-urlencode "code=uno-$STAMP@x.test|verified|google-$STAMP" \
+    --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
+  check "el subject repetido inicia de nuevo" 303 "$r"
+
+  bad_jar=$(mktemp "/tmp/leads-oauth-e2e-${STAMP}-XXXXXX.cookies")
+  r=$(curl -s -D "$start_headers.bad" -o /dev/null -w '%{http_code}' -c "$bad_jar" \
+    "http://127.0.0.1:$port/api/v1/auth/oauth/google/start")
+  state=$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.bad" | tr -d '\r' | f '(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).parse_qs(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).urlsplit(d).query).get("state") or [""])[0]')
+  r=$(curl -s -D "$start_headers.bad.callback" -o /dev/null -w '%{http_code}' -b "$bad_jar" -G \
+    --data-urlencode "code=uno-$STAMP@x.test|unverified|unverified-$STAMP" \
+    --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
+  check "un correo sin verificar vuelve al error genérico" "http://localhost/login?oauth_error=1" "$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.bad.callback" | tr -d '\r')"
+  check "un correo sin verificar no fija sesión" False "$(grep -qi 'leads_session=' "$start_headers.bad.callback" && printf True || printf False)"
+
+  mfa_jar=$(login "dos-$STAMP@x.test" "$ADMIN_PASS")
+  secret=$(curl -s -b "$mfa_jar" -H 'Content-Type: application/json' -d "{\"password\":\"$ADMIN_PASS\"}" "$API/auth/mfa/setup" | f 'd.get("secret") or ""')
+  totp=$(python3 - "$secret" <<'PY'
+import base64, hashlib, hmac, struct, sys, time
+key = base64.b32decode(sys.argv[1], casefold=True)
+counter = struct.pack(">Q", int(time.time()) // 30)
+digest = hmac.new(key, counter, hashlib.sha1).digest()
+offset = digest[-1] & 15
+value = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7fffffff) % 1000000
+print(f"{value:06d}")
+PY
+)
+  r=$(curl -s -o /dev/null -w '%{http_code}' -b "$mfa_jar" -H 'Content-Type: application/json' \
+    -d "{\"code\":\"$totp\"}" "$API/auth/mfa/setup/confirm")
+  check "el agente de la transición OAuth tiene MFA activo" 200 "$r"
+
+  r=$(curl -s -D "$start_headers.mfa" -o /dev/null -w '%{http_code}' -c "$mfa_jar" \
+    "http://127.0.0.1:$port/api/v1/auth/oauth/google/start")
+  state=$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.mfa" | tr -d '\r' | f '(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).parse_qs(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).urlsplit(d).query).get("state") or [""])[0]')
+  r=$(curl -s -D "$start_headers.mfa.callback" -o /dev/null -w '%{http_code}' -b "$mfa_jar" -c "$mfa_jar" -G \
+    --data-urlencode "code=dos-$STAMP@x.test|verified|mfa-google-$STAMP" \
+    --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
+  check "OAuth con MFA redirige al desafío" "http://localhost/mfa" "$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.mfa.callback" | tr -d '\r')"
+  check "OAuth con MFA sólo fija el desafío temporal" True "$(grep -qi 'leads_mfa_challenge=' "$start_headers.mfa.callback" && ! grep -qi 'leads_session=' "$start_headers.mfa.callback" && printf True || printf False)"
+  r=$(curl -s -D "$start_headers.replay" -o /dev/null -w '%{http_code}' -b "$mfa_jar" -G \
+    --data-urlencode "code=dos-$STAMP@x.test|verified|mfa-google-$STAMP" \
+    --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
+  check "un callback OAuth repetido se rechaza" "http://localhost/login?oauth_error=1" "$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.replay" | tr -d '\r')"
+
+  logs=$(docker logs "$container" 2>&1)
+  check "el adaptador no deja tracebacks ni datos OAuth en logs" False "$(printf '%s' "$logs" | grep -Eqi 'traceback|google-[0-9]|mfa-google-[0-9]|unverified-[0-9]' && printf True || printf False)"
+  docker rm -f "$container" >/dev/null 2>&1 || true
+  rm -f "$start_headers" "$start_headers".* "$jar" "$bad_jar" "$mfa_jar"
+}
+
 
 # ------------------------------------------------------------------- main ---
 
@@ -922,6 +1022,7 @@ verify_f3a
 verify_f31
 verify_f41
 verify_f5
+verify_social_oauth
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then

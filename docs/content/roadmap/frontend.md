@@ -24,9 +24,10 @@ La interfaz actual es una maqueta desconectada de ese backend, no un punto de pa
 - La sesión humana usa la cookie HttpOnly del backend: no se guarda un token ni se añade una cabecera
   de autorización; la identidad se rehidrata con `GET /auth/me`. El login puede quedar en
   `MFA_REQUIRED` hasta verificar el desafío temporal.
-- Google y GitHub son una vía de entrada opcional con OAuth Authorization Code y PKCE S256, para
+- Google y GitHub ya son una vía de entrada opcional con OAuth Authorization Code y PKCE S256, para
   agentes existentes y correo de proveedor verificado. El callback continúa con MFA si está activo
-  antes de crear la misma sesión opaca.
+  antes de crear la misma sesión opaca; la interfaz ya consulta los proveedores habilitados y muestra
+  sólo sus botones.
 - El cliente HTTP fija `Content-Type: application/json` de forma fija, lo que rompería el login en
   cuanto se conectara: ese endpoint espera `form-urlencoded`.
 

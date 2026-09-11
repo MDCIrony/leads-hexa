@@ -42,7 +42,7 @@ añadirlas no obligue a tocar el núcleo.
 | Webhooks de salida configurables | El despachador con firma HMAC ya funciona en el código | Una entidad de configuración con CRUD, suscripción del manejador al bus de eventos, reintentos y cola de fallidos |
 | Ciclo comercial del lead | El estado `ASIGNADO` cierra el recorrido de esta plataforma | Estados de contactado, ganado o perdido, y las acciones del asesor sobre ellos |
 | Métricas e informes | El desglose de puntuación por lead | Agregados de conversión, tiempo de respuesta y rendimiento por asesor |
-| Renovación de sesión | Sesión opaca con expiración fija y cierre revocable | Renovación antes de que expire; no forma parte del plan OAuth pendiente |
+| Renovación de sesión | Sesión opaca con expiración fija y cierre revocable; OAuth Google/GitHub ya usa la misma sesión y MFA | Renovación antes de que expire |
 | Colas y trabajadores externos | La carga masiva ya es asíncrona y un trabajo interrumpido se reprocesa sin duplicar leads | Reintento automático y un proceso separado del propio servidor web |
 
 ## Deuda técnica

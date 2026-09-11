@@ -16,7 +16,7 @@ from infrastructure.adapters.output.queue.rabbitmq_job_queue import RabbitMQJobQ
 from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
 from infrastructure.adapters.output.security.totp_mfa_crypto import TotpMfaCrypto
 from infrastructure.adapters.output.http.oauth_identity_providers import (
-    GitHubOAuthIdentityProvider, GoogleOAuthIdentityProvider,
+    GitHubOAuthIdentityProvider, GoogleOAuthIdentityProvider, TestOAuthIdentityProvider,
 )
 from infrastructure.adapters.output.system_clock import SystemClock
 from infrastructure.adapters.output.uuid_generator import UuidGenerator
@@ -54,7 +54,9 @@ class Container:
         # provisioning credentials, not a tenant consuming with one.
         self._messaging_credential_provisioner = KafkaCredentialProvisioner(settings.kafka_bootstrap_servers)
         self._oauth_identity_providers: dict[str, OAuthIdentityProviderPort] = {}
-        if settings.google_oauth.enabled:
+        if settings.oauth_test_mode:
+            self._oauth_identity_providers["GOOGLE"] = TestOAuthIdentityProvider()
+        elif settings.google_oauth.enabled:
             self._oauth_identity_providers["GOOGLE"] = GoogleOAuthIdentityProvider(settings.google_oauth)
         if settings.github_oauth.enabled:
             self._oauth_identity_providers["GITHUB"] = GitHubOAuthIdentityProvider(settings.github_oauth)

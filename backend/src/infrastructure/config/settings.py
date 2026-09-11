@@ -55,6 +55,7 @@ class Settings:
     frontend_origin: str = "http://localhost"
     google_oauth: OAuthProviderSettings = field(default_factory=OAuthProviderSettings)
     github_oauth: OAuthProviderSettings = field(default_factory=OAuthProviderSettings)
+    oauth_test_mode: bool = False
     session_hours: int = 8
     session_cookie_secure: bool = False
     webhook_timeout_seconds: float = 5.0
@@ -88,11 +89,21 @@ class Settings:
         if not _is_origin(frontend_origin) or frontend_origin not in origins:
             raise ValueError("FRONTEND_ORIGIN must be an origin included in CORS_ORIGINS")
 
+        oauth_test_mode = os.getenv("OAUTH_TEST_MODE", "false").lower() == "true"
+        if oauth_test_mode and os.getenv("APP_ENV") != "test":
+            raise ValueError("OAUTH_TEST_MODE requires APP_ENV=test")
+
+        # The deterministic adapter exists solely for a loopback process the
+        # HTTP harness starts. It cannot be enabled in a normal environment.
+        test_google = OAuthProviderSettings(
+            "e2e-test-client", "e2e-test-placeholder",
+            "http://localhost/api/v1/auth/oauth/google/callback",
+        )
         return cls(
             database_url=database_url,
             mfa_encryption_key=mfa_encryption_key,
             frontend_origin=frontend_origin,
-            google_oauth=OAuthProviderSettings(
+            google_oauth=test_google if oauth_test_mode else OAuthProviderSettings(
                 client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
                 client_secret=os.getenv("GOOGLE_CLIENT_SECRET", ""),
                 redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", ""),
@@ -102,6 +113,7 @@ class Settings:
                 client_secret=os.getenv("GITHUB_CLIENT_SECRET", ""),
                 redirect_uri=os.getenv("GITHUB_REDIRECT_URI", ""),
             ),
+            oauth_test_mode=oauth_test_mode,
             session_hours=int(os.getenv("SESSION_HOURS", "8")),
             session_cookie_secure=os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true",
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0")),

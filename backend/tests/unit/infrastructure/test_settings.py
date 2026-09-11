@@ -80,3 +80,17 @@ def test_frontend_origin_must_be_an_allowed_origin_and_partial_oauth_is_disabled
     monkeypatch.setenv("FRONTEND_ORIGIN", "http://a.test")
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "configured-alone")
     assert Settings.from_environment().google_oauth.enabled is False
+
+
+def test_oauth_test_mode_requires_an_explicit_test_environment(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
+    monkeypatch.setenv("OAUTH_TEST_MODE", "true")
+    monkeypatch.delenv("APP_ENV", raising=False)
+
+    with pytest.raises(ValueError, match="APP_ENV=test"):
+        Settings.from_environment()
+
+    monkeypatch.setenv("APP_ENV", "test")
+    settings = Settings.from_environment()
+    assert settings.oauth_test_mode is True
+    assert settings.google_oauth.enabled is True
