@@ -24,6 +24,9 @@ La interfaz actual es una maqueta desconectada de ese backend, no un punto de pa
 - La sesión humana usa la cookie HttpOnly del backend: no se guarda un token ni se añade una cabecera
   de autorización; la identidad se rehidrata con `GET /auth/me`. El login puede quedar en
   `MFA_REQUIRED` hasta verificar el desafío temporal.
+- Google y GitHub aún no son una vía de entrada: están planificados como OAuth Authorization Code con
+  PKCE S256, para agentes existentes y correo de proveedor verificado. Cuando lleguen, el callback
+  continuará con MFA si está activo antes de crear la misma sesión opaca.
 - El cliente HTTP fija `Content-Type: application/json` de forma fija, lo que rompería el login en
   cuanto se conectara: ese endpoint espera `form-urlencoded`.
 
@@ -43,7 +46,7 @@ src/
 | Elemento | Qué debe resolver |
 |---|---|
 | Enrutado | Rutas declarativas con URLs propias, enlaces directos y navegación con botón atrás |
-| Sesión | Cookie HttpOnly, rehidratación con `GET /auth/me`, desafío temporal cuando el login devuelve `MFA_REQUIRED` y manejo centralizado de sesión expirada y acceso denegado |
+| Sesión | Cookie HttpOnly, rehidratación con `GET /auth/me`, desafío temporal cuando el login devuelve `MFA_REQUIRED`, manejo centralizado de sesión expirada/acceso denegado y, pendiente, botones OAuth Google/GitHub que inician una redirección del navegador |
 | Datos | Una capa de datos con caché, reintentos y estados de carga y error explícitos, que hoy no existen en ninguna vista |
 | Tipos del API | Generados desde el contrato del backend en vez de escritos a mano, para que un cambio de contrato rompa la compilación del frontend en lugar de fallar en producción |
 | Guards | Por rol: el gestor accede a la gestión completa, el asesor sólo a su propio panel |
@@ -233,7 +236,7 @@ sin `curl`.
 | Vista | Funcionalidad mínima |
 |---|---|
 | Arranque de la plataforma **·MVP·** | Crear el primer administrador cuando la plataforma está vacía; detectar que ya no lo está y llevar al login en vez de ofrecer un formulario que va a responder `401` |
-| Login **·MVP·** | Entrada única; si devuelve `MFA_REQUIRED`, verificar el desafío temporal antes de rehidratar la sesión y llevar a cada rol a su panel |
+| Login **·MVP·** | Entrada por contraseña hoy; si devuelve `MFA_REQUIRED`, verificar el desafío temporal antes de rehidratar la sesión y llevar a cada rol a su panel. Google/GitHub OAuth con PKCE S256 queda planificado y nunca auto-registra cuentas |
 | Errores y sesión **·MVP·** | Un `401` de una solicitud autenticada cierra la sesión y vuelve al login; un `401` al verificar MFA se muestra en ese formulario. Un `403` explica que el rol no alcanza; un `404` dice que no existe; un `422` señala el campo; un `500` ofrece reintentar |
 
 ## Qué ya existe y se puede aprovechar
