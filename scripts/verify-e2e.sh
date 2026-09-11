@@ -66,6 +66,10 @@ print($1)
 " 2>/dev/null
 }
 
+oauth_state() {
+  python3 -c 'import sys; from urllib.parse import parse_qs, urlsplit; print(parse_qs(urlsplit(sys.argv[1]).query).get("state", [""])[0])' "$1"
+}
+
 login() {
   local jar body_file status
   jar=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.cookies")
@@ -928,7 +932,7 @@ verify_social_oauth() {
   r=$(curl -s -D "$start_headers" -o /dev/null -w '%{http_code}' -c "$jar" \
     "http://127.0.0.1:$port/api/v1/auth/oauth/google/start?return_path=/mis-leads")
   location=$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers" | tr -d '\r')
-  state=$(printf '%s' "$location" | f '(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).parse_qs(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).urlsplit(d).query).get("state") or [""])[0]')
+  state=$(oauth_state "$location")
   check "OAuth start responde 303" 303 "$r"
   check "OAuth start deja state y PKCE S256" True "$(printf '%s' "$location" | python3 -c 'import sys; from urllib.parse import parse_qs,urlsplit; q=parse_qs(urlsplit(sys.stdin.read()).query); print(bool(q.get("state")) and q.get("code_challenge_method") == ["S256"])')"
   check "OAuth start fija la cookie de desafío" True "$(grep -qi 'leads_oauth_challenge=.*HttpOnly' "$start_headers" && printf True || printf False)"
@@ -946,7 +950,7 @@ verify_social_oauth() {
   check "la sesión social se puede cerrar" 204 "$r"
   r=$(curl -s -D "$start_headers.repeat" -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" \
     "http://127.0.0.1:$port/api/v1/auth/oauth/google/start?return_path=/mis-leads")
-  state=$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.repeat" | tr -d '\r' | f '(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).parse_qs(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).urlsplit(d).query).get("state") or [""])[0]')
+  state=$(oauth_state "$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.repeat" | tr -d '\r')")
   r=$(curl -s -D "$start_headers.repeat.callback" -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" -G \
     --data-urlencode "code=uno-$STAMP@x.test|verified|google-$STAMP" \
     --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
@@ -955,7 +959,7 @@ verify_social_oauth() {
   bad_jar=$(mktemp "/tmp/leads-oauth-e2e-${STAMP}-XXXXXX.cookies")
   r=$(curl -s -D "$start_headers.bad" -o /dev/null -w '%{http_code}' -c "$bad_jar" \
     "http://127.0.0.1:$port/api/v1/auth/oauth/google/start")
-  state=$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.bad" | tr -d '\r' | f '(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).parse_qs(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).urlsplit(d).query).get("state") or [""])[0]')
+  state=$(oauth_state "$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.bad" | tr -d '\r')")
   r=$(curl -s -D "$start_headers.bad.callback" -o /dev/null -w '%{http_code}' -b "$bad_jar" -G \
     --data-urlencode "code=uno-$STAMP@x.test|unverified|unverified-$STAMP" \
     --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
@@ -980,12 +984,12 @@ PY
 
   r=$(curl -s -D "$start_headers.mfa" -o /dev/null -w '%{http_code}' -c "$mfa_jar" \
     "http://127.0.0.1:$port/api/v1/auth/oauth/google/start")
-  state=$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.mfa" | tr -d '\r' | f '(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).parse_qs(__import__("urllib.parse", fromlist=["parse_qs", "urlsplit"]).urlsplit(d).query).get("state") or [""])[0]')
+  state=$(oauth_state "$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.mfa" | tr -d '\r')")
   r=$(curl -s -D "$start_headers.mfa.callback" -o /dev/null -w '%{http_code}' -b "$mfa_jar" -c "$mfa_jar" -G \
     --data-urlencode "code=dos-$STAMP@x.test|verified|mfa-google-$STAMP" \
     --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
   check "OAuth con MFA redirige al desafío" "http://localhost/mfa" "$(awk 'tolower($1) == "location:" { print $2 }' "$start_headers.mfa.callback" | tr -d '\r')"
-  check "OAuth con MFA sólo fija el desafío temporal" True "$(grep -qi 'leads_mfa_challenge=' "$start_headers.mfa.callback" && ! grep -qi 'leads_session=' "$start_headers.mfa.callback" && printf True || printf False)"
+  check "OAuth con MFA revoca la sesión previa y fija el desafío temporal" True "$(grep -qi 'leads_mfa_challenge=' "$start_headers.mfa.callback" && grep -qi 'leads_session=.*max-age=0' "$start_headers.mfa.callback" && printf True || printf False)"
   r=$(curl -s -D "$start_headers.replay" -o /dev/null -w '%{http_code}' -b "$mfa_jar" -G \
     --data-urlencode "code=dos-$STAMP@x.test|verified|mfa-google-$STAMP" \
     --data-urlencode "state=$state" "http://127.0.0.1:$port/api/v1/auth/oauth/google/callback")
