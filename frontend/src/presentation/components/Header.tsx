@@ -1,4 +1,4 @@
-import { Layers, LogOut } from 'lucide-react';
+import { Layers, LogOut, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useSession } from '../../application/session/use-session';
 import { NotificationBell } from './NotificationBell';
@@ -33,6 +33,7 @@ export function Header() {
           </div>
         )}
         <NotificationBell />
+        <button onClick={() => navigate('/cuenta/seguridad')} aria-label="Seguridad" className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg"><Shield className="w-4 h-4" /></button>
         <button
           onClick={handleLogout}
           className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"

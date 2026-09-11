@@ -21,8 +21,9 @@ La interfaz actual es una maqueta desconectada de ese backend, no un punto de pa
   pantalla, ni enlaces directos, ni botón atrás.
 - La carga masiva no sube ningún fichero: fabrica un lead de ejemplo y lo añade a la lista en
   memoria.
-- No existe manejo de sesión: ni login, ni almacenamiento del token, ni interceptor que lo añada a
-  las peticiones, ni noción de rol.
+- La sesión humana usa la cookie HttpOnly del backend: no se guarda un token ni se añade una cabecera
+  de autorización; la identidad se rehidrata con `GET /auth/me`. El login puede quedar en
+  `MFA_REQUIRED` hasta verificar el desafío temporal.
 - El cliente HTTP fija `Content-Type: application/json` de forma fija, lo que rompería el login en
   cuanto se conectara: ese endpoint espera `form-urlencoded`.
 
@@ -35,14 +36,14 @@ verdad:
 src/
 ├── domain/           modelos y tipos de negocio
 ├── application/      mappers, servicios y hooks de caso de uso
-├── infrastructure/   cliente HTTP, DTOs generados, almacenamiento de sesión
+├── infrastructure/   cliente HTTP y DTOs generados
 └── presentation/     páginas, componentes, rutas y guards
 ```
 
 | Elemento | Qué debe resolver |
 |---|---|
 | Enrutado | Rutas declarativas con URLs propias, enlaces directos y navegación con botón atrás |
-| Sesión | Token en memoria con rehidratación al recargar, interceptor que añade la cabecera de autorización, manejo centralizado de sesión expirada y de acceso denegado |
+| Sesión | Cookie HttpOnly, rehidratación con `GET /auth/me`, desafío temporal cuando el login devuelve `MFA_REQUIRED` y manejo centralizado de sesión expirada y acceso denegado |
 | Datos | Una capa de datos con caché, reintentos y estados de carga y error explícitos, que hoy no existen en ninguna vista |
 | Tipos del API | Generados desde el contrato del backend en vez de escritos a mano, para que un cambio de contrato rompa la compilación del frontend en lugar de fallar en producción |
 | Guards | Por rol: el gestor accede a la gestión completa, el asesor sólo a su propio panel |
@@ -69,7 +70,7 @@ contrato devuelve cada una**.
 
 | Servicio | Operaciones | Contrato de salida |
 |---|---|---|
-| `auth` | `POST /auth/login` · `GET /auth/me` | `LoginResponse` · `CurrentUserResponse` |
+| `auth` | `POST /auth/login` · `/auth/logout` · `/auth/mfa/*` · `GET /auth/me` | `LoginResponse` · `CurrentUserResponse` · respuestas MFA |
 | `tenants` | `GET` lista · `POST` · `PATCH /{id}` | `PaginatedTenantsResponse` · `TenantResponse` |
 | `agents` | `GET` lista · `POST` · `GET /{id}` · `PATCH /{id}` · `DELETE /{id}` | `PaginatedAgentsResponse` · `AgentResponse` |
 | `groups` | `GET` lista · `POST` · `PATCH /{id}` · `DELETE /{id}` | `PaginatedGroupsResponse` · `SalesGroupResponse` · `204` |
@@ -94,7 +95,7 @@ registros y trabajos de entrada. Ninguna vista tiene que reordenar en cliente.
 **El login no es JSON.** `POST /auth/login` espera `form-urlencoded` y el correo viaja en el campo
 `username`. Es la única operación que se sale del JSON, y es la primera que se implementa.
 
-**La organización sale del token, nunca de la URL ni del cuerpo.** No hay `tenant_id` que enviar en
+**La organización sale de la identidad de la sesión, nunca de la URL ni del cuerpo.** No hay `tenant_id` que enviar en
 ninguna petición: un `tenant_id` en el cuerpo se ignora en silencio.
 
 **La ingesta responde `202`, no `200`.** El lead no existe todavía cuando la petición vuelve: hay que
@@ -113,8 +114,8 @@ necesita y evitar una segunda petición era justamente su motivo.)
 
 ## Los tres roles
 
-Cada rol ve una aplicación distinta, no la misma con botones ocultos. El rol viaja en el token y se
-lee con `GET /auth/me`.
+Cada rol ve una aplicación distinta, no la misma con botones ocultos. El rol se lee con `GET /auth/me`
+después de que la cookie de sesión se haya establecido.
 
 | Rol | Alcance | Qué recibe fuera de él |
 |---|---|---|
@@ -232,8 +233,8 @@ sin `curl`.
 | Vista | Funcionalidad mínima |
 |---|---|
 | Arranque de la plataforma **·MVP·** | Crear el primer administrador cuando la plataforma está vacía; detectar que ya no lo está y llevar al login en vez de ofrecer un formulario que va a responder `401` |
-| Login **·MVP·** | Entrada única; guardar el token, rehidratarlo al recargar, y llevar a cada rol a su panel |
-| Errores y sesión **·MVP·** | Un `401` cierra la sesión y vuelve al login; un `403` explica que el rol no alcanza; un `404` dice que no existe; un `422` señala el campo; un `500` ofrece reintentar |
+| Login **·MVP·** | Entrada única; si devuelve `MFA_REQUIRED`, verificar el desafío temporal antes de rehidratar la sesión y llevar a cada rol a su panel |
+| Errores y sesión **·MVP·** | Un `401` de una solicitud autenticada cierra la sesión y vuelve al login; un `401` al verificar MFA se muestra en ese formulario. Un `403` explica que el rol no alcanza; un `404` dice que no existe; un `422` señala el campo; un `500` ofrece reintentar |
 
 ## Qué ya existe y se puede aprovechar
 

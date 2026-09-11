@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { login as loginRequest, logout as logoutRequest, me as fetchCurrentUser } from '../services/auth.service';
+import { login as loginRequest, logout as logoutRequest, me as fetchCurrentUser, type LoginOutcome } from '../services/auth.service';
 import type { CurrentUser } from '../services/auth.service';
 
 export type { CurrentUser };
@@ -9,8 +9,9 @@ export type { CurrentUser };
  * GET /auth/me is mandatory, not an optimization — it's the only source of
  * the role and identity that decide which panel the user lands on.
  */
-export async function login(email: string, password: string): Promise<CurrentUser> {
-  await loginRequest(email, password);
+export async function login(email: string, password: string): Promise<LoginOutcome> {
+  const result = await loginRequest(email, password);
+  if (result.status === 'MFA_REQUIRED') return { status: 'MFA_REQUIRED' };
   return fetchCurrentUser();
 }
 

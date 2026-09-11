@@ -12,6 +12,8 @@ puede devolver cada endpoint.
 |---|---|---|---|
 | Salud | `GET /health` | Público | 200 |
 | Autenticación | `POST /api/v1/auth/login`, `POST /api/v1/auth/logout` | Público/cookie | 200/204 |
+| MFA | `POST /api/v1/auth/mfa/setup`, `/setup/confirm`, `/recovery-codes/regenerate`, `/disable` | Cookie de sesión humana | 200/204 |
+| Verificación MFA | `POST /api/v1/auth/mfa/verify` | Cookie temporal de desafío MFA | 200 |
 | Autenticación | `GET /api/v1/auth/me` | Cualquiera autenticado | 200 |
 | Organizaciones | `POST /api/v1/tenants` | `ADMIN` | 201 |
 | Organizaciones | `GET /api/v1/tenants` | `ADMIN` | 200 |
@@ -62,12 +64,13 @@ puede devolver cada endpoint.
 
 ## Convenciones comunes
 
-**Autenticación humana.** Cookie HttpOnly `leads_session`, fijada por `POST /api/v1/auth/login`. La
-organización de quien llama sale siempre del token — nunca de la URL ni del cuerpo de la petición;
-ver [ADR-0004](../decisiones/0004-organizacion-desde-el-token.md). Todo endpoint fuera de `GET
-/health` y `POST /api/v1/auth/login` responde `401 Unauthorized` sin un token válido; las listas de
-errores de cada endpoint, más abajo, sólo nombran lo específico de ese recurso — el rol exigido y
-los códigos `404`/`400` propios.
+**Autenticación humana.** Cookie HttpOnly `leads_session`, fijada por `POST /api/v1/auth/login` después
+del segundo factor cuando MFA está activo. Durante la verificación se usa la cookie temporal
+`leads_mfa_challenge`. La organización de quien llama sale siempre de la sesión — nunca de la URL ni del cuerpo de la petición;
+ver [ADR-0004](../decisiones/0004-organizacion-desde-el-token.md). Los endpoints que exigen sesión
+humana responden `401 Unauthorized` sin una sesión válida; `/mfa/verify` usa en su lugar el desafío
+temporal descrito abajo. Las listas de errores de cada endpoint sólo nombran lo específico de ese
+recurso — el rol exigido y los códigos `404`/`400` propios.
 
 **Paginación.** Todo endpoint de lista acepta `limit` (por defecto 100, rango `1`-`1000`) y `offset`
 (por defecto 0, mínimo `0`), y responde con la misma envoltura `{items, total, limit, offset,
@@ -124,6 +127,9 @@ username=ana%40acme.test&password=Secret123
 {"status": "AUTHENTICATED"}
 ```
 
+Con MFA activo responde `{"status":"MFA_REQUIRED"}` y fija `leads_mfa_challenge`; todavía no crea
+una sesión autenticada.
+
 Errores: `401 Unauthorized` (`INVALID_CREDENTIALS`).
 
 ### `GET /api/v1/auth/me`
@@ -138,11 +144,22 @@ organización.
   "email": "ana@acme.test",
   "role": "MANAGER",
   "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
-  "tenant_name": "Acme Corp"
+  "tenant_name": "Acme Corp",
+  "mfa_enabled": false
 }
 ```
 
 Para un `ADMIN`, `tenant_id` y `tenant_name` son siempre `null`. Errores: `401 Unauthorized`.
+
+### MFA
+
+`POST /api/v1/auth/mfa/verify` recibe `{"code":"123456"}` y la cookie temporal
+`leads_mfa_challenge`; acepta TOTP o un código de recuperación y, al verificarlo, crea la sesión
+humana. Sin un desafío vigente o con un factor inválido responde `401 Unauthorized`
+(`INVALID_CREDENTIALS`); se puede reintentar hasta cinco veces, tras lo cual se elimina la cookie
+del desafío y hay que iniciar sesión de nuevo. El enrolamiento usa `setup` con contraseña,
+`setup/confirm` con TOTP y devuelve los ocho códigos una sola vez.
+`recovery-codes/regenerate` y `disable` exigen contraseña y factor vigente.
 
 ## Organizaciones
 

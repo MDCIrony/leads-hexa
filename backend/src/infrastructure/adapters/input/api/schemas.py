@@ -473,3 +473,21 @@ class CurrentUserResponse(BaseModel):
     role: str
     tenant_id: Optional[str] = None
     tenant_name: Optional[str] = None
+    mfa_enabled: bool
+
+class MfaPasswordRequest(BaseModel):
+    password: str
+
+class MfaCodeRequest(BaseModel):
+    code: str
+
+class MfaFactorRequest(BaseModel):
+    password: str
+    code: str
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+class MfaRecoveryCodesResponse(BaseModel):
+    recovery_codes: List[str]

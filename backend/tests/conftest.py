@@ -31,6 +31,7 @@ def _test_dsn() -> str:
 # another had already been imported first.
 os.environ.setdefault("DATABASE_URL", _test_dsn())
 os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
+os.environ.setdefault("MFA_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 
 
 def pytest_collection_modifyitems(items):

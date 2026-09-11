@@ -32,21 +32,21 @@ sequenceDiagram
     participant API as Endpoint FastAPI
     participant L as LoginUseCase
     participant H as BcryptPasswordHasher
-    participant T as JwtTokenService
+    participant T as Sesión opaca
     participant P as AuthorizationPolicy
 
     C->>API: POST /auth/login (email, password)
     API->>L: execute(email, password)
     L->>L: agents.get_by_email(email)
     L->>H: verify(password, hashed_password)
-    L->>T: issue(TokenClaims)
-    T-->>L: JWT
-    L-->>API: access_token
-    API-->>C: 200 con el token
+    L->>T: crear sesión o desafío MFA
+    T-->>L: cookie leads_session
+    L-->>API: estado de autenticación
+    API-->>C: 200 y cookie HttpOnly
 
-    C->>API: petición con Authorization Bearer
-    API->>T: verify(token)
-    T-->>API: TokenClaims
+    C->>API: petición con cookie leads_session
+    API->>T: resolver cookie
+    T-->>API: identidad vigente
     API->>API: recarga el agente por id, exige is_active
     API->>P: ensure_can_manage_organization / ensure_can_access_tenant / ...
     P-->>API: ForbiddenException si el rol no alcanza
@@ -76,14 +76,14 @@ impide crear un segundo `ADMIN` por esa vía: el único que existirá siempre es
 
 ### La cabecera `X-Api-Key`
 
-`GET /leads` es el único endpoint que también acepta una credencial de máquina, además del JWT de
+`GET /leads` es el único endpoint que también acepta una credencial de máquina, además de la sesión de
 un `MANAGER`. `POST /agents/integration-credential` la emite con el formato `{agent_id}.{secret}` —
-el identificador va en claro en la propia clave, igual que un JWT lleva el `sub` en claro en su
-payload firmado; sólo el secreto está protegido, con el mismo `BcryptPasswordHasher` que la
+el identificador va en claro en la propia clave; sólo el secreto está protegido, con el mismo
+`BcryptPasswordHasher` que la
 contraseña de un agente humano. `resolve_integration_context` divide la clave, recarga el agente por
 `agent_id` y exige `role == INTEGRATION`, activo, y que el secreto verifique — cuatro condiciones que
 fallan todas con el mismo `401`, sin decir cuál. `require_manager_or_integration` es la única ruta
-que compone los dos caminos: si llega `X-Api-Key` la resuelve por ahí sin mirar el JWT; si no,
+que compone los dos caminos: si llega `X-Api-Key` la resuelve por ahí sin mirar la cookie; si no,
 exige el `MANAGER` de siempre. El resto de la API no cambia — `X-Api-Key` no abre ninguna otra
 puerta. Detalle completo en [Autenticación de la mensajería](../eventos/autenticacion.md).
 
@@ -105,15 +105,15 @@ organización responde `404`, no `403` —confirmar que existe en otro sitio ya 
 | Pieza | Responsabilidad |
 |---|---|
 | `AuthorizationPolicy` | Único punto que decide quién puede hacer qué, por plano y por rol |
-| `get_current_agent` / `resolve_current_agent` | Verifica el JWT y recarga el agente en BD |
+| `get_current_agent` / `resolve_current_agent` | Resuelve la sesión opaca y recarga el agente en BD |
 | `require_organization_manager` | Exige rol `MANAGER` sobre la organización del actor |
 | `require_platform_admin` | Exige rol `ADMIN` |
 | `require_organization_member` | Exige pertenecer a una organización, con cualquier rol |
 | `resolve_integration_context` | Verifica `X-Api-Key` y recarga el agente `INTEGRATION` en BD |
-| `require_manager_or_integration` | Compone JWT de `MANAGER` y `X-Api-Key`, sólo en `GET /leads` |
+| `require_manager_or_integration` | Compone sesión de `MANAGER` y `X-Api-Key`, sólo en `GET /leads` |
 | `RequestContext` | Actor y organización, resueltos una vez por petición desde el token |
-| `LoginUseCase` | Verifica credenciales y emite el JWT |
-| `JwtTokenService` | Adaptador PyJWT: firma y verifica el token |
+| `LoginUseCase` | Verifica credenciales y emite sesión o challenge MFA |
+| `MfaUseCase` | Enrola, verifica y desactiva TOTP y códigos de recuperación |
 | `BcryptPasswordHasher` | Adaptador passlib/bcrypt para el hash de la contraseña |
 
 ## Decisiones que lo explican
@@ -122,6 +122,8 @@ organización responde `404`, no `403` —confirmar que existe en otro sitio ya 
 - [ADR-0004](../decisiones/0004-organizacion-desde-el-token.md): nunca lo manda el cliente.
 - [ADR-0005](../decisiones/0005-404-en-vez-de-403.md): por qué un recurso ajeno responde 404.
 - [ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md): el rol `INTEGRATION` y `X-Api-Key`.
+- [ADR-0029](../decisiones/0029-sesiones-opacas.md): sesiones humanas en cookie.
+- [ADR-0030](../decisiones/0030-mfa-totp.md): MFA TOTP opt-in.
 
 ## Dónde vive
 
@@ -129,5 +131,5 @@ organización responde `404`, no `403` —confirmar que existe en otro sitio ya 
 - `backend/src/infrastructure/adapters/input/api/dependencies.py`
 - `backend/src/application/use_cases/auth_use_cases.py`
 - `backend/src/infrastructure/adapters/input/api/auth_router.py`
-- `backend/src/infrastructure/adapters/output/security/jwt_token_service.py`
+- `backend/src/infrastructure/adapters/output/security/totp_mfa_crypto.py`
 - `backend/src/infrastructure/adapters/output/security/bcrypt_password_hasher.py`

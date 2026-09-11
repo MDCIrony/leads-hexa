@@ -20,7 +20,7 @@ Sólo hace falta reconstruir la imagen cuando cambia algo que se instala en tiem
 `pyproject.toml`, `uv.lock` o el propio `Dockerfile`.
 
 ```bash
-docker compose build backend backend-test
+docker compose build backend intake-worker backend-test
 ```
 
 ## Qué demuestra cada uno
@@ -42,14 +42,14 @@ un servidor HTTP real) y `architecture`.
 
 `cd backend && uv run pytest -m unit -q` corre sin PostgreSQL —ni falta el contenedor de base de
 datos, ni falta Docker— y sin que quien lo ejecuta tenga que exportar ninguna variable de entorno.
-`backend/tests/conftest.py` fija `DATABASE_URL` y `JWT_SECRET` una única vez, con
+`backend/tests/conftest.py` fija `DATABASE_URL` y `MFA_ENCRYPTION_KEY` una única vez, con
 `os.environ.setdefault(...)`, antes de que se importe cualquier módulo de test.
 
 Si `pytest -m unit` empieza a fallar fuera de Docker, es la señal de que se infiltró una
 dependencia de infraestructura en el dominio: el marcador existe precisamente para detectar eso.
 
 !!! warning
-    Ningún fichero de test debe fijar `DATABASE_URL` o `JWT_SECRET` por su cuenta. Copiar un
+    Ningún fichero de test debe fijar `DATABASE_URL` o `MFA_ENCRYPTION_KEY` por su cuenta. Copiar un
     preámbulo `os.environ.setdefault(...)` de otro fichero reintroduce un fallo que depende del
     orden en que pytest importa los módulos: sólo pasa si `conftest.py` ya corrió antes.
 

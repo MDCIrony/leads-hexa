@@ -13,6 +13,7 @@ from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.queue.rabbitmq_job_queue import RabbitMQJobQueue
 from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
+from infrastructure.adapters.output.security.totp_mfa_crypto import TotpMfaCrypto
 from infrastructure.adapters.output.system_clock import SystemClock
 from infrastructure.adapters.output.uuid_generator import UuidGenerator
 from infrastructure.config.settings import Settings
@@ -30,6 +31,7 @@ class Container:
         self._settings = settings
         self._database = RawSqlDatabase(dsn=settings.database_url)
         self._password_hasher = BcryptPasswordHasher()
+        self._mfa_crypto = TotpMfaCrypto(settings.mfa_encryption_key)
         self._clock = SystemClock()
         self._id_generator = UuidGenerator()
         # The engine is stateless (the rotation cursor lives on the
@@ -59,6 +61,10 @@ class Container:
     @property
     def password_hasher(self) -> PasswordHasherPort:
         return self._password_hasher
+
+    @property
+    def mfa_crypto(self) -> TotpMfaCrypto:
+        return self._mfa_crypto
 
     @property
     def clock(self) -> ClockPort:

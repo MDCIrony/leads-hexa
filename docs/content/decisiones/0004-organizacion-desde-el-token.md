@@ -15,9 +15,10 @@ dato más de la petición, controlado por quien la enviaba.
 
 ## Decisión
 
-La organización sobre la que opera una petición se deriva **siempre** del token JWT, nunca de la
-URL ni del cuerpo. Una única dependencia construye un contexto de petición —actor autenticado más
-`tenant_id`— a partir del token, una vez por petición, y los casos de uso lo reciben dentro de su
+La organización sobre la que opera una petición se deriva **siempre** de la sesión humana opaca
+verificada (o de la credencial de integración), nunca de la URL ni del cuerpo. Una única dependencia
+construye un contexto de petición —actor autenticado más `tenant_id`— a partir de la identidad
+verificada, una vez por petición, y los casos de uso lo reciben dentro de su
 comando. Ningún caso de uso recibe un `tenant_id` que venga del cliente. Consecuencia directa:
 `{tenant_id}` desaparece de todas las rutas de la API.
 

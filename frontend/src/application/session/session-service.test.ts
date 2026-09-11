@@ -25,6 +25,8 @@ describe('login', () => {
 
     const user = await login('ana@acme.test', 'secret');
 
+    expect(user.status).toBeUndefined();
+    if (user.status === 'MFA_REQUIRED') throw new Error('Expected an authenticated user');
     expect(user.role).toBe('MANAGER');
     expect(meMock).toHaveBeenCalled();
   });

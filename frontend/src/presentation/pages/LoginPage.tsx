@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { isMfaRequired } from '../../application/services/auth.service';
 import { useSession } from '../../application/session/use-session';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
 import { Input } from '../components/ui/Input';
-import { isPathAllowedForRole } from '../routes/role-access';
+import { allowedPreviousDestination, type PreviousDestination } from '../routes/role-access';
 
 interface LocationState {
-  from?: { pathname: string };
+  from?: PreviousDestination;
   notice?: string;
 }
 
@@ -28,14 +29,17 @@ export function LoginPage() {
     setError(null);
     try {
       const currentUser = await login(email, password);
-      const from = (location.state as LocationState | null)?.from?.pathname;
+      if (isMfaRequired(currentUser)) {
+        navigate('/mfa', { replace: true, state: { from: (location.state as LocationState | null)?.from } });
+        return;
+      }
       // A destination only survives login if the newly authenticated role can
       // reach it — otherwise it's someone else's leftover redirect (e.g. a
       // manager's session on /asesores expiring, then an agent logging in on
       // the same tab) and honoring it would drop the agent on a forbidden
       // page as their first sight of the app. '/' defers to RootRedirect,
       // which knows the role's own panel.
-      const destination = from && isPathAllowedForRole(currentUser.role, from) ? from : '/';
+      const destination = allowedPreviousDestination(currentUser.role, (location.state as LocationState | null)?.from);
       navigate(destination, { replace: true });
     } catch (err) {
       setError(readApiError(err)?.message ?? 'No se pudo iniciar sesión.');

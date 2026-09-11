@@ -1,5 +1,6 @@
 import { createContext, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { setSessionExpiredListener } from '../../infrastructure/api/api-client';
+import { isMfaRequired, type LoginOutcome } from '../services/auth.service';
 import {
   login as loginRequest,
   logout as logoutRequest,
@@ -16,8 +17,9 @@ export interface SessionContextValue {
   status: SessionStatus;
   // Returns the freshly authenticated user: LoginPage needs the role to
   // decide whether a pending destination still applies.
-  login: (email: string, password: string) => Promise<CurrentUser>;
+  login: (email: string, password: string) => Promise<LoginOutcome>;
   logout: () => void;
+  refresh: () => Promise<CurrentUser | null>;
 }
 
 export const SessionContext = createContext<SessionContextValue | null>(null);
@@ -40,6 +42,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const currentUser = await loginRequest(email, password);
+    if (isMfaRequired(currentUser)) return currentUser;
     setUser(currentUser);
     setStatus('authenticated');
     return currentUser;
@@ -52,6 +55,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStatus('anonymous');
     void logoutRequest();
   }, []);
+  const refresh = useCallback(async () => {
+    const currentUser = await rehydrateSession();
+    setUser(currentUser);
+    setStatus(currentUser ? 'authenticated' : 'anonymous');
+    return currentUser;
+  }, []);
 
   // A token that dies mid-session (expiry, revocation) is reported by
   // api-client as a 401 on some unrelated request; this is what turns that
@@ -63,7 +72,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [logout]);
 
   return (
-    <SessionContext.Provider value={{ user, status, login, logout }}>
+    <SessionContext.Provider value={{ user, status, login, logout, refresh }}>
       {children}
     </SessionContext.Provider>
   );

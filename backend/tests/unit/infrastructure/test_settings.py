@@ -7,6 +7,7 @@ def test_reads_every_value_from_the_environment(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
     monkeypatch.setenv("SESSION_HOURS", "12")
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
+    monkeypatch.setenv("MFA_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
     monkeypatch.setenv("CORS_ORIGINS", "http://a.test,http://b.test")
 
     settings = Settings.from_environment()
@@ -14,6 +15,7 @@ def test_reads_every_value_from_the_environment(monkeypatch):
     assert settings.database_url == "postgresql://u:p@host:5432/db"
     assert settings.session_hours == 12
     assert settings.session_cookie_secure is True
+    assert settings.mfa_encryption_key == "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     assert settings.cors_origins == ["http://a.test", "http://b.test"]
 
 
@@ -23,6 +25,14 @@ def test_missing_database_url_fails_loudly(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
     with pytest.raises(ValueError, match="DATABASE_URL"):
+        Settings.from_environment()
+
+
+def test_missing_mfa_key_fails_loudly(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
+    monkeypatch.delenv("MFA_ENCRYPTION_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="MFA_ENCRYPTION_KEY"):
         Settings.from_environment()
 
 

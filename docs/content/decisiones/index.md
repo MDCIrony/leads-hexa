@@ -85,3 +85,5 @@ hecho, no una decisión.
 | [0026](0026-kafka-como-canal-del-producto.md) | Kafka como canal del producto | Aceptada |
 | [0027](0027-cola-para-el-trabajo-de-fondo.md) | Una cola para el trabajo de fondo | Aceptada |
 | [0028](0028-autenticacion-de-la-mensajeria.md) | Autenticación de la mensajería | Aceptada |
+| [0029](0029-sesiones-opacas.md) | Sesiones humanas opacas | Aceptada |
+| [0030](0030-mfa-totp.md) | MFA TOTP opt-in para cuentas humanas | Aceptada |

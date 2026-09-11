@@ -24,6 +24,7 @@ from infrastructure.adapters.output.persistence.raw_sql_notification_repository 
 from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
 from infrastructure.adapters.output.persistence.raw_sql_auth_session_repository import RawSqlAuthSessionRepository
 from infrastructure.adapters.output.persistence.raw_sql_auth_challenge_repository import RawSqlAuthChallengeRepository
+from infrastructure.adapters.output.persistence.raw_sql_agent_mfa_repository import RawSqlAgentMfaRepository
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):
@@ -55,6 +56,7 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.outbox = RawSqlOutboxRepository(self.connection)
         self.sessions = RawSqlAuthSessionRepository(self.connection)
         self.challenges = RawSqlAuthChallengeRepository(self.connection)
+        self.mfa = RawSqlAgentMfaRepository(self.connection)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

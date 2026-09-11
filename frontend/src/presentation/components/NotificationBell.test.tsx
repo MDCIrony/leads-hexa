@@ -12,9 +12,10 @@ import { NotificationBell } from './NotificationBell';
 const EMPTY_PAGE = { items: [], total: 0, limit: 20, offset: 0, has_more: false, unread_count: 0 };
 
 function renderBell(user: typeof meAgent | typeof meManager) {
+  const sessionUser = { ...user, mfa_enabled: false };
   return render(
     <MemoryRouter initialEntries={['/mis-leads']}>
-      <SessionContext.Provider value={{ user, status: 'authenticated', login: vi.fn(), logout: vi.fn() }}>
+      <SessionContext.Provider value={{ user: sessionUser, status: 'authenticated', login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
         <Routes>
           <Route path="/mis-leads" element={<NotificationBell />} />
           <Route path="/mis-leads/:leadId" element={<p>Detalle del lead</p>} />

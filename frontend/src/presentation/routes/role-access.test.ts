@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPathAllowedForRole } from './role-access';
+import { allowedPreviousDestination, isPathAllowedForRole } from './role-access';
 
 describe('isPathAllowedForRole', () => {
   it('allows a role its own route', () => {
@@ -16,5 +16,12 @@ describe('isPathAllowedForRole', () => {
 
   it('denies everything for an unknown role', () => {
     expect(isPathAllowedForRole('GHOST', '/asesores')).toBe(false);
+  });
+
+  it('restores query and fragment only for an allowed destination', () => {
+    expect(allowedPreviousDestination('AGENT', { pathname: '/mis-leads', search: '?state=open', hash: '#table' })).toBe(
+      '/mis-leads?state=open#table'
+    );
+    expect(allowedPreviousDestination('AGENT', { pathname: '/asesores' })).toBe('/');
   });
 });

@@ -59,6 +59,14 @@ class InvalidCredentialsException(DomainException):
         super().__init__(message, error_code="INVALID_CREDENTIALS")
 
 
+class InvalidMfaFactorException(InvalidCredentialsException):
+    """Generic factor failure, with cookie cleanup metadata for the HTTP adapter."""
+
+    def __init__(self, terminal: bool):
+        super().__init__("Invalid authentication factor")
+        self.terminal = terminal
+
+
 class UnauthorizedException(DomainException):
     """Raised when a request carries no valid identity."""
 

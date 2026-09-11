@@ -74,6 +74,21 @@ describe('LoginPage', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: panelTitle })).toBeInTheDocument());
   });
 
+  it('moves an MFA-required login to the verification step before loading a user', async () => {
+    mockApiClient({
+      'POST /api/v1/auth/login': { data: { status: 'MFA_REQUIRED' } },
+      'GET /api/v1/auth/me': {
+        status: 401,
+        error: { error: true, error_code: 'UNAUTHORIZED', message: 'No autenticado.' },
+      },
+    });
+    renderApp('/login');
+
+    await fillAndSubmit('agent@plat.test', 'Secret123');
+
+    expect(await screen.findByRole('heading', { name: 'Verificación adicional' })).toBeInTheDocument();
+  });
+
   it('returns to the protected route it redirected from once logged in', async () => {
     mockApiClient({
       'POST /api/v1/auth/login': { data: loginFixture },

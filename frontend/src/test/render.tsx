@@ -12,9 +12,9 @@ export type Role = 'ADMIN' | 'MANAGER' | 'AGENT';
 // Captured GET /auth/me responses, one per role: what a view actually
 // receives once logged in, not a role string invented for the test.
 const USER_BY_ROLE: Record<Role, CurrentUser> = {
-  ADMIN: meAdmin,
-  MANAGER: meManager,
-  AGENT: meAgent,
+  ADMIN: { ...meAdmin, mfa_enabled: false },
+  MANAGER: { ...meManager, mfa_enabled: false },
+  AGENT: { ...meAgent, mfa_enabled: false },
 };
 
 interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper'> {
@@ -38,6 +38,7 @@ export function renderWithProviders(
     status: user ? 'authenticated' : 'anonymous',
     login: async () => USER_BY_ROLE.AGENT,
     logout: () => {},
+    refresh: async () => user,
   };
 
   return render(

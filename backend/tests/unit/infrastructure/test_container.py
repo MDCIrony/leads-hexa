@@ -1,7 +1,10 @@
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
 
-_SETTINGS = Settings(database_url="postgresql://u:p@host:5432/db")
+_SETTINGS = Settings(
+    database_url="postgresql://u:p@host:5432/db",
+    mfa_encryption_key="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+)
 
 
 def test_stateless_adapters_are_shared_across_the_container_lifetime():

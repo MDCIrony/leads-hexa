@@ -30,8 +30,10 @@ from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupReposi
 from tests.unit.mocks.in_memory_tenant_repo import InMemoryTenantRepository
 from application.ports.output.auth_session_repository_port import AuthSessionRepositoryPort
 from application.ports.output.auth_challenge_repository_port import AuthChallengeRepositoryPort
+from application.ports.output.agent_mfa_repository_port import AgentMfaRepositoryPort
 from domain.entities.auth_session import AuthSession
 from domain.entities.auth_challenge import AuthChallenge
+from domain.entities.agent_mfa import AgentMfa
 from datetime import datetime
 
 
@@ -50,6 +52,11 @@ class InMemoryAuthSessionRepository(AuthSessionRepositoryPort):
         session = self.items.get(token_hash)
         if session and session.revoked_at is None:
             self.items[token_hash] = AuthSession(**{**session.__dict__, "revoked_at": now})
+
+    def revoke_for_agent_except(self, agent_id: object, token_hash: str, now: datetime) -> None:
+        for item_hash, session in list(self.items.items()):
+            if session.agent_id == agent_id and item_hash != token_hash and session.revoked_at is None:
+                self.items[item_hash] = AuthSession(**{**session.__dict__, "revoked_at": now})
 
 
 class InMemoryAuthChallengeRepository(AuthChallengeRepositoryPort):
@@ -70,12 +77,69 @@ class InMemoryAuthChallengeRepository(AuthChallengeRepositoryPort):
         self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "attempts": challenge.attempts + 1})
         return True
 
+    def reserve_attempt(self, token_hash: str, purpose: str, now: datetime, maximum: int) -> bool:
+        challenge = self.resolve_active(token_hash, now)
+        if not challenge or challenge.purpose != purpose or challenge.agent_id is None or challenge.attempts >= maximum:
+            return False
+        self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "attempts": challenge.attempts + 1})
+        return True
+
     def consume(self, token_hash: str, now: datetime) -> bool:
         challenge = self.resolve_active(token_hash, now)
         if not challenge:
             return False
         self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "consumed_at": now})
         return True
+
+    def invalidate_active_for_agent(self, agent_id: object, purpose: str, now: datetime) -> Optional[AuthChallenge]:
+        active = [
+            challenge for token_hash, challenge in self.items.items()
+            if challenge.agent_id == agent_id and challenge.purpose == purpose and self.resolve_active(token_hash, now)
+        ]
+        for challenge in active:
+            self.items[challenge.token_hash] = AuthChallenge(**{**challenge.__dict__, "consumed_at": now})
+        return max(active, key=lambda challenge: challenge.attempts, default=None)
+
+
+class InMemoryAgentMfaRepository(AgentMfaRepositoryPort):
+    def __init__(self) -> None:
+        self.items: Dict[UUID, AgentMfa] = {}
+        self.recovery_codes: Dict[tuple[UUID, str], datetime | None] = {}
+
+    def get(self, agent_id: UUID) -> Optional[AgentMfa]:
+        return self.items.get(agent_id)
+
+    def save_pending(self, enrollment: AgentMfa) -> None:
+        self.items[enrollment.agent_id] = AgentMfa(enrollment.agent_id, enrollment.secret_ciphertext)
+
+    def confirm(self, agent_id: UUID, step: int, now: datetime) -> bool:
+        enrollment = self.items.get(agent_id)
+        if not enrollment or enrollment.enabled_at is not None:
+            return False
+        self.items[agent_id] = AgentMfa(agent_id, enrollment.secret_ciphertext, now, step)
+        return True
+
+    def claim_totp_step(self, agent_id: UUID, step: int) -> bool:
+        enrollment = self.items.get(agent_id)
+        if not enrollment or enrollment.enabled_at is None or (enrollment.last_used_step is not None and enrollment.last_used_step >= step):
+            return False
+        self.items[agent_id] = AgentMfa(agent_id, enrollment.secret_ciphertext, enrollment.enabled_at, step)
+        return True
+
+    def replace_recovery_codes(self, agent_id: UUID, code_hashes, now: datetime) -> None:
+        self.recovery_codes = {key: value for key, value in self.recovery_codes.items() if key[0] != agent_id}
+        self.recovery_codes.update({(agent_id, code_hash): None for code_hash in code_hashes})
+
+    def consume_recovery_code(self, agent_id: UUID, code_hash: str, now: datetime) -> bool:
+        key = (agent_id, code_hash)
+        if key not in self.recovery_codes or self.recovery_codes[key] is not None:
+            return False
+        self.recovery_codes[key] = now
+        return True
+
+    def delete(self, agent_id: UUID) -> None:
+        self.items.pop(agent_id, None)
+        self.recovery_codes = {key: value for key, value in self.recovery_codes.items() if key[0] != agent_id}
 
 
 class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
@@ -320,6 +384,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.outbox = outbox or InMemoryOutboxRepository()
         self.sessions = InMemoryAuthSessionRepository()
         self.challenges = InMemoryAuthChallengeRepository()
+        self.mfa = InMemoryAgentMfaRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self

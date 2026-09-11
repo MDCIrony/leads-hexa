@@ -37,6 +37,17 @@ describe('handleUnauthorizedResponse', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  it('leaves MFA verification failures alone so a wrong code does not discard the challenge', async () => {
+    const listener = vi.fn();
+    setSessionExpiredListener(listener);
+
+    const error = axiosErrorWith(401);
+    Object.defineProperty(error, 'config', { value: { url: '/api/v1/auth/mfa/verify' } });
+    await expect(handleUnauthorizedResponse(error)).rejects.toBeInstanceOf(AxiosError);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('ignores non-401 errors entirely', async () => {
     const listener = vi.fn();
     setSessionExpiredListener(listener);

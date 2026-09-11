@@ -10,6 +10,7 @@ _DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost,http://localhost
 @dataclass(frozen=True)
 class Settings:
     database_url: str
+    mfa_encryption_key: str = ""
     session_hours: int = 8
     session_cookie_secure: bool = False
     webhook_timeout_seconds: float = 5.0
@@ -33,12 +34,16 @@ class Settings:
         database_url = os.getenv("DATABASE_URL")
         if not database_url:
             raise ValueError("DATABASE_URL is required and has no default")
+        mfa_encryption_key = os.getenv("MFA_ENCRYPTION_KEY")
+        if not mfa_encryption_key:
+            raise ValueError("MFA_ENCRYPTION_KEY is required and has no default")
 
         raw_origins = os.getenv("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS)
         origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 
         return cls(
             database_url=database_url,
+            mfa_encryption_key=mfa_encryption_key,
             session_hours=int(os.getenv("SESSION_HOURS", "8")),
             session_cookie_secure=os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true",
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0")),

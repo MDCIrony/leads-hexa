@@ -26,7 +26,13 @@ export function setSessionExpiredListener(listener: (() => void) | null): void {
  * A 401 on an authenticated request removes the browser session state.
  */
 export function handleUnauthorizedResponse(error: unknown): Promise<never> {
-  if (axios.isAxiosError(error) && error.response?.status === 401 && error.config?.url !== '/api/v1/auth/login') {
+  const url = axios.isAxiosError(error) ? error.config?.url : undefined;
+  if (
+    axios.isAxiosError(error) &&
+    error.response?.status === 401 &&
+    url !== '/api/v1/auth/login' &&
+    url !== '/api/v1/auth/mfa/verify'
+  ) {
     sessionExpiredListener?.();
   }
   return Promise.reject(error);

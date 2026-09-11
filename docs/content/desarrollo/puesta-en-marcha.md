@@ -87,15 +87,18 @@ curl -s -X POST http://localhost:8001/api/v1/auth/login \
 ```
 
 ```json
-{"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", "token_type": "bearer"}
+{"status": "AUTHENTICATED"}
 ```
 
-Para encadenar comandos conviene guardar el token en una variable:
+La respuesta fija la cookie HttpOnly `leads_session`. Si la cuenta tiene MFA activo devuelve
+`{"status":"MFA_REQUIRED"}` y hay que verificar el código en `/api/v1/auth/mfa/verify` antes de
+continuar.
+
+Para encadenar comandos, conserva las cookies con un jar:
 
 ```bash
-ADMIN_TOKEN=$(curl -s -X POST http://localhost:8001/api/v1/auth/login \
-  -d 'username=root@plat.test&password=Secret123' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+curl -c /tmp/leads.cookies -s -X POST http://localhost:8001/api/v1/auth/login \
+  -d 'username=root@plat.test&password=Secret123'
 ```
 
 ## Crear una organización y su gestor
@@ -105,7 +108,7 @@ una sola transacción: si el correo del gestor ya existe, la organización tampo
 
 ```bash
 curl -s -X POST http://localhost:8001/api/v1/tenants \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -b /tmp/leads.cookies \
   -H 'Content-Type: application/json' \
   -d '{"name":"Acme Corp","manager":{"name":"Ana Ruiz","email":"ana@acme.test","password":"Secret123"}}'
 ```
@@ -137,9 +140,8 @@ respondería `404 SOURCE_NOT_FOUND`.
 ## Autenticarse como gestor
 
 ```bash
-MGR_TOKEN=$(curl -s -X POST http://localhost:8001/api/v1/auth/login \
-  -d 'username=ana@acme.test&password=Secret123' \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+curl -c /tmp/leads.cookies -s -X POST http://localhost:8001/api/v1/auth/login \
+  -d 'username=ana@acme.test&password=Secret123'
 ```
 
 ## Ingerir el primer lead
@@ -150,7 +152,7 @@ asignación— corre después, en segundo plano.
 
 ```bash
 curl -s -X POST http://localhost:8001/api/v1/intake/leads/ingest \
-  -H "Authorization: Bearer $MGR_TOKEN" \
+  -b /tmp/leads.cookies \
   -H 'Content-Type: application/json' \
   -d '{
     "first_name": "Maria",
@@ -181,7 +183,7 @@ El `job_id` de la respuesta anterior identifica el trabajo de ingesta:
 
 ```bash
 curl -s http://localhost:8001/api/v1/intake/jobs/550e8400-e29b-41d4-a716-446655440000 \
-  -H "Authorization: Bearer $MGR_TOKEN"
+  -b /tmp/leads.cookies
 ```
 
 ```json
@@ -201,7 +203,7 @@ curl -s http://localhost:8001/api/v1/intake/jobs/550e8400-e29b-41d4-a716-4466554
 Con `status: "COMPLETED"` y `succeeded: 1`, el lead ya existe. Para verlo:
 
 ```bash
-curl -s http://localhost:8001/api/v1/leads -H "Authorization: Bearer $MGR_TOKEN"
+curl -s http://localhost:8001/api/v1/leads -b /tmp/leads.cookies
 ```
 
 La referencia completa de estos endpoints está en [API · Referencia](api-referencia.md).

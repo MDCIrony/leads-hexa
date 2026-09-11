@@ -92,6 +92,7 @@ def test_secure_flag_follows_configuration(monkeypatch):
             "_settings",
             Settings(
                 database_url=current.database_url,
+                mfa_encryption_key=current.mfa_encryption_key,
                 session_hours=current.session_hours,
                 session_cookie_secure=True,
                 cors_origins=list(current.cors_origins),

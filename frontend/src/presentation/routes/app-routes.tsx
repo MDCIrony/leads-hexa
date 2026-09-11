@@ -5,6 +5,8 @@ import { BootstrapPage } from '../pages/BootstrapPage';
 import { BulkUploadPage } from '../pages/BulkUploadPage';
 import { LeadDetailPage } from '../pages/LeadDetailPage';
 import { LoginPage } from '../pages/LoginPage';
+import { MfaPage } from '../pages/MfaPage';
+import { SecurityPage } from '../pages/SecurityPage';
 import { MyLeadsPage } from '../pages/MyLeadsPage';
 import { NewLeadPage } from '../pages/NewLeadPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
@@ -24,6 +26,11 @@ export function AppRoutes() {
       <Route path="/" element={<RootRedirect />} />
       <Route path="/bootstrap" element={<BootstrapPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/mfa" element={<MfaPage />} />
+
+      <Route element={<RoleRoute allow={['ADMIN', 'MANAGER', 'AGENT']} />}>
+        <Route path="/cuenta/seguridad" element={<SecurityPage />} />
+      </Route>
 
       <Route element={<RoleRoute allow={['ADMIN']} />}>
         <Route path="/admin/organizaciones" element={<OrganizationsPage />} />

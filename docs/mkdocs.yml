@@ -134,6 +134,7 @@ nav:
       - "ADR-0027 · Una cola para el trabajo de fondo": decisiones/0027-cola-para-el-trabajo-de-fondo.md
       - "ADR-0028 · Autenticación de la mensajería": decisiones/0028-autenticacion-de-la-mensajeria.md
       - "ADR-0029 · Sesiones humanas opacas": decisiones/0029-sesiones-opacas.md
+      - "ADR-0030 · MFA TOTP": decisiones/0030-mfa-totp.md
 
   - Módulos:
       - modulos/index.md

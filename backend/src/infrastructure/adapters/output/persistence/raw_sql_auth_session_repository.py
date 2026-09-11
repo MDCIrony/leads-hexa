@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 import psycopg
 
@@ -28,4 +29,11 @@ class RawSqlAuthSessionRepository(AuthSessionRepositoryPort):
         self.connection.execute(
             "UPDATE auth_sessions SET revoked_at = %s WHERE token_hash = %s AND revoked_at IS NULL",
             (now, token_hash),
+        )
+
+    def revoke_for_agent_except(self, agent_id: UUID, token_hash: str, now: datetime) -> None:
+        self.connection.execute(
+            "UPDATE auth_sessions SET revoked_at = %s WHERE agent_id = %s AND token_hash <> %s "
+            "AND revoked_at IS NULL",
+            (now, agent_id, token_hash),
         )

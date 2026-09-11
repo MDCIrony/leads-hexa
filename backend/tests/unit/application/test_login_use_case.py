@@ -40,24 +40,24 @@ def _build_use_case(
 
 def test_login_succeeds_with_correct_credentials():
     use_case, _ = _build_use_case("manager@test.com", "correct-password")
-    token = use_case.execute(email="manager@test.com", password="correct-password")
-    assert isinstance(token, str) and token
+    result = use_case.execute(email="manager@test.com", password="correct-password")
+    assert result.status == "AUTHENTICATED" and result.token
 
 
 def test_login_normalizes_email_before_lookup():
     use_case, _ = _build_use_case("manager@test.com", "correct-password")
 
-    token = use_case.execute(email="  MANAGER@Test.Com ", password="correct-password")
+    result = use_case.execute(email="  MANAGER@Test.Com ", password="correct-password")
 
-    assert isinstance(token, str) and token
+    assert result.status == "AUTHENTICATED" and result.token
 
 
 def test_issued_session_is_stored_only_as_a_hash():
     use_case, _ = _build_use_case("manager@test.com", "correct-password")
-    token = use_case.execute(email="manager@test.com", password="correct-password")
+    result = use_case.execute(email="manager@test.com", password="correct-password")
     from hashlib import sha256
-    assert token not in use_case.uow.sessions.items
-    assert sha256(token.encode()).hexdigest() in use_case.uow.sessions.items
+    assert result.token not in use_case.uow.sessions.items
+    assert sha256(result.token.encode()).hexdigest() in use_case.uow.sessions.items
 
 
 def test_login_fails_with_wrong_password():
