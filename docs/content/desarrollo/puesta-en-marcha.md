@@ -94,6 +94,25 @@ La respuesta fija la cookie HttpOnly `leads_session`. Si la cuenta tiene MFA act
 `{"status":"MFA_REQUIRED"}` y hay que verificar el código en `/api/v1/auth/mfa/verify` antes de
 continuar.
 
+## Activar OAuth localmente
+
+OAuth de Google y GitHub está desactivado hasta configurar por completo cada proveedor. En un `.env`
+local no versionado, usa credenciales de desarrollo y registra exactamente las URLs de callback:
+
+```dotenv
+FRONTEND_ORIGIN=http://localhost
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:8001/api/v1/auth/oauth/google/callback
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+GITHUB_REDIRECT_URI=http://localhost:8001/api/v1/auth/oauth/github/callback
+```
+
+`FRONTEND_ORIGIN` debe estar incluido exactamente en `CORS_ORIGINS`. Al completar las tres variables
+de un proveedor aparece su botón en el login; sólo permite entrar a agentes humanos ya existentes con
+correo de proveedor verificado. La vuelta conserva PKCE y, si MFA está activo, continúa en `/mfa`.
+
 Para encadenar comandos, conserva las cookies con un jar:
 
 ```bash

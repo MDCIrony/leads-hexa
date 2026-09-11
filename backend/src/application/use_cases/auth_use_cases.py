@@ -14,7 +14,7 @@ from domain.entities.agent_mfa import AgentMfa
 from domain.entities.agent import Agent
 from domain.entities.agent import normalize_email
 from domain.entities.social_identity import SocialIdentity
-from domain.exceptions import InvalidCredentialsException, InvalidMfaFactorException
+from domain.exceptions import DomainException, InvalidCredentialsException, InvalidMfaFactorException
 from domain.value_objects.enums import AgentRole
 
 
@@ -22,6 +22,8 @@ MFA_CHALLENGE_PURPOSE = "MFA_LOGIN"
 MFA_CHALLENGE_MINUTES = 5
 MFA_CHALLENGE_ATTEMPTS = 5
 MFA_RECOVERY_CODE_COUNT = 8
+OAUTH_CHALLENGE_PURPOSE = "OAUTH_LOGIN"
+OAUTH_CHALLENGE_MINUTES = 5
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,14 @@ class LoginResult:
 class MfaSetupResult:
     secret: str
     otpauth_uri: str
+
+
+@dataclass(frozen=True)
+class OAuthChallengeResult:
+    nonce: str
+    state: str
+    pkce_verifier: str
+    return_path: str
 
 
 class _LostMfaChallenge(Exception):
@@ -125,26 +135,67 @@ class SocialLoginUseCase:
         now = datetime.now(timezone.utc)
         if provider not in {"GOOGLE", "GITHUB"} or not provider_subject.strip():
             raise InvalidCredentialsException()
-        with self.uow:
-            identity = self.uow.social_identities.get_by_provider_subject(provider, provider_subject)
-            if identity:
-                agent = self.uow.agents.get_by_id(identity.agent_id)
-                if not self.primary_authentication.eligible(agent) or not self.uow.social_identities.touch_last_login(identity.id, now):
+        try:
+            with self.uow:
+                identity = self.uow.social_identities.get_by_provider_subject(provider, provider_subject)
+                if identity:
+                    agent = self.uow.agents.get_by_id(identity.agent_id)
+                    if not self.primary_authentication.eligible(agent) or not self.uow.social_identities.touch_last_login(identity.id, now):
+                        raise InvalidCredentialsException()
+                    return self.primary_authentication.authenticate(agent, now)
+
+                normalized_email = normalize_email(email or "")
+                agent = self.uow.agents.get_by_email(normalized_email) if email_verified and normalized_email else None
+                if not self.primary_authentication.eligible(agent):
+                    raise InvalidCredentialsException()
+                identity = SocialIdentity(
+                    id=uuid4(), agent_id=agent.id.value, provider=provider,
+                    provider_subject=provider_subject, email_at_link=normalized_email,
+                    created_at=now, last_login_at=now,
+                )
+                if not self.uow.social_identities.save(identity):
                     raise InvalidCredentialsException()
                 return self.primary_authentication.authenticate(agent, now)
+        except DomainException as error:
+            if isinstance(error, InvalidCredentialsException):
+                raise
+            raise InvalidCredentialsException() from None
 
-            normalized_email = normalize_email(email or "")
-            agent = self.uow.agents.get_by_email(normalized_email) if email_verified and normalized_email else None
-            if not self.primary_authentication.eligible(agent):
-                raise InvalidCredentialsException()
-            identity = SocialIdentity(
-                id=uuid4(), agent_id=agent.id.value, provider=provider,
-                provider_subject=provider_subject, email_at_link=normalized_email,
-                created_at=now, last_login_at=now,
+
+class OAuthChallengeUseCase:
+    """Persist and atomically consume the browser-bound OAuth proof."""
+
+    def __init__(self, uow: UnitOfWorkPort) -> None:
+        self.uow = uow
+
+    def start(self, provider: str, return_path: str) -> OAuthChallengeResult:
+        if provider not in {"GOOGLE", "GITHUB"} or not AuthChallenge._internal_return_path(return_path):
+            raise InvalidCredentialsException()
+        now = datetime.now(timezone.utc)
+        nonce = secrets.token_urlsafe(32)
+        state = secrets.token_urlsafe(32)
+        verifier = secrets.token_urlsafe(64)
+        with self.uow:
+            self.uow.challenges.save(AuthChallenge(
+                token_hash=sha256(nonce.encode()).hexdigest(), agent_id=None,
+                purpose=OAUTH_CHALLENGE_PURPOSE, attempts=0,
+                expires_at=now + timedelta(minutes=OAUTH_CHALLENGE_MINUTES), consumed_at=None,
+                created_at=now, provider=provider, state_hash=sha256(state.encode()).hexdigest(),
+                pkce_verifier=verifier, return_path=return_path,
+            ))
+        return OAuthChallengeResult(nonce, state, verifier, return_path)
+
+    def consume(self, nonce: str | None, provider: str, state: str | None) -> AuthChallenge:
+        if not nonce or not state or provider not in {"GOOGLE", "GITHUB"}:
+            raise InvalidCredentialsException()
+        now = datetime.now(timezone.utc)
+        with self.uow:
+            challenge = self.uow.challenges.consume_oauth(
+                sha256(nonce.encode()).hexdigest(), provider, sha256(state.encode()).hexdigest(), now
             )
-            if not self.uow.social_identities.save(identity):
-                raise InvalidCredentialsException()
-            return self.primary_authentication.authenticate(agent, now)
+        if challenge is None:
+            raise InvalidCredentialsException()
+        return challenge
 
 
 class MfaUseCase:

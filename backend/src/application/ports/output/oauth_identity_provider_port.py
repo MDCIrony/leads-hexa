@@ -10,6 +10,10 @@ class OAuthIdentity:
     name: str | None
 
 
+class OAuthIdentityProviderError(Exception):
+    """An external OAuth response cannot establish an application identity."""
+
+
 class OAuthIdentityProviderPort(abc.ABC):
     @abc.abstractmethod
     def exchange(self, code: str, pkce_verifier: str) -> OAuthIdentity: ...

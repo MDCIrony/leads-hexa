@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass, field
 from typing import List
+from urllib.parse import urlsplit
 
 # `http://localhost` without a port is what a browser actually sends when the
 # SPA is served on port 80; omitting it breaks the CORS preflight.
@@ -8,9 +9,52 @@ _DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost,http://localhost
 
 
 @dataclass(frozen=True)
+class OAuthProviderSettings:
+    client_id: str = ""
+    client_secret: str = ""
+    redirect_uri: str = ""
+
+    @property
+    def enabled(self) -> bool:
+        if not all((self.client_id.strip(), self.client_secret.strip(), self.redirect_uri.strip())):
+            return False
+        try:
+            uri = urlsplit(self.redirect_uri)
+        except ValueError:
+            return False
+        return (
+            not uri.username
+            and not uri.password
+            and not uri.query
+            and not uri.fragment
+            and bool(uri.hostname)
+            and (uri.scheme == "https" or (uri.scheme == "http" and uri.hostname == "localhost"))
+        )
+
+
+def _is_origin(value: str) -> bool:
+    try:
+        uri = urlsplit(value)
+    except ValueError:
+        return False
+    return bool(
+        uri.scheme in {"http", "https"}
+        and uri.hostname
+        and not uri.username
+        and not uri.password
+        and not uri.path
+        and not uri.query
+        and not uri.fragment
+    )
+
+
+@dataclass(frozen=True)
 class Settings:
     database_url: str
     mfa_encryption_key: str = ""
+    frontend_origin: str = "http://localhost"
+    google_oauth: OAuthProviderSettings = field(default_factory=OAuthProviderSettings)
+    github_oauth: OAuthProviderSettings = field(default_factory=OAuthProviderSettings)
     session_hours: int = 8
     session_cookie_secure: bool = False
     webhook_timeout_seconds: float = 5.0
@@ -40,10 +84,24 @@ class Settings:
 
         raw_origins = os.getenv("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS)
         origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+        frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost").strip()
+        if not _is_origin(frontend_origin) or frontend_origin not in origins:
+            raise ValueError("FRONTEND_ORIGIN must be an origin included in CORS_ORIGINS")
 
         return cls(
             database_url=database_url,
             mfa_encryption_key=mfa_encryption_key,
+            frontend_origin=frontend_origin,
+            google_oauth=OAuthProviderSettings(
+                client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
+                client_secret=os.getenv("GOOGLE_CLIENT_SECRET", ""),
+                redirect_uri=os.getenv("GOOGLE_REDIRECT_URI", ""),
+            ),
+            github_oauth=OAuthProviderSettings(
+                client_id=os.getenv("GITHUB_CLIENT_ID", ""),
+                client_secret=os.getenv("GITHUB_CLIENT_SECRET", ""),
+                redirect_uri=os.getenv("GITHUB_REDIRECT_URI", ""),
+            ),
             session_hours=int(os.getenv("SESSION_HOURS", "8")),
             session_cookie_secure=os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true",
             webhook_timeout_seconds=float(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "5.0")),

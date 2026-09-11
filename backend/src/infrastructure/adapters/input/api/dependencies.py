@@ -87,7 +87,9 @@ from application.use_cases.notification_use_cases import (
     GetNotificationsUseCase, MarkAllNotificationsReadUseCase, MarkNotificationReadUseCase,
 )
 from application.ports.input.auth_use_case_port import LoginInputPort
-from application.use_cases.auth_use_cases import LoginUseCase, MfaUseCase
+from application.use_cases.auth_use_cases import (
+    LoginUseCase, MfaUseCase, OAuthChallengeUseCase, SocialLoginUseCase,
+)
 from application.ports.input.tenant_use_case_ports import (
     CreateTenantInputPort, GetTenantsInputPort, UpdateTenantInputPort
 )
@@ -295,6 +297,18 @@ def get_mfa_use_case(
         password_hasher=container.password_hasher,
         crypto=container.mfa_crypto,
         session_hours=container.settings.session_hours,
+    )
+
+def get_oauth_challenge_use_case(
+    container: Container = Depends(get_container),
+) -> OAuthChallengeUseCase:
+    return OAuthChallengeUseCase(uow=container.unit_of_work())
+
+def get_social_login_use_case(
+    container: Container = Depends(get_container),
+) -> SocialLoginUseCase:
+    return SocialLoginUseCase(
+        uow=container.unit_of_work(), session_hours=container.settings.session_hours,
     )
 
 def get_create_tenant_use_case(

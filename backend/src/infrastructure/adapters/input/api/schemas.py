@@ -466,6 +466,9 @@ class NotificationsPageResponse(BaseModel):
 class LoginResponse(BaseModel):
     status: str
 
+class OAuthProvidersResponse(BaseModel):
+    providers: List[str]
+
 class CurrentUserResponse(BaseModel):
     id: str
     name: str

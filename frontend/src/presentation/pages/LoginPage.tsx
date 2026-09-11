@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { isMfaRequired } from '../../application/services/auth.service';
+import {
+  isMfaRequired, isOAuthProvider, oauthProviders, oauthStartUrl, type OAuthProvider,
+} from '../../application/services/auth.service';
 import { useSession } from '../../application/session/use-session';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from '../components/ui/Button';
@@ -21,7 +23,15 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const notice = (location.state as LocationState | null)?.notice;
+  const [providers, setProviders] = useState<OAuthProvider[]>([]);
+  const state = location.state as LocationState | null;
+  const notice = state?.notice ?? (new URLSearchParams(location.search).get('oauth_error') === '1'
+    ? 'No se pudo iniciar sesión con el proveedor.'
+    : undefined);
+
+  useEffect(() => {
+    void oauthProviders().then((result) => setProviders(result.providers.filter(isOAuthProvider))).catch(() => setProviders([]));
+  }, []);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -81,6 +91,15 @@ export function LoginPage() {
         <Button type="submit" submitting={submitting} submittingLabel="Entrando…" className="w-full">
           Entrar
         </Button>
+        {providers.map((provider) => (
+          <a
+            key={provider}
+            href={oauthStartUrl(provider, typeof state?.from?.pathname === 'string' ? state.from.pathname : '/')}
+            className="block w-full px-4 py-2 text-center rounded-lg font-medium border border-slate-800 text-slate-200 hover:bg-slate-800/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+          >
+            Continuar con {provider === 'GOOGLE' ? 'Google' : 'GitHub'}
+          </a>
+        ))}
       </form>
     </div>
   );

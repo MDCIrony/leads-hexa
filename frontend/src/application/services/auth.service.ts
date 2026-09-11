@@ -7,6 +7,12 @@ export type MfaRequired = { status: 'MFA_REQUIRED' };
 export type LoginOutcome = (CurrentUser & { status?: never }) | MfaRequired;
 export type MfaSetup = components['schemas']['MfaSetupResponse'];
 export type MfaRecoveryCodes = components['schemas']['MfaRecoveryCodesResponse'];
+export type OAuthProviders = components['schemas']['OAuthProvidersResponse'];
+export type OAuthProvider = 'GOOGLE' | 'GITHUB';
+
+export function isOAuthProvider(provider: string): provider is OAuthProvider {
+  return provider === 'GOOGLE' || provider === 'GITHUB';
+}
 
 /** POST /auth/login: form-urlencoded, email in `username` — see api-client.loginRequest. */
 export async function login(email: string, password: string): Promise<LoginResult> {
@@ -16,6 +22,17 @@ export async function login(email: string, password: string): Promise<LoginResul
 
 export function isMfaRequired(result: LoginOutcome): result is MfaRequired {
   return result.status === 'MFA_REQUIRED';
+}
+
+export async function oauthProviders(): Promise<OAuthProviders> {
+  const { data } = await apiClient.get<OAuthProviders>('/api/v1/auth/oauth/providers');
+  return data;
+}
+
+export function oauthStartUrl(provider: OAuthProvider, returnPath: string): string {
+  if (!isOAuthProvider(provider)) return '/';
+  const safePath = /^\/(?!\/)[^?#\\\x00-\x1f\x7f]*$/.test(returnPath) ? returnPath : '/';
+  return `/api/v1/auth/oauth/${provider.toLowerCase()}/start?${new URLSearchParams({ return_path: safePath })}`;
 }
 
 /** The only source of the role and identity: never read from the token. */

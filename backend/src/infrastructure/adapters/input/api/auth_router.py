@@ -1,24 +1,147 @@
+from base64 import urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Response, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from application.dtos.context import RequestContext
 from application.ports.input.auth_use_case_port import LoginInputPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.use_cases.auth_use_cases import MfaUseCase
+from application.use_cases.auth_use_cases import MfaUseCase, OAuthChallengeUseCase, SocialLoginUseCase
 from infrastructure.adapters.input.api.dependencies import (
-    get_current_agent, get_login_use_case, get_mfa_use_case, get_request_context, get_uow,
+    get_current_agent, get_login_use_case, get_mfa_use_case, get_oauth_challenge_use_case,
+    get_request_context, get_social_login_use_case, get_uow,
 )
 from infrastructure.adapters.input.api.schemas import (
     CurrentUserResponse, LoginResponse, MfaCodeRequest, MfaFactorRequest, MfaPasswordRequest,
-    MfaRecoveryCodesResponse, MfaSetupResponse,
+    MfaRecoveryCodesResponse, MfaSetupResponse, OAuthProvidersResponse,
 )
 from domain.entities.agent import Agent
-from domain.exceptions import InvalidMfaFactorException
+from domain.exceptions import InvalidCredentialsException, InvalidMfaFactorException
 
 router = APIRouter()
+
+_OAUTH_AUTHORIZATION = {
+    "GOOGLE": ("https://accounts.google.com/o/oauth2/v2/auth", "openid email profile"),
+    "GITHUB": ("https://github.com/login/oauth/authorize", "read:user user:email"),
+}
+
+
+def _oauth_provider(value: str) -> str:
+    provider = value.upper()
+    if provider not in _OAUTH_AUTHORIZATION:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proveedor no disponible")
+    return provider
+
+
+def _oauth_callback_error(request: Request) -> RedirectResponse:
+    response = RedirectResponse(
+        f"{request.app.state.container.settings.frontend_origin}/login?oauth_error=1",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    response.delete_cookie("leads_oauth_challenge", path="/api/v1/auth/oauth")
+    return response
+
+
+@router.get("/oauth/providers", response_model=OAuthProvidersResponse)
+def oauth_providers(request: Request):
+    return OAuthProvidersResponse(providers=request.app.state.container.oauth_providers)
+
+
+@router.get(
+    "/oauth/{provider}/start", status_code=status.HTTP_303_SEE_OTHER,
+    response_class=RedirectResponse, responses={303: {"description": "Redirección al proveedor OAuth"}},
+)
+def start_oauth_login(
+    provider: str,
+    request: Request,
+    return_path: str = "/",
+    use_case: OAuthChallengeUseCase = Depends(get_oauth_challenge_use_case),
+):
+    normalized_provider = _oauth_provider(provider)
+    container = request.app.state.container
+    identity_provider = container.oauth_identity_provider(normalized_provider)
+    if identity_provider is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proveedor no disponible")
+    try:
+        challenge = use_case.start(normalized_provider, return_path)
+    except InvalidCredentialsException:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ruta de retorno inválida") from None
+
+    endpoint, scope = _OAUTH_AUTHORIZATION[normalized_provider]
+    settings = container.settings.google_oauth if normalized_provider == "GOOGLE" else container.settings.github_oauth
+    code_challenge = urlsafe_b64encode(sha256(challenge.pkce_verifier.encode()).digest()).rstrip(b"=").decode()
+    parameters = urlencode({
+        "response_type": "code", "client_id": settings.client_id,
+        "redirect_uri": settings.redirect_uri, "scope": scope, "state": challenge.state,
+        "code_challenge": code_challenge, "code_challenge_method": "S256",
+    })
+    response = RedirectResponse(
+        f"{endpoint}?{parameters}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    response.set_cookie(
+        "leads_oauth_challenge", challenge.nonce, httponly=True, samesite="lax",
+        secure=container.settings.session_cookie_secure, path="/api/v1/auth/oauth", max_age=300,
+        expires=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    return response
+
+
+@router.get(
+    "/oauth/{provider}/callback", status_code=status.HTTP_303_SEE_OTHER,
+    response_class=RedirectResponse, responses={303: {"description": "Redirección tras OAuth"}},
+)
+def oauth_callback(
+    provider: str,
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    challenge_use_case: OAuthChallengeUseCase = Depends(get_oauth_challenge_use_case),
+    social_login: SocialLoginUseCase = Depends(get_social_login_use_case),
+):
+    try:
+        normalized_provider = _oauth_provider(provider)
+        container = request.app.state.container
+        identity_provider = container.oauth_identity_provider(normalized_provider)
+        if identity_provider is None or not code:
+            raise InvalidMfaFactorException(terminal=True)
+        challenge = challenge_use_case.consume(
+            request.cookies.get("leads_oauth_challenge"), normalized_provider, state
+        )
+        identity = identity_provider.exchange(code, challenge.pkce_verifier or "")
+        result = social_login.execute(
+            normalized_provider, identity.provider_subject, identity.email, identity.email_verified,
+        )
+    except Exception:
+        return _oauth_callback_error(request)
+
+    settings = request.app.state.container.settings
+    if result.status == "MFA_REQUIRED":
+        response = RedirectResponse(
+            f"{settings.frontend_origin}/mfa", status_code=status.HTTP_303_SEE_OTHER,
+        )
+        response.delete_cookie("leads_session", path="/")
+        response.set_cookie(
+            "leads_mfa_challenge", result.token, httponly=True, samesite="lax",
+            secure=settings.session_cookie_secure, path="/api/v1/auth/mfa", max_age=300,
+            expires=datetime.now(timezone.utc) + timedelta(minutes=5),
+        )
+    else:
+        response = RedirectResponse(
+            f"{settings.frontend_origin}{challenge.return_path}", status_code=status.HTTP_303_SEE_OTHER,
+        )
+        response.delete_cookie("leads_mfa_challenge", path="/api/v1/auth/mfa")
+        response.set_cookie(
+            "leads_session", result.token, httponly=True, samesite="lax", secure=settings.session_cookie_secure,
+            path="/", max_age=settings.session_hours * 3600,
+            expires=datetime.now(timezone.utc) + timedelta(hours=settings.session_hours),
+        )
+    response.delete_cookie("leads_oauth_challenge", path="/api/v1/auth/oauth")
+    return response
 
 
 @router.post("/login", response_model=LoginResponse)

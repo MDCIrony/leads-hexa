@@ -4,6 +4,7 @@ from application.ports.output.id_generator_port import IdGeneratorPort
 from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
+from application.ports.output.oauth_identity_provider_port import OAuthIdentityProviderPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.services.assignment_engine import AssignmentEngine
 from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
@@ -14,6 +15,9 @@ from infrastructure.adapters.output.persistence.postgres_unit_of_work import Pos
 from infrastructure.adapters.output.queue.rabbitmq_job_queue import RabbitMQJobQueue
 from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
 from infrastructure.adapters.output.security.totp_mfa_crypto import TotpMfaCrypto
+from infrastructure.adapters.output.http.oauth_identity_providers import (
+    GitHubOAuthIdentityProvider, GoogleOAuthIdentityProvider,
+)
 from infrastructure.adapters.output.system_clock import SystemClock
 from infrastructure.adapters.output.uuid_generator import UuidGenerator
 from infrastructure.config.settings import Settings
@@ -49,6 +53,11 @@ class Container:
         # not the SASL one the host reaches — this adapter is the thing
         # provisioning credentials, not a tenant consuming with one.
         self._messaging_credential_provisioner = KafkaCredentialProvisioner(settings.kafka_bootstrap_servers)
+        self._oauth_identity_providers: dict[str, OAuthIdentityProviderPort] = {}
+        if settings.google_oauth.enabled:
+            self._oauth_identity_providers["GOOGLE"] = GoogleOAuthIdentityProvider(settings.google_oauth)
+        if settings.github_oauth.enabled:
+            self._oauth_identity_providers["GITHUB"] = GitHubOAuthIdentityProvider(settings.github_oauth)
 
     @property
     def settings(self) -> Settings:
@@ -93,6 +102,13 @@ class Container:
     @property
     def messaging_credential_provisioner(self) -> MessagingCredentialProvisionerPort:
         return self._messaging_credential_provisioner
+
+    def oauth_identity_provider(self, provider: str) -> OAuthIdentityProviderPort | None:
+        return self._oauth_identity_providers.get(provider)
+
+    @property
+    def oauth_providers(self) -> list[str]:
+        return list(self._oauth_identity_providers)
 
     def unit_of_work(self) -> UnitOfWorkPort:
         """A fresh unit of work per call: it owns a transaction, which must not

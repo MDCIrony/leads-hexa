@@ -9,6 +9,10 @@ def test_reads_every_value_from_the_environment(monkeypatch):
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
     monkeypatch.setenv("MFA_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
     monkeypatch.setenv("CORS_ORIGINS", "http://a.test,http://b.test")
+    monkeypatch.setenv("FRONTEND_ORIGIN", "http://a.test")
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "google-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "google-secret")
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "https://a.test/oauth/google")
 
     settings = Settings.from_environment()
 
@@ -17,6 +21,8 @@ def test_reads_every_value_from_the_environment(monkeypatch):
     assert settings.session_cookie_secure is True
     assert settings.mfa_encryption_key == "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     assert settings.cors_origins == ["http://a.test", "http://b.test"]
+    assert settings.frontend_origin == "http://a.test"
+    assert settings.google_oauth.enabled is True
 
 
 def test_missing_database_url_fails_loudly(monkeypatch):
@@ -59,5 +65,18 @@ def test_session_defaults_are_eight_hours_without_secure_flag(monkeypatch):
 def test_whitespace_around_origins_is_trimmed(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
     monkeypatch.setenv("CORS_ORIGINS", " http://a.test , http://b.test ")
+    monkeypatch.setenv("FRONTEND_ORIGIN", "http://a.test")
 
     assert Settings.from_environment().cors_origins == ["http://a.test", "http://b.test"]
+
+
+def test_frontend_origin_must_be_an_allowed_origin_and_partial_oauth_is_disabled(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
+    monkeypatch.setenv("CORS_ORIGINS", "http://a.test")
+    monkeypatch.setenv("FRONTEND_ORIGIN", "http://other.test/login")
+    with pytest.raises(ValueError, match="FRONTEND_ORIGIN"):
+        Settings.from_environment()
+
+    monkeypatch.setenv("FRONTEND_ORIGIN", "http://a.test")
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "configured-alone")
+    assert Settings.from_environment().google_oauth.enabled is False

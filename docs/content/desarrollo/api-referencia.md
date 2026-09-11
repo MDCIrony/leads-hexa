@@ -12,6 +12,7 @@ puede devolver cada endpoint.
 |---|---|---|---|
 | Salud | `GET /health` | Público | 200 |
 | Autenticación | `POST /api/v1/auth/login`, `POST /api/v1/auth/logout` | Público/cookie | 200/204 |
+| OAuth | `GET /api/v1/auth/oauth/providers`, `/{provider}/start`, `/{provider}/callback` | Público/navegador | 200/303 |
 | MFA | `POST /api/v1/auth/mfa/setup`, `/setup/confirm`, `/recovery-codes/regenerate`, `/disable` | Cookie de sesión humana | 200/204 |
 | Verificación MFA | `POST /api/v1/auth/mfa/verify` | Cookie temporal de desafío MFA | 200 |
 | Autenticación | `GET /api/v1/auth/me` | Cualquiera autenticado | 200 |
@@ -131,6 +132,21 @@ Con MFA activo responde `{"status":"MFA_REQUIRED"}` y fija `leads_mfa_challenge`
 una sesión autenticada.
 
 Errores: `401 Unauthorized` (`INVALID_CREDENTIALS`).
+
+### OAuth de Google y GitHub
+
+`GET /api/v1/auth/oauth/providers` devuelve sólo los proveedores configurados:
+
+```json
+{"providers":["GOOGLE","GITHUB"]}
+```
+
+El navegador abre `GET /api/v1/auth/oauth/{provider}/start?return_path=/ruta-interna`; la API crea un
+desafío de cinco minutos ligado a una cookie HttpOnly y responde `303` al proveedor con Authorization
+Code + PKCE S256. El callback también responde `303`: para una cuenta humana existente, activa y con
+correo verificado crea la cookie de sesión opaca o el desafío MFA existente. Nunca registra cuentas,
+persiste tokens del proveedor ni devuelve `code`, `state` o correo en la URL final. Un fallo redirige
+de forma genérica a `/login`.
 
 ### `GET /api/v1/auth/me`
 

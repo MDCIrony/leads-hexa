@@ -4,7 +4,7 @@ import { apiClient } from '../../infrastructure/api/api-client';
 import { mockApiClient } from '../../test/mock-api';
 import loginFixture from '../../test/fixtures/login.json';
 import meAdminFixture from '../../test/fixtures/me-admin.json';
-import { login, me } from './auth.service';
+import { login, me, oauthProviders, oauthStartUrl, type OAuthProvider } from './auth.service';
 
 describe('auth.login', () => {
   it('sends form-urlencoded with the email in username, never JSON — the most likely regression here', async () => {
@@ -34,5 +34,15 @@ describe('auth.me', () => {
     const user = await me();
 
     expect(user.role).toBe('ADMIN');
+  });
+});
+
+describe('auth OAuth helpers', () => {
+  it('lists public providers and only builds internal callback starts', async () => {
+    mockApiClient({ 'GET /api/v1/auth/oauth/providers': { data: { providers: ['GOOGLE'] } } });
+
+    await expect(oauthProviders()).resolves.toEqual({ providers: ['GOOGLE'] });
+    expect(oauthStartUrl('GOOGLE', '//other.test')).toContain('return_path=%2F');
+    expect(oauthStartUrl('UNKNOWN' as OAuthProvider, '/')).toBe('/');
   });
 });

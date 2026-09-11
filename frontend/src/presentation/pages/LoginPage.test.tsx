@@ -142,6 +142,18 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText('Contraseña')).toHaveAttribute('autocomplete', 'current-password');
   });
 
+  it('shows enabled OAuth providers as normal browser links', async () => {
+    mockApiClient({
+      'GET /api/v1/auth/oauth/providers': { data: { providers: ['GOOGLE'] } },
+      'GET /api/v1/auth/me': { status: 401, error: { error: true, error_code: 'UNAUTHORIZED', message: 'No autenticado.' } },
+    });
+    renderApp('/login');
+
+    expect(await screen.findByRole('link', { name: 'Continuar con Google' })).toHaveAttribute(
+      'href', '/api/v1/auth/oauth/google/start?return_path=%2F'
+    );
+  });
+
   it('shows the same message for an unknown email as for a wrong password', async () => {
     const invalidCredentials = {
       error: true as const,
