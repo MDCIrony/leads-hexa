@@ -14,23 +14,28 @@ export function SecurityPage() {
   const [secret, setSecret] = useState('');
   const [uri, setUri] = useState('');
   const [codes, setCodes] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  function showError(error: unknown, fallback: string) {
-    setError(readApiError(error)?.message ?? fallback);
+  // The backend answers every wrong factor with the same generic envelope, so
+  // the page names the field instead of echoing the English message.
+  function factorError(error: unknown, fallback: string) {
+    const envelope = readApiError(error);
+    if (envelope?.error_code === 'INVALID_CREDENTIALS') return fallback;
+    return envelope?.message ?? fallback;
   }
 
   async function setup(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    setError(null);
+    setPasswordError(null);
     try {
       const result = await setupMfa(password);
       setSecret(result.secret);
       setUri(result.otpauth_uri);
     } catch (error) {
-      showError(error, 'No se pudo iniciar la configuración.');
+      setPasswordError(factorError(error, 'Contraseña incorrecta.'));
     } finally {
       setSubmitting(false);
     }
@@ -39,7 +44,7 @@ export function SecurityPage() {
   async function confirm(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    setError(null);
+    setCodeError(null);
     try {
       setCodes((await confirmMfa(code)).recovery_codes);
       setPassword('');
@@ -48,7 +53,7 @@ export function SecurityPage() {
       setUri('');
       await refresh();
     } catch (error) {
-      showError(error, 'Código inválido.');
+      setCodeError(factorError(error, 'Código inválido.'));
     } finally {
       setSubmitting(false);
     }
@@ -57,12 +62,12 @@ export function SecurityPage() {
   async function regenerate(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    setError(null);
+    setCodeError(null);
     try {
       setCodes((await regenerateMfa(password, code)).recovery_codes);
       setCode('');
     } catch (error) {
-      showError(error, 'No se pudieron regenerar los códigos.');
+      setCodeError(factorError(error, 'Contraseña o código inválidos.'));
     } finally {
       setSubmitting(false);
     }
@@ -71,7 +76,7 @@ export function SecurityPage() {
   async function disable() {
     if (!window.confirm('¿Desactivar la autenticación multifactor?')) return;
     setSubmitting(true);
-    setError(null);
+    setPasswordError(null);
     try {
       await disableMfa(password, code);
       setPassword('');
@@ -79,7 +84,7 @@ export function SecurityPage() {
       setCodes([]);
       await refresh();
     } catch (error) {
-      showError(error, 'No se pudo desactivar MFA.');
+      setPasswordError(factorError(error, 'Contraseña o código inválidos.'));
     } finally {
       setSubmitting(false);
     }
@@ -89,11 +94,10 @@ export function SecurityPage() {
     <div className="max-w-xl space-y-6">
       <h1 className="text-2xl font-semibold">Seguridad</h1>
       <p className="text-slate-400">Autenticación multifactor: {user?.mfa_enabled ? 'activada' : 'desactivada'}.</p>
-      {error && <p className="text-rose-400" role="alert">{error}</p>}
 
       {!user?.mfa_enabled && !secret && (
         <form onSubmit={setup} className="space-y-4">
-          <Field label="Contraseña">
+          <Field label="Contraseña" error={passwordError ?? undefined}>
             <Input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
           </Field>
           <Button type="submit" submitting={submitting} submittingLabel="Configurando…">Configurar MFA</Button>
@@ -102,10 +106,11 @@ export function SecurityPage() {
 
       {secret && (
         <form onSubmit={confirm} className="space-y-4">
-          <QRCodeSVG value={uri} size={192} role="img" aria-label="Código QR para configurar MFA" />
+          {/* The quiet zone is mandatory for scanners: without margin many readers never lock on. */}
+          <QRCodeSVG value={uri} size={224} includeMargin role="img" aria-label="Código QR para configurar MFA" />
           <p>Clave manual: <code className="break-all text-indigo-300">{secret}</code></p>
           <p className="text-sm text-slate-400">URI para importar en tu aplicación: <code className="break-all">{uri}</code></p>
-          <Field label="Código de confirmación">
+          <Field label="Código de confirmación" error={codeError ?? undefined}>
             <Input value={code} onChange={(event) => setCode(event.target.value)} autoComplete="one-time-code" required autoFocus />
           </Field>
           <Button type="submit" submitting={submitting} submittingLabel="Confirmando…">Confirmar</Button>
@@ -121,10 +126,10 @@ export function SecurityPage() {
 
       {user?.mfa_enabled && (
         <form onSubmit={regenerate} className="space-y-4">
-          <Field label="Contraseña">
+          <Field label="Contraseña" error={passwordError ?? undefined}>
             <Input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
           </Field>
-          <Field label="Código de autenticación o recuperación">
+          <Field label="Código de autenticación o recuperación" error={codeError ?? undefined}>
             <Input value={code} onChange={(event) => setCode(event.target.value)} autoComplete="one-time-code" required />
           </Field>
           <div className="flex gap-3">

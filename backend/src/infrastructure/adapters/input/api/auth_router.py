@@ -47,7 +47,10 @@ def _oauth_callback_error(request: Request) -> RedirectResponse:
 
 
 @router.get("/oauth/providers", response_model=OAuthProvidersResponse)
-def oauth_providers(request: Request):
+def oauth_providers(request: Request, response: Response):
+    # Dynamic per configuration: a cached "[]" would hide buttons that a
+    # later-configured provider should show.
+    response.headers["Cache-Control"] = "no-store"
     return OAuthProvidersResponse(providers=request.app.state.container.oauth_providers)
 
 

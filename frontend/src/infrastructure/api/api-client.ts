@@ -31,7 +31,11 @@ export function handleUnauthorizedResponse(error: unknown): Promise<never> {
     axios.isAxiosError(error) &&
     error.response?.status === 401 &&
     url !== '/api/v1/auth/login' &&
-    url !== '/api/v1/auth/mfa/verify'
+    url !== '/api/v1/auth/me' &&
+    // A wrong password/code on MFA management is a form error, not an expired
+    // session: notifying here would log the user out of the page they are
+    // trying to fix. (Expired sessions still reach /login via the /me guard.)
+    !(typeof url === 'string' && url.startsWith('/api/v1/auth/mfa/'))
   ) {
     sessionExpiredListener?.();
   }

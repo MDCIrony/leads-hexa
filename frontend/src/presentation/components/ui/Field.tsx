@@ -26,9 +26,14 @@ export function Field({ label, error, children }: FieldProps) {
         {label}
       </label>
       {control}
-      {error && (
-        <p id={errorId} className="text-sm text-rose-400">
+      {/* The slot always reserves one line: showing an error must not push the form down. */}
+      {error ? (
+        <p id={errorId} role="alert" className="text-sm text-rose-400 min-h-5">
           {error}
+        </p>
+      ) : (
+        <p aria-hidden="true" className="text-sm min-h-5">
+          {'\u00A0'}
         </p>
       )}
     </div>

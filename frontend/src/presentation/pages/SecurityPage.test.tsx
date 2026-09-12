@@ -34,4 +34,58 @@ describe('SecurityPage', () => {
       code: '123456',
     });
   });
+
+  it('shows a wrong password inline without leaving the page', async () => {
+    const user = { ...meAgent, mfa_enabled: false };
+    mockApiClient({
+      'POST /api/v1/auth/mfa/setup': {
+        status: 401,
+        error: { error: true, error_code: 'INVALID_CREDENTIALS', message: 'Invalid authentication factor' },
+      },
+    });
+    const logout = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <SessionContext.Provider value={{ user, status: 'authenticated', login: vi.fn(), logout, refresh: vi.fn() }}>
+          <SecurityPage />
+        </SessionContext.Provider>
+      </MemoryRouter>
+    );
+
+    await userEvent.type(screen.getByLabelText('Contraseña'), 'wrong-pass');
+    await userEvent.click(screen.getByRole('button', { name: 'Configurar MFA' }));
+
+    await waitFor(() => expect(screen.getByText('Contraseña incorrecta.')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Configurar MFA' })).toBeInTheDocument();
+    expect(logout).not.toHaveBeenCalled();
+  });
+
+  it('shows a wrong confirmation code inline', async () => {
+    const user = { ...meAgent, mfa_enabled: false };
+    mockApiClient({
+      'POST /api/v1/auth/mfa/setup': { data: { secret: 'SECRET', otpauth_uri: 'otpauth://totp/x?secret=SECRET' } },
+      'POST /api/v1/auth/mfa/setup/confirm': {
+        status: 401,
+        error: { error: true, error_code: 'INVALID_CREDENTIALS', message: 'Invalid authentication factor' },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <SessionContext.Provider value={{ user, status: 'authenticated', login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+          <SecurityPage />
+        </SessionContext.Provider>
+      </MemoryRouter>
+    );
+
+    await userEvent.type(screen.getByLabelText('Contraseña'), 'Secret123');
+    await userEvent.click(screen.getByRole('button', { name: 'Configurar MFA' }));
+    await waitFor(() => expect(screen.getByLabelText('Código de confirmación')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText('Código de confirmación'), '000000');
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(screen.getByText('Código inválido.')).toBeInTheDocument());
+  });
 });
