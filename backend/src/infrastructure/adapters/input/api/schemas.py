@@ -477,6 +477,7 @@ class CurrentUserResponse(BaseModel):
     tenant_id: Optional[str] = None
     tenant_name: Optional[str] = None
     mfa_enabled: bool
+    linked_oauth_providers: List[str] = Field(default_factory=list)
 
 class MfaPasswordRequest(BaseModel):
     password: str

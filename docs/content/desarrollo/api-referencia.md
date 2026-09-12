@@ -163,11 +163,14 @@ organización.
   "role": "MANAGER",
   "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
   "tenant_name": "Acme Corp",
-  "mfa_enabled": false
+  "mfa_enabled": false,
+  "linked_oauth_providers": ["GOOGLE"]
 }
 ```
 
 Para un `ADMIN`, `tenant_id` y `tenant_name` son siempre `null`. Errores: `401 Unauthorized`.
+`linked_oauth_providers` enumera únicamente las identidades sociales ya vinculadas a la cuenta; no
+debe confundirse con los proveedores disponibles globalmente en `GET /auth/oauth/providers`.
 
 ### MFA
 

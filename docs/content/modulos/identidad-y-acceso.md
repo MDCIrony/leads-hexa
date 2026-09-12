@@ -15,6 +15,11 @@ firma y la caducidad del token, y **recarga el agente desde base de datos** por 
 lugar de confiar en lo que el token dice. Un asesor desactivado deja de poder operar en su siguiente
 petición, aunque su token todavía no haya caducado.
 
+`GET /auth/me` incluye `linked_oauth_providers` para distinguir una identidad social realmente
+vinculada de un proveedor meramente disponible en la plataforma. El enlace ocurre durante un login
+OAuth cuyo correo verificado coincide con el agente; no existe un flujo separado de conexión desde
+una sesión abierta.
+
 La desactivación es reversible: `PATCH /agents/{agent_id}` con `{"is_active": true}` reactiva al
 asesor y le devuelve el acceso en el acto, por la misma razón que se lo cortó — la próxima petición
 suya vuelve a recargar el agente, que ya aparece activo. `GET /agents` (sin parámetro) sólo lista

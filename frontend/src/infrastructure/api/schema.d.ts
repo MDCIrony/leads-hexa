@@ -987,6 +987,8 @@ export interface components {
             tenant_name?: string | null;
             /** Mfa Enabled */
             mfa_enabled: boolean;
+            /** Linked Oauth Providers */
+            linked_oauth_providers?: string[];
         };
         /** DiscardLeadRequest */
         DiscardLeadRequest: {

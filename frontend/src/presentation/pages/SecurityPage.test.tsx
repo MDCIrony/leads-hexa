@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
@@ -9,6 +9,26 @@ import meAgent from '../../test/fixtures/me-agent.json';
 import { SecurityPage } from './SecurityPage';
 
 describe('SecurityPage', () => {
+  it('distinguishes linked providers from providers that are only available', async () => {
+    const user = { ...meAgent, mfa_enabled: true, linked_oauth_providers: ['GOOGLE'] };
+    mockApiClient({
+      'GET /api/v1/auth/oauth/providers': { data: { providers: ['GOOGLE', 'GITHUB'] } },
+    });
+
+    render(
+      <MemoryRouter>
+        <SessionContext.Provider value={{ user, status: 'authenticated', login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}>
+          <SecurityPage />
+        </SessionContext.Provider>
+      </MemoryRouter>
+    );
+
+    const methods = screen.getByRole('region', { name: 'Métodos de acceso' });
+    await waitFor(() => expect(within(methods).getByText('Disponible, no vinculado')).toBeInTheDocument());
+    expect(within(methods).getByText('Vinculado')).toBeInTheDocument();
+    expect(within(methods).getByText('Activada')).toBeInTheDocument();
+  });
+
   it('regenerates recovery codes with both required factors', async () => {
     const user = { ...meAgent, mfa_enabled: true };
     mockApiClient({

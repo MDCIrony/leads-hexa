@@ -164,6 +164,12 @@ class InMemorySocialIdentityRepository(SocialIdentityRepositoryPort):
             None,
         )
 
+    def list_by_agent(self, agent_id: UUID) -> list[SocialIdentity]:
+        return sorted(
+            (identity for identity in self.items.values() if identity.agent_id == agent_id),
+            key=lambda identity: identity.provider,
+        )
+
     def save(self, identity: SocialIdentity) -> bool:
         if self.get_by_provider_subject(identity.provider, identity.provider_subject) or any(
             item.agent_id == identity.agent_id and item.provider == identity.provider

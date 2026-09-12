@@ -50,6 +50,7 @@ def test_oauth_callback_consumes_browser_challenge_before_creating_an_opaque_ses
             f"/api/v1/auth/oauth/google/callback?code=provider-code&state={query['state'][0]}",
             follow_redirects=False,
         )
+        me = client.get("/api/v1/auth/me")
         replay = client.get(
             f"/api/v1/auth/oauth/google/callback?code=provider-code&state={query['state'][0]}",
             follow_redirects=False,
@@ -62,6 +63,7 @@ def test_oauth_callback_consumes_browser_challenge_before_creating_an_opaque_ses
     assert callback.status_code == 303
     assert callback.headers["location"] == "http://localhost/mis-leads"
     assert "leads_session=" in callback.headers["set-cookie"]
+    assert me.json()["linked_oauth_providers"] == ["GOOGLE"]
     assert provider.calls == [("provider-code", provider.calls[0][1])]
     assert replay.headers["location"] == "http://localhost/login?oauth_error=1"
     assert "provider-code" not in replay.headers["location"]

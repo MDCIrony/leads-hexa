@@ -39,6 +39,7 @@ def test_social_identity_constraints_and_last_login_are_persisted(social_db):
     with PostgresUnitOfWork(social_db) as uow:
         stored = uow.social_identities.get_by_provider_subject("GOOGLE", "subject")
         assert stored is not None and stored.last_login_at == now + timedelta(seconds=1)
+        assert uow.social_identities.list_by_agent(agent_id) == [stored]
 
     with social_db.get_connection(autocommit=True) as conn:
         with pytest.raises(psycopg.IntegrityError):

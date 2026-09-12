@@ -1,7 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useSession } from '../../application/session/use-session';
-import { confirmMfa, disableMfa, regenerateMfa, setupMfa } from '../../application/services/auth.service';
+import {
+  confirmMfa, disableMfa, isOAuthProvider, oauthProviders, regenerateMfa, setupMfa,
+  type OAuthProvider,
+} from '../../application/services/auth.service';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
@@ -17,6 +20,13 @@ export function SecurityPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [availableProviders, setAvailableProviders] = useState<OAuthProvider[] | null>(null);
+
+  useEffect(() => {
+    void oauthProviders()
+      .then((result) => setAvailableProviders(result.providers.filter(isOAuthProvider)))
+      .catch(() => setAvailableProviders([]));
+  }, []);
 
   // The backend answers every wrong factor with the same generic envelope, so
   // the page names the field instead of echoing the English message.
@@ -92,8 +102,37 @@ export function SecurityPage() {
 
   return (
     <div className="max-w-xl space-y-6">
-      <h1 className="text-2xl font-semibold">Seguridad</h1>
-      <p className="text-slate-400">Autenticación multifactor: {user?.mfa_enabled ? 'activada' : 'desactivada'}.</p>
+      <h1 className="text-2xl font-semibold text-balance">Seguridad</h1>
+
+      <section aria-labelledby="access-methods" className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
+        <h2 id="access-methods" className="font-semibold text-balance">Métodos de acceso</h2>
+        <p className="mt-1 text-sm text-slate-400 text-pretty">
+          Consulta qué métodos protegen tu cuenta y cuáles están vinculados.
+        </p>
+        <dl className="mt-4 divide-y divide-slate-800">
+          <div className="flex items-center justify-between gap-4 py-3">
+            <dt>Autenticación multifactor</dt>
+            <dd className={user?.mfa_enabled ? 'text-emerald-400' : 'text-slate-400'}>
+              {user?.mfa_enabled ? 'Activada' : 'Desactivada'}
+            </dd>
+          </div>
+          {(['GOOGLE', 'GITHUB'] as const).map((provider) => {
+            const linked = user?.linked_oauth_providers?.includes(provider) ?? false;
+            const available = availableProviders?.includes(provider) ?? false;
+            const status = availableProviders === null
+              ? 'Consultando…'
+              : linked
+                ? available ? 'Vinculado' : 'Vinculado, no disponible'
+                : available ? 'Disponible, no vinculado' : 'No disponible';
+            return (
+              <div key={provider} className="flex items-center justify-between gap-4 py-3">
+                <dt>{provider === 'GOOGLE' ? 'Google' : 'GitHub'}</dt>
+                <dd className={linked && available ? 'text-emerald-400' : 'text-slate-400'}>{status}</dd>
+              </div>
+            );
+          })}
+        </dl>
+      </section>
 
       {!user?.mfa_enabled && !secret && (
         <form onSubmit={setup} className="space-y-4">

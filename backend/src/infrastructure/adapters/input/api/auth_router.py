@@ -270,6 +270,9 @@ def get_current_user(
 
     with uow:
         enrollment = uow.mfa.get(context.actor.id.value)
+        linked_oauth_providers = [
+            identity.provider for identity in uow.social_identities.list_by_agent(context.actor.id.value)
+        ]
 
     actor = context.actor
     return CurrentUserResponse(
@@ -280,4 +283,5 @@ def get_current_user(
         tenant_id=str(context.tenant_id) if context.tenant_id else None,
         tenant_name=tenant_name,
         mfa_enabled=bool(enrollment and enrollment.enabled_at),
+        linked_oauth_providers=linked_oauth_providers,
     )

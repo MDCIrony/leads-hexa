@@ -11,6 +11,9 @@ class SocialIdentityRepositoryPort(abc.ABC):
     def get_by_provider_subject(self, provider: str, provider_subject: str) -> Optional[SocialIdentity]: ...
 
     @abc.abstractmethod
+    def list_by_agent(self, agent_id: UUID) -> list[SocialIdentity]: ...
+
+    @abc.abstractmethod
     def save(self, identity: SocialIdentity) -> bool: ...
 
     @abc.abstractmethod

@@ -20,6 +20,14 @@ class RawSqlSocialIdentityRepository(SocialIdentityRepositoryPort):
         ).fetchone()
         return SocialIdentity(**dict(row)) if row else None
 
+    def list_by_agent(self, agent_id: UUID) -> list[SocialIdentity]:
+        rows = self.connection.execute(
+            "SELECT id, agent_id, provider, provider_subject, email_at_link, created_at, last_login_at "
+            "FROM social_identities WHERE agent_id = %s ORDER BY provider",
+            (agent_id,),
+        ).fetchall()
+        return [SocialIdentity(**dict(row)) for row in rows]
+
     def save(self, identity: SocialIdentity) -> bool:
         return self.connection.execute(
             "INSERT INTO social_identities (id, agent_id, provider, provider_subject, email_at_link, created_at, last_login_at) "
