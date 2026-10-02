@@ -45,7 +45,7 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
-        "5xx":
+        "5XX":
           description: Error del servicio o claves de verificación no disponibles (503). El llamante lo trata como fallo transitorio.
           content:
             application/json:
@@ -86,7 +86,7 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Error"}
-        "5xx":
+        "5XX":
           description: Error del servicio o claves de verificación no disponibles (503).
           content:
             application/json:
