@@ -1186,6 +1186,16 @@ except urllib.error.HTTPError as e:
     sleep 1
   done
   check "identity vuelve tras el corte" 200 "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")"
+  docker compose stop backend >/dev/null 2>&1
+  r=$(req "$API/leads" -H "Authorization: Bearer $MGR_A")
+  check "lead-core caído → 503" 503 "$(code "$r")"
+  check "  con el sobre" SERVICE_UNAVAILABLE "$(body "$r" | f 'd.get("error_code")')"
+  docker compose start backend >/dev/null 2>&1
+  for i in $(seq 1 60); do
+    docker compose ps backend --format '{{.Status}}' | grep -q '(healthy)' && break
+    sleep 1
+  done
+  check "lead-core vuelve tras el corte" 200 "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")"
   rm -f "$headers" "$headers.big"
 }
 
@@ -1481,6 +1491,17 @@ except urllib.error.HTTPError as e:
     -d "{\"group_id\":\"$group\"}")
   check "el asesor de otra organización no existe (404)" 404 "$(code "$r")"
 
+  # The PATCH above may find the projection already there; this pins the
+  # hydration path itself: lead-core's service credentials against identity.
+  check "lead-core obtiene un token de servicio y lee el agente en identity" 200 "$(docker compose exec -T backend python -c '
+import os, sys, httpx
+from chassis.auth import ServiceTokenClient
+base = os.environ["IDENTITY_URL"]
+tokens = ServiceTokenClient(base + "/internal/v1/service-tokens", os.environ["SERVICE_CLIENT_ID"],
+                            os.environ["SERVICE_CLIENT_SECRET"], "identity")
+r = httpx.get(base + "/internal/v1/agents/" + sys.argv[1], headers={"Authorization": "Bearer " + tokens.token()})
+print(r.status_code)' "$AGENT_1" 2>/dev/null)"
+
   section "Microservicios F3 · revocación en la petición siguiente"
   agent_jar=$(login "f3-new-$STAMP@x.test" "$ADMIN_PASS")
   check "el asesor nuevo entra" 200 "$(code "$(req "$API/leads/mine" -H "Authorization: Bearer $agent_jar")")"
@@ -1522,7 +1543,7 @@ except urllib.error.HTTPError as e:
     done
     check "$group sin lag (<=30 s)" 0 "$lag"
   done
-  for group in lead-core.advisors intake.tenants; do
+  for group in lead-core.advisors intake.tenants notifications.members; do
     check "internal.dlq.$group existe y está vacía" 0 "$(dlq_size "internal.dlq.$group")"
   done
   check "el gestor de OrgD llega a members de notifications" 1 "$(docker compose exec -T db psql -U postgres -d notifications_db -tAc \
