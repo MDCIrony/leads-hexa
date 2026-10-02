@@ -40,10 +40,6 @@ services:
       - ./backend/src:/app/src:ro
       - ./backend/migrations:/app/migrations:ro
       - ./libs/chassis/src:/libs/chassis/src:ro
-    ports:
-      # 8001 on the host: 8000 is a common default and is often already taken.
-      # Inside the compose network the API still listens on 8000.
-      - "8001:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
       - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
@@ -73,6 +69,27 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  gateway:
+    # The only container that publishes the API (ADR-0032). 8001 on the host is
+    # the port the backend used to publish, so every client keeps its URL.
+    image: nginx:1.27-alpine
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./gateway/proxy_headers.conf:/etc/nginx/proxy_headers.conf:ro
+      - ./gateway/introspect.conf:/etc/nginx/introspect.conf:ro
+    ports:
+      - "8001:8080"
+    depends_on:
+      # nginx resolves upstream names at startup and refuses to start if one
+      # does not exist yet on the network; started is enough, healthy is not needed.
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   kafka:
     image: apache/kafka:3.7.0
@@ -226,7 +243,7 @@ services:
     ports:
       - "80:80"
     depends_on:
-      backend:
+      gateway:
         condition: service_healthy
 
   docs:
@@ -239,7 +256,7 @@ services:
     volumes:
       - ./docs/content:/docs/content:ro
     ports:
-      # 8002: 8000 and 8001 are taken by the API's container and host ports.
+      # 8002: 8000 is the backend's container port and 8001 the gateway's host port.
       - "8002:8000"
     # No dependency on db or backend: documentation must be readable when the
     # product does not start, which is exactly when it is needed most.
@@ -259,11 +276,11 @@ services:
       # kafka:9095 and not the localhost:9094 the credential reports: that
       # address is for clients on the host. Same broker, same per-tenant ACLs.
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9095
-      - LEADS_API_BASE=http://backend:8000/api/v1
+      - LEADS_API_BASE=http://gateway:8080/api/v1
     volumes:
       - inboxdata:/data
     depends_on:
-      backend:
+      gateway:
         condition: service_healthy
 
   backend-test:

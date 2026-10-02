@@ -1002,15 +1002,109 @@ PY
 }
 
 
+# ------------------------------------------------ microservicios · F0 ---
+# Gateway and phantom token (ADR-0032): what the edge guarantees and what the
+# service still enforces on its own. Runs last: it stops the backend.
+verify_ms_f0() {
+  local r headers base mgr_a_id forged key status i
+  section "Microservicios F0 · gateway y phantom token"
+  base=${API%/api/v1}
+  headers=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.headers")
+
+  r=$(req "$API/leads" -H "Authorization: Bearer not-a-jwt")
+  check "bearer basura sin cookie → 401" 401 "$(code "$r")"
+  check "401 con el sobre de siempre" UNAUTHORIZED "$(body "$r" | f 'd["error_code"] if d.get("error") is True else ""')"
+
+  mgr_a_id=$(body "$(req "$API/auth/me" -H "Authorization: Bearer $MGR_A")" | f 'd["id"]')
+  forged=$(docker compose exec -T backend python -c '
+import sys, time, uuid
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from chassis.auth import Ed25519Signer
+now = int(time.time())
+print(Ed25519Signer("dev-1", Ed25519PrivateKey.generate()).sign({"iss": "identity", "aud": "lead-router",
+    "sub": sys.argv[1], "tid": sys.argv[2], "role": "MANAGER", "ptype": "human",
+    "iat": now, "exp": now + 60, "jti": str(uuid.uuid4())}))' "$mgr_a_id" "$TENANT_A")
+  r=$(req "$API/leads" -H "Authorization: Bearer $forged")
+  check "JWT de otra clave por el gateway → 401" 401 "$(code "$r")"
+  status=$(docker compose exec -T backend python -c '
+import sys, urllib.request, urllib.error
+req = urllib.request.Request("http://localhost:8000/api/v1/leads", headers={"Authorization": "Bearer " + sys.argv[1]})
+try:
+    print(urllib.request.urlopen(req).status)
+except urllib.error.HTTPError as e:
+    print(e.code)' "$forged")
+  check "JWT de otra clave directo al servicio → 401" 401 "$status"
+  r=$(req "$API/leads" -H "Authorization: Bearer $TOKEN_1" -H "Authorization: Bearer $forged")
+  check "el Authorization del cliente no llega: manda la cookie" 403 "$(code "$r")"
+
+  check "jwks no se publica" 404 "$(code "$(req "$base/internal/v1/jwks")")"
+  check "introspect no se publica" 404 "$(code "$(req "$base/internal/v1/auth/introspect")")"
+
+  curl -s -o /dev/null -D "$headers" -H "X-Request-Id: e2e-$STAMP" "$API/auth/me"
+  check "X-Request-Id entrante se conserva" "e2e-$STAMP" "$(awk 'tolower($1)=="x-request-id:"{print $2}' "$headers" | tr -d '\r')"
+  curl -s -o /dev/null -D "$headers" "$API/auth/me"
+  check "X-Request-Id se genera si falta" True "$(awk 'tolower($1)=="x-request-id:"{print $2}' "$headers" | tr -d '\r' | grep -qE '^[A-Za-z0-9]{16,}$' && printf True || printf False)"
+  curl -s -o /dev/null -D "$headers" -H "X-Request-Id: no vale;$STAMP" "$API/auth/me"
+  check "X-Request-Id hostil se sustituye" False "$(grep -qi "no vale" "$headers" && printf True || printf False)"
+  check "el access log del gateway lleva el id" True "$(docker compose logs --since 2m gateway | grep -q "rid=e2e-$STAMP" && printf True || printf False)"
+
+  r=$(curl -s -o /dev/null -D "$headers" -w '%{http_code}' -X OPTIONS "$API/auth/login" \
+    -H "Origin: http://localhost:5173" -H "Access-Control-Request-Method: POST")
+  check "preflight de origen permitido" 204 "$r"
+  check "preflight devuelve el origen" "http://localhost:5173" "$(awk 'tolower($1)=="access-control-allow-origin:"{print $2}' "$headers" | tr -d '\r')"
+  check "preflight permite credenciales" true "$(awk 'tolower($1)=="access-control-allow-credentials:"{print $2}' "$headers" | tr -d '\r')"
+  r=$(curl -s -o /dev/null -D "$headers" -w '%{http_code}' -X POST "$API/auth/login" \
+    -H "Origin: http://localhost:5173.evil.test" --data-urlencode "username=mgr-b-$STAMP@x.test" --data-urlencode "password=$ADMIN_PASS")
+  check "dominio parecido no es origen permitido" 403 "$r"
+  check "un Origin hostil no crea sesión" False "$(grep -qi 'set-cookie: leads_session' "$headers" && printf True || printf False)"
+  r=$(curl -s -o /dev/null -D "$headers" -w '%{http_code}' -X POST "$API/auth/login" \
+    -H "Origin: http://localhost" --data-urlencode "username=mgr-b-$STAMP@x.test" --data-urlencode "password=$ADMIN_PASS")
+  check "login con origen permitido" 200 "$r"
+  check "y fija la sesión" True "$(grep -qi 'set-cookie: leads_session' "$headers" && printf True || printf False)"
+  r=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/auth/login" -H "Referer: https://evil.test/" \
+    --data-urlencode "username=mgr-b-$STAMP@x.test" --data-urlencode "password=$ADMIN_PASS")
+  check "un Referer hostil sin Origin no cuenta" 200 "$r"
+  r=$(req -X POST "$API/rules/scoring" -H "X-Api-Key: not-a-real-key" -H "Origin: https://evil.test" \
+    -H 'Content-Type: application/json' -d '{"name":"X","conditions":[],"score_delta":1}')
+  check "X-Api-Key con Origin hostil → 403 antes de autenticar" 403 "$(code "$r")"
+
+  r=$(req -X POST "$API/agents/integration-credential" -H "Authorization: Bearer $MGR_B")
+  key=$(body "$r" | f 'd.get("api_key") or ""')
+  check "X-Api-Key válida en GET /leads" 200 "$(code "$(req "$API/leads" -H "X-Api-Key: $key")")"
+  check "X-Api-Key válida fuera de GET /leads → 401" 401 "$(code "$(req "$API/rules/scoring" -H "X-Api-Key: $key")")"
+
+  r=$(req -X POST "$API/agents/" -H 'Content-Type: application/json' \
+    -d '{"name":"X","email":"x@x.test","password":"Secret123","role":"ADMIN"}')
+  check "POST /agents anónimo con agentes ya creados → 401" 401 "$(code "$r")"
+
+  head -c 11000000 /dev/zero > "$headers.big"
+  r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" -F "file=@$headers.big;filename=big.csv")
+  check "cuerpo mayor de 10 MB → 413" 413 "$(code "$r")"
+
+  docker compose stop backend >/dev/null 2>&1
+  r=$(req "$API/leads" -H "Authorization: Bearer $MGR_A")
+  check "identity caída → 503 (siempre cerrado)" 503 "$(code "$r")"
+  check "503 con sobre" SERVICE_UNAVAILABLE "$(body "$r" | f 'd.get("error_code")')"
+  docker compose start backend >/dev/null 2>&1
+  for i in $(seq 1 60); do
+    [ "$(code "$(req "$API/auth/me")")" = 401 ] && break
+    sleep 1
+  done
+  check "el backend vuelve tras el corte" 200 "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")"
+  rm -f "$headers" "$headers.big"
+}
+
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
   printf 'Recreando el volumen…\n'
   docker compose down -v >/dev/null 2>&1
   docker compose up -d >/dev/null 2>&1
-  # The API needs the migrations applied before it answers.
-  for _ in $(seq 1 30); do
-    curl -sf "${API%/api/v1}/health" >/dev/null 2>&1 && break
+  # The gateway answers /health before the backend has migrated; /auth/me
+  # reaches the backend and only returns 401 once it is serving.
+  for _ in $(seq 1 60); do
+    [ "$(curl -s -o /dev/null -w '%{http_code}' "$API/auth/me")" = 401 ] && break
     sleep 1
   done
 fi
@@ -1027,6 +1121,7 @@ verify_f31
 verify_f41
 verify_f5
 verify_social_oauth
+verify_ms_f0
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then
