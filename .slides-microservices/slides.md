@@ -604,6 +604,30 @@ flowchart LR
 
 ---
 layout: blocked
+bloque: "12 · Estado"
+idea: "Vista C4 de contenedores: quién habla con quién, por qué medio y con qué propósito."
+---
+
+# Arquitectura tras F4 · contenedores (C4)
+
+<img src="/c4-contenedores.svg" class="mx-auto" style="height: 84%; object-fit: contain;" />
+
+<div class="text-xs text-center"><a href="/c4-contenedores.svg" target="_blank">Abrir a tamaño completo</a> · fuente editable en <code>docs/content/microservices/diagramas/c4-contenedores.drawio</code></div>
+
+---
+layout: blocked
+bloque: "12 · Estado"
+idea: "HTTP cuando se necesita la respuesta, Kafka para hechos y estado, RabbitMQ para trabajo, outbox para toda publicación."
+---
+
+# Cómo se comunican los componentes
+
+<img src="/comunicacion.svg" class="mx-auto" style="height: 86%; object-fit: contain;" />
+
+<div class="text-xs text-center"><a href="/comunicacion.svg" target="_blank">Abrir a tamaño completo</a> · fuente editable en <code>docs/content/microservices/diagramas/comunicacion.drawio</code></div>
+
+---
+layout: blocked
 bloque: "13 · F4"
 idea: "Recepción y decisión se separan. Lo que antes garantizaba una transacción lo garantiza ahora una clave única."
 ---
