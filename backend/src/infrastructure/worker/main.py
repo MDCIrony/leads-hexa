@@ -1,0 +1,99 @@
+import logging
+import signal
+import threading
+
+from chassis.outbox import KafkaEventDispatcher, run_relay
+from chassis.rabbit import RabbitJobDispatcher
+from confluent_kafka import Producer
+from confluent_kafka.admin import AdminClient
+
+from infrastructure.adapters.output.events.internal_topics import (
+    INTERNAL_TOPIC_SPECS,
+    NOTIFICATION_GROUPS,
+    topic_for,
+)
+from infrastructure.adapters.output.events.kafka_outbound_dispatcher import KafkaOutboundDispatcher
+from infrastructure.adapters.output.events.webhook_outbound_dispatcher import WebhookOutboundDispatcher
+from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
+from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
+from infrastructure.adapters.output.queue.intake_queue_topology import QUEUE_NAME, declare_intake_topology
+from infrastructure.config.settings import Settings
+from infrastructure.di.container import Container
+from infrastructure.logging_config import configure_logging
+from infrastructure.worker.config import PRODUCER_NAME, producer_config
+from infrastructure.worker.lanes import consumer_loop, ensure_topics_until_ready, run_consumer_lane
+from infrastructure.worker.relays import PooledWebhookRepository, build_dispatchers, build_relays
+from infrastructure.workers.job_messages import job_message
+
+_LOGGER = logging.getLogger(__name__)
+
+_JOIN_TIMEOUT_SECONDS = 15.0
+
+
+def main() -> int:
+    configure_logging()
+    settings = Settings.from_environment()
+    container = Container(settings)
+    bootstrap = settings.kafka_bootstrap_servers
+    stop, ready = threading.Event(), threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+
+    product_dispatchers = [
+        WebhookOutboundDispatcher(
+            webhook_repo=PooledWebhookRepository(container.database),
+            webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
+        ),
+        KafkaOutboundDispatcher(producer=Producer(producer_config(bootstrap))),
+    ]
+    dispatchers = build_dispatchers(
+        product_dispatchers,
+        [RabbitJobDispatcher(settings.rabbitmq_url, QUEUE_NAME, declare_intake_topology, job_message)],
+    )
+    internal_dispatcher = KafkaEventDispatcher(
+        Producer(producer_config(bootstrap, auto_create_topics=False)), PRODUCER_NAME, topic_for,
+    )
+
+    def activate_internal() -> None:
+        dispatchers["internal"].append(internal_dispatcher)
+        ready.set()
+
+    relays = build_relays(lambda: open_outbox_store(container.database), dispatchers)
+    admin = AdminClient({"bootstrap.servers": bootstrap})
+    threads = [
+        *(
+            threading.Thread(
+                target=run_relay, args=(relay, stop, settings.outbox_relay_interval_seconds),
+                name=f"relay-{channel}", daemon=True,
+            )
+            for channel, relay in relays.items()
+        ),
+        threading.Thread(
+            target=ensure_topics_until_ready,
+            args=(admin, [*INTERNAL_TOPIC_SPECS], stop, activate_internal),
+            name="ensure-topics", daemon=True,
+        ),
+        *(
+            threading.Thread(
+                target=run_consumer_lane,
+                args=(
+                    group,
+                    lambda group=group, topic=topic: consumer_loop(container, bootstrap, group, topic),
+                    ready, stop,
+                ),
+                name=f"consumer-{group}", daemon=True,
+            )
+            for group, topic in NOTIFICATION_GROUPS.items()
+        ),
+    ]
+    for thread in threads:
+        thread.start()
+        _LOGGER.info("Lane %s started", thread.name)
+
+    while not stop.wait(1.0):
+        pass
+    _LOGGER.info("Stopping")
+    for thread in threads:
+        thread.join(timeout=_JOIN_TIMEOUT_SECONDS)
+    container.database.close()
+    return 0

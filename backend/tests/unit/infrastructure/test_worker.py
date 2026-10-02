@@ -7,9 +7,9 @@ from types import SimpleNamespace
 from chassis.consumer import TopicSpec
 from chassis.outbox import OutboxRow
 
-from infrastructure.worker import (
-    build_dispatchers, build_relays, ensure_topics_until_ready, producer_config, run_consumer_lane,
-)
+from infrastructure.worker.config import producer_config
+from infrastructure.worker.lanes import ensure_topics_until_ready, run_consumer_lane
+from infrastructure.worker.relays import build_dispatchers, build_relays
 
 
 def _row(channel: str) -> OutboxRow:
