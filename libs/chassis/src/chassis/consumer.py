@@ -124,6 +124,8 @@ class ConsumerLoop:
         self._sleep = sleep
         self._flush_timeout_seconds = flush_timeout_seconds
         self._rewind_delay_seconds = rewind_delay_seconds
+        # (topic, partition) -> offset of an unsettled message whose rewind failed.
+        self._blocked: dict[tuple[str, int], int] = {}
 
     def process(self, message) -> str:
         """Returns "handled" or "dead-lettered"; the offset is committed either way.
@@ -163,7 +165,15 @@ class ConsumerLoop:
                     continue
                 error = message.error()
                 if error:
-                    self._log_consumer_error(error)
+                    self._handle_consumer_error(error)
+                    continue
+                partition = (message.topic(), message.partition())
+                blocked_at = self._blocked.get(partition)
+                if blocked_at is not None and message.offset() > blocked_at:
+                    # An earlier message of this partition is unsettled and its rewind
+                    # failed: committing this one would commit past it and lose it.
+                    self._seek(partition, blocked_at)
+                    stop.wait(self._rewind_delay_seconds)
                     continue
                 try:
                     self.process(message)
@@ -174,29 +184,42 @@ class ConsumerLoop:
                     _LOGGER.error("Message %s[%s]@%s not settled, rewinding",
                                   message.topic(), message.partition(), message.offset(),
                                   exc_info=True)
-                    self._rewind(message)
+                    if self._seek(partition, message.offset()):
+                        self._blocked.pop(partition, None)
+                    else:
+                        self._blocked[partition] = message.offset()
                     # Longer than a poll: the dead-letter topic is down, not busy.
                     stop.wait(self._rewind_delay_seconds)
+                else:
+                    if blocked_at is not None and message.offset() == blocked_at:
+                        del self._blocked[partition]
         finally:
             self._consumer.close()
 
     @staticmethod
-    def _log_consumer_error(error) -> None:
-        from confluent_kafka import KafkaError
+    def _handle_consumer_error(error) -> None:
+        from confluent_kafka import KafkaError, KafkaException
 
+        if error.fatal():
+            # The client cannot recover from a fatal error; let the caller see it
+            # instead of polling a dead consumer forever.
+            raise KafkaException(error)
         # End of a partition is informational; anything else may need attention.
         level = logging.DEBUG if error.code() == KafkaError._PARTITION_EOF else logging.WARNING
         _LOGGER.log(level, "Consumer error: %s", error)
 
-    def _rewind(self, message) -> None:
+    def _seek(self, partition: tuple[str, int], offset: int) -> bool:
+        """Returns whether the consumer now sits at `offset`."""
         from confluent_kafka import TopicPartition
 
         try:
-            self._consumer.seek(TopicPartition(message.topic(), message.partition(), message.offset()))
+            self._consumer.seek(TopicPartition(*partition, offset))
+            return True
         except Exception:
-            # A thread that dies here is never restarted; keep polling instead.
-            _LOGGER.error("Rewind failed for %s[%s]@%s", message.topic(), message.partition(),
-                          message.offset(), exc_info=True)
+            # A thread that dies here is never restarted; the caller blocks the
+            # partition and keeps polling instead.
+            _LOGGER.error("Rewind failed for %s[%s]@%s", *partition, offset, exc_info=True)
+            return False
 
     def _commit(self, message) -> None:
         self._consumer.commit(message=message, asynchronous=False)

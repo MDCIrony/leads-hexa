@@ -253,22 +253,74 @@ def test_run_skips_messages_carrying_an_error_without_committing(caplog):
     assert levels == {logging.DEBUG, logging.WARNING}
 
 
-def test_run_keeps_polling_when_the_rewind_itself_fails(caplog):
+def _failing_seek(partition):
+    raise KafkaException(KafkaError(KafkaError._STATE))
+
+
+def test_a_failed_rewind_blocks_the_partition_until_the_unsettled_offset_is_redelivered(caplog):
     stop, handled = threading.Event(), []
-    consumer = FakeConsumer([FakeMessage(_raw()), FakeMessage(_raw())], stop)
-    consumer.seek = lambda partition: (_ for _ in ()).throw(KafkaException(KafkaError(KafkaError._STATE)))
-    attempts = []
+    first_try = {"fail": True}
 
-    def flaky(envelope):
-        attempts.append(envelope)
-        raise RuntimeError("boom")
+    def handle(envelope):
+        if first_try["fail"] and envelope.payload["n"] == 7:
+            raise RuntimeError("boom")
+        handled.append(envelope.payload["n"])
 
-    loop = ConsumerLoop(consumer, FakeProducer(pending=1), GROUP, ["t"], flaky,
+    seven, eight = FakeMessage(_raw(payload={"n": 7}), offset=7), FakeMessage(_raw(payload={"n": 8}), offset=8)
+    consumer = FakeConsumer([seven, eight], stop)
+    consumer.seek = _failing_seek
+    loop = ConsumerLoop(consumer, FakeProducer(pending=1), GROUP, ["t"], handle,
                         max_attempts=1, rewind_delay_seconds=0)
+
     with caplog.at_level(logging.CRITICAL):
         loop.run(stop, poll_timeout=0)
 
-    assert len(attempts) == 2 and consumer.closed
+    assert consumer.commits == [] and handled == []
+    assert loop._blocked == {("internal.lead-core.events", 2): 7}
+
+    # The seek recovers and 7 comes back; with its block cleared, 8 flows again.
+    first_try["fail"] = False
+    stop = threading.Event()
+    consumer.stop, consumer.queue = stop, [seven, eight]
+    loop.run(stop, poll_timeout=0)
+
+    assert handled == [7, 8] and len(consumer.commits) == 2
+    assert loop._blocked == {}
+
+
+def test_a_blocked_partition_retries_the_rewind_to_the_blocked_offset(caplog):
+    stop = threading.Event()
+    consumer = FakeConsumer([FakeMessage(_raw(), offset=7), FakeMessage(_raw(), offset=8)], stop)
+    seeks = []
+    consumer.seek = lambda tp: (seeks.append(tp.offset), _failing_seek(tp))
+    loop = ConsumerLoop(consumer, FakeProducer(pending=1), GROUP, ["t"], lambda e: 1 / 0,
+                        max_attempts=1, rewind_delay_seconds=0)
+
+    with caplog.at_level(logging.CRITICAL):
+        loop.run(stop, poll_timeout=0)
+
+    assert seeks == [7, 7]
+
+
+def test_a_successful_rewind_leaves_no_block():
+    stop = threading.Event()
+    consumer = FakeConsumer([FakeMessage(_raw(), offset=7)], stop)
+    loop = ConsumerLoop(consumer, FakeProducer(pending=1), GROUP, ["t"], lambda e: 1 / 0,
+                        max_attempts=1, rewind_delay_seconds=0)
+
+    loop.run(stop, poll_timeout=0)
+
+    assert loop._blocked == {} and len(consumer.seeks) == 1
+
+
+def test_a_fatal_consumer_error_stops_the_loop_and_closes():
+    stop = threading.Event()
+    consumer = FakeConsumer([FakeMessage(None, error=KafkaError(KafkaError._FATAL, fatal=True))], stop)
+
+    with pytest.raises(KafkaException):
+        _loop(lambda e: None, consumer).run(stop, poll_timeout=0)
+
+    assert consumer.closed
 
 
 def test_run_waits_the_dedicated_delay_after_a_rewind():
