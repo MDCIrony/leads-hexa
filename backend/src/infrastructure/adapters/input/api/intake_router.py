@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from application.dtos.commands import PromoteIntakeRecordCommand, ReceiveIntakeCommand
 from application.dtos.context import RequestContext
 from application.dtos.queries import GetIntakeJobsQuery, GetIntakeRecordsQuery
@@ -30,7 +31,6 @@ from infrastructure.adapters.input.api.dependencies import (
     get_reprocess_intake_job_use_case,
     require_organization_manager,
 )
-
 from infrastructure.adapters.input.api.schemas import (
     IngestLeadRequest,
     IntakeAcceptedResponse,
@@ -115,9 +115,9 @@ async def batch_upload(
             status_code=413,
             content={"error": True, "error_code": "PAYLOAD_TOO_LARGE", "message": "Request body too large"},
         )
-    # Stored with the job, not handed to a background task: the file must
-    # outlive this process for the worker that parses it.
-    received = receive.execute(ReceiveIntakeCommand(
+    # Stored with the job (the file must outlive this process), and off the
+    # event loop: up to 10 MB of bytea is a blocking write.
+    received = await run_in_threadpool(receive.execute, ReceiveIntakeCommand(
         tenant_id=context.tenant_id,
         kind=IntakeJobKind.BATCH.value,
         payloads=[],
