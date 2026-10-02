@@ -21,6 +21,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Named context: the image needs libs/chassis without widening the build
+      # context to the whole repository.
+      additional_contexts:
+        chassis: ./libs/chassis
       # Explicit: without it, `docker build` targets the last stage in the
       # Dockerfile, and this service would silently run pytest instead of
       # serving the API. `dev` is `runner` plus a file watcher.
@@ -35,6 +39,7 @@ services:
     volumes:
       - ./backend/src:/app/src:ro
       - ./backend/migrations:/app/migrations:ro
+      - ./libs/chassis/src:/libs/chassis/src:ro
     ports:
       # 8001 on the host: 8000 is a common default and is often already taken.
       # Inside the compose network the API still listens on 8000.
@@ -42,6 +47,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
       - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      # Development-only Ed25519 seed (kid=seed): never reuse outside this stack.
+      - SIGNING_KEYS=dev-1=_tS3Kljdu1EaOrOFVqdVQ2G1VaP7q5pWZKmqPb9W-mU
       - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
       - FRONTEND_ORIGIN=http://localhost
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
@@ -176,13 +183,19 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Named context: the image needs libs/chassis without widening the build
+      # context to the whole repository.
+      additional_contexts:
+        chassis: ./libs/chassis
       target: dev
     working_dir: /app/src
     volumes:
       - ./backend/src:/app/src:ro
+      - ./libs/chassis/src:/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
       - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      - SIGNING_KEYS=dev-1=_tS3Kljdu1EaOrOFVqdVQ2G1VaP7q5pWZKmqPb9W-mU
       - LOG_LEVEL=INFO
       - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
       # Needed even though this process never publishes: the container it
@@ -258,6 +271,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      # Named context: the image needs libs/chassis without widening the build
+      # context to the whole repository.
+      additional_contexts:
+        chassis: ./libs/chassis
       target: test
     # Same reasoning as `backend`, plus tests/. This is what makes `--build`
     # unnecessary on every run: the suite executes the working tree as it is.
@@ -266,6 +283,7 @@ services:
       - ./backend/src:/app/src:ro
       - ./backend/tests:/app/tests:ro
       - ./backend/migrations:/app/migrations:ro
+      - ./libs/chassis/src:/libs/chassis/src:ro
     depends_on:
       db:
         condition: service_healthy

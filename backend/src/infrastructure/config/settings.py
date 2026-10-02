@@ -52,6 +52,8 @@ def _is_origin(value: str) -> bool:
 class Settings:
     database_url: str
     mfa_encryption_key: str = ""
+    # Raw `kid=seed[,kid=seed]`; parsed and validated by chassis at Container build.
+    signing_keys: str = ""
     frontend_origin: str = "http://localhost"
     google_oauth: OAuthProviderSettings = field(default_factory=OAuthProviderSettings)
     github_oauth: OAuthProviderSettings = field(default_factory=OAuthProviderSettings)
@@ -82,6 +84,9 @@ class Settings:
         mfa_encryption_key = os.getenv("MFA_ENCRYPTION_KEY")
         if not mfa_encryption_key:
             raise ValueError("MFA_ENCRYPTION_KEY is required and has no default")
+        signing_keys = os.getenv("SIGNING_KEYS")
+        if not signing_keys:
+            raise ValueError("SIGNING_KEYS is required and has no default")
 
         raw_origins = os.getenv("CORS_ORIGINS", _DEFAULT_CORS_ORIGINS)
         origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
@@ -102,6 +107,7 @@ class Settings:
         return cls(
             database_url=database_url,
             mfa_encryption_key=mfa_encryption_key,
+            signing_keys=signing_keys,
             frontend_origin=frontend_origin,
             google_oauth=test_google if oauth_test_mode else OAuthProviderSettings(
                 client_id=os.getenv("GOOGLE_CLIENT_ID", ""),

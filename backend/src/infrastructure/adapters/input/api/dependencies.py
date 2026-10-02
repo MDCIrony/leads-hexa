@@ -421,9 +421,9 @@ def require_organization_member(
     return context
 
 
-def resolve_integration_context(
+def resolve_integration_agent(
     api_key: str, uow: UnitOfWorkPort, password_hasher: PasswordHasherPort
-) -> RequestContext:
+) -> Agent:
     """Pure function, same shape as resolve_current_agent: testable without
     FastAPI's dependency machinery."""
     try:
@@ -443,7 +443,13 @@ def resolve_integration_context(
         or not password_hasher.verify(secret, agent.hashed_password)
     ):
         raise UnauthorizedException("Invalid API key")
-    return build_request_context(principal_from_agent(agent))
+    return agent
+
+
+def resolve_integration_context(
+    api_key: str, uow: UnitOfWorkPort, password_hasher: PasswordHasherPort
+) -> RequestContext:
+    return build_request_context(principal_from_agent(resolve_integration_agent(api_key, uow, password_hasher)))
 
 
 def require_manager_or_integration(

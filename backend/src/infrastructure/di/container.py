@@ -1,3 +1,4 @@
+from chassis.auth import JwksCache, TokenVerifier, load_signers
 from application.ports.output.clock_port import ClockPort
 from application.ports.output.file_parser_port import FileParserPort
 from application.ports.output.id_generator_port import IdGeneratorPort
@@ -21,6 +22,7 @@ from infrastructure.adapters.output.http.oauth_identity_providers import (
 from infrastructure.adapters.output.system_clock import SystemClock
 from infrastructure.adapters.output.uuid_generator import UuidGenerator
 from infrastructure.config.settings import Settings
+from infrastructure.security.internal_token_issuer import InternalTokenIssuer
 
 
 class Container:
@@ -53,6 +55,16 @@ class Container:
         # not the SASL one the host reaches — this adapter is the thing
         # provisioning credentials, not a tenant consuming with one.
         self._messaging_credential_provisioner = KafkaCredentialProvisioner(settings.kafka_bootstrap_servers)
+        signers = load_signers(settings.signing_keys)
+        self._token_issuer = InternalTokenIssuer(signers[0])
+        self._jwks = {"keys": [signer.public_jwk() for signer in signers]}
+        # In F0 this process is both issuer and verifier, so it reads its own
+        # keys from memory instead of fetching them over HTTP.
+        self._token_verifier = TokenVerifier(
+            JwksCache(lambda: self._jwks),
+            issuer=InternalTokenIssuer.ISSUER,
+            audience=InternalTokenIssuer.AUDIENCE,
+        )
         self._oauth_identity_providers: dict[str, OAuthIdentityProviderPort] = {}
         if settings.oauth_test_mode:
             self._oauth_identity_providers["GOOGLE"] = TestOAuthIdentityProvider()
@@ -76,6 +88,18 @@ class Container:
     @property
     def mfa_crypto(self) -> TotpMfaCrypto:
         return self._mfa_crypto
+
+    @property
+    def token_issuer(self) -> InternalTokenIssuer:
+        return self._token_issuer
+
+    @property
+    def token_verifier(self) -> TokenVerifier:
+        return self._token_verifier
+
+    @property
+    def jwks(self) -> dict:
+        return self._jwks
 
     @property
     def clock(self) -> ClockPort:

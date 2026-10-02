@@ -4,6 +4,7 @@ from infrastructure.di.container import Container
 _SETTINGS = Settings(
     database_url="postgresql://u:p@host:5432/db",
     mfa_encryption_key="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+    signing_keys="unit-1=We6wZYLn41lq5z4FdSgMD7Jmla3wUOhIe8MBaNQiuuk",
 )
 
 
@@ -25,3 +26,17 @@ def test_unit_of_work_is_built_fresh_on_every_call():
     container = Container(_SETTINGS)
 
     assert container.unit_of_work() is not container.unit_of_work()
+
+
+def test_issued_tokens_verify_against_the_published_keys():
+    """F0 wiring: the verifier reads the container's own JWKS, so a token it
+    issues must verify and the published keys must be public-only."""
+    from domain.entities.agent import Agent
+    from domain.value_objects.enums import AgentRole
+
+    container = Container(_SETTINGS)
+    token = container.token_issuer.issue(Agent.create("A", "a@a.invalid", role=AgentRole.ADMIN), "human")
+
+    assert container.token_verifier.verify(token).role == "ADMIN"
+    assert [key["kid"] for key in container.jwks["keys"]] == ["unit-1"]
+    assert all("d" not in key for key in container.jwks["keys"])

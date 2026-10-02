@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
 from confluent_kafka import Producer
+from chassis.web import RequestIdMiddleware
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +24,7 @@ from infrastructure.adapters.input.api.sales_group_router import router as sales
 from infrastructure.adapters.input.api.source_router import router as source_router
 from infrastructure.adapters.input.api.auth_router import router as auth_router
 from infrastructure.adapters.input.api.tenant_router import router as tenant_router
+from infrastructure.adapters.input.api.internal_router import router as internal_router
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
@@ -107,6 +109,10 @@ async def reject_untrusted_browser_origins(request: Request, call_next):
         return JSONResponse(status_code=403, content={"error": True, "error_code": "FORBIDDEN", "message": "Origen no permitido"})
     return await call_next(request)
 
+# Added last, so it is the outermost layer: every response, including the ones
+# the other middlewares short-circuit, carries the request id.
+app.add_middleware(RequestIdMiddleware)
+
 # Include Routers
 app.include_router(lead_router, prefix="/api/v1/leads", tags=["Leads"])
 app.include_router(intake_router, prefix="/api/v1/intake", tags=["Intake"])
@@ -117,3 +123,4 @@ app.include_router(source_router, prefix="/api/v1/sources", tags=["Sources"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(tenant_router, prefix="/api/v1/tenants", tags=["Platform"])
 app.include_router(notification_router, prefix="/api/v1/notifications", tags=["Notifications"])
+app.include_router(internal_router, prefix="/internal/v1")

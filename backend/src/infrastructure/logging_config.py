@@ -1,14 +1,7 @@
-import logging
-import os
-import sys
+from chassis.web import configure_logging as _configure_logging
 
 
 def configure_logging(level: str | None = None) -> None:
-    """Send everything to stdout in a single line per record, which is what a
-    container log collector expects."""
-    logging.basicConfig(
-        level=(level or os.getenv("LOG_LEVEL", "INFO")).upper(),
-        format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
-        stream=sys.stdout,
-        force=True,
-    )
+    """Delegates to chassis so every service logs one line per record tagged
+    with the request id; kept here so callers do not depend on the library."""
+    _configure_logging(level)

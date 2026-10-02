@@ -7,6 +7,14 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
+# Named context (compose `additional_contexts`): the lock resolves chassis as
+# ../libs/chassis, i.e. /libs/chassis from /app, without widening the build
+# context to the whole repository.
+COPY --from=chassis . /libs/chassis
+# A named context ignores .dockerignore: drop the host's virtualenv and caches
+# so they do not reach the runner image.
+RUN rm -rf /libs/chassis/.venv /libs/chassis/.pytest_cache
+
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
@@ -20,6 +28,8 @@ FROM python:3.12-slim AS runner
 WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
+# The editable install's .pth points here, so the library must exist at runtime.
+COPY --from=builder /libs/chassis /libs/chassis
 COPY --from=builder /app/src /app/src
 COPY --from=builder /app/migrations /app/migrations
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
@@ -50,7 +60,7 @@ USER appuser
 # which would also cover /app/migrations, where a change needs the process to
 # restart and re-run the migration, not to hot-reload the app.
 CMD ["uvicorn", "infrastructure.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--app-dir", "src", "--reload", "--reload-dir", "/app/src"]
+     "--app-dir", "src", "--reload", "--reload-dir", "/app/src", "--reload-dir", "/libs/chassis/src"]
 
 # Stage 4: test runner, used by the `backend-test` compose profile.
 # Inherits from `builder` (already ran `COPY . .`), so src/, tests/, and

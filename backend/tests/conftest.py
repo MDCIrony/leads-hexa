@@ -32,6 +32,7 @@ def _test_dsn() -> str:
 os.environ.setdefault("DATABASE_URL", _test_dsn())
 os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
 os.environ.setdefault("MFA_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+os.environ.setdefault("SIGNING_KEYS", "test-1=We6wZYLn41lq5z4FdSgMD7Jmla3wUOhIe8MBaNQiuuk")
 
 
 def pytest_collection_modifyitems(items):
