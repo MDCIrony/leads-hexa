@@ -47,3 +47,29 @@ def raise_if_fatal(error) -> None:
     # End of a partition is informational; anything else may need attention.
     level = logging.DEBUG if error.code() == KafkaError._PARTITION_EOF else logging.WARNING
     _LOGGER.log(level, "Consumer error: %s", error)
+
+
+def rewind(consumer, partition: tuple[str, int], offset: int) -> bool:
+    """Returns whether the consumer now sits at `offset`."""
+    from confluent_kafka import TopicPartition
+
+    try:
+        consumer.seek(TopicPartition(*partition, offset))
+        return True
+    except Exception:
+        # A thread that dies here is never restarted; the caller blocks the
+        # partition and keeps polling instead.
+        _LOGGER.error("Rewind failed for %s[%s]@%s", *partition, offset, exc_info=True)
+        return False
+
+
+def shut_down(consumer, dlq_producer, flush_timeout_seconds: float) -> None:
+    """Releases the consumer and the DLQ producer; one failing never skips the next step."""
+    steps = [consumer.close, lambda: dlq_producer.flush(flush_timeout_seconds)]
+    if hasattr(dlq_producer, "close"):
+        steps.append(dlq_producer.close)
+    for step in steps:
+        try:
+            step()
+        except Exception:
+            _LOGGER.warning("Consumer shutdown step failed", exc_info=True)

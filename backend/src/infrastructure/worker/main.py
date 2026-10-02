@@ -2,6 +2,8 @@ import logging
 import signal
 import threading
 
+from chassis.consumer import ensure_topics_until_ready, run_consumer_lane
+from chassis.kafka_config import producer_config
 from chassis.outbox import KafkaEventDispatcher, run_relay
 from chassis.rabbit import RabbitJobDispatcher
 from confluent_kafka import Producer
@@ -22,10 +24,9 @@ from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
 from infrastructure.intake_worker.messages import job_message
 from infrastructure.logging_config import configure_logging
-from infrastructure.worker.lanes import consumer_loop, run_consumer_lane
-from infrastructure.worker.producers import PRODUCER_NAME, producer_config
+from infrastructure.worker.lanes import consumer_loop
+from infrastructure.worker.producers import PRODUCER_NAME
 from infrastructure.worker.relays import build_dispatchers, build_relays
-from infrastructure.worker.topics import ensure_topics_until_ready
 
 _LOGGER = logging.getLogger(__name__)
 

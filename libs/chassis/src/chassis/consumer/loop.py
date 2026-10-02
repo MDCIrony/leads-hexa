@@ -5,7 +5,7 @@ import time
 from typing import Callable, Sequence
 
 from chassis.consumer.envelope import Envelope
-from chassis.consumer.kafka import publish_dead_letter, raise_if_fatal
+from chassis.consumer.kafka import publish_dead_letter, raise_if_fatal, rewind, shut_down
 from chassis.consumer.topics import dlq_topic
 from chassis.web import request_id_var
 
@@ -76,8 +76,9 @@ class ConsumerLoop:
         return self._dead_letter(message, error, attempts=self._max_attempts)
 
     def run(self, stop: threading.Event, poll_timeout: float = 1.0) -> None:
-        self._consumer.subscribe(self._topics)
         try:
+            # Inside the try: a failed subscribe must still release the consumer.
+            self._consumer.subscribe(self._topics, on_revoke=self._unblock, on_lost=self._unblock)
             while not stop.is_set():
                 message = self._consumer.poll(poll_timeout)
                 if message is None:
@@ -113,20 +114,16 @@ class ConsumerLoop:
                     if blocked_at is not None and message.offset() == blocked_at:
                         del self._blocked[partition]
         finally:
-            self._consumer.close()
+            shut_down(self._consumer, self._dlq_producer, self._flush_timeout_seconds)
+
+    def _unblock(self, _consumer, partitions) -> None:
+        # The partition is no longer ours: the unsettled offset belongs to
+        # whoever is assigned it next, and the block would outlive its reason.
+        for partition in partitions:
+            self._blocked.pop((partition.topic, partition.partition), None)
 
     def _seek(self, partition: tuple[str, int], offset: int) -> bool:
-        """Returns whether the consumer now sits at `offset`."""
-        from confluent_kafka import TopicPartition
-
-        try:
-            self._consumer.seek(TopicPartition(*partition, offset))
-            return True
-        except Exception:
-            # A thread that dies here is never restarted; the caller blocks the
-            # partition and keeps polling instead.
-            _LOGGER.error("Rewind failed for %s[%s]@%s", *partition, offset, exc_info=True)
-            return False
+        return rewind(self._consumer, partition, offset)
 
     def _commit(self, message) -> None:
         self._consumer.commit(message=message, asynchronous=False)
