@@ -5,16 +5,23 @@ añadirla. Y lo que el plan introduce tiene un coste, que también se escribe.
 
 ## Mediciones
 
-La fase F0 rellena esta tabla a través del gateway, con el stack local. Es la referencia contra la que
-se decide cualquier evolución de abajo; sin ella, «añade latencia» es una opinión.
+Línea base de F0, tomada el 2026-10-02 con el stack local de Compose: 200 llamadas secuenciales de un
+único cliente por medida. Es la referencia contra la que se decide cualquier evolución de abajo; sin
+ella, «añade latencia» es una opinión.
 
 | Medida | p50 | p95 | Nota |
 |---|---|---|---|
-| `introspect` (gateway → identity) | | | |
-| `GET /api/v1/leads` (página de 50) | | | |
-| `POST /api/v1/auth/login` | | | Dominado por bcrypt |
-| `GET /api/v1/leads` con `X-Api-Key` | | | bcrypt en cada petición, como hoy |
-| Job de 1.000 registros, de `202` a `COMPLETED` | | | Se repite tras F4 para ver el coste de la admisión por HTTP |
+| `introspect`, dentro de la red y directo al backend | 4,7 ms | 8,4 ms | Sesión por cookie: SHA-256, dos lecturas y firma Ed25519 |
+| `GET /api/v1/leads` directo al backend con bearer, dentro de la red | 7,3 ms | 12,7 ms | Referencia sin gateway |
+| `GET /api/v1/leads` por el gateway, con cookie | 10,6 ms | 13,9 ms | Sobrecoste del borde ≈ 3,3 ms en p50, del orden de una introspección |
+| `POST /api/v1/auth/login` por el gateway | 292 ms | 314 ms | Dominado por bcrypt |
+| `GET /api/v1/leads` con `X-Api-Key` por el gateway | 289 ms | 310 ms | bcrypt en cada petición (en la introspección), como antes |
+| Job de 1.000 registros, de `202` a `COMPLETED` | 14,5 s | — | Una ejecución; `completed_at − created_at` = 14,2 s. Se repite tras F4 para ver el coste de la admisión por HTTP |
+
+**Conclusión.** El gateway con introspección añade ≈ 3 ms por petición: nada de lo medido justifica una
+caché de introspección. La ruta `X-Api-Key` está limitada por bcrypt (≈ 290 ms) y es la primera
+optimización a considerar si las integraciones consultan con frecuencia; queda como evolución con su
+señal, no hecha.
 
 ## Evoluciones, con su señal
 
@@ -22,7 +29,8 @@ se decide cualquier evolución de abajo; sin ella, «añade latencia» es una op
 |---|---|---|---|
 | **Admisión por lotes** (`POST /internal/v1/admissions:batch`, N registros por llamada) | Menos idas y vueltas en jobs grandes | Tras F4, la admisión domina la duración del job medido arriba | Respuesta parcial por registro; misma idempotencia |
 | **gRPC interno** para `admissions` y `agents/{id}` | Contrato binario tipado, HTTP/2, *streaming* | La admisión por lotes no basta, hace falta *streaming*, o entran servicios en otros lenguajes | Segunda pila (`protoc`, código generado, otro puerto); `introspect` sigue en HTTP porque `auth_request` sólo hace HTTP; la API pública sigue en REST. El cambio es un adaptador detrás de `LeadAdmissionPort` y `AdvisorDirectory` |
-| **Caché de introspección** en el gateway | Una consulta a identity menos por petición | p95 de `introspect` relevante frente al total, o carga real sobre identity | La revocación tarda lo que dure la caché; ADR-0029 deja de cumplirse al pie de la letra |
+| **Caché de introspección** en el gateway | Una consulta a identity menos por petición | p95 de `introspect` relevante frente al total, o carga real sobre identity. Con ≈ 3 ms medidos en F0 no se cumple | La revocación tarda lo que dure la caché; ADR-0029 deja de cumplirse al pie de la letra |
+| **Caché de verificación de `X-Api-Key`** (por hash de la clave, TTL corto) | Quita el bcrypt de cada petición de integración (≈ 290 ms medidos) | Integraciones que consultan `GET /leads` con frecuencia, o p95 de esa ruta que afecte a la carga de identity | Una clave revocada sigue valiendo lo que dure el TTL; el TTL tiene que ser corto y la caché sólo guardar el hash |
 | **Kubernetes** | Réplicas, autorreparación, despliegue progresivo, autoescalado, `NetworkPolicy`, multihost | Más de un host, alta disponibilidad o despliegues sin corte | Operación del clúster. **No reduce latencia**: la red entre pods es equivalente a la de Compose. Cada servicio son dos `Deployment` (`api`, `worker`) con los mismos nombres DNS; el gateway pasa a Ingress o a un `Deployment` de nginx |
 | **mTLS** entre servicios | Cifrado y autenticación del transporte | Red no confiable: varios hosts, red compartida, requisito de cumplimiento | Emisión y rotación de certificados; en Kubernetes, normalmente vía service mesh |
 | **Principales SASL por servicio** en Kafka | Cada servicio sólo publica y lee sus topics | Igual que mTLS, o un servicio de terceros en la red | Credenciales por servicio y ACL `PREFIXED` sobre `internal.<svc>.` |

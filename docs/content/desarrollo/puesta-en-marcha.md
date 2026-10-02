@@ -14,22 +14,33 @@ en `docker-compose.yml` para desarrollo local, así que no hace falta crear ning
 docker compose up -d
 ```
 
-Levanta cuatro servicios: `db` (PostgreSQL 16), `backend` (la API, que aplica las migraciones
-pendientes al arrancar y recarga en caliente lo que cambie en `backend/src`), `frontend` (nginx
-sirviendo el esqueleto de interfaz) y `docs` (este sitio). `backend` espera a que `db` esté sano;
-`frontend` espera a que `backend` lo esté.
+Levanta `db` (PostgreSQL 16), `backend` (la API, que aplica las migraciones pendientes al arrancar y
+recarga en caliente lo que cambie en `backend/src`), `gateway` (nginx, la única entrada de la API),
+`frontend` (nginx sirviendo la interfaz) y `docs` (este sitio), más `rabbitmq`, `kafka`, `kafka-ui` e
+`intake-worker`. `backend` espera a que `db` esté sano; `gateway` no espera a nadie (vuelve a resolver
+`backend` por DNS); `frontend` espera a que `gateway` esté sano.
 
 Puertos reales en el host:
 
 | Servicio | Puerto | Por qué no el estándar |
 |---|---|---|
-| API | `8001` | `8000` es un puerto común y suele estar ocupado |
+| API (`gateway`) | `8001` | `8000` es un puerto común y suele estar ocupado |
 | Base de datos | `5433` | `5432` es el puerto por defecto de un PostgreSQL local |
 | Interfaz web | `80` | — |
 | Documentación | `8002` | `8000` y `8001` ya están tomados por la API |
 
-Dentro de la red de `compose` cada servicio sigue escuchando en su puerto estándar (la API en
-`8000`, la base en `5432`); el remapeo sólo afecta a cómo se les llega desde el host.
+Dentro de la red de `compose` cada servicio sigue escuchando en su puerto estándar (el gateway en
+`8080`, `backend` en `8000`, la base en `5432`); el remapeo sólo afecta a cómo se les llega desde el
+host. **`backend` no publica ningún puerto**: la API sólo es alcanzable por el gateway en `8001`, y
+`8001` ya no es el `backend` sino el gateway. Para depurar con el backend directamente hay que entrar
+en el contenedor (`docker compose exec backend …`).
+
+Los ficheros de `gateway/` (`nginx.conf`, `proxy_headers.conf`, `introspect.conf`) están montados como
+volumen. Tras editarlos no hace falta reconstruir nada, sólo recargar nginx:
+
+```bash
+docker compose exec gateway nginx -s reload
+```
 
 Comprueba que la API responde:
 
@@ -109,7 +120,7 @@ GITHUB_CLIENT_SECRET=...
 GITHUB_REDIRECT_URI=http://localhost:8001/api/v1/auth/oauth/github/callback
 ```
 
-`FRONTEND_ORIGIN` debe estar incluido exactamente en `CORS_ORIGINS`. Al completar las tres variables
+`FRONTEND_ORIGIN` debe estar incluido exactamente en `CORS_ORIGINS` (el backend sólo usa esa lista para esta validación). Los orígenes que el navegador puede usar los decide el `map $http_origin` de `gateway/nginx.conf`: cambiar uno obliga a tocar los dos sitios. Al completar las tres variables
 de un proveedor aparece su botón en el login; sólo permite entrar a agentes humanos ya existentes con
 correo de proveedor verificado. La vuelta conserva PKCE y, si MFA está activo, continúa en `/mfa`.
 No hay auto-registro: crea antes el `Agent` activo de prueba con el mismo correo. `SESSION_COOKIE_SECURE=false`
@@ -238,8 +249,10 @@ La referencia completa de estos endpoints está en [API · Referencia](api-refer
 
 ## Cuando algo no arranca
 
-- **Estado de los contenedores**: `docker compose ps` muestra si `db` y `backend` están `healthy`.
-  `backend` no arranca hasta que `db` lo está.
+- **Estado de los contenedores**: `docker compose ps` muestra si `db`, `backend` y `gateway` están
+  `healthy`. `backend` no arranca hasta que `db` lo está. Un `gateway` sano sólo prueba que nginx
+  responde: `/health` lo contesta él mismo, no el backend. Un `503 SERVICE_UNAVAILABLE` en la API
+  significa que el gateway no alcanza `backend`; mira `docker compose logs backend`.
 - **Logs**: `docker compose logs -f backend` — las migraciones se aplican al arrancar el proceso
   (antes de aceptar peticiones), así que un contenedor que reinicia en bucle casi siempre señala un
   fallo de migración o de conexión a la base, visible ahí.

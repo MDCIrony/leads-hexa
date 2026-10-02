@@ -30,8 +30,12 @@ docker compose build backend intake-worker backend-test
 `docker compose --profile test run --rm backend-test` corre contra una base PostgreSQL real
 (`leads_test`, un contenedor aparte de la de desarrollo), no contra un doble en memoria. Es la
 única de las tres que ejercita de verdad `backend/src/infrastructure/adapters/output/persistence`.
-Cubre los cuatro marcadores de `pyproject.toml`: `unit`, `integration`, `e2e` (vía `TestClient`, sin
-un servidor HTTP real) y `architecture`.
+Cubre los cuatro marcadores de `pyproject.toml`: `unit`, `integration`, `e2e` y `architecture`. Los
+tests e2e usan `GatewayClient` (`backend/tests/e2e/gateway_client.py`), un `TestClient` que se comporta
+como el gateway: introspecciona la cookie o la `X-Api-Key` contra `/internal/v1/auth/introspect` y
+reenvía sólo el bearer resultante, igual que `gateway/nginx.conf`, de modo que ejercitan la misma
+frontera de confianza que el stack. Siguen sin servidor HTTP real. `test_internal_auth` usa un
+`TestClient` plano a propósito, porque habla con la app sin gateway.
 
 !!! warning
     `docker compose run` reemplaza el `CMD` de la imagen, no lo extiende. Para correr sólo una
@@ -42,14 +46,14 @@ un servidor HTTP real) y `architecture`.
 
 `cd backend && uv run pytest -m unit -q` corre sin PostgreSQL —ni falta el contenedor de base de
 datos, ni falta Docker— y sin que quien lo ejecuta tenga que exportar ninguna variable de entorno.
-`backend/tests/conftest.py` fija `DATABASE_URL` y `MFA_ENCRYPTION_KEY` una única vez, con
-`os.environ.setdefault(...)`, antes de que se importe cualquier módulo de test.
+`backend/tests/conftest.py` fija `DATABASE_URL`, `MFA_ENCRYPTION_KEY` y `SIGNING_KEYS` una única vez,
+con `os.environ.setdefault(...)`, antes de que se importe cualquier módulo de test.
 
 Si `pytest -m unit` empieza a fallar fuera de Docker, es la señal de que se infiltró una
 dependencia de infraestructura en el dominio: el marcador existe precisamente para detectar eso.
 
 !!! warning
-    Ningún fichero de test debe fijar `DATABASE_URL` o `MFA_ENCRYPTION_KEY` por su cuenta. Copiar un
+    Ningún fichero de test debe fijar `DATABASE_URL`, `MFA_ENCRYPTION_KEY` o `SIGNING_KEYS` por su cuenta. Copiar un
     preámbulo `os.environ.setdefault(...)` de otro fichero reintroduce un fallo que depende del
     orden en que pytest importa los módulos: sólo pasa si `conftest.py` ya corrió antes.
 
@@ -70,9 +74,31 @@ que no necesita una base limpia para dar una respuesta correcta.
 `--reset` sólo hace falta cuando una migración lo exige; el día a día no lo necesita. Requiere la
 plataforma levantada — ver [Puesta en marcha](puesta-en-marcha.md).
 
+`--reset` espera a que `GET /api/v1/auth/me` responda 401 antes de empezar: el gateway contesta
+`/health` antes de que el backend haya migrado, así que `/health` no indica que la API esté lista.
+
 El script se amplía, nunca se reescribe: cada fase de trabajo añade su propia función `verify_fN` y
 la llama desde `main`, de modo que las comprobaciones anteriores siguen corriendo y probando que lo
-que ya funcionaba sigue funcionando.
+que ya funcionaba sigue funcionando. Las fases del [desacople en microservicios](../microservices/06-plan-de-desacople.md)
+usan `verify_ms_f0`, `verify_ms_f1` y `verify_ms_f2`, porque los nombres `verify_fN` ya eran de
+planes anteriores.
+
+### El gateway: `verify_ms_f0`
+
+Lo que el borde garantiza sólo se puede probar contra el nginx real, y por eso vive en el script y no
+en la suite. `verify_ms_f0` corre la última, porque detiene y vuelve a arrancar el backend. Comprueba:
+
+- Un bearer basura o un JWT firmado con otra clave → 401, por el gateway y directo al servicio; el
+  `Authorization` del cliente nunca llega al servicio.
+- `/internal/*` no se publica; `X-Request-Id` se conserva, se genera o se sustituye, y llega al access
+  log.
+- **Los casos de `Origin` y CORS**, que antes estaban en `test_origin_protection.py`: preflight de un
+  origen permitido, un dominio parecido (`http://localhost:5173.evil.test`) → 403, un `Origin` hostil no
+  crea sesión, un `Referer` hostil sin `Origin` no cuenta y `X-Api-Key` con `Origin` hostil → 403 antes
+  de autenticar.
+- `X-Api-Key` válida sólo en `GET /leads`; `POST /agents` anónimo con agentes ya creados → 401; un
+  cuerpo de más de 10 MB → 413.
+- Con el backend parado, 503 `SERVICE_UNAVAILABLE` (siempre cerrado), y vuelve al arrancarlo.
 
 La comprobación social OAuth ya está integrada. Conserva la API habitual y arranca un backend efímero
 en `127.0.0.1` con `APP_ENV=test` y `OAUTH_TEST_MODE=true`; ese único proceso usa un adaptador
@@ -130,6 +156,21 @@ Añade además una garantía transversal: ningún cuerpo de respuesta contiene `
     impedir, y es tanto más tentador cuanto que el frontend genera sus tipos desde este contrato:
     un campo declarado en el esquema y nunca rellenado compila en TypeScript y llega `undefined` al
     navegador.
+
+## La librería `chassis`
+
+`libs/chassis` tiene su propia suite, independiente del backend y sin base de datos:
+
+```bash
+cd libs/chassis && uv run pytest -q
+```
+
+## La colección de Bruno
+
+La colección `bruno/` (y el login de `test-consumer`) siguen esperando un `access_token` en la respuesta
+de `POST /auth/login`. Está desactualizada desde las sesiones opacas (commit `346b0cb`): el login
+devuelve `{"status": "AUTHENTICATED"}` y fija la cookie. No es una validación fiable hasta que se
+actualice; `verify-e2e.sh` sí lo es.
 
 ## La limpieza entre pruebas
 

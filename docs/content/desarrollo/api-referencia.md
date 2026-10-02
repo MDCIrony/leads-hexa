@@ -2,7 +2,8 @@
 
 Referencia completa de la API HTTP, organizada por recurso. Todas las rutas cuelgan de `/api/v1`,
 salvo `GET /health`. En desarrollo local, con la plataforma levantada, la API responde en
-`http://localhost:8001` — ver [Puesta en marcha](puesta-en-marcha.md). Los códigos de error se
+`http://localhost:8001`, que es el gateway nginx (`backend` no publica puerto); ver
+[Puesta en marcha](puesta-en-marcha.md). Los códigos de error se
 explican una sola vez, completos, en [API · Errores](api-errores.md); aquí sólo se nombra cuáles
 puede devolver cada endpoint.
 
@@ -19,7 +20,7 @@ puede devolver cada endpoint.
 | Organizaciones | `POST /api/v1/tenants` | `ADMIN` | 201 |
 | Organizaciones | `GET /api/v1/tenants` | `ADMIN` | 200 |
 | Organizaciones | `PATCH /api/v1/tenants/{tenant_id}` | `ADMIN` | 200 |
-| Agentes | `POST /api/v1/agents` | Bootstrap sin auth; luego `MANAGER` | 201 |
+| Agentes | `POST /api/v1/agents` | Bootstrap sin credencial; luego `MANAGER` | 201 |
 | Agentes | `POST /api/v1/agents/integration-credential` | `MANAGER` | 201 |
 | Agentes | `GET /api/v1/agents` | `MANAGER` | 200 |
 | Agentes | `GET /api/v1/agents/{agent_id}` | `MANAGER` | 200 |
@@ -72,6 +73,20 @@ ver [ADR-0004](../decisiones/0004-organizacion-desde-el-token.md). Los endpoints
 humana responden `401 Unauthorized` sin una sesión válida; `/mfa/verify` usa en su lugar el desafío
 temporal descrito abajo. Las listas de errores de cada endpoint sólo nombran lo específico de ese
 recurso — el rol exigido y los códigos `404`/`400` propios.
+
+**Credencial de integración (`X-Api-Key`).** Formato `{agent_id}.{secreto}`. La valida el gateway, en
+la introspección, antes de que la petición llegue a la API; por eso **no aparece como esquema de
+seguridad en OpenAPI ni en `/docs`** y se documenta aquí a mano. Sólo `GET /api/v1/leads` la acepta: en
+cualquier otra ruta protegida responde `401 UNAUTHORIZED`. Cada petición con clave cuesta un bcrypt
+(≈ 290 ms medidos, ver [Mediciones](../microservices/07-evoluciones-y-riesgos.md#mediciones)); una
+clave inválida es `401`, con el mismo mensaje que cualquier otra credencial fallida.
+
+**Errores del gateway.** Algunas respuestas las genera el gateway sin llegar a la API: `401`
+(`UNAUTHORIZED`, siempre con el mensaje «Authentication required»), `403` por `Origin` no permitido en
+una escritura, `404` en rutas no publicadas, `413` por cuerpos de más de 10 MB, `429` en
+`/api/v1/auth/` y `503` si la API no responde. Llevan el mismo sobre JSON y se listan en
+[API · Errores](api-errores.md#errores-del-gateway). Toda respuesta, incluidas ésas, lleva
+`X-Request-Id`.
 
 **Paginación.** Todo endpoint de lista acepta `limit` (por defecto 100, rango `1`-`1000`) y `offset`
 (por defecto 0, mínimo `0`), y responde con la misma envoltura `{items, total, limit, offset,
@@ -274,7 +289,11 @@ organización es siempre la suya (no hay `tenant_id` en el cuerpo) y no puede cr
 }
 ```
 
-Errores: `401 Unauthorized` (fuera del bootstrap, sin token); `403 Forbidden` (no es `MANAGER`, o
+El gateway la trata con introspección opcional: sin credencial la deja pasar y la API decide (sólo el
+bootstrap sobre una base de agentes vacía es válido anónimo). Una credencial que llegue debe ser
+válida, y una de integración aquí es `401`.
+
+Errores: `401 Unauthorized` (fuera del bootstrap, sin sesión); `403 Forbidden` (no es `MANAGER`, o
 intenta crear un `ADMIN`); `400 Bad Request` (`EMAIL_ALREADY_EXISTS`) si el correo ya está en uso —
 la unicidad es de toda la plataforma, no sólo de la organización, porque el login resuelve la
 cuenta por correo sin filtrar por organización.

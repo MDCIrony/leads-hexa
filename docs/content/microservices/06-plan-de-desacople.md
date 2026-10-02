@@ -60,41 +60,59 @@ flowchart LR
 
 ## F0 · Gateway y *phantom token*
 
+**Estado: implantada** (`43393d1..08bc24a`). Medición de la línea base en
+[07](07-evoluciones-y-riesgos.md#mediciones).
+
 **Objetivo.** Todas las peticiones entran por el gateway y cada ruta protegida se autentica con el JWT
 interno. Sigue habiendo un único servicio.
 
 **Cambios**
 
-- `libs/chassis` con `auth` (verificación del token y caché de JWKS), `web` (`X-Request-Id` y logging
-  correlacionado) y `testing` (helper del guardián).
+- `libs/chassis` con `auth` (verificación del token y caché de JWKS) y `web` (`X-Request-Id` y logging
+  correlacionado). `testing` (helper del guardián) pasa a F2: en F0 sólo hay un guardián y ya existe;
+  entra cuando un segundo servicio lo necesita.
 - En `backend`:
     - `Principal` en `application/dtos/context.py`; `RequestContext(principal, tenant_id)`.
       `AuthorizationPolicy` opera sobre `Principal`.
-    - Router interno con `GET /internal/v1/auth/introspect` y `GET /internal/v1/jwks`, que reutiliza
-      `resolve_current_agent` y `resolve_integration_context`. `SIGNING_KEYS` en `Settings`.
+    - Router interno con `GET /internal/v1/auth/introspect` (con `?optional=true` para el bootstrap de
+      `POST /agents`, que 03 no contemplaba) y `GET /internal/v1/jwks`, que reutiliza
+      `resolve_current_agent` y `resolve_integration_context`. `SIGNING_KEYS` en `Settings`, con
+      semillas Ed25519 en base64url, no PEM.
     - `get_request_context` verifica el bearer interno. Las rutas de `/auth/*` siguen leyendo la cookie.
     - Se retiran de `main.py` `CORSMiddleware` y `reject_untrusted_browser_origins`; sus casos de prueba
-      (`test_origin_protection.py`) pasan a `verify-e2e.sh`, contra el gateway.
+      (`test_origin_protection.py`) pasan a `verify_ms_f0`, contra el nginx real.
+    - La suite emula al gateway: `GatewayClient` (`backend/tests/e2e/gateway_client.py`) introspecciona y
+      reenvía el bearer igual que nginx, y los tests e2e lo usan.
 - `gateway/nginx.conf` con la tabla de enrutado de [03](03-gateway-y-autenticacion.md): todos los
-  prefijos apuntan a `backend`.
-- `docker-compose.yml`: servicio `gateway` en `:8001`; `backend` deja de publicar puerto.
-- `frontend/nginx.conf`: `proxy_pass` hacia `gateway`.
-- Documentación: se corrigen las menciones a JWT/Bearer como sesión listadas en
-  [01](01-punto-de-partida.md).
-- Línea base: p50/p95 de `introspect`, `GET /leads` y login a través del gateway, y duración de un job
-  de 1.000 registros. Se anota en [07](07-evoluciones-y-riesgos.md#mediciones).
+  prefijos apuntan a `backend`, que vuelve a resolverse por DNS (`resolve`), de modo que el gateway no
+  declara `depends_on`. `limit_req` sólo en `/api/v1/auth/`.
+- `docker-compose.yml`: servicio `gateway` en `:8001`; `backend` deja de publicar puerto. La imagen del
+  backend recibe `libs/chassis` por un contexto de construcción con nombre (`additional_contexts`).
+- `frontend/nginx.conf`: `proxy_pass` hacia `gateway`, también con resolución en ejecución.
+- Documentación: [01](01-punto-de-partida.md) refleja la identidad por introspección. Las páginas de
+  fuera de esta sección que describen JWT/Bearer como sesión (listadas en 01) siguen pendientes.
+- Línea base: p50/p95 de `introspect`, `GET /leads` (directo y por el gateway), login y
+  `GET /leads` con `X-Api-Key`, y duración de un job de 1.000 registros.
 
-**`verify_f0`**
+**`verify_ms_f0`** (corre la última: detiene el backend; los nombres `verify_f0_identity`,
+`verify_f2a`… ya pertenecen a planes anteriores, así que las fases de este desacople son
+`verify_ms_f0`, `verify_ms_f1` y `verify_ms_f2`)
 
-- Un `Authorization: Bearer <basura>` sin cookie → 401 con el sobre de siempre.
-- Un JWT firmado con otra clave → 401.
-- `/internal/v1/jwks` a través del gateway → 404.
-- La respuesta lleva `X-Request-Id`; si la petición trae uno, es el mismo.
-- Una escritura con `Origin` no permitido → 403.
+- Un `Authorization: Bearer <basura>` sin cookie → 401 con el sobre y el mensaje del gateway.
+- Un JWT firmado con otra clave → 401, por el gateway y directo al servicio.
+- El `Authorization` del cliente no llega al servicio: manda la cookie.
+- `/internal/v1/jwks` y `/internal/v1/auth/introspect` a través del gateway → 404.
+- `X-Request-Id`: se conserva, se genera si falta, se sustituye si es hostil o de 129 caracteres, y
+  aparece en el access log del gateway.
+- CORS: preflight de origen permitido, `localhost:5173.evil.test` → 403, un `Origin` hostil no crea
+  sesión, un `Referer` hostil sin `Origin` no cuenta y `X-Api-Key` con `Origin` hostil → 403.
 - Una `X-Api-Key` válida en una ruta distinta de `GET /leads` → 401.
+- `POST /agents` anónimo con agentes ya creados → 401.
+- Un cuerpo de más de 10 MB → 413.
+- Con el backend parado → 503 `SERVICE_UNAVAILABLE`, y vuelve a responder al arrancarlo.
 
-**Criterio de salida.** Todos los checks existentes de `verify-e2e.sh` pasan sin modificarse, más
-`verify_f0`. El backend no recibe nunca la cookie fuera de `/auth/*`.
+**Criterio de salida.** Los checks previos de `verify-e2e.sh` pasan, más `verify_ms_f0`. El backend no
+recibe nunca la cookie fuera de `/auth/*`.
 
 ---
 

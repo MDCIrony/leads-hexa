@@ -53,8 +53,10 @@ Sólo el gateway publica la API. Los servicios no tienen puerto en el host: para
 por el gateway, igual que el frontend. `test-consumer` cambia `LEADS_API_BASE` a
 `http://gateway:8080/api/v1`.
 
-El gateway declara `depends_on` (`service_started`) sobre los cuatro servicios: nginx resuelve los
-nombres de sus `upstream` al arrancar y no levanta si alguno todavía no existe en la red de Compose.
+El gateway **no declara `depends_on`**. Sus `upstream` usan `resolve` con el DNS de Docker
+(`resolver 127.0.0.11 valid=10s`, nginx 1.27.3 o posterior), así que arranca sin que sus servicios
+existan y sigue funcionando si uno se recrea con otra IP. El nginx del frontend hace lo mismo con el
+gateway. Tras editar `gateway/*.conf` (montados como volumen), `docker compose exec gateway nginx -s reload`.
 
 ## Bases de datos
 
@@ -85,10 +87,12 @@ Las migraciones siguen siendo de cada servicio y se aplican al arrancar su proce
 
 ## Imágenes
 
-- **Contexto de construcción: la raíz del repo**, con un `Dockerfile` por servicio
-  (`services/<svc>/Dockerfile`). Cada imagen copia **sólo** su servicio y `libs/chassis`; ningún otro
-  servicio está dentro. Que un servicio importe código de otro no es una regla que revisar: no
-  compila.
+- **Contexto de construcción: el directorio del servicio, más un contexto con nombre para
+  `libs/chassis`**, con un `Dockerfile` por servicio (`additional_contexts: chassis: ./libs/chassis`
+  en Compose; `COPY --from=chassis` en el `Dockerfile`). No se usa la raíz del repo como contexto.
+  Cada imagen contiene **sólo** su servicio y `libs/chassis`; ningún otro servicio está dentro. Que un
+  servicio importe código de otro no es una regla que revisar: no compila. BuildKit respeta el
+  `.dockerignore` de `libs/chassis` para ese contexto con nombre.
 - **Proyecto `uv` independiente por servicio** con su `uv.lock`, y `chassis` como dependencia por
   ruta (`chassis = { path = "../../libs/chassis", editable = true }`). Cambiar `chassis` obliga a
   reconstruir las imágenes que lo usan; es el precio de que la verificación del token sea idéntica en
@@ -107,7 +111,7 @@ Igual que hoy: `src/` y `migrations/` del servicio, más `libs/chassis/src`, mon
 | Variable | identity | intake | lead-core | notifications |
 |---|:-:|:-:|:-:|:-:|
 | `DATABASE_URL` (su base, su rol) | ✓ | ✓ | ✓ | ✓ |
-| `SIGNING_KEYS` (PEM Ed25519, actual + anterior) | ✓ | | | |
+| `SIGNING_KEYS` (`kid=<semilla Ed25519 en base64url>[,kid=…]`; la primera firma, todas se publican) | ✓ | | | |
 | `SERVICE_CLIENTS` (hashes y audiencias) | ✓ | | | |
 | `MFA_ENCRYPTION_KEY`, `GOOGLE_*`, `GITHUB_*`, `FRONTEND_ORIGIN` | ✓ | | | |
 | `JWKS_URL` | | ✓ | ✓ | ✓ |
@@ -128,8 +132,8 @@ contraseñas de los brokers. Los secretos de OAuth siguen leyéndose de `.env`.
 | todos los de aplicación | `db` sano y `db-bootstrap` completado | Sin su base no hay nada que hacer |
 | `intake-worker` | `rabbitmq` sano | Su razón de ser es la cola (igual que hoy) |
 | `*-worker` y `api` | **no** esperan a Kafka | Los relays reintentan solos; la API sirve aunque el broker no esté (ADR-0026) |
-| `gateway` | los cuatro servicios iniciados | Resolución de `upstream` |
-| `frontend` | `gateway` | |
+| `gateway` | nada | Re-resuelve sus `upstream` en ejecución (`resolve`); responde `/health` aunque el servicio aún no exista |
+| `frontend` | `gateway` sano | El `healthcheck` del gateway es su propio `GET /health` |
 
 ## Tests
 
@@ -139,8 +143,11 @@ contraseñas de los brokers. Los secretos de OAuth siguen leyéndose de `.env`.
 | `cd services/<svc> && uv run pytest -m unit -q` | El dominio aislado: **sin base y sin variables de entorno**, como hoy |
 | `./scripts/verify-e2e.sh` | El negocio de punta a punta sobre HTTP real, contra el gateway en `:8001` |
 
-`verify-e2e.sh` no cambia de destino ni se reescribe: cada fase añade su `verify_fN` y la llama desde
-`main`. Cada servicio lleva sus cuatro tests de guardián, y el de lead-core sigue siendo el del
+`verify-e2e.sh` no cambia de destino ni se reescribe: cada fase de este desacople añade su
+`verify_ms_fN` (`verify_ms_f0`, `verify_ms_f1`, `verify_ms_f2`; los nombres `verify_fN` ya son de planes
+anteriores) y la llama desde `main`. `verify_ms_f0` va la última porque detiene y arranca el backend.
+Con `--reset` recrea el volumen y espera a que `/api/v1/auth/me` responda 401: el gateway contesta
+`/health` antes de que el backend haya migrado, así que `/health` no vale como señal de «listo». Cada servicio lleva sus cuatro tests de guardián, y el de lead-core sigue siendo el del
 backend actual.
 
 ## Estados intermedios

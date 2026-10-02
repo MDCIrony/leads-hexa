@@ -7,8 +7,9 @@ El segundo nivel del modelo C4: las piezas desplegables que forman Lead Router, 
 
 | Contenedor | Tecnología | Puerto (host:contenedor) | Protocolo | Responsabilidad |
 |---|---|---|---|---|
-| `frontend` | Nginx sirviendo el build estático de React (Vite) | 80:80 | HTTP | Interfaz web; también hace de proxy inverso de `/api/v1/` hacia `backend` |
-| `backend` | FastAPI + Uvicorn sobre Python 3.12 | 8001:8000 | HTTP con JSON | La API completa: autenticación, reglas, ingesta, asignación, notificaciones |
+| `frontend` | Nginx sirviendo el build estático de React (Vite) | 80:80 | HTTP | Interfaz web; también hace de proxy inverso de `/api/v1/` hacia `gateway` |
+| `gateway` | Nginx (`nginx:1.27-alpine`) | 8001:8080 | HTTP con JSON | Única entrada de la API: enruta, autentica con el *phantom token* (introspección + JWT interno), CORS, `Origin`, `X-Request-Id` y límites. Ver [Gateway y autenticación](../microservices/03-gateway-y-autenticacion.md) |
+| `backend` | FastAPI + Uvicorn sobre Python 3.12 | — (sólo red interna, `8000`) | HTTP con JSON | La API completa: autenticación, reglas, ingesta, asignación, notificaciones; sirve también la introspección y la JWKS internas |
 | `db` | PostgreSQL 16 (`postgres:16-alpine`) | 5433:5432 | Protocolo de PostgreSQL, vía `psycopg` | Único almacén de estado del sistema |
 | `docs` | MkDocs Material | 8002:8000 | HTTP | Este sitio, servido desde `docs/content` |
 
@@ -22,23 +23,27 @@ flowchart TD
 
     subgraph SISTEMA["Lead Router"]
         FRONTEND["frontend — Nginx + React"]
+        GATEWAY["gateway — Nginx"]
         BACKEND["backend — FastAPI + Uvicorn"]
         DB[("db — PostgreSQL 16")]
         DOCS["docs — MkDocs Material"]
     end
 
     BROWSER -->|"HTTP, puerto 80"| FRONTEND
-    FRONTEND -->|"proxy /api/v1/, puerto 8000"| BACKEND
+    FRONTEND -->|"proxy /api/v1/, puerto 8080"| GATEWAY
+    BROWSER -->|"HTTP, puerto 8001"| GATEWAY
+    GATEWAY -->|"auth_request + proxy, puerto 8000"| BACKEND
     BACKEND -->|"SQL vía psycopg, puerto 5432"| DB
-    BROWSER -->|"HTTP, puerto 8000"| DOCS
+    BROWSER -->|"HTTP, puerto 8002"| DOCS
 ```
 
 ## Qué depende de qué, y por qué
 
 `db` no depende de ningún otro contenedor: es la base del grafo de arranque. `backend` espera a
 que `db` esté saludable (`condition: service_healthy`) antes de arrancar, porque aplica las
-migraciones nada más iniciar. `frontend` espera a que `backend` esté saludable, para que Nginx no
-arranque antes de poder resolver su upstream.
+migraciones nada más iniciar. `frontend` espera a que `gateway` esté saludable. `gateway` no espera a
+nadie: vuelve a resolver el nombre de `backend` por DNS en ejecución, así que arranca sin él y sobrevive
+a que se recree.
 
 `docs` no depende ni de `backend` ni de `db`. Es deliberado: la documentación tiene que poder
 leerse incluso cuando el producto no arranca, que es precisamente cuando más se necesita.

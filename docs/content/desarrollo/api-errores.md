@@ -2,7 +2,9 @@
 
 El formato de error unificado, de dónde sale cada código HTTP y qué significa cada código de
 dominio. La tabla de códigos es la autoridad real del sistema:
-`backend/src/infrastructure/adapters/input/api/exception_handlers.py`.
+`backend/src/infrastructure/adapters/input/api/exception_handlers.py`. Las respuestas que genera el
+gateway antes de llegar a la API se listan [al final](#errores-del-gateway) y salen de
+`gateway/nginx.conf`.
 
 ## El dominio no conoce HTTP
 
@@ -44,7 +46,7 @@ token, nunca de la URL ni del cuerpo— está en
 | `error_code` | HTTP | Significa |
 |---|---|---|
 | `INVALID_CREDENTIALS` | 401 | El correo o la contraseña no coinciden, o la organización del agente está desactivada |
-| `UNAUTHORIZED` | 401 | Token ausente, caducado, inválido, o el agente ya no existe o está desactivado |
+| `UNAUTHORIZED` | 401 | Sesión o `X-Api-Key` ausente, caducada, inválida, o el agente ya no existe o está desactivado. El mensaje es siempre «Authentication required»: no dice cuál de esas causas fue |
 | `FORBIDDEN` | 403 | La identidad es válida, pero el rol o el plano (plataforma/organización) no alcanza para la acción |
 
 ## Recurso inexistente o ajeno
@@ -176,6 +178,22 @@ Ejemplo de `VALIDATION_ERROR`:
   ]
 }
 ```
+
+## Errores del gateway
+
+El gateway nginx responde por sí mismo en estos casos, con el mismo sobre JSON, sin llegar a la API.
+Ninguno es una `DomainException`.
+
+| `error_code` | HTTP | `message` | Cuándo |
+|---|---|---|---|
+| `UNAUTHORIZED` | 401 | `Authentication required` | La introspección rechaza la credencial (también `X-Api-Key`) o no hay ninguna |
+| `FORBIDDEN` | 403 | `Origen no permitido` | Una escritura (`POST`, `PUT`, `PATCH`, `DELETE`) trae un `Origin` que no es uno de los permitidos. Se resuelve antes de autenticar. Una petición sin `Origin` no es de navegador y pasa |
+| `NOT_FOUND` | 404 | `Not Found` | Ruta fuera de `/api/v1/`, `/health`, `/openapi.json` y `/docs`; `/internal/*` nunca se publica |
+| `PAYLOAD_TOO_LARGE` | 413 | `Request body too large` | Cuerpo de más de 10 MB |
+| `TOO_MANY_REQUESTS` | 429 | `Too many requests` | Más de 20 peticiones por segundo desde una IP (con ráfaga de 60) en `/api/v1/auth/`; es el único prefijo con límite |
+| `SERVICE_UNAVAILABLE` | 503 | `Service unavailable` | La introspección o el servicio destino no responden. Siempre cerrado: nunca deja pasar una petición sin autenticar. No confundir con `MESSAGING_UNAVAILABLE`, que genera la API |
+
+`FORBIDDEN` y `NOT_FOUND` comparten código con los de la API, pero el `message` del gateway es fijo.
 
 ## Ver también
 

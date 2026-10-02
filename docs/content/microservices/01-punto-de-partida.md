@@ -6,6 +6,9 @@ aquí, el plan no lo resuelve.
 
 ## Lo que corre hoy
 
+El gateway (F0) ya está en su sitio; el resto de la tabla es el punto de partida que las fases F1 a F5
+van cortando. `backend` no publica puerto en el host.
+
 | Contenedor | Qué hace | Comparte |
 |---|---|---|
 | `backend` | API completa, migraciones, casos de uso y **relay del outbox en un hilo** (`OutboxRelayThread`) | Imagen, código y base con `intake-worker` |
@@ -13,11 +16,13 @@ aquí, el plan no lo resuelve.
 | `db` | Un único `leads_db` con las tablas de todos los contextos | — |
 | `rabbitmq` | `intake.jobs` (cuórum, `x-delivery-limit: 3`) y `intake.jobs.dlq` | — |
 | `kafka` | `leads.{tenant_id}`, ACL `LITERAL` por organización (ADR-0028) | — |
-| `frontend` | SPA + proxy `/api/v1/` → `backend:8000` | — |
+| `gateway` | nginx: única entrada de la API en `:8001`; autentica con *phantom token* ([03](03-gateway-y-autenticacion.md)) | — |
+| `frontend` | SPA + proxy `/api/v1/` → `gateway:8080` | — |
 
 ```mermaid
 flowchart LR
-    FE["frontend nginx"] --> API["backend<br/>API + relay"]
+    FE["frontend nginx"] --> GW["gateway nginx"]
+    GW --> API["backend<br/>API + relay"]
     API --> DB[("leads_db<br/>todas las tablas")]
     API -->|"enqueue o fallback en proceso"| R["RabbitMQ"]
     R --> W["intake-worker<br/>mismo código"]
@@ -57,19 +62,21 @@ solo contexto.
 ## Cómo entra la identidad
 
 - Humanos: cookie `leads_session`, valor aleatorio de 256 bits, sólo su SHA-256 en `auth_sessions`
-  (ADR-0029). `get_current_agent` vuelve a cargar el agente en **cada** petición: desactivar a
-  alguien corta su acceso en la siguiente.
-- Integraciones: `X-Api-Key` con formato `{agent_id}.{secreto}`, verificado con bcrypt, aceptado
-  **sólo** en `GET /leads` mediante `require_manager_or_integration`.
-- Todas las rutas protegidas dependen de `get_request_context` y de sus tres guardas
+  (ADR-0029). El gateway introspecciona la cookie en **cada** petición (`resolve_current_agent`
+  vuelve a cargar al agente): desactivar a alguien corta su acceso en la siguiente.
+- Integraciones: `X-Api-Key` con formato `{agent_id}.{secreto}`, verificada con bcrypt en la
+  introspección y aceptada **sólo** en `GET /leads` mediante `require_manager_or_integration`.
+- Los routers protegidos reciben del gateway un bearer interno (JWT Ed25519 de 60 s). Todos dependen de
+  `get_request_context`, que lo verifica y construye el `Principal`, y de sus tres guardas
   (`require_platform_admin`, `require_organization_manager`, `require_organization_member`).
-  Cambiar el origen de la identidad es un cambio en un único punto por servicio.
-- La comprobación de `Origin` en escrituras y CORS viven como middleware en `main.py`.
+  Cambiar el origen de la identidad es un cambio en un único punto por servicio. Sólo `/auth/*` lee la
+  cookie.
+- `Origin` en escrituras y CORS se resuelven en el gateway, no en `main.py`.
 
-Algunas páginas todavía describen JWT/Bearer como mecanismo de sesión
-(`arquitectura/index.md`, `arquitectura/c4-componentes.md`, `arquitectura/recorrido-de-un-lead.md`,
-`eventos/autenticacion.md`, `demo/index.md`). Describen una versión anterior a ADR-0029 y se
-corrigen en la fase F0.
+Algunas páginas fuera de esta sección todavía describen JWT/Bearer como mecanismo de sesión
+(`arquitectura/c4-componentes.md`, `arquitectura/recorrido-de-un-lead.md`,
+`eventos/autenticacion.md`, `demo/index.md`). Describen una versión anterior a ADR-0029 y siguen
+pendientes de corrección: F0 no las tocó.
 
 ## Mensajería: lo que ya está bien y lo que no aguanta la separación
 

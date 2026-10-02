@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — se implementa en F0; la introspección pasa a identity en F3 |
+| **Estado** | Aceptada — implantada en F0 (la introspección la sirve el monolito; pasa a identity en F3) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Seguridad · Infraestructura |
 
@@ -16,8 +16,9 @@ petición siguiente. Esa propiedad tiene que sobrevivir a la separación.
 ## Decisión
 
 - **Un gateway nginx** es la única entrada a la API (`:8001`). Enruta por prefijo y concentra lo que
-  es del borde: CORS, comprobación de `Origin`, `X-Request-Id`, límites de tamaño y de peticiones.
-  `/internal/*` nunca se publica.
+  es del borde: CORS, comprobación de `Origin`, `X-Request-Id`, límites de tamaño (10 MB) y de
+  peticiones (sólo `/api/v1/auth/`). `/internal/*` nunca se publica; lo que no es `/api/v1/`, `/health`,
+  `/openapi.json` o `/docs` responde 404.
 - **Introspección en cada petición** con `auth_request` contra
   `GET /internal/v1/auth/introspect` de identity, que valida la cookie o la `X-Api-Key` y devuelve un
   **JWT interno** firmado con **Ed25519**, de **60 s**: `iss`, `aud`, `sub`, `tid`, `role`, `ptype`,
@@ -30,6 +31,10 @@ petición siguiente. Esa propiedad tiene que sobrevivir a la separación.
 - **Llamadas entre servicios** con tokens de servicio (*client credentials*) emitidos por identity,
   con audiencia por destino y 5 minutos de vida.
 - Se falla cerrado: introspección fallida → 401; identity inalcanzable → 503.
+- `POST /agents` usa una introspección **opcional**: sin credencial pasa sin `Authorization` y el
+  servicio decide (sólo crea al `ADMIN` sobre una base vacía); una credencial presente debe ser válida.
+- El gateway vuelve a resolver sus `upstream` por DNS, así que arranca sin sus servicios y no declara
+  `depends_on`.
 
 ## Alternativas consideradas
 
@@ -50,9 +55,12 @@ La revocación sigue aplicándose en la petición siguiente. Cada servicio verif
 llamar a nadie. Llevar un prefijo a otro servicio es cambiar un `upstream`.
 
 **Difícil:** identity está en el camino de cada petición autenticada, y su caída deja la API en 503.
-Cada petición paga un salto interno y una firma. El `message` de un 401 pasa a ser fijo, porque lo
-compone el gateway. Rotar la clave de firma exige publicar la nueva en la JWKS antes de usarla. Vuelve
-PyJWT como dependencia, ahora sólo para tokens internos.
+Cada petición paga un salto interno y una firma: ≈ 3 ms en p50 medidos en F0
+([Mediciones](../microservices/07-evoluciones-y-riesgos.md#mediciones)). El `message` de un 401 es
+siempre «Authentication required», porque lo compone el gateway. Rotar la clave de firma exige publicar
+la nueva en la JWKS antes de usarla. Vuelve PyJWT como dependencia, ahora sólo para tokens internos.
+Los orígenes permitidos viven en dos sitios (el `map` del gateway y `CORS_ORIGINS`). Un `X-Api-Key`
+sigue costando un bcrypt por petición (≈ 290 ms), ahora dentro de la introspección.
 
 ## Ver también
 
