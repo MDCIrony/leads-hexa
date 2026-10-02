@@ -71,7 +71,7 @@ def test_creates_the_indexes(test_db):
     assert _INDEXES <= {row["indexname"] for row in rows}
 
 
-def test_nullability_matches_the_origin_schema(test_db):
+def test_nullability_is_as_expected_for_the_columns_that_changed(test_db):
     rows = _rows(
         test_db,
         "SELECT table_name, column_name, is_nullable FROM information_schema.columns WHERE table_schema = 'public'",
