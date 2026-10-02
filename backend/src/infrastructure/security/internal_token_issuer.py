@@ -1,7 +1,7 @@
 import time
 from uuid import uuid4
 
-from chassis.auth import Ed25519Signer
+from chassis.auth import AUDIENCE, ISSUER, Ed25519Signer
 from domain.entities.agent import Agent
 
 
@@ -9,8 +9,8 @@ class InternalTokenIssuer:
     """Mints the internal token the gateway forwards (ADR-0032). Lives in the
     monolith only until identity is extracted (F3)."""
 
-    ISSUER = "identity"
-    AUDIENCE = "lead-router"
+    ISSUER = ISSUER
+    AUDIENCE = AUDIENCE
 
     def __init__(self, signer: Ed25519Signer, ttl_seconds: int = 60) -> None:
         self._signer = signer

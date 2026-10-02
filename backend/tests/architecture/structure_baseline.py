@@ -22,7 +22,7 @@ BASELINE = {
     "infrastructure/adapters/input/api/": 13,
     "infrastructure/adapters/input/api/agent_router.py": 161,
     "infrastructure/adapters/input/api/auth_router.py": 286,
-    "infrastructure/adapters/input/api/dependencies.py": 483,
+    "infrastructure/adapters/input/api/dependencies.py": 477,
     "infrastructure/adapters/input/api/intake_router.py": 242,
     "infrastructure/adapters/input/api/lead_router.py": 228,
     "infrastructure/adapters/input/api/rule_router.py": 285,

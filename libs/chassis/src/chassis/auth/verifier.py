@@ -1,6 +1,6 @@
 import jwt
 
-from chassis.auth.claims import Claims, TokenError
+from chassis.auth.claims import PRINCIPAL_TYPES, Claims, TokenError
 from chassis.auth.jwks import JwksCache
 from chassis.auth.signing import ALGORITHM
 
@@ -37,6 +37,9 @@ class TokenVerifier:
         if not isinstance(role, str) or not isinstance(ptype, str) or not (
             tid is None or isinstance(tid, str)
         ):
+            raise TokenError("invalid token claims")
+        # Identity always issues a coherent pair; anything else is not ours.
+        if ptype not in PRINCIPAL_TYPES or (role == "INTEGRATION") != (ptype == "integration"):
             raise TokenError("invalid token claims")
         return Claims(
             sub=str(payload["sub"]), tid=tid, role=role, ptype=ptype,

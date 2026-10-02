@@ -356,16 +356,10 @@ def _bearer_token(request: Request) -> Optional[str]:
 def _principal_from_token(token: str, container: Container) -> Principal:
     try:
         claims = container.token_verifier.verify(token)
-        role = AgentRole(claims.role)
-        # Identity always issues a coherent pair; anything else is not ours.
-        if claims.ptype not in ("human", "integration") or (
-            (role == AgentRole.INTEGRATION) != (claims.ptype == "integration")
-        ):
-            raise ValueError("incoherent role and principal type")
         return Principal(
             id=UUID(claims.sub),
             tenant_id=UUID(claims.tid) if claims.tid else None,
-            role=role,
+            role=AgentRole(claims.role),
             principal_type=claims.ptype,
         )
     except (TokenError, ValueError) as error:
