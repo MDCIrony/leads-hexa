@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class Settings:
     identity_url: str = "http://identity:8000"
     service_client_id: str = "lead-core"
     # Empty is allowed here because the worker never calls identity; the API refuses to start without it.
-    service_client_secret: str = ""
+    service_client_secret: str = field(default="", repr=False)
 
     @classmethod
     def from_environment(cls) -> "Settings":

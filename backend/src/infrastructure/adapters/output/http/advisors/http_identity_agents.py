@@ -4,6 +4,7 @@ from uuid import UUID
 
 import httpx
 from chassis.auth import ServiceTokenClient, ServiceTokenUnavailable
+from chassis.web import request_id_var
 
 from application.ports.output.advisors.identity_agents_port import IdentityAgentsPort
 from domain.advisors.advisor import Advisor
@@ -33,11 +34,17 @@ class HttpIdentityAgents(IdentityAgentsPort):
     def fetch(self, agent_id: UUID) -> Optional[Advisor]:
         try:
             token = self._tokens.token()
-            response = self._client.get(self._url + str(agent_id), headers={"Authorization": f"Bearer {token}"})
+            # The caller's request id: one hydration reads as part of the request that caused it.
+            response = self._client.get(self._url + str(agent_id), headers={
+                "Authorization": f"Bearer {token}", "X-Request-Id": request_id_var.get()})
         except (ServiceTokenUnavailable, httpx.HTTPError) as error:
             raise _unavailable(type(error).__name__) from None
         if response.status_code == 404:
             return None
+        if response.status_code == 401:
+            # Refused, not expired (a rotated key, a changed client entry): the
+            # next call fetches a fresh token instead of reusing this one for minutes.
+            self._tokens.invalidate()
         if response.status_code != 200:
             # A 401 included: a token identity refuses is a misconfiguration
             # here, not an answer about the agent.

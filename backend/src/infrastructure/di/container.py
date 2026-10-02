@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import httpx
 from chassis.auth import AUDIENCE, ISSUER, JwksCache, ServiceTokenClient, TokenVerifier, http_jwks
+from chassis.web import request_id_var
 from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.clock_port import ClockPort
 from application.ports.output.file_parser_port import FileParserPort
@@ -16,6 +17,11 @@ from infrastructure.adapters.output.persistence.postgres_unit_of_work import Pos
 from infrastructure.adapters.output.system_clock import SystemClock
 from infrastructure.adapters.output.uuid_generator import UuidGenerator
 from infrastructure.config.settings import Settings
+
+
+def _correlated(post: Callable[..., httpx.Response]) -> Callable[..., httpx.Response]:
+    """The token request carries the caller's request id, like the call it precedes."""
+    return lambda url, **kwargs: post(url, headers={"X-Request-Id": request_id_var.get()}, **kwargs)
 
 
 class Container:
@@ -45,7 +51,7 @@ class Container:
         self._identity_http = httpx.Client(timeout=2.0)
         tokens = ServiceTokenClient(settings.identity_url.rstrip("/") + "/internal/v1/service-tokens",
                                     settings.service_client_id, settings.service_client_secret, "identity",
-                                    post=self._identity_http.post)
+                                    post=_correlated(self._identity_http.post))
         self._advisor_directory = HydratingAdvisorDirectory(
             self.unit_of_work, HttpIdentityAgents(settings.identity_url, tokens, self._identity_http))
 

@@ -94,3 +94,28 @@ def test_anything_but_an_answer_is_service_unavailable(identity):
     with pytest.raises(DomainException) as exc:
         _adapter(identity).fetch(uuid.uuid4())
     assert exc.value.error_code == "SERVICE_UNAVAILABLE"
+
+
+def test_a_refused_token_is_dropped_so_the_next_call_fetches_another():
+    identity = _Identity(agent_status=401, agent_body={
+        "error": True, "error_code": "UNAUTHORIZED", "message": "Authentication required"})
+    adapter = _adapter(identity)
+
+    for _ in range(2):
+        with pytest.raises(DomainException):
+            adapter.fetch(uuid.uuid4())
+
+    assert len(identity.token_requests) == 2
+
+
+def test_the_lookup_carries_the_callers_request_id():
+    from chassis.web import request_id_var
+
+    identity = _Identity()
+    reset = request_id_var.set("req-123")
+    try:
+        _adapter(identity).fetch(uuid.UUID(_AGENT["agent_id"]))
+    finally:
+        request_id_var.reset(reset)
+
+    assert identity.agent_requests[0].headers["X-Request-Id"] == "req-123"
