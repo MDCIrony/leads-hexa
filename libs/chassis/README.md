@@ -11,8 +11,10 @@ token interno (Ed25519, ADR-0032) y correlación de peticiones por `X-Request-ID
   `internal.dlq.<grupo>`), `ensure_topics`, `TopicSpec`. El consumidor se crea con
   `enable.auto.commit=false` y `auto.offset.reset=earliest`.
 - `chassis.rabbit`: `RabbitJobDispatcher` (publica con *confirms*, `mandatory` y persistente).
+- `chassis.persistence`: `RawSqlDatabase` (pool `psycopg` lazy, `dict_row`) y `MigrationRunner`
+  (`.sql` numerados, una vez cada uno, tabla `schema_migrations`). El DSN lo recibe el servicio.
 - `chassis.testing`: `assert_structure` y `assert_domain_tests_isolated`, los guardianes de estructura
-  (ADR-0037) que cada servicio llama desde `tests/architecture/`. `python -m chassis.testing measure <raíz>`
+  (ADR-0037), más `layer_violations` y `stdlib_only_violations` (guardián de capas por AST) que cada servicio llama desde `tests/architecture/`. `python -m chassis.testing measure <raíz>`
   imprime la lista base de un árbol y `check <raíz>` la aplica; `scripts/verify-structure.sh` la usa
   para todo el repositorio.
 
@@ -24,6 +26,7 @@ Cada servicio instala sólo el cliente que usa:
 |---|---|---|
 | `kafka` | `confluent-kafka` | `ensure_topics` y `ConsumerLoop.run` (importan `confluent_kafka` al usarse); los productores y consumidores que se inyectan |
 | `rabbit` | `pika` | `chassis.rabbit` |
+| `postgres` | `psycopg[binary]`, `psycopg-pool` | `chassis.persistence` |
 
 ## Regla de uso
 
