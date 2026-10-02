@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "LeadLeftUnassigned.v1",
+  "title": "LeadLeftUnassigned, v1",
+  "description": "internal.lead-core.events (clave lead_id). Lead cualificado sin agente elegible.",
+  "allOf": [
+    {
+      "$ref": "envelope.v1"
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "LeadLeftUnassigned"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "tenant_id": {
+          "$ref": "envelope.v1#/$defs/uuid"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "tenant_id",
+            "lead_id"
+          ],
+          "properties": {
+            "tenant_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "lead_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  ]
+}

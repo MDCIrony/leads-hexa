@@ -1,0 +1,18 @@
+{
+  "event_id": "11111111-1111-4111-8111-111111111111",
+  "event_type": "AgentState",
+  "schema_version": 1,
+  "occurred_at": "2026-10-02T09:15:30.123456+00:00",
+  "producer": "identity",
+  "tenant_id": "3f2b8c1e-6d4a-4b7e-9c1f-2a5d8e7b6c40",
+  "aggregate_id": "8a1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d",
+  "correlation_id": "7d9e1f20-3a4b-4c5d-8e6f-708192a3b4c5",
+  "payload": {
+    "agent_id": "8a1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d",
+    "tenant_id": "3f2b8c1e-6d4a-4b7e-9c1f-2a5d8e7b6c40",
+    "name": "Ana Pérez",
+    "role": "AGENT",
+    "is_active": true,
+    "version": 3
+  }
+}

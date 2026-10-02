@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "LeadAssigned.v1",
+  "title": "LeadAssigned, v1",
+  "description": "internal.lead-core.events (clave lead_id). El motor encontró agente.",
+  "allOf": [
+    {
+      "$ref": "envelope.v1"
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "LeadAssigned"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "tenant_id": {
+          "$ref": "envelope.v1#/$defs/uuid"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "tenant_id",
+            "lead_id",
+            "agent_id"
+          ],
+          "properties": {
+            "tenant_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "lead_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "agent_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  ]
+}

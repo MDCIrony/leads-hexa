@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "IntakeRejected.v1",
+  "title": "IntakeRejected, v1",
+  "description": "internal.intake.events (clave intake_record_id). Payload que no supera la validación.",
+  "allOf": [
+    {
+      "$ref": "envelope.v1"
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "IntakeRejected"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "tenant_id": {
+          "$ref": "envelope.v1#/$defs/uuid"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "tenant_id",
+            "intake_record_id",
+            "reason"
+          ],
+          "properties": {
+            "tenant_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "intake_record_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  ]
+}

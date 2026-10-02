@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "identity.agent.v1",
+  "title": "Agente, v1",
+  "description": "Respuesta 200 de GET /internal/v1/agents/{agent_id}.",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "tenant_id",
+    "name",
+    "role",
+    "is_active",
+    "version"
+  ],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "tenant_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "ADMIN",
+        "MANAGER",
+        "AGENT",
+        "INTEGRATION"
+      ]
+    },
+    "is_active": {
+      "type": "boolean"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": true
+}

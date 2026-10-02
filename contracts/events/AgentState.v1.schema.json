@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "AgentState.v1",
+  "title": "AgentState, v1",
+  "description": "internal.identity.agents (compactado, clave agent_id). El agente tras una escritura, foto completa.",
+  "allOf": [
+    {
+      "$ref": "envelope.v1"
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "AgentState"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "agent_id",
+            "tenant_id",
+            "name",
+            "role",
+            "is_active",
+            "version"
+          ],
+          "properties": {
+            "agent_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "tenant_id": {
+              "anyOf": [
+                {
+                  "$ref": "envelope.v1#/$defs/uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "role": {
+              "enum": [
+                "ADMIN",
+                "MANAGER",
+                "AGENT",
+                "INTEGRATION"
+              ]
+            },
+            "is_active": {
+              "type": "boolean"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  ]
+}

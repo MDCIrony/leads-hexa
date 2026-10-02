@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "identity.service-token.v1",
+  "title": "Token de servicio, v1",
+  "description": "Respuesta 200 de POST /internal/v1/service-tokens.",
+  "type": "object",
+  "required": [
+    "access_token",
+    "expires_in"
+  ],
+  "properties": {
+    "access_token": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expires_in": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": true
+}

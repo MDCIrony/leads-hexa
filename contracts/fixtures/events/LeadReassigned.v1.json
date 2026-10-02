@@ -1,0 +1,16 @@
+{
+  "event_id": "44444444-4444-4444-8444-444444444444",
+  "event_type": "LeadReassigned",
+  "schema_version": 1,
+  "occurred_at": "2026-10-02T09:15:30.123456+00:00",
+  "producer": "lead-core",
+  "tenant_id": "3f2b8c1e-6d4a-4b7e-9c1f-2a5d8e7b6c40",
+  "aggregate_id": "c0ffee00-1234-4abc-8def-001122334455",
+  "correlation_id": "7d9e1f20-3a4b-4c5d-8e6f-708192a3b4c5",
+  "payload": {
+    "tenant_id": "3f2b8c1e-6d4a-4b7e-9c1f-2a5d8e7b6c40",
+    "lead_id": "c0ffee00-1234-4abc-8def-001122334455",
+    "agent_id": "5b6c7d8e-9f01-4a2b-8c3d-4e5f60718293",
+    "previous_agent_id": "8a1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "LeadReassigned.v1",
+  "title": "LeadReassigned, v1",
+  "description": "internal.lead-core.events (clave lead_id). Un manager cambió el agente.",
+  "allOf": [
+    {
+      "$ref": "envelope.v1"
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "LeadReassigned"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "tenant_id": {
+          "$ref": "envelope.v1#/$defs/uuid"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "tenant_id",
+            "lead_id",
+            "agent_id",
+            "previous_agent_id"
+          ],
+          "properties": {
+            "tenant_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "lead_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "agent_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "previous_agent_id": {
+              "anyOf": [
+                {
+                  "$ref": "envelope.v1#/$defs/uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  ]
+}

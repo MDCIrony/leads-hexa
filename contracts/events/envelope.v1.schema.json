@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "envelope.v1",
+  "title": "Sobre de un evento interno, v1",
+  "description": "Lo que escribe chassis.outbox.envelope.envelope() y lee chassis.consumer.envelope.Envelope.from_bytes. Todas las claves están siempre presentes; tenant_id y correlation_id pueden ser null.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "occurred_at",
+    "producer",
+    "tenant_id",
+    "aggregate_id",
+    "correlation_id",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "event_type": {
+      "description": "Nombre de la clase del evento.",
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "description": "Versión del payload; 1 en todo v1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurred_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "producer": {
+      "description": "Servicio que publica: lead-core, identity…; ningún consumidor filtra por él.",
+      "type": "string",
+      "minLength": 1
+    },
+    "tenant_id": {
+      "description": "null sólo en el AgentState del administrador de plataforma.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "aggregate_id": {
+      "description": "Clave de partición: el agregado cuyo orden se conserva.",
+      "type": "string",
+      "minLength": 1
+    },
+    "correlation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "description": "ISO-8601 con desfase horario, como datetime.isoformat().",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([+-]\\d{2}:\\d{2}|Z)$"
+    }
+  }
+}

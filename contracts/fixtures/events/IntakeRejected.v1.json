@@ -1,0 +1,15 @@
+{
+  "event_id": "66666666-6666-4666-8666-666666666666",
+  "event_type": "IntakeRejected",
+  "schema_version": 1,
+  "occurred_at": "2026-10-02T09:15:30.123456+00:00",
+  "producer": "lead-core",
+  "tenant_id": "3f2b8c1e-6d4a-4b7e-9c1f-2a5d8e7b6c40",
+  "aggregate_id": "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a",
+  "correlation_id": "7d9e1f20-3a4b-4c5d-8e6f-708192a3b4c5",
+  "payload": {
+    "tenant_id": "3f2b8c1e-6d4a-4b7e-9c1f-2a5d8e7b6c40",
+    "intake_record_id": "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a",
+    "reason": "email: value is not a valid email address"
+  }
+}

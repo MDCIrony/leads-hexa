@@ -1,0 +1,158 @@
+openapi: 3.1.0
+info:
+  title: identity — API interna
+  version: "1"
+  description: >
+    Rutas que identity sirve sólo dentro de la red de Compose. El gateway responde 404 a
+    cualquier `/internal/` que llegue de fuera. Diseño en
+    docs/content/microservices/03-gateway-y-autenticacion.md (ADR-0032).
+servers:
+  - url: http://identity:8000
+paths:
+  /internal/v1/auth/introspect:
+    get:
+      operationId: introspect
+      summary: Quién es el portador de la cookie o de la clave de API. No autoriza.
+      description: >
+        Lo llama el gateway con `auth_request`. Si llegan las dos credenciales, `X-Api-Key`
+        tiene prioridad. Cualquier credencial presente debe ser válida: una inválida es 401,
+        también con `optional=true`.
+      parameters:
+        - name: optional
+          in: query
+          required: false
+          schema: {type: boolean, default: false}
+        - name: leads_session
+          in: cookie
+          required: false
+          schema: {type: string}
+        - name: X-Api-Key
+          in: header
+          required: false
+          description: "`{agent_id}.{secreto}`"
+          schema: {type: string}
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Credencial válida. Cuerpo vacío.
+          headers:
+            X-Internal-Token:
+              required: true
+              description: >
+                JWT EdDSA de 60 s. Claims `iss=identity`, `aud=lead-router`, `sub=agent_id`,
+                `tid` (null para ADMIN), `role`, `ptype` (`human` | `integration`), `iat`, `exp`,
+                `jti`; cabecera `kid`.
+              schema: {type: string}
+        "204":
+          description: Sólo con `optional=true` y sin ninguna credencial. Cuerpo vacío.
+        "401":
+          description: >
+            Sin credencial (y sin `optional=true`), sesión caducada o revocada, agente
+            inactivo o clave inválida. Cuerpo vacío: el sobre lo compone el gateway.
+  /internal/v1/jwks:
+    get:
+      operationId: jwks
+      summary: Claves públicas de firma. Todas las publicadas son válidas; la primera firma.
+      responses:
+        "200":
+          description: JWKS.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items: {$ref: "#/components/schemas/Ed25519Jwk"}
+  /internal/v1/service-tokens:
+    post:
+      operationId: issueServiceToken
+      summary: Token de servicio (client credentials).
+      description: >
+        El token lleva `iss=identity`, `sub=client_id`, `aud=audience`, `ptype=service`,
+        `iat`, `exp=iat+expires_in`, `jti`. El llamante lo cachea y lo renueva cuando le
+        quedan menos de 30 s.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id, client_secret, audience]
+              properties:
+                client_id: {type: string}
+                client_secret: {type: string}
+                audience: {type: string}
+      responses:
+        "200":
+          description: Token emitido.
+          content:
+            application/json:
+              schema: {$ref: "../schemas/identity/service-token.v1.schema.json"}
+        "401":
+          description: Cliente desconocido, secreto incorrecto o audiencia no permitida a ese cliente.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /internal/v1/agents/{agent_id}:
+    get:
+      operationId: getAgent
+      summary: Un agente, para hidratar copias locales (lead-core).
+      security:
+        - serviceToken: []
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: El agente.
+          content:
+            application/json:
+              schema: {$ref: "../schemas/identity/agent.v1.schema.json"}
+        "401":
+          description: >
+            Sin token de servicio, o con uno que no es `ptype=service`, cuya `aud` no es
+            `identity` o cuyo `sub` no está entre los llamantes permitidos (`lead-core`).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "404":
+          description: "No existe. `error_code`: `AGENT_NOT_FOUND`."
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de `POST /internal/v1/service-tokens` con `audience=identity`.
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema: {type: string, pattern: "^[A-Za-z0-9._-]{1,128}$"}
+  schemas:
+    Ed25519Jwk:
+      type: object
+      required: [kty, crv, x, kid, alg, use]
+      properties:
+        kty: {const: OKP}
+        crv: {const: Ed25519}
+        x: {type: string, description: Clave pública en base64url sin relleno.}
+        kid: {type: string}
+        alg: {const: EdDSA}
+        use: {const: sig}
+    Error:
+      type: object
+      required: [error, error_code, message]
+      properties:
+        error: {const: true}
+        error_code: {type: string, examples: [UNAUTHORIZED, AGENT_NOT_FOUND]}
+        message: {type: string}

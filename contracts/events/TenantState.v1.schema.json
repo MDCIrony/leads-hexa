@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TenantState.v1",
+  "title": "TenantState, v1",
+  "description": "internal.identity.tenants (compactado, clave tenant_id). La organización tras una escritura, foto completa.",
+  "allOf": [
+    {
+      "$ref": "envelope.v1"
+    },
+    {
+      "properties": {
+        "event_type": {
+          "const": "TenantState"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "tenant_id": {
+          "$ref": "envelope.v1#/$defs/uuid"
+        },
+        "payload": {
+          "type": "object",
+          "required": [
+            "tenant_id",
+            "name",
+            "slug",
+            "is_active",
+            "version"
+          ],
+          "properties": {
+            "tenant_id": {
+              "$ref": "envelope.v1#/$defs/uuid"
+            },
+            "name": {
+              "type": "string"
+            },
+            "slug": {
+              "type": "string"
+            },
+            "is_active": {
+              "type": "boolean"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    }
+  ]
+}
