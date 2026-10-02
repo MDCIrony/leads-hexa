@@ -1,7 +1,8 @@
 import json
 import uuid
 
-from application.dtos.commands import OutboxEntry
+from chassis.outbox import OutboxRow
+
 from domain.entities.lead import Lead
 from domain.events.lead_events import LeadProcessedEvent
 from domain.value_objects.enums import LeadStatus
@@ -54,15 +55,17 @@ def _qualified_lead() -> Lead:
     )
 
 
-def _entry_of(event) -> OutboxEntry:
+def _entry_of(event) -> OutboxRow:
     """Exactly what the relay reads back out of the outbox."""
-    return OutboxEntry(
+    return OutboxRow(
         id=event.event_id,
+        channel="product",
         tenant_id=event.tenant_id,
         partition_key=event.partition_key,
         event_type=event.event_type,
         payload=event.as_payload(),
         occurred_on=event.occurred_on,
+        correlation_id=None,
     )
 
 

@@ -1,18 +1,10 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
-from confluent_kafka import Producer
 from chassis.web import RequestIdMiddleware
 from fastapi import FastAPI
 
 from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import RawSqlWebhookRepository
-from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
-from infrastructure.adapters.output.events.kafka_outbound_dispatcher import KafkaOutboundDispatcher
-from infrastructure.adapters.output.events.outbox_relay_thread import OutboxRelayThread
-from infrastructure.adapters.output.events.webhook_outbound_dispatcher import WebhookOutboundDispatcher
-from application.services.outbox_relay import OutboxRelay
 from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.intake_router import router as intake_router
 from infrastructure.adapters.input.api.notification_router import router as notification_router
@@ -36,37 +28,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
     MigrationRunner(container.database, migrations_dir).apply_pending()
 
-    # Held open for the process lifetime and only ever read from, so it runs
-    # in autocommit mode rather than sitting in one long-lived transaction.
-    # Needs a connection with a longer lifetime than a per-request unit of
-    # work, so it is built here rather than in the container. get_connection()
-    # is now a pool-backed context manager, so it wraps everything up to and
-    # including `yield`: the connection returns to the pool only at shutdown.
-    with container.database.get_connection(autocommit=True) as webhook_connection:
-        # The relay replaces the webhook handler's subscription to the
-        # in-process publisher (ADR-0025): delivery now reads from the
-        # outbox instead of running inside the use case's own call stack.
-        relay = OutboxRelay(
-            uow_factory=lambda: PostgresUnitOfWork(container.database),
-            dispatchers=[
-                WebhookOutboundDispatcher(
-                    webhook_repo=RawSqlWebhookRepository(webhook_connection),
-                    webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
-                ),
-                # Producer() does not connect synchronously (ADR-0026): a
-                # broker that is not reachable yet fails delivery, not
-                # construction, so this never blocks startup.
-                KafkaOutboundDispatcher(
-                    producer=Producer({"bootstrap.servers": settings.kafka_bootstrap_servers}),
-                ),
-            ],
-        )
-        relay_thread = OutboxRelayThread(relay, interval_seconds=settings.outbox_relay_interval_seconds)
-        relay_thread.start()
-
-        app.state.container = container
-        yield
-        relay_thread.stop()
+    # Delivery (outbox relay, webhooks, notification consumers) runs in the
+    # backend-worker process, so the API owns nothing but request handling.
+    app.state.container = container
+    yield
     container.database.close()
 
 app = FastAPI(

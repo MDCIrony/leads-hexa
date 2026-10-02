@@ -94,3 +94,7 @@ class InMemoryAgentRepository(AgentRepositoryPort):
 
     def distinct_tenant_ids(self) -> List[UUID]:
         return list({a.tenant_id.value for a in self.agents.values() if a.tenant_id is not None})
+
+    def list_all(self, limit: int = 100, offset: int = 0) -> List[Agent]:
+        ordered = sorted(self.agents.values(), key=lambda a: str(a.id))
+        return ordered[offset : offset + limit]

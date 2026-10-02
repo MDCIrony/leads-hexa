@@ -112,6 +112,36 @@ await_job() {
   printf 'TIMEOUT'
 }
 
+# await_notice <session> <expression over d> — waits until the inbox satisfies it.
+# Notifications are written by backend-worker once Kafka delivers the event: one
+# hop after the job completes, so the reads below must not race it. Bounded
+# polling like await_job; the check that follows still decides pass or fail.
+await_notice() {
+  local i r
+  for i in $(seq 1 50); do
+    r=$(req "$API/notifications" -H "Authorization: Bearer $1")
+    [ "$(body "$r" | f "bool($2)")" = True ] && return 0
+    sleep 0.2
+  done
+}
+
+# await_quiet <session> — waits until the inbox counter stops moving.
+# A baseline read right after earlier phases can predate a notification they
+# caused that is still on its way through Kafka; a counter unchanged for the
+# whole window (longer than a relay pass plus a consumer fetch) is a baseline
+# that later "+1" checks can trust.
+await_quiet() {
+  local i r now last="" stable=0
+  for i in $(seq 1 60); do
+    r=$(req "$API/notifications" -H "Authorization: Bearer $1")
+    now=$(body "$r" | f 'd.get("unread_count")')
+    if [ "$now" = "$last" ]; then stable=$((stable + 1)); else stable=0; fi
+    [ "$stable" -ge 10 ] && return 0
+    last=$now
+    sleep 0.25
+  done
+}
+
 # ------------------------------------------------------------- scaffolding ---
 
 # Platform admin, two organizations, three agents. Everything later builds on
@@ -645,6 +675,7 @@ verify_f3a() {
 
   section "F3a · la bandeja del asesor"
 
+  await_quiet "$TOKEN_1"
   r=$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_1")
   check "el asesor uno consulta su bandeja al empezar" 200 "$(code "$r")"
   base1=$(body "$r" | f 'd.get("unread_count")')
@@ -664,6 +695,7 @@ verify_f3a() {
   r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
   lead_direct=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
 
+  await_notice "$TOKEN_1" "d.get('unread_count') == $((base1 + 1))"
   r=$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_1")
   after_ingest=$(body "$r" | f 'd.get("unread_count")')
   check "su unread_count sube" "$((base1 + 1))" "$after_ingest"
@@ -715,6 +747,7 @@ verify_f3a() {
   r=$(req "$API/leads/$lead_orphan" -H "Authorization: Bearer $MGR_A")
   check "queda UNASSIGNED" UNASSIGNED "$(body "$r" | f 'd.get("status")')"
 
+  await_notice "$MGR_A" "any(i.get('kind') == 'LEAD_LEFT_UNASSIGNED' and i.get('lead_id') == '$lead_orphan' for i in d.get('items') or [])"
   r=$(req "$API/notifications" -H "Authorization: Bearer $MGR_A")
   check "el gestor recibe LEAD_LEFT_UNASSIGNED" True "$(body "$r" | f 'any(i.get("kind") == "LEAD_LEFT_UNASSIGNED" and i.get("lead_id") == "'"$lead_orphan"'" for i in d.get("items") or [])')"
 
@@ -727,6 +760,7 @@ verify_f3a() {
   rec=$(body "$r" | f '(d.get("items") or [{}])[0].get("id") or ""')
   check "y queda REJECTED" REJECTED "$(body "$r" | f '(d.get("items") or [{}])[0].get("status") or ""')"
 
+  await_notice "$MGR_A" "any(i.get('kind') == 'INTAKE_REJECTED' and i.get('intake_record_id') == '$rec' for i in d.get('items') or [])"
   r=$(req "$API/notifications" -H "Authorization: Bearer $MGR_A")
   check "el gestor recibe INTAKE_REJECTED con el registro" True "$(body "$r" | f 'any(i.get("kind") == "INTAKE_REJECTED" and i.get("intake_record_id") == "'"$rec"'" for i in d.get("items") or [])')"
 

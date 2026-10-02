@@ -83,3 +83,11 @@ class AgentRepositoryPort(ABC):
 
         Used by the backfill command of Task 7; declared here so the port is
         modified once instead of twice."""
+
+    @abstractmethod
+    def list_all(self, limit: int = 100, offset: int = 0) -> List[Agent]:
+        """Return a page of every agent, any organization, state or role.
+
+        For the identity snapshot only: the organization-scoped listings above
+        leave out the platform admin and the machine credentials, which are
+        identity state a rebuilt copy must also hold."""

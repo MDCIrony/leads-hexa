@@ -176,3 +176,9 @@ class RawSqlAgentRepository(AgentRepositoryPort):
             "SELECT DISTINCT tenant_id FROM agents WHERE tenant_id IS NOT NULL"
         ).fetchall()
         return [row["tenant_id"] for row in rows]
+
+    def list_all(self, limit: int = 100, offset: int = 0) -> List[Agent]:
+        rows = self.connection.execute(
+            "SELECT * FROM agents ORDER BY id LIMIT %s OFFSET %s", (limit, offset)
+        ).fetchall()
+        return [self._row_to_agent(row) for row in rows]
