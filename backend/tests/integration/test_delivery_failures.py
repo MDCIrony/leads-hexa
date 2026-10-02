@@ -26,8 +26,8 @@ from infrastructure.adapters.output.persistence.postgres_unit_of_work import Pos
 from infrastructure.adapters.output.queue.intake_queue_topology import (
     DLQ_NAME, QUEUE_NAME, declare_intake_topology,
 )
-from infrastructure.workers import job_messages
-from infrastructure.workers.job_messages import process_job_message
+from infrastructure.intake_worker import messages as job_messages
+from infrastructure.intake_worker.messages import process_job_message
 
 _GROUP = "notifications.lead-events"
 _TOPIC = "internal.lead-core.events"

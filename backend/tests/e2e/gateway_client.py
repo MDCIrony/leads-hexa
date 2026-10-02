@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from infrastructure.adapters.input.events.notification_consumer import NotificationConsumer
 from infrastructure.adapters.output.events.internal_topics import NOTIFICATION_GROUPS, topic_for
-from infrastructure.workers.job_messages import job_message, process_job_message
+from infrastructure.intake_worker.messages import job_message, process_job_message
 
 _INTROSPECT = "/internal/v1/auth/introspect"
 _PUBLIC_PREFIX = "/api/v1/auth/"

@@ -11,8 +11,8 @@ from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from domain.entities.lead_source import LeadSource
 from domain.services.assignment_engine import AssignmentEngine
 from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus, IntakeRecordStatus, LeadSourceKind
-from infrastructure.workers import job_messages
-from infrastructure.workers.job_messages import job_message, process_job_message
+from infrastructure.intake_worker import messages as job_messages
+from infrastructure.intake_worker.messages import job_message, process_job_message
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 _PAYLOAD = {

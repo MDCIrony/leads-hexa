@@ -1,26 +1,14 @@
-"""Standalone consumer for `intake.jobs` (ADR-0027): its own compose service,
-not a thread inside the API process, so a container restart mid-file does not
-strand the job.
-
-Redelivery is what makes this safe to kill at any point: nothing is acked
-until the job's run returns, and a run only ever reads PENDING records back."""
-
 import json
 import logging
-import time
 from uuid import UUID
 
 import pika
-from pika.exceptions import AMQPConnectionError, ChannelClosedByBroker
 
 from infrastructure.adapters.output.queue.intake_queue_topology import QUEUE_NAME, declare_intake_topology
-from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
-from infrastructure.logging_config import configure_logging
-from infrastructure.workers.job_messages import process_job_message
+from infrastructure.intake_worker.messages import process_job_message
 
 _LOGGER = logging.getLogger(__name__)
-_MAX_BACKOFF_SECONDS = 30.0
 
 
 def _decode(body: bytes) -> dict:
@@ -46,7 +34,7 @@ def _handle_message(container: Container, channel, method, body: bytes) -> None:
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
 
-def _consume(container: Container, url: str) -> None:
+def consume(container: Container, url: str) -> None:
     connection = pika.BlockingConnection(pika.URLParameters(url))
     try:
         channel = connection.channel()
@@ -64,30 +52,3 @@ def _consume(container: Container, url: str) -> None:
     finally:
         if connection.is_open:
             connection.close()
-
-
-def main() -> None:
-    configure_logging()
-    settings = Settings.from_environment()
-    container = Container(settings)
-
-    # Reconnects in process instead of exiting: under the dev file watcher an
-    # exited worker stays down until a file changes, and the jobs the relay
-    # keeps publishing would wait for nobody.
-    delay = 1.0
-    while True:
-        started = time.monotonic()
-        try:
-            _consume(container, settings.rabbitmq_url)
-        # OSError too: a broker host that does not resolve surfaces as
-        # socket.gaierror, which pika re-raises unwrapped.
-        except (AMQPConnectionError, ChannelClosedByBroker, OSError) as exc:
-            if time.monotonic() - started > _MAX_BACKOFF_SECONDS:
-                delay = 1.0
-            _LOGGER.warning("RabbitMQ unavailable (%r), reconnecting in %.0fs", exc, delay)
-            time.sleep(delay)
-            delay = min(delay * 2, _MAX_BACKOFF_SECONDS)
-
-
-if __name__ == "__main__":
-    main()

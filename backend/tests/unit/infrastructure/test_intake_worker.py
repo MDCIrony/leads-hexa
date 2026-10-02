@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from infrastructure.workers import intake_worker
+from infrastructure.intake_worker import consumer
 
 
 class _Channel:
@@ -20,6 +20,6 @@ class _Channel:
 def test_a_malformed_body_is_dead_lettered_instead_of_killing_the_worker(body):
     channel = _Channel()
 
-    intake_worker._handle_message(None, channel, SimpleNamespace(delivery_tag=7), body)
+    consumer._handle_message(None, channel, SimpleNamespace(delivery_tag=7), body)
 
     assert channel.calls == [("nack", 7, False)]
