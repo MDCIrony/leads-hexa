@@ -1,96 +1,15 @@
-"""Kafka consumer loop with bounded retries and a dead-letter topic per group.
-
-No broker library is imported at module level: the consumer and producers are
-injected. confluent-kafka is needed only by ensure_topics and the seek in run,
-and is imported there."""
-import json
+"""Kafka consumer loop with bounded retries and a dead-letter topic per group."""
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
-from typing import Callable, Mapping, Optional, Sequence
-from uuid import UUID
+from typing import Callable, Sequence
 
+from chassis.consumer.kafka import publish_dead_letter, raise_if_fatal
+from chassis.consumer.envelope import Envelope
+from chassis.consumer.topics import dlq_topic
 from chassis.web import request_id_var
 
 _LOGGER = logging.getLogger(__name__)
-
-DLQ_PREFIX = "internal.dlq."
-
-
-def dlq_topic(group: str) -> str:
-    return DLQ_PREFIX + group
-
-
-@dataclass(frozen=True)
-class Envelope:
-    event_id: UUID
-    event_type: str
-    schema_version: int
-    occurred_at: str
-    producer: str
-    tenant_id: Optional[str]
-    aggregate_id: str
-    correlation_id: Optional[str]
-    payload: dict
-
-    @classmethod
-    def from_bytes(cls, raw: bytes) -> "Envelope":
-        """Raises ValueError on anything that is not a well-formed envelope."""
-        try:
-            body = json.loads(raw)
-            if not isinstance(body, dict):
-                raise ValueError("envelope is not a JSON object")
-            strings = {k: body[k] for k in ("event_type", "occurred_at", "producer", "aggregate_id")}
-            optional = {k: body[k] for k in ("tenant_id", "correlation_id")}
-            version, payload = body["schema_version"], body["payload"]
-            if not all(isinstance(v, str) for v in strings.values()):
-                raise ValueError("envelope string field has the wrong type")
-            if not all(v is None or isinstance(v, str) for v in optional.values()):
-                raise ValueError("envelope optional field has the wrong type")
-            if isinstance(version, bool) or not isinstance(version, int):
-                raise ValueError("schema_version is not an integer")
-            if not isinstance(payload, dict):
-                raise ValueError("payload is not an object")
-            return cls(event_id=UUID(body["event_id"]), schema_version=version,
-                       payload=payload, **strings, **optional)
-        except (KeyError, TypeError, AttributeError, UnicodeDecodeError, RecursionError) as exc:
-            # json.JSONDecodeError and the UUID error are already ValueErrors.
-            # RecursionError: deeply nested input such as b"[" * 100000 would
-            # otherwise escape, and a poison message would block its partition.
-            raise ValueError(f"malformed envelope: {exc!r}") from exc
-
-
-@dataclass(frozen=True)
-class TopicSpec:
-    name: str
-    partitions: int = 3
-    config: Mapping[str, str] = field(default_factory=dict)
-
-
-def ensure_topics(admin, specs: Sequence[TopicSpec], timeout_seconds: float = 10.0) -> None:
-    """Idempotent: an existing topic is left alone (TOPIC_ALREADY_EXISTS ignored)."""
-    from confluent_kafka import KafkaError, KafkaException
-    from confluent_kafka.admin import NewTopic
-
-    existing = admin.list_topics(timeout=timeout_seconds).topics
-    missing = [
-        # -1 asks the broker for its default replication factor, so the same
-        # specs work on the single-broker dev stack and on a real cluster.
-        NewTopic(spec.name, num_partitions=spec.partitions, replication_factor=-1,
-                 config=dict(spec.config))
-        for spec in specs if spec.name not in existing
-    ]
-    if not missing:
-        return
-    for topic, future in admin.create_topics(missing, request_timeout=timeout_seconds).items():
-        try:
-            future.result(timeout_seconds)
-        except KafkaException as exc:
-            # Another instance may have created it between the listing and now.
-            if exc.args[0].code() != KafkaError.TOPIC_ALREADY_EXISTS:
-                raise
-            _LOGGER.debug("Topic %s already exists", topic)
 
 
 class ConsumerLoop:
@@ -165,7 +84,7 @@ class ConsumerLoop:
                     continue
                 error = message.error()
                 if error:
-                    self._handle_consumer_error(error)
+                    raise_if_fatal(error)
                     continue
                 partition = (message.topic(), message.partition())
                 blocked_at = self._blocked.get(partition)
@@ -196,18 +115,6 @@ class ConsumerLoop:
         finally:
             self._consumer.close()
 
-    @staticmethod
-    def _handle_consumer_error(error) -> None:
-        from confluent_kafka import KafkaError, KafkaException
-
-        if error.fatal():
-            # The client cannot recover from a fatal error; let the caller see it
-            # instead of polling a dead consumer forever.
-            raise KafkaException(error)
-        # End of a partition is informational; anything else may need attention.
-        level = logging.DEBUG if error.code() == KafkaError._PARTITION_EOF else logging.WARNING
-        _LOGGER.log(level, "Consumer error: %s", error)
-
     def _seek(self, partition: tuple[str, int], offset: int) -> bool:
         """Returns whether the consumer now sits at `offset`."""
         from confluent_kafka import TopicPartition
@@ -225,35 +132,8 @@ class ConsumerLoop:
         self._consumer.commit(message=message, asynchronous=False)
 
     def _dead_letter(self, message, error: str, attempts: int) -> str:
-        topic = dlq_topic(self._group)
-        delivery_error = None
-
-        def _on_delivery(err, _msg):
-            nonlocal delivery_error
-            if err is not None:
-                delivery_error = err
-
-        self._dlq_producer.produce(
-            topic=topic,
-            key=message.key(),
-            value=message.value(),
-            # The original headers (event_type, correlation_id) travel along so a
-            # replay from the DLQ keeps its routing context.
-            headers=[
-                *(message.headers() or []),
-                ("error", error.encode()),
-                ("original_topic", message.topic().encode()),
-                ("original_partition", str(message.partition()).encode()),
-                ("original_offset", str(message.offset()).encode()),
-                ("attempts", str(attempts).encode()),
-            ],
-            on_delivery=_on_delivery,
-        )
-        pending = self._dlq_producer.flush(self._flush_timeout_seconds)
-        if pending > 0:
-            raise RuntimeError(f"DLQ flush timed out with {pending} message(s) undelivered")
-        if delivery_error is not None:
-            raise RuntimeError(f"DLQ delivery failed for topic {topic}: {delivery_error}")
+        publish_dead_letter(self._dlq_producer, dlq_topic(self._group), message, error, attempts,
+                            self._flush_timeout_seconds)
         # Only once the DLQ has the message: an unconfirmed one would be lost
         # for good if the offset moved on.
         self._commit(message)
