@@ -52,13 +52,25 @@ class RawSqlOutboxRepository(OutboxRepositoryPort):
         # would exhaust it and lose exactly the leads this table exists to
         # protect. A failing entry sinks in the order instead, so new ones
         # overtake it, and it keeps being retried for as long as it takes.
+        #
+        # That reordering is only across keys. Within one partition_key only
+        # the oldest unpublished row is eligible: on a compacted topic the
+        # last record wins, so letting v6 out before a failing v5 would leave
+        # the older state as the final one. A poison row blocks its own key
+        # and nothing else. (occurred_on, id) keeps equal timestamps total.
         rows = self.connection.execute(
             """
-            SELECT id, tenant_id, partition_key, event_type, payload, occurred_on,
-                   channel, correlation_id
-            FROM outbox_events
-            WHERE channel = %s AND published_at IS NULL
-            ORDER BY attempts, occurred_on
+            SELECT o.id, o.tenant_id, o.partition_key, o.event_type, o.payload,
+                   o.occurred_on, o.channel, o.correlation_id
+            FROM outbox_events o
+            WHERE o.channel = %s AND o.published_at IS NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM outbox_events p
+                  WHERE p.channel = o.channel AND p.partition_key = o.partition_key
+                    AND p.published_at IS NULL
+                    AND (p.occurred_on, p.id) < (o.occurred_on, o.id)
+              )
+            ORDER BY o.attempts, o.occurred_on
             LIMIT %s
             """,
             (channel, limit),

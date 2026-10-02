@@ -84,7 +84,9 @@ los consumidores lo ponen en sus propias líneas de log: la misma petición se s
 ## Un canal por tipo de entrega
 
 `channel` decide **quién entrega** la fila. Un `CHECK` limita los valores a tres, y el índice parcial
-`idx_outbox_unpublished_by_channel (channel, attempts, occurred_on)` cubre lo no publicado.
+`idx_outbox_unpublished_by_channel (channel, attempts, occurred_on)` cubre lo no publicado; un segundo
+índice parcial, `idx_outbox_unpublished_by_key (channel, partition_key, occurred_on, id)` (migración
+`016_outbox_key_order.sql`), sirve a la garantía de orden por clave.
 
 | `channel` | Qué lleva | Destino | Despachadores |
 |---|---|---|---|
@@ -127,6 +129,19 @@ tope y descartaban para siempre los leads que esta tabla existe para no perder.
 Con el orden por intentos, una entrada que falla se hunde, las nuevas la adelantan, y se sigue
 reintentando el tiempo que haga falta.
 
+## El orden se garantiza por `partition_key`
+
+El reordenamiento por intentos sólo ocurre **entre claves**. Dentro de una misma `partition_key` y
+canal, el lote sólo incluye la fila no publicada **más antigua** (desempate por `id`, para que
+timestamps iguales sigan un orden total). Es lo que exige un topic compactado: allí gana el último
+registro de la clave, y dejar salir `AgentState` v6 antes de una v5 que falla dejaría el estado viejo
+como definitivo.
+
+- **Una fila envenenada bloquea sólo su clave.** Las demás claves del canal siguen saliendo.
+- **Un fallo en un ciclo no deja salir a la siguiente.** La sucesora ni siquiera se lee mientras la
+  anterior esté sin publicar, así que la entrega secuencial del relay no puede adelantarla.
+- Publicada la primera, la segunda entra en el siguiente ciclo.
+
 ## Qué entra en el outbox
 
 Todo lo que sale de un caso de uso hacia otro proceso, **dentro de su transacción**: no hay un
@@ -147,7 +162,7 @@ cliente y lo que se queda dentro son criterios distintos, y por eso son canales 
 
 | Pieza | Fichero |
 |---|---|
-| La tabla | `backend/migrations/009_outbox.sql`, `015_durability.sql` (canal y correlación) |
+| La tabla | `backend/migrations/009_outbox.sql`, `015_durability.sql` (canal y correlación), `016_outbox_key_order.sql` (índice del orden por clave) |
 | El puerto | `application/ports/output/outbox_repository_port.py` |
 | El adaptador SQL | `infrastructure/adapters/output/persistence/raw_sql_outbox_repository.py` |
 | El relay y los despachadores genéricos | `libs/chassis/src/chassis/outbox/` (`OutboxRelay`, `run_relay`, `KafkaEventDispatcher`), `chassis/rabbit.py` (`RabbitJobDispatcher`) |

@@ -386,12 +386,16 @@ class InMemoryOutboxRepository(OutboxRepositoryPort):
         )
 
     def list_unpublished(self, channel: str, limit: int) -> List[OutboxEntry]:
-        items = [
+        pending = [
             e for e in self._entries.values()
             if e.channel == channel and e.id not in self.published_ids
         ]
-        items.sort(key=lambda e: e.occurred_on)
-        return items[:limit]
+        # Same rule as the real adapter: only the oldest unpublished row of
+        # each partition_key is eligible.
+        oldest = {}
+        for e in sorted(pending, key=lambda e: (e.occurred_on, str(e.id))):
+            oldest.setdefault(e.partition_key, e)
+        return sorted(oldest.values(), key=lambda e: e.occurred_on)[:limit]
 
     def mark_published(self, event_id: UUID) -> None:
         self.published_ids.append(event_id)

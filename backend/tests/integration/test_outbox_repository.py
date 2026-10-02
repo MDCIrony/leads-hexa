@@ -36,6 +36,15 @@ def _event() -> LeadDisqualified:
     )
 
 
+def _event_for(lead_id: str) -> LeadDisqualified:
+    return LeadDisqualified(
+        tenant_id=str(uuid.uuid4()),
+        lead_id=lead_id,
+        source_id=str(uuid.uuid4()),
+        reason="Sin forma de contactar",
+    )
+
+
 def _seed_source(conn, tenant_id: uuid.UUID) -> uuid.UUID:
     """intake_records.tenant_id and .source_id are real foreign keys
     (migration 005): a full ingestion needs a persisted organization and
@@ -244,5 +253,35 @@ def test_an_event_without_a_tenant_is_stored(test_db):
         entries = repo.list_unpublished("internal", 10)
         assert [entry.id for entry in entries] == [event.event_id]
         assert entries[0].tenant_id is None
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_only_the_oldest_unpublished_row_of_a_key_is_eligible(test_db):
+    """On a compacted topic the last record per key wins: v6 must never leave
+    before a failing v5. The newer row is not even fetched, so a relay pass
+    that delivers sequentially cannot let it out after r1 fails."""
+    repo, _, ctx = _repo(test_db)
+    try:
+        lead_id = str(uuid.uuid4())
+        first, second = _event_for(lead_id), _event_for(lead_id)
+        other = _event()
+        repo.record(first)
+        repo.record(second)
+        repo.record(other)
+
+        assert [e.id for e in repo.list_unpublished("product", 10)] == [first.event_id, other.event_id]
+
+        repo.mark_failed(first.event_id, "broker unreachable")
+
+        # The failed row sinks behind other keys but still holds back its successor.
+        for _ in range(2):
+            ids = [e.id for e in repo.list_unpublished("product", 10)]
+            assert ids == [other.event_id, first.event_id]
+            assert second.event_id not in ids
+
+        repo.mark_published(first.event_id)
+
+        assert [e.id for e in repo.list_unpublished("product", 10)] == [second.event_id, other.event_id]
     finally:
         ctx.__exit__(None, None, None)

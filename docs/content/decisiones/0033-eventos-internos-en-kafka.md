@@ -3,6 +3,7 @@
 | | |
 |---|---|
 | **Estado** | Aceptada — implantada en F1 |
+| **Nota** | Revisión final de F1: el relay entrega, por canal, sólo la fila más antigua no publicada de cada `partition_key`, para que el estado compactado no quede en una versión vieja; ver [el outbox](../eventos/outbox.md#el-orden-se-garantiza-por-partition_key) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Backend · Mensajería |
 

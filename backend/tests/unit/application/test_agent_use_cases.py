@@ -226,7 +226,12 @@ def test_authorization_policy_rejects_integration_the_same_way_it_rejects_admin(
 
 
 def _agent_states(uow: InMemoryUnitOfWork):
-    entries = uow.outbox.list_unpublished("internal", 100)
+    # Every row written, not only the eligible ones: list_unpublished hands out
+    # a single row per key at a time, and these tests assert the whole history.
+    entries = sorted(
+        (e for e in uow.outbox._entries.values() if e.channel == "internal"),
+        key=lambda e: e.occurred_on,
+    )
     assert {e.event_type for e in entries} <= {"AgentState"}
     return [e.payload for e in entries]
 
