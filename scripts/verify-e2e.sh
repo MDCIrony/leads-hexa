@@ -1134,12 +1134,19 @@ except urllib.error.HTTPError as e:
 }
 
 
+# group_lag <group> — total lag of a consumer group, or "none" while it has no
+# committed position yet or no member reading the topic.
+group_lag() {
+  docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+    --describe --group "$1" 2>/dev/null | awk '$1 == g && $4 ~ /^[0-9]+$/ && $6 ~ /^[0-9]+$/ {n++; l += $6; if ($7 == "-") orphan = 1} END {if (n && !orphan) print l; else if (n) print l + 1; else print "none"}' g="$1"
+}
+
 # ------------------------------------------------ microservicios · F1 ---
 # Durable delivery (ADR-0033, ADR-0034): the outbox hands jobs to RabbitMQ and
 # events to Kafka, and a broker outage delays work without losing it. Runs
 # before verify_ms_f0, which stops the backend.
 verify_ms_f1() {
-  local r job lead rid i st notices logs csv sum_offsets queues topic
+  local r job lead rid i st notices logs csv sum_offsets queues topic lag end begin
   local kafka_bin=/opt/kafka/bin
   rid="f1-$STAMP"
   section "Microservicios F1 · entrega duradera"
@@ -1167,7 +1174,8 @@ verify_ms_f1() {
   check "al volver RabbitMQ el trabajo termina solo (<=60 s)" COMPLETED "$st"
   r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
   lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
-  check "y el lead existe" 200 "$(code "$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")")"
+  check "el trabajo produjo un lead" True "$(test -n "$lead" && printf True || printf False)"
+  check "y el lead existe" 200 "$(code "$(req "$API/leads/${lead:-missing}" -H "Authorization: Bearer $MGR_A")")"
 
   section "Microservicios F1 · notificación por Kafka, sin duplicados"
   r=$(req -X POST "$API/leads/$lead/assign" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' -d "{\"agent_id\":\"$AGENT_1\"}")
@@ -1178,9 +1186,22 @@ verify_ms_f1() {
     sleep 0.2
   done
   check "llega LEAD_ASSIGNED al asesor (<=15 s)" 1 "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | f "$notices")"
-  docker compose restart backend-worker >/dev/null 2>&1
-  sleep 5
-  check "tras reiniciar backend-worker sigue habiendo una" 1 "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | f "$notices")"
+  # The committed offset alone would replay nothing; rewinding the group makes
+  # the consumer see the same event again, so only the dedupe keeps it at one.
+  docker compose stop backend-worker >/dev/null 2>&1
+  docker compose exec -T kafka "$kafka_bin/kafka-consumer-groups.sh" --bootstrap-server localhost:9092 \
+    --group notifications.lead-events --topic internal.lead-core.events --reset-offsets --to-earliest --execute >/dev/null 2>&1
+  lag=$(group_lag notifications.lead-events)
+  check "el grupo vuelve a quedar por leer desde el principio" True "$(test "${lag:-0}" -gt 0 && printf True || printf False)"
+  docker compose start backend-worker >/dev/null 2>&1
+  for i in $(seq 1 90); do
+    lag=$(group_lag notifications.lead-events)
+    [ "$lag" = 0 ] && break
+    sleep 1
+  done
+  check "backend-worker relee el topic hasta lag 0" 0 "$lag"
+  sleep 2
+  check "tras la relectura sigue habiendo una" 1 "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | f "$notices")"
 
   section "Microservicios F1 · subida de fichero por el camino nuevo"
   csv=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.csv")
@@ -1208,9 +1229,14 @@ verify_ms_f1() {
         --entity-type topics --entity-name "$topic" 2>/dev/null | grep -o 'cleanup.policy=[a-z]*' | head -1)"
   done
   for topic in internal.dlq.notifications.lead-events internal.dlq.notifications.intake-events; do
-    # One "topic:partition:end-offset" line per partition; an absent topic prints none.
-    sum_offsets=$(docker compose exec -T kafka "$kafka_bin/kafka-get-offsets.sh" --bootstrap-server localhost:9092 \
-      --topic "$topic" 2>/dev/null | awk -F: 'NF==3 {n++; s+=$3} END {if (n) print s; else print "missing"}')
+    # Live messages are end minus beginning offset: retention advances the
+    # beginning, so the end offset alone would call a purged topic non-empty.
+    # An absent topic prints no offset lines at all.
+    end=$(docker compose exec -T kafka "$kafka_bin/kafka-get-offsets.sh" --bootstrap-server localhost:9092 \
+      --topic "$topic" --time -1 2>/dev/null | awk -F: 'NF==3 {n++; s+=$3} END {if (n) print s; else print "missing"}')
+    begin=$(docker compose exec -T kafka "$kafka_bin/kafka-get-offsets.sh" --bootstrap-server localhost:9092 \
+      --topic "$topic" --time -2 2>/dev/null | awk -F: 'NF==3 {n++; s+=$3} END {if (n) print s; else print "missing"}')
+    if [ "$end" = missing ] || [ "$begin" = missing ]; then sum_offsets=missing; else sum_offsets=$((end - begin)); fi
     check "$topic existe y está vacía" 0 "$sum_offsets"
   done
   queues=$(docker compose exec -T rabbitmq rabbitmqctl list_queues name messages 2>/dev/null)

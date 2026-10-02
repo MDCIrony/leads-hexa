@@ -139,7 +139,10 @@ def test_an_event_whose_effect_always_fails_is_dead_lettered_and_committed(test_
         (row,) = store.fetch("internal", 10)
     message = _Message(json.dumps(envelope(row, "lead-core")).encode())
 
+    attempts = []
+
     def _boom(self, *args):
+        attempts.append(args)
         raise RuntimeError("effect failed")
 
     monkeypatch.setattr(NotificationHandler, "apply", _boom)
@@ -152,6 +155,7 @@ def test_an_event_whose_effect_always_fails_is_dead_lettered_and_committed(test_
 
     assert loop.process(message) == "dead-lettered"
 
+    assert len(attempts) == 3
     (sent,) = producer.produced
     assert sent["topic"] == dlq_topic(_GROUP) == "internal.dlq.notifications.lead-events"
     assert dict(sent["headers"])["attempts"] == b"3"
