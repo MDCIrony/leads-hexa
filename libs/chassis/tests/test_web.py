@@ -41,7 +41,7 @@ def test_missing_id_is_generated():
     assert echoed == [inside]
 
 
-@pytest.mark.parametrize("hostile", ["has space", "line\nbreak", "x" * 129, "semi;colon"])
+@pytest.mark.parametrize("hostile", ["has space", "line\nbreak", "x" * 129, "semi;colon", "abc\n"])
 def test_hostile_id_is_replaced(hostile):
     inside, echoed = _run({"x-request-id": hostile})
     assert inside != hostile
@@ -49,8 +49,23 @@ def test_hostile_id_is_replaced(hostile):
 
 
 def test_context_is_reset_after_the_request():
-    _run({"x-request-id": "abc"})
-    assert request_id_var.get() == "-"
+    # Same coroutine for the call and the read: asyncio.run copies the context,
+    # so reading outside would pass even without the reset.
+    async def scenario():
+        async def app(scope, receive, send):
+            pass
+
+        async def receive():
+            return {"type": "http.request"}
+
+        async def send(message):
+            pass
+
+        scope = {"type": "http", "headers": [(b"x-request-id", b"abc")]}
+        await RequestIdMiddleware(app)(scope, receive, send)
+        return request_id_var.get()
+
+    assert asyncio.run(scenario()) == "-"
 
 
 def test_log_filter_injects_current_id():

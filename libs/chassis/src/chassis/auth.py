@@ -3,6 +3,7 @@
 Every service verifies with this same code, so a rule tightened here is
 tightened everywhere at once."""
 import base64
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 ALGORITHM = "EdDSA"
+_SEED_ALPHABET = re.compile(r"[A-Za-z0-9_-]+")
 _REQUIRED_CLAIMS = ["iss", "aud", "sub", "iat", "exp", "jti"]
 
 
@@ -47,6 +49,10 @@ class Ed25519Signer:
 
     @classmethod
     def from_seed(cls, kid: str, seed_b64url: str) -> "Ed25519Signer":
+        # Strict: the lenient decoder drops stray characters, so a typo would
+        # silently produce a different key instead of failing at startup.
+        if not _SEED_ALPHABET.fullmatch(seed_b64url):
+            raise ValueError(f"signing key {kid!r} is not base64url")
         seed = _b64url_decode(seed_b64url)
         if len(seed) != 32:
             raise ValueError(f"signing key {kid!r} must be a 32-byte Ed25519 seed")
@@ -111,11 +117,16 @@ class JwksCache:
             document = self._fetch()
         except Exception as error:
             raise TokenError("signing keys unavailable") from error
-        self._keys = {
-            jwk["kid"]: Ed25519PublicKey.from_public_bytes(_b64url_decode(jwk["x"]))
-            for jwk in document.get("keys", [])
-            if jwk.get("kty") == "OKP" and jwk.get("crv") == "Ed25519" and "kid" in jwk
-        }
+        try:
+            keys = {
+                jwk["kid"]: Ed25519PublicKey.from_public_bytes(_b64url_decode(jwk["x"]))
+                for jwk in document.get("keys", [])
+                if jwk.get("kty") == "OKP" and jwk.get("crv") == "Ed25519" and "kid" in jwk
+            }
+        except Exception as error:
+            # A bad document must not wipe the keys already trusted.
+            raise TokenError("signing keys unavailable") from error
+        self._keys = keys
 
 
 def http_jwks(url: str, timeout: float = 2.0) -> Callable[[], dict]:
@@ -155,8 +166,12 @@ class TokenVerifier:
             )
         except jwt.PyJWTError as error:
             raise TokenError("invalid token") from error
+        role, ptype, tid = payload.get("role"), payload.get("ptype"), payload.get("tid")
+        if not isinstance(role, str) or not isinstance(ptype, str) or not (
+            tid is None or isinstance(tid, str)
+        ):
+            raise TokenError("invalid token claims")
         return Claims(
-            sub=str(payload["sub"]), tid=payload.get("tid"), role=str(payload.get("role", "")),
-            ptype=str(payload.get("ptype", "")), aud=str(payload["aud"]),
-            jti=str(payload["jti"]), exp=int(payload["exp"]),
+            sub=str(payload["sub"]), tid=tid, role=role, ptype=ptype,
+            aud=str(payload["aud"]), jti=str(payload["jti"]), exp=int(payload["exp"]),
         )

@@ -135,7 +135,7 @@ def test_load_signers_parses_spec_and_keeps_order():
     assert signers[0].public_jwk()["kid"] == "a"
 
 
-@pytest.mark.parametrize("spec", ["", "  ", "nokey", "a=short", "a=AAAA,a=AAAA"])
+@pytest.mark.parametrize("spec", ["", "  ", "nokey", "a=short", "a=AAAA,a=AAAA", "a=" + "*" + "A" * 42])
 def test_load_signers_rejects_bad_specs(spec):
     with pytest.raises(ValueError):
         load_signers(spec)
@@ -146,3 +146,58 @@ def test_public_jwk_shape():
     assert {k: jwk[k] for k in ("kty", "crv", "alg", "use", "kid")} == {
         "kty": "OKP", "crv": "Ed25519", "alg": "EdDSA", "use": "sig", "kid": "k9"}
     assert "d" not in jwk
+
+
+@pytest.mark.parametrize("missing", ["role", "ptype"])
+def test_missing_role_or_ptype_is_rejected(missing):
+    signer = _signer()
+    claims = _claims()
+    del claims[missing]
+    with pytest.raises(TokenError):
+        _verifier(signer).verify(signer.sign(claims))
+
+
+@pytest.mark.parametrize("field,value", [("role", 1), ("ptype", None), ("tid", 7)])
+def test_non_string_claims_are_rejected(field, value):
+    signer = _signer()
+    with pytest.raises(TokenError):
+        _verifier(signer).verify(signer.sign(_claims(**{field: value})))
+
+
+def test_tid_none_round_trips():
+    signer = _signer()
+    assert _verifier(signer).verify(signer.sign(_claims(tid=None))).tid is None
+
+
+_GOOD_JWK = _signer().public_jwk()
+_MALFORMED = [
+    "not-a-dict",
+    [],
+    {"keys": [{k: v for k, v in _GOOD_JWK.items() if k != "x"}]},
+    {"keys": [{**_GOOD_JWK, "x": "***"}]},
+    {"keys": [{**_GOOD_JWK, "x": "AAAA"}]},
+]
+
+
+@pytest.mark.parametrize("document", _MALFORMED)
+def test_malformed_jwks_is_a_token_error(document):
+    with pytest.raises(TokenError):
+        _verifier_for(lambda: document).verify(_signer().sign(_claims()))
+
+
+def _verifier_for(fetch):
+    return TokenVerifier(JwksCache(fetch), issuer=ISS, audience=AUD)
+
+
+def test_malformed_refresh_keeps_previously_cached_keys():
+    known = _signer("known")
+    published = {"keys": [known.public_jwk()]}
+    clock = [100.0]
+    cache = JwksCache(lambda: published, min_refresh_seconds=10, clock=lambda: clock[0])
+    verifier = TokenVerifier(cache, issuer=ISS, audience=AUD)
+    verifier.verify(known.sign(_claims()))
+    published = "garbage"
+    clock[0] += 11
+    with pytest.raises(TokenError):
+        verifier.verify(_signer("ghost").sign(_claims()))
+    verifier.verify(known.sign(_claims()))
