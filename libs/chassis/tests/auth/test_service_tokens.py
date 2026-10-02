@@ -113,6 +113,15 @@ def test_client_posts_its_credentials_and_caches_the_token():
                            {"client_id": "lead-core", "client_secret": SECRET, "audience": "identity"})]
 
 
+def test_an_invalidated_token_is_fetched_again():
+    post = FakePost(FakeResponse(), FakeResponse(body={"access_token": "tok-2", "expires_in": 300}))
+    c = client(post)
+    c.token()
+    c.invalidate()
+    assert c.token() == "tok-2"
+    assert len(post.calls) == 2
+
+
 def test_client_renews_once_less_than_30_seconds_remain():
     post = FakePost(FakeResponse(), FakeResponse(body={"access_token": "tok-2", "expires_in": 300}))
     clock = FakeClock()

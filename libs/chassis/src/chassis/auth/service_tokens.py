@@ -5,7 +5,7 @@ Identity issues them with `ptype=service`, `sub` = the calling service and
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable, Collection, Optional
+from typing import Any, Callable, Collection, Optional, Protocol
 
 import httpx
 
@@ -47,6 +47,12 @@ class ServiceTokenVerifier:
                              exp=int(payload["exp"]))
 
 
+class _Response(Protocol):
+    status_code: int
+
+    def json(self) -> Any: ...
+
+
 def _http_post(url: str, json: dict) -> httpx.Response:
     return httpx.post(url, json=json, timeout=2.0)
 
@@ -55,7 +61,7 @@ class ServiceTokenClient:
     """Fetches a service token and reuses it until it is about to expire."""
 
     def __init__(self, token_url: str, client_id: str, client_secret: str, audience: str, *,
-                 post: Optional[Callable[..., object]] = None,
+                 post: Optional[Callable[..., _Response]] = None,
                  clock: Callable[[], float] = time.time, renew_margin: float = 30) -> None:
         self._url = token_url
         self._client_id = client_id
@@ -79,6 +85,11 @@ class ServiceTokenClient:
                 return cached
             self._cached = self._fetch()
             return self._cached[0]
+
+    def invalidate(self) -> None:
+        """Drops the cached token: the callee refused it (a rotated key, a changed
+        client entry), and waiting for its expiry would refuse every call until then."""
+        self._cached = None
 
     def _valid(self) -> Optional[str]:
         cached = self._cached
