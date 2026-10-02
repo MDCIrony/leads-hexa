@@ -7,7 +7,8 @@
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', role, password)
 FROM (VALUES ('notifications_svc', :'notifications_password'),
              ('identity_svc', :'identity_password'),
-             ('intake_svc', :'intake_password')) AS roles (role, password)
+             ('intake_svc', :'intake_password'),
+             ('lead_core_svc', :'lead_core_password')) AS roles (role, password)
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role)
 \gexec
 
@@ -15,15 +16,18 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role)
 SELECT format('ALTER ROLE %I PASSWORD %L', role, password)
 FROM (VALUES ('notifications_svc', :'notifications_password'),
              ('identity_svc', :'identity_password'),
-             ('intake_svc', :'intake_password')) AS roles (role, password)
+             ('intake_svc', :'intake_password'),
+             ('lead_core_svc', :'lead_core_password')) AS roles (role, password)
 \gexec
 
--- The test databases exist up front because no service role has CREATEDB.
+-- The test databases exist up front because no service role has CREATEDB. leads_db
+-- already exists (POSTGRES_DB); the CREATE below skips it and the ALTER fixes its owner.
 CREATE TEMP TABLE service_databases (name text, owner text);
 INSERT INTO service_databases VALUES
     ('notifications_db', 'notifications_svc'), ('notifications_test', 'notifications_svc'),
     ('identity_db', 'identity_svc'), ('identity_test', 'identity_svc'),
-    ('intake_db', 'intake_svc'), ('intake_test', 'intake_svc');
+    ('intake_db', 'intake_svc'), ('intake_test', 'intake_svc'),
+    ('leads_db', 'lead_core_svc'), ('leads_test', 'lead_core_svc');
 
 -- CREATE DATABASE cannot run in a transaction or a DO block; \gexec sends each statement on its own.
 SELECT format('CREATE DATABASE %I OWNER %I', name, owner)
@@ -41,9 +45,13 @@ SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', name) FROM service_da
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', name, owner) FROM service_databases
 \gexec
 
--- The monolith's databases too, so a service role reaches only its own. They
--- are created elsewhere (POSTGRES_DB, the test suite), hence only where they exist.
--- The backend connects as the postgres superuser, which this does not restrict.
-SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', datname)
-FROM pg_database WHERE datname IN ('leads_db', 'leads_test')
+-- leads_db is created by POSTGRES_DB as postgres; the backend ran as postgres, so its tables
+-- belong to postgres until handed over. Index and sequence ownership follow the table.
+\connect leads_db
+SELECT format('ALTER TABLE public.%I OWNER TO lead_core_svc', tablename)
+FROM pg_tables WHERE schemaname = 'public' AND tableowner <> 'lead_core_svc'
+\gexec
+\connect leads_test
+SELECT format('ALTER TABLE public.%I OWNER TO lead_core_svc', tablename)
+FROM pg_tables WHERE schemaname = 'public' AND tableowner <> 'lead_core_svc'
 \gexec

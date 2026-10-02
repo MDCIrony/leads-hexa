@@ -26,7 +26,7 @@ services:
     volumes:
       # A directory, not a file, for the same reason as the gateway config.
       - ./db:/bootstrap:ro
-    command: ["psql", "-h", "db", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "notifications_password=notificationspassword", "-v", "identity_password=identitypassword", "-v", "intake_password=intakepassword", "-f", "/bootstrap/bootstrap.sql"]
+    command: ["psql", "-h", "db", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "notifications_password=notificationspassword", "-v", "identity_password=identitypassword", "-v", "intake_password=intakepassword", "-v", "lead_core_password=leadcorepassword", "-f", "/bootstrap/bootstrap.sql"]
     depends_on:
       db:
         condition: service_healthy
@@ -56,7 +56,7 @@ services:
       - ./backend/migrations:/app/migrations:ro
       - ./libs/chassis/src:/libs/chassis/src:ro
     environment:
-      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
+      - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_db
       - JWKS_URL=http://identity:8000/internal/v1/jwks
       # Service credentials for identity's internal agent lookup (AdvisorDirectory).
       - IDENTITY_URL=http://identity:8000
@@ -67,6 +67,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # With --reset the role must exist before the first connection.
+      db-bootstrap:
+        condition: service_completed_successfully
       # No condition on kafka (ADR-0026): the API only records to the outbox and
       # backend-worker delivers, so it must come up and keep serving leads
       # whether or not the broker is reachable yet.
@@ -262,7 +265,7 @@ services:
       - ./backend/src:/app/src:ro
       - ./libs/chassis/src:/libs/chassis/src:ro
     environment:
-      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
+      - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_db
       - JWKS_URL=http://identity:8000/internal/v1/jwks
       - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
@@ -276,6 +279,8 @@ services:
       # and indexes they create (channel, correlation_id, key order).
       backend:
         condition: service_healthy
+      db-bootstrap:
+        condition: service_completed_successfully
       # No condition on kafka (ADR-0026): the worker retries its topics and
       # keeps relaying the rest while the broker is away.
     restart: on-failure
@@ -516,9 +521,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      db-bootstrap:
+        condition: service_completed_successfully
     environment:
-      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
-      - TEST_DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
+      - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_test
+      - TEST_DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_test
       # The mounts are read-only, so bytecode cannot be cached anyway; saying so
       # avoids a warning per module.
       - PYTHONDONTWRITEBYTECODE=1
@@ -595,6 +602,31 @@ services:
     environment:
       - DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_test
       - TEST_DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_test
+      - PYTHONDONTWRITEBYTECODE=1
+    command: ["pytest", "-q"]
+
+  lead-core-test:
+    # Pre-declared for F5: services/lead-core arrives with the move out of backend/.
+    profiles: ["test"]
+    build:
+      context: ./services/lead-core
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: test
+    volumes:
+      - ./services/lead-core/src:/srv/services/lead-core/src:ro
+      - ./services/lead-core/tests:/srv/services/lead-core/tests:ro
+      - ./services/lead-core/migrations:/srv/services/lead-core/migrations:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+      - ./contracts:/srv/contracts:ro
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    # The role has no CREATEDB: leads_test already exists, made by db-bootstrap.
+    environment:
+      - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_test
+      - TEST_DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_test
       - PYTHONDONTWRITEBYTECODE=1
     command: ["pytest", "-q"]
 
