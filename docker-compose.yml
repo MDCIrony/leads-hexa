@@ -57,20 +57,13 @@ services:
       - ./libs/chassis/src:/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
-      - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      # Development-only Ed25519 seed (kid=seed): never reuse outside this stack.
-      - SIGNING_KEYS=dev-1=_tS3Kljdu1EaOrOFVqdVQ2G1VaP7q5pWZKmqPb9W-mU
-      - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
-      - FRONTEND_ORIGIN=http://localhost
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:8001/api/v1/auth/oauth/google/callback}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
-      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI:-http://localhost:8001/api/v1/auth/oauth/github/callback}
+      - JWKS_URL=http://identity:8000/internal/v1/jwks
+      # Service credentials for identity's internal agent lookup (AdvisorDirectory).
+      - IDENTITY_URL=http://identity:8000
+      - SERVICE_CLIENT_ID=lead-core
+      - SERVICE_CLIENT_SECRET=lead-core-dev-secret-0c7f2a9e4b1d
       - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - KAFKA_EXTERNAL_BOOTSTRAP_SERVERS=localhost:9094
       - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
     depends_on:
       db:
@@ -225,8 +218,7 @@ services:
       - ./libs/chassis/src:/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
-      - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      - SIGNING_KEYS=dev-1=_tS3Kljdu1EaOrOFVqdVQ2G1VaP7q5pWZKmqPb9W-mU
+      - JWKS_URL=http://identity:8000/internal/v1/jwks
       - LOG_LEVEL=INFO
       - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
       # Needed even though this process never publishes: the container it
@@ -265,10 +257,7 @@ services:
       - ./libs/chassis/src:/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
-      # F3 debt: Settings still demands both, and Container builds the token
-      # signer and MFA crypto this process never uses.
-      - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      - SIGNING_KEYS=dev-1=_tS3Kljdu1EaOrOFVqdVQ2G1VaP7q5pWZKmqPb9W-mU
+      - JWKS_URL=http://identity:8000/internal/v1/jwks
       - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
@@ -284,6 +273,76 @@ services:
         condition: service_healthy
       # No condition on kafka (ADR-0026): the worker retries its topics and
       # keeps relaying the rest while the broker is away.
+    restart: on-failure
+
+  identity:
+    # Who you are and what you may do (ADR-0031, F3): sessions, MFA, OAuth,
+    # organizations, agents and the internal token. The only holder of the
+    # signing key and of the MFA and OAuth secrets. Not published: the gateway
+    # is the only way in.
+    build:
+      context: ./services/identity
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: dev
+    volumes:
+      - ./services/identity/src:/srv/services/identity/src:ro
+      - ./services/identity/migrations:/srv/services/identity/migrations:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+    environment:
+      - DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_db
+      - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      # Development-only Ed25519 seed: never reuse outside this stack.
+      - SIGNING_KEYS=dev-1=_tS3Kljdu1EaOrOFVqdVQ2G1VaP7q5pWZKmqPb9W-mU
+      # client:audience:sha256(secret). The secret itself lives only with its caller.
+      - SERVICE_CLIENTS=lead-core:identity:21c1a510ed8f851deccca537c6c7d35aed463034a5c938518a607bdfa9eaf93d
+      - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
+      - FRONTEND_ORIGIN=http://localhost
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-http://localhost:8001/api/v1/auth/oauth/google/callback}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI:-http://localhost:8001/api/v1/auth/oauth/github/callback}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_EXTERNAL_BOOTSTRAP_SERVERS=localhost:9094
+      - LOG_LEVEL=INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      db-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  identity-worker:
+    # Same image: relays identity's outbox to internal.identity.*, the only
+    # producer of those topics. Needs none of the API's secrets.
+    build:
+      context: ./services/identity
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: dev
+    working_dir: /srv/services/identity/src
+    volumes:
+      - ./services/identity/src:/srv/services/identity/src:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+    environment:
+      - DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_db
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOG_LEVEL=INFO
+    command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/identity/src", "/srv/libs/chassis/src"]
+    depends_on:
+      # The API applies the migrations at startup; the relay reads the outbox they create.
+      identity:
+        condition: service_healthy
+      # No condition on kafka (ADR-0026): the relay retries until the broker answers.
     restart: on-failure
 
   notifications:
@@ -302,7 +361,7 @@ services:
       - ./libs/chassis/src:/srv/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_db
-      - JWKS_URL=http://backend:8000/internal/v1/jwks
+      - JWKS_URL=http://identity:8000/internal/v1/jwks
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - LOG_LEVEL=INFO
     depends_on:
@@ -333,7 +392,7 @@ services:
       - ./libs/chassis/src:/srv/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_db
-      - JWKS_URL=http://backend:8000/internal/v1/jwks
+      - JWKS_URL=http://identity:8000/internal/v1/jwks
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - LOG_LEVEL=INFO
     command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/notifications/src", "/srv/libs/chassis/src"]
@@ -422,7 +481,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
       - TEST_DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
-      - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       # The mounts are read-only, so bytecode cannot be cached anyway; saying so
       # avoids a warning per module.
       - PYTHONDONTWRITEBYTECODE=1
