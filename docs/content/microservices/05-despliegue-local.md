@@ -82,21 +82,25 @@ en todas. Un servicio que intentara leer otra base fallaría al conectar, no al 
 
 **Las crea `db-bootstrap`**, un servicio de una sola ejecución con un script `psql` idempotente
 (`db/bootstrap.sql`), del que dependen los servicios con `condition: service_completed_successfully`.
-Hoy crea, para notifications, el rol `notifications_svc` (con la contraseña de desarrollo que le pasa
-Compose), las bases `notifications_db` y `notifications_test` con ese rol de propietario, y aplica
-`REVOKE CONNECT … FROM PUBLIC` y `GRANT CONNECT` sólo al rol. La base de pruebas la crea él porque el
-rol no tiene `CREATEDB`. También quita `CONNECT` a `PUBLIC` en `leads_db` y `leads_test`, si existen: el
-monolito entra con el superusuario `postgres`, que no lo necesita, y así `notifications_svc` no puede
-conectarse a ellas. Cada fase que extrae un servicio añade el suyo al script. No sirve
+Hoy crea, para notifications y para identity, los roles `notifications_svc` e `identity_svc` (con la
+contraseña de desarrollo que le pasa Compose, que vuelve a fijar en cada ejecución), las bases
+`notifications_db`, `notifications_test`, `identity_db` e `identity_test` con su rol de propietario, y
+aplica `REVOKE CONNECT … FROM PUBLIC` y `GRANT CONNECT` sólo al rol. Las bases de pruebas las crea él
+porque ningún rol de servicio tiene `CREATEDB`. También quita `CONNECT` a `PUBLIC` en `leads_db` y
+`leads_test`, si existen: el monolito entra con el superusuario `postgres`, que no lo necesita, y así
+ningún rol de servicio puede conectarse a ellas. Cada fase que extrae un servicio añade el suyo al
+script. No sirve
 `/docker-entrypoint-initdb.d`: sólo se ejecuta con el volumen vacío, y el volumen `pgdata` actual ya
 tiene datos. `CREATE DATABASE` no admite `IF NOT EXISTS`, así que el script usa el patrón:
 
 ```sql
-SELECT format('CREATE DATABASE %I OWNER notifications_svc', name)
-FROM (VALUES ('notifications_db'), ('notifications_test')) AS databases (name)
+SELECT format('CREATE DATABASE %I OWNER %I', name, owner)
+FROM service_databases
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = name)
 \gexec
 ```
+
+`service_databases` es una tabla temporal con cada base y su propietario.
 
 Las migraciones siguen siendo de cada servicio y se aplican al arrancar su proceso `api`, como hoy.
 
@@ -133,24 +137,36 @@ Igual que hoy: `src/` y `migrations/` del servicio, más `libs/chassis/src`, mon
 | `SIGNING_KEYS` (`kid=<semilla Ed25519 en base64url>[,kid=…]`; la primera firma, todas se publican) | ✓ | | | |
 | `SERVICE_CLIENTS` (hashes y audiencias) | ✓ | | | |
 | `MFA_ENCRYPTION_KEY`, `GOOGLE_*`, `GITHUB_*`, `FRONTEND_ORIGIN` | ✓ | | | |
-| `JWKS_URL` (`http://backend:8000/internal/v1/jwks` mientras identity no esté extraído) | | ✓ | ✓ | ✓ |
-| `SERVICE_CLIENT_ID`, `SERVICE_CLIENT_SECRET` | | ✓ | ✓ | |
-| `LEAD_CORE_URL` | | ✓ | | |
-| `IDENTITY_URL` | | | ✓ | |
+| `CORS_ORIGINS` (sólo para validar `FRONTEND_ORIGIN`) | ✓ | | | |
+| `JWKS_URL` (`http://identity:8000/internal/v1/jwks`) | | ✓ | ✓ | ✓ |
+| `SERVICE_CLIENT_ID`, `SERVICE_CLIENT_SECRET` | | F4 | ✓ | |
+| `LEAD_CORE_URL` | | F4 | | |
+| `IDENTITY_URL` (`http://identity:8000`) | | | ✓ | |
 | `KAFKA_BOOTSTRAP_SERVERS` | ✓ | ✓ | ✓ | ✓ |
 | `KAFKA_EXTERNAL_BOOTSTRAP_SERVERS` | ✓ | | | |
-| `RABBITMQ_URL` | | ✓ | | |
-| `LOG_LEVEL` (`INFO` por defecto) | | | | ✓ |
+| `RABBITMQ_URL` | | ✓ | ✓ | |
+| `LOG_LEVEL` (`INFO` por defecto) | ✓ | | | ✓ |
 
-Los valores de desarrollo viven en `docker-compose.yml`, como hoy viven `MFA_ENCRYPTION_KEY` y las
-contraseñas de los brokers. Los secretos de OAuth siguen leyéndose de `.env`.
+**Por proceso.** identity separa la configuración: `identity` exige `DATABASE_URL`, `SIGNING_KEYS`,
+`SERVICE_CLIENTS` y `MFA_ENCRYPTION_KEY`; `identity-worker` sólo `DATABASE_URL` y
+`KAFKA_BOOTSTRAP_SERVERS`. El backend tiene un único `Settings` hasta F5: `backend`, `backend-worker`
+e `intake-worker` exigen los tres `DATABASE_URL` y `JWKS_URL`, y sólo la API comprueba al arrancar
+`SERVICE_CLIENT_SECRET`. `IDENTITY_URL` y `SERVICE_CLIENT_ID` tienen valores por defecto
+(`http://identity:8000`, `lead-core`). La columna intake describe el servicio de F4; hoy es el
+`intake-worker` del backend, con las variables de lead-core.
+
+Los valores de desarrollo viven en `docker-compose.yml`, como `MFA_ENCRYPTION_KEY`, `SIGNING_KEYS`,
+`SERVICE_CLIENTS` y su secreto (`SERVICE_CLIENT_SECRET` de `backend`) y las contraseñas de los
+brokers. Los secretos de OAuth siguen leyéndose de `.env`, ahora sólo en `identity`.
 
 ## Arranque y dependencias
 
 | Servicio | Espera a | Por qué |
 |---|---|---|
-| servicios de aplicación | `db` sano y, para los extraídos, `db-bootstrap` completado | Sin su base no hay nada que hacer. Hoy sólo `notifications` y `notifications-test` dependen de `db-bootstrap`; cada servicio que se extraiga lo hará también |
+| servicios de aplicación | `db` sano y, para los extraídos, `db-bootstrap` completado | Sin su base no hay nada que hacer. Hoy dependen de `db-bootstrap` `identity`, `notifications`, `identity-test` y `notifications-test`; cada servicio que se extraiga lo hará también |
 | `intake-worker` | `rabbitmq` sano | Su razón de ser es la cola (igual que hoy) |
+| `backend-worker` | `backend` sano | La API aplica las migraciones al arrancar y el relay lee las columnas que crean |
+| `identity-worker` | `identity` sano | La API aplica las migraciones al arrancar y el relay lee su outbox |
 | `notifications-worker` | `notifications` sano | La API aplica las migraciones al arrancar y los consumidores escriben esas tablas |
 | `*-worker` y `api` | **no** esperan a Kafka | Los relays reintentan solos; la API sirve aunque el broker no esté (ADR-0026) |
 | `gateway` | nada | Re-resuelve sus `upstream` en ejecución (`resolve`); responde `/health` aunque el servicio aún no exista |
@@ -160,7 +176,7 @@ contraseñas de los brokers. Los secretos de OAuth siguen leyéndose de `.env`.
 
 | Comando | Qué demuestra |
 |---|---|
-| `docker compose --profile test run --rm <svc>-test` | La suite completa de un servicio, con su base `*_test` (hoy `notifications-test`; el backend usa `backend-test`) |
+| `docker compose --profile test run --rm <svc>-test` | La suite completa de un servicio, con su base `*_test` (hoy `identity-test` y `notifications-test`; el backend usa `backend-test`) |
 | `cd services/<svc> && uv run pytest -m unit -q` | El dominio aislado: **sin base y sin variables de entorno**, como hoy |
 | `./scripts/verify-e2e.sh` | El negocio de punta a punta sobre HTTP real, contra el gateway en `:8001` |
 
@@ -169,7 +185,12 @@ contraseñas de los brokers. Los secretos de OAuth siguen leyéndose de `.env`.
 `main`. `verify_ms_f0` va la última porque detiene y arranca el backend.
 
 Con `--reset` recrea el volumen y espera a que `/api/v1/auth/me` responda 401: el gateway contesta
-`/health` antes de que el backend haya migrado, así que `/health` no vale como señal de «listo».
+`/health` antes de que los servicios hayan migrado, así que `/health` no vale como señal de «listo».
+Desde F3 esa ruta la sirve identity; lead-core no tiene ninguna ruta anónima, así que el script
+espera además a que el *healthcheck* de `backend` diga `healthy`. Lo que depende de las proyecciones
+lo comprueba el propio `bootstrap`: tras crear cada organización, que tenga sus dos fuentes
+(`await_sources`), y tras crear cada agente, que esté en `GET /advisors` (`await_advisor`), con
+hasta 30 s cada una y un check que falla si no llegan.
 
 Cada servicio lleva sus cuatro tests de guardián, y el de lead-core sigue siendo el del backend
 actual.
@@ -184,6 +205,6 @@ sirviendo tráfico.
 | F0 | `gateway`, `backend` (monolito), `intake-worker` |
 | F1 | + `backend-worker` (relay y consumidores) |
 | F2 | + `notifications`, `notifications-worker`, `db-bootstrap`; `backend-worker` conserva los relays y deja de consumir |
-| F3 | + `identity`, `identity-worker` |
+| F3 | + `identity`, `identity-worker`; `backend-worker` vuelve a consumir (`lead-core.advisors`, `intake.tenants`) |
 | F4 | + `intake` (el `intake-worker` pasa a ser suyo) |
 | F5 | `backend` → `lead-core`, `backend-worker` → `lead-core-worker` |

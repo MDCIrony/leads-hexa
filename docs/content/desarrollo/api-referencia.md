@@ -7,6 +7,12 @@ salvo `GET /health`. En desarrollo local, con la plataforma levantada, la API re
 explican una sola vez, completos, en [API · Errores](api-errores.md); aquí sólo se nombra cuáles
 puede devolver cada endpoint.
 
+Detrás del gateway responden tres servicios: `identity` sirve `/auth`, `/tenants` y `/agents`
+(desde F3); `notifications`, `/notifications` (desde F2); el backend (lead-core), todo lo demás. El
+contrato hacia el cliente es uno solo, con el mismo sobre de error en todos. `/openapi.json` y
+`/docs` son los del backend; los de los servicios extraídos se publican en `/openapi/identity.json` y
+`/openapi/notifications.json`. Esta página es la referencia completa de los tres.
+
 ## Resumen de endpoints
 
 | Recurso | Método y ruta | Rol | Éxito |
@@ -30,6 +36,8 @@ puede devolver cada endpoint.
 | Grupos de ventas | `GET /api/v1/groups` | `MANAGER` | 200 |
 | Grupos de ventas | `PATCH /api/v1/groups/{group_id}` | `MANAGER` | 200 |
 | Grupos de ventas | `DELETE /api/v1/groups/{group_id}` | `MANAGER` | 204 |
+| Asesores | `GET /api/v1/advisors` | `MANAGER` | 200 |
+| Asesores | `PATCH /api/v1/advisors/{agent_id}` | `MANAGER` | 200 |
 | Orígenes de leads | `POST /api/v1/sources` | `MANAGER` | 201 |
 | Orígenes de leads | `GET /api/v1/sources` | `MANAGER` | 200 |
 | Orígenes de leads | `PATCH /api/v1/sources/{source_id}` | `MANAGER` | 200 |
@@ -84,9 +92,10 @@ clave inválida es `401`, con el mismo mensaje que cualquier otra credencial fal
 **Errores del gateway.** Algunas respuestas las genera el gateway sin llegar a la API: `401`
 (`UNAUTHORIZED`, siempre con el mensaje «Authentication required»), `403` por `Origin` no permitido en
 una escritura, `404` en rutas no publicadas, `413` por cuerpos de más de 10 MB, `429` en
-`/api/v1/auth/` y `503` si la API no responde. Llevan el mismo sobre JSON y se listan en
-[API · Errores](api-errores.md#errores-del-gateway). Toda respuesta, incluidas ésas, lleva
-`X-Request-Id`.
+`/api/v1/auth/` y `503` si la introspección o el servicio no responden. Llevan el mismo sobre JSON y
+se listan en [API · Errores](api-errores.md#errores-del-gateway). Toda respuesta, incluidas ésas, lleva
+`X-Request-Id`. Un servicio también puede responder `503 SERVICE_UNAVAILABLE` por su cuenta, cuando
+le falta algo de otro servicio ([API · Errores](api-errores.md#servicio-no-disponible)).
 
 **Paginación.** Todo endpoint de lista acepta `limit` (por defecto 100, rango `1`-`1000`) y `offset`
 (por defecto 0, mínimo `0`), y responde con la misma envoltura `{items, total, limit, offset,
@@ -199,13 +208,16 @@ del desafío y hay que iniciar sesión de nuevo. El enrolamiento usa `setup` con
 
 ## Organizaciones
 
-Plano de plataforma. Los tres endpoints exigen `ADMIN`; cualquier otro rol recibe `403 Forbidden`.
+Plano de plataforma, servido por `identity`. Los tres endpoints exigen `ADMIN`; cualquier otro rol
+recibe `403 Forbidden`.
 
 ### `POST /api/v1/tenants`
 
 Crea una organización junto con su primer gestor, en una sola transacción: si el correo del gestor
-ya está en uso, la organización tampoco se crea. La misma transacción crea además dos orígenes de
-leads (`MANUAL_FORM` y `FILE_UPLOAD`) para la organización nueva.
+ya está en uso, la organización tampoco se crea. Sus dos orígenes de leads (`MANUAL_FORM` y
+`FILE_UPLOAD`) **no** nacen en esa transacción: identity publica el estado de la organización y
+lead-core los crea al recibirlo, en pocos segundos. Una ingesta enviada antes puede recibir
+`SOURCE_NOT_FOUND` ([Servicios y datos](../microservices/02-servicios-y-datos.md#alta-de-una-organizacion)).
 
 ```json
 {
@@ -226,7 +238,6 @@ leads (`MANUAL_FORM` y `FILE_UPLOAD`) para la organización nueva.
     "id": "11111111-1111-1111-1111-111111111111",
     "name": "Ana Ruiz",
     "email": "ana@acme.test",
-    "group_id": null,
     "is_active": true,
     "role": "MANAGER",
     "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
@@ -247,18 +258,23 @@ organización más nueva sale primero, igual que `GET /leads` y `GET /notificati
 ### `PATCH /api/v1/tenants/{tenant_id}`
 
 Renombra y/o activa/desactiva una organización. `name` e `is_active` son opcionales.
-Desactivarla (`is_active: false`) desactiva en cascada a todos sus agentes: pierden acceso de
-inmediato, aunque su token siga sin caducar, porque el login vuelve a comprobar el estado en base
-de datos.
+Desactivarla (`is_active: false`) desactiva en cascada a todos sus agentes y les corta el acceso en
+su siguiente petición, porque cada una vuelve a introspeccionar la sesión. Mientras la organización
+siga suspendida, un agente suyo que se reactive tampoco entra: la introspección comprueba también el
+estado de la organización.
 
-Errores: `400 Bad Request` — no `404` — si la organización no existe (`TENANT_NOT_FOUND`; ver la
-nota en [API · Errores](api-errores.md)), o si el nuevo nombre no deja caracteres alfanuméricos
-(`INVALID_TENANT_NAME`).
+Errores: `404 Not Found` (`TENANT_NOT_FOUND`) si la organización no existe; `400 Bad Request`
+(`INVALID_TENANT_NAME`) si el nuevo nombre no deja caracteres alfanuméricos.
 
 ## Agentes
 
-`MANAGER` en los seis endpoints, siempre dentro de su propia organización. Un `ADMIN` o un
-`AGENT` reciben `403 Forbidden`.
+Servidos por `identity`. `MANAGER` en los seis endpoints, siempre dentro de su propia organización.
+Un `ADMIN` o un `AGENT` reciben `403 Forbidden`.
+
+Desde F3 un agente **no tiene grupo** en estas rutas: el grupo es un dato de enrutado y vive en
+lead-core, en [Asesores](#asesores) ([ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)).
+`POST` y `PATCH` rechazan cualquier campo que no declaran con `422 VALIDATION_ERROR`, `group_id`
+incluido, en vez de ignorarlo.
 
 ### `POST /api/v1/agents`
 
@@ -271,7 +287,6 @@ organización es siempre la suya (no hay `tenant_id` en el cuerpo) y no puede cr
 {
   "name": "Carlos Ruiz",
   "email": "cruiz@techcorp.com",
-  "group_id": "22222222-2222-2222-2222-222222222222",
   "password": "Secret123",
   "role": "AGENT"
 }
@@ -282,21 +297,25 @@ organización es siempre la suya (no hay `tenant_id` en el cuerpo) y no puede cr
   "id": "11111111-1111-1111-1111-111111111111",
   "name": "Carlos Ruiz",
   "email": "cruiz@techcorp.com",
-  "group_id": "22222222-2222-2222-2222-222222222222",
   "is_active": true,
   "role": "AGENT",
   "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
 }
 ```
 
-El gateway la trata con introspección opcional: sin credencial la deja pasar y la API decide (sólo el
-bootstrap sobre una base de agentes vacía es válido anónimo). Una credencial que llegue debe ser
+El gateway la trata con introspección opcional: sin credencial la deja pasar e identity decide (sólo
+el bootstrap sobre una base de agentes vacía es válido anónimo). Una credencial que llegue debe ser
 válida, y una de integración aquí es `401`.
 
 Errores: `401 Unauthorized` (fuera del bootstrap, sin sesión); `403 Forbidden` (no es `MANAGER`, o
 intenta crear un `ADMIN`); `400 Bad Request` (`EMAIL_ALREADY_EXISTS`) si el correo ya está en uso —
 la unicidad es de toda la plataforma, no sólo de la organización, porque el login resuelve la
-cuenta por correo sin filtrar por organización.
+cuenta por correo sin filtrar por organización; `422 Unprocessable Entity` (`VALIDATION_ERROR`) con
+un campo no declarado, como `group_id`.
+
+El agente nuevo llega a lead-core por evento, en segundos; asignarle grupo al instante funciona
+igualmente, porque lead-core lo pide a identity si todavía no lo tiene
+([`PATCH /advisors/{agent_id}`](#asesores)).
 
 ### `POST /api/v1/agents/integration-credential`
 
@@ -318,14 +337,15 @@ completo en [Autenticación de la mensajería](../eventos/autenticacion.md).
 
 `api_key` va en la cabecera `X-Api-Key` de `GET /api/v1/leads`, el único endpoint que la acepta.
 Revocar es `DELETE /api/v1/agents/{agent_id}` — el mismo endpoint de siempre, sin ruta especial.
-Errores: `403 Forbidden` (no es `MANAGER`); `503 Service Unavailable` (`MESSAGING_UNAVAILABLE`) si
-Kafka no admite la credencial en ese instante — la operación entera falla sin dejar un agente a
-medias.
+Errores: `403 Forbidden` (no es `MANAGER`); `404 Not Found` (`TENANT_NOT_FOUND`) si la organización
+del gestor no tiene fila; `503 Service Unavailable` (`MESSAGING_UNAVAILABLE`) si Kafka no admite la
+credencial en ese instante — la operación entera falla sin dejar un agente a medias.
 
 ### `GET /api/v1/agents`
 
-Lista paginada de la propia organización. Acepta `group_id` para filtrar, y `is_active` para elegir
-qué franja de activación se lista:
+Lista paginada de la propia organización. Acepta `is_active` para elegir qué franja de activación se
+lista; ya no filtra por grupo (un `group_id` en la query se ignora, como cualquier parámetro
+desconocido): eso es `GET /advisors?group_id=`.
 
 | Petición | Devuelve |
 |---|---|
@@ -339,18 +359,19 @@ Errores: `404 Not Found` (`AGENT_NOT_FOUND`, tanto si no existe como si es de ot
 
 ### `PATCH /api/v1/agents/{agent_id}`
 
-`name`, `group_id` y/o `is_active`, los tres opcionales. `is_active: true` **reactiva** a un asesor
+`name` y/o `is_active`, los dos opcionales. `is_active: true` **reactiva** a un asesor
 desactivado con `DELETE` — no hay un endpoint aparte para eso, activar y desactivar son el mismo
-atributo. Reactivar sólo cambia `is_active`: `group_id` y las asignaciones que ya tenía no se tocan,
-y el asesor recupera el acceso en el acto porque cada petición suya vuelve a resolver su identidad
-contra base de datos. Errores: `404 Not Found` (`AGENT_NOT_FOUND`; `GROUP_NOT_FOUND` si el grupo no
-existe o es de otra organización).
+atributo. Reactivar sólo cambia `is_active`: su grupo (en lead-core) y las asignaciones que ya tenía
+no se tocan, y el asesor recupera el acceso en el acto porque cada petición suya vuelve a resolver su
+identidad contra base de datos. Errores: `404 Not Found` (`AGENT_NOT_FOUND`); `422 Unprocessable
+Entity` (`VALIDATION_ERROR`) con `group_id` o cualquier otro campo no declarado.
 
 ### `DELETE /api/v1/agents/{agent_id}`
 
 **Desactiva**, no borra: los leads que ya tiene asignados siguen apuntando a su identificador.
 Responde `200 OK` con el agente y `is_active: false`, no `204` — no es un borrado real. Un asesor
-desactivado deja de recibir asignaciones automáticas pero su historial sigue legible, y deja de
+desactivado pierde el acceso en su siguiente petición y deja de recibir asignaciones automáticas en
+cuanto el cambio llega a lead-core (segundos), pero su historial sigue legible, y deja de
 aparecer en `GET /agents` sin parámetro (sigue visible con `?is_active=false`). La operación inversa
 es `PATCH /api/v1/agents/{agent_id}` con `{"is_active": true}`. Errores: `404 Not Found`
 (`AGENT_NOT_FOUND`).
@@ -376,7 +397,7 @@ Errores: `400 Bad Request` (`GROUP_ALREADY_EXISTS` si el nombre ya existe en la 
 
 ### `GET /api/v1/groups`
 
-Lista paginada; cada elemento trae `agent_count`.
+Lista paginada; cada elemento trae `agent_count`, contado sobre los asesores de lead-core.
 
 ### `PATCH /api/v1/groups/{group_id}`
 
@@ -390,15 +411,64 @@ se sobrescribe tal cual llega.
 
 ### `DELETE /api/v1/groups/{group_id}`
 
-Sus asesores no se borran: quedan sin grupo (`group_id: null`). Errores: `404 Not Found`
-(`GROUP_NOT_FOUND`).
+Sus asesores no se borran: quedan sin grupo (`group_id: null` en `GET /advisors`). Errores:
+`404 Not Found` (`GROUP_NOT_FOUND`).
+
+## Asesores
+
+La vista de lead-core sobre los agentes de su organización: lo que necesita para enrutar (nombre,
+estado, grupo) y la carga de cada uno. La cuenta es de identity y llega por evento; el grupo es de
+lead-core y sólo se escribe aquí. Excluye a `INTEGRATION` e incluye a `AGENT` y `MANAGER`. Los dos
+endpoints exigen `MANAGER`; un `AGENT` o un `ADMIN` reciben `403 Forbidden`. Nuevos en F3
+([ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)).
+
+### `GET /api/v1/advisors`
+
+| Parámetro | Tipo | Por defecto | |
+|---|---|---|---|
+| `group_id` | UUID | — | Sólo los asesores de ese grupo |
+| `is_active` | bool | — | Sin él devuelve **activos e inactivos**, a diferencia de `GET /agents` |
+| `limit`, `offset` | int | 100, 0 | Como en el resto de listados |
+
+```json
+{
+  "items": [
+    {"agent_id": "11111111-1111-1111-1111-111111111111", "name": "Carlos Ruiz",
+     "group_id": "22222222-2222-2222-2222-222222222222", "is_active": true, "active_load": 2}
+  ],
+  "total": 1, "limit": 100, "offset": 0, "has_more": false
+}
+```
+
+Orden: `name` y después `agent_id`. `active_load` cuenta los leads de la organización en `ASSIGNED`
+con ese asesor. Un agente recién creado aparece cuando su evento llega a lead-core, en segundos.
+
+### `PATCH /api/v1/advisors/{agent_id}`
+
+```json
+{"group_id": "22222222-2222-2222-2222-222222222222"}
+```
+
+`group_id` es **obligatorio** aunque admita `null` (que quita el grupo): un cuerpo vacío no puede
+leerse como «quitar el grupo». Cualquier otro campo es `422`. Responde `200 OK` con el asesor, en la
+misma forma que un elemento de `items`. Un asesor inactivo también admite grupo.
+
+Funciona aunque el agente se haya creado un instante antes: si lead-core todavía no lo tiene, se lo
+pide a identity con un token de servicio y lo guarda
+([La carrera de proyección](../microservices/02-servicios-y-datos.md#la-carrera-de-proyeccion)).
+
+Errores: `404 Not Found` (`AGENT_NOT_FOUND` si el agente no existe, es de otra organización o es
+`INTEGRATION`/`ADMIN`; `GROUP_NOT_FOUND` si el grupo no existe o es de otra organización);
+`422 Unprocessable Entity` (`VALIDATION_ERROR`); `503 Service Unavailable` (`SERVICE_UNAVAILABLE`)
+si el agente no estaba en lead-core e identity no responde.
 
 ## Orígenes de leads
 
 `LeadSource` responde «¿de dónde vienen mis leads?»: cada lead ingerido lleva el `source_id` de la
 fuente por la que entró. Al crear una organización nacen automáticamente dos, `MANUAL_FORM` y
-`FILE_UPLOAD` — las que usan la ingesta individual y la carga de ficheros. Los cuatro endpoints
-exigen `MANAGER`.
+`FILE_UPLOAD` — las que usan la ingesta individual y la carga de ficheros —, pocos segundos después
+de `POST /tenants`, cuando lead-core recibe el estado de la organización nueva. Se crean una sola
+vez: si el gestor borra una, no vuelve a aparecer. Los cuatro endpoints exigen `MANAGER`.
 
 ### `POST /api/v1/sources`
 
@@ -769,9 +839,11 @@ importar el estado de partida.
 ```
 
 Errores: `404 Not Found` (`LEAD_NOT_FOUND` o `AGENT_NOT_FOUND` — el asesor se resuelve acotado a la
-organización del gestor, así que uno ajeno se lee como inexistente, nunca como `403`);
-`400 Bad Request` (`INVALID_LEAD_TRANSITION` si el lead está en un estado no asignable, como
-`DISCARDED`).
+organización del gestor, así que uno ajeno se lee como inexistente, nunca como `403`; un destino
+`INTEGRATION` o `ADMIN` también es `AGENT_NOT_FOUND`. El asesor se resuelve antes que el lead: si
+fallan los dos, responde `AGENT_NOT_FOUND`); `400 Bad Request` (`INVALID_LEAD_TRANSITION` si el lead
+está en un estado no asignable, como `DISCARDED`); `503 Service Unavailable` (`SERVICE_UNAVAILABLE`)
+si el asesor no estaba en lead-core e identity no responde al pedírselo.
 
 ### `POST /api/v1/leads/{lead_id}/discard`
 

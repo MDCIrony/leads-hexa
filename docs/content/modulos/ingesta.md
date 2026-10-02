@@ -57,7 +57,9 @@ flowchart TD
 ### Las tres vías de entrada
 
 Cada organización recibe dos fuentes (`LeadSource`) al darse de alta: una `MANUAL_FORM` para el
-formulario individual y otra `FILE_UPLOAD` para la carga de fichero. `ReceiveIntakeUseCase`
+formulario individual y otra `FILE_UPLOAD` para la carga de fichero. Desde F3 llegan unos segundos
+después del alta, cuando el consumidor `intake.tenants` recibe el estado de la organización nueva
+que publica identity ([Organizaciones](organizaciones.md#el-alta-una-transaccion-y-un-evento)). `ReceiveIntakeUseCase`
 resuelve la fuente activa según el tipo de trabajo, así que ninguna de las dos exige configuración
 previa. Una tercera vía, `WEBHOOK`, está declarada en `LeadSourceKind` pero todavía no tiene un
 endpoint que la sirva.

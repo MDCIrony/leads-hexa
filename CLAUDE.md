@@ -47,15 +47,19 @@ Cada uno demuestra algo que los otros no:
   producto roto; esto no.
 - **`verify-structure.sh`** aplica la regla de estructura (ADR-0037) a todas las raíces Python del
   repositorio, sin Docker: `backend/src`, `backend/tests`, `libs/chassis/src`, `libs/chassis/tests`,
-  `services/notifications/src`, `services/notifications/tests`, `test-consumer/`, `demo/` y
+  `services/notifications/src`, `services/notifications/tests`, `services/identity/src`,
+  `services/identity/tests`, `test-consumer/`, `demo/` y
   `tools/`. Una raíz Python nueva se declara ahí.
 - **`bru run flows`** recorre los seis flujos de `bruno/` contra el gateway, con una sesión por cookie
   por rol: demuestra que el contrato documentado en `api-referencia.md` es el que ve un cliente. Las
   carpetas de referencia no entran; dependen de variables que siembran los flujos.
 
-Cada servicio extraído (hoy `services/notifications`) tiene la suya, con las mismas dos formas:
-`docker compose --profile test run --rm notifications-test` y
-`cd services/notifications && uv run pytest -m unit -q` (sin base ni variables de entorno).
+Cada servicio extraído (hoy `services/notifications` y `services/identity`) tiene la suya, con las
+mismas dos formas: `docker compose --profile test run --rm notifications-test` y
+`cd services/notifications && uv run pytest -m unit -q`; `docker compose --profile test run --rm
+identity-test` y `cd services/identity && uv run pytest -m unit -q` (sin base ni variables de
+entorno). Desde F3 `/auth`, `/tenants` y `/agents` son de identity, no del backend: un cambio de
+autenticación, MFA, OAuth, organizaciones o agentes se prueba en su suite.
 
 Dentro de la suite de cada servicio viajan cuatro tests que analizan el AST y fallan si el dominio
 importa algo de fuera o la aplicación importa infraestructura. **Deben estar siempre 4/4.**

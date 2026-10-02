@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — primer servicio extraído: `notifications` (F2). El resto, en F3–F5 del [plan de desacople](../microservices/06-plan-de-desacople.md) |
+| **Estado** | Aceptada — servicios extraídos: `notifications` (F2) e `identity` (F3). El resto, en F4–F5 del [plan de desacople](../microservices/06-plan-de-desacople.md) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Arquitectura · Backend · Infraestructura |
 

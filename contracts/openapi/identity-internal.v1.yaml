@@ -48,7 +48,12 @@ paths:
         "401":
           description: >
             Sin credencial (y sin `optional=true`), sesión caducada o revocada, agente
-            inactivo o clave inválida. Cuerpo vacío: el sobre lo compone el gateway.
+            inactivo, organización suspendida o clave inválida. `error_code`: `UNAUTHORIZED`.
+            El gateway no reenvía este cuerpo: `auth_request` sólo mira el código de estado
+            y el cliente recibe el sobre que compone nginx.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
   /internal/v1/jwks:
     get:
       operationId: jwks

@@ -138,8 +138,8 @@ primero no debe exponer datos internos a la organización.
 |---|---|---|---|
 | `internal.lead-core.events` | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned` | 3 particiones, `delete`, 7 días | Grupo `notifications.lead-events` |
 | `internal.intake.events` | `IntakeRejected` | 3 particiones, `delete`, 7 días | Grupo `notifications.intake-events` |
-| `internal.identity.agents` | `AgentState`: el estado completo de cada agente | 3 particiones, **`compact`** | Grupo `notifications.members` (la proyección `members`) |
-| `internal.identity.tenants` | `TenantState`: el estado completo de cada organización | 3 particiones, **`compact`** | Nadie todavía |
+| `internal.identity.agents` | `AgentState`: el estado completo de cada agente | 3 particiones, **`compact`** | Grupos `notifications.members` (la proyección `members`) y `lead-core.advisors` (la proyección `advisors`) |
+| `internal.identity.tenants` | `TenantState`: el estado completo de cada organización | 3 particiones, **`compact`** | Grupo `intake.tenants` (las fuentes por defecto) |
 | `internal.dlq.<grupo>` | Lo que un grupo no pudo procesar | 1 partición, `delete`, 7 días | Un humano |
 
 Los hechos se retienen siete días; el estado se **compacta**: de cada clave sólo importa el último
@@ -147,10 +147,12 @@ mensaje, y una copia derivada se reconstruye leyendo el topic desde el principio
 estado lleva la `version` de su fila (la sube la base en cada escritura), para que quien lo
 proyecte descarte lo que ya tiene.
 
-**Los `internal.*` de hechos y de estado se crean al arrancar `backend-worker`**, su productor, con
-`ensure_topics`, idempotente y con reintentos mientras Kafka no responda. **Las `internal.dlq.<grupo>`
-las crea el servicio dueño del grupo**: `notifications-worker` declara las de sus tres grupos al
-arrancar, con `ensure_topics_until_ready`. Si un topic existente difiere de lo declarado (particiones
+**Los `internal.*` de hechos y de estado los crea al arrancar su productor**, con `ensure_topics`,
+idempotente y con reintentos mientras Kafka no responda: `backend-worker` crea
+`internal.lead-core.events` e `internal.intake.events`; `identity-worker`, desde F3,
+`internal.identity.agents` e `internal.identity.tenants`. **Las `internal.dlq.<grupo>` las crea el
+servicio dueño del grupo**, al arrancar y con `ensure_topics_until_ready`: `notifications-worker` las
+de sus tres grupos y `backend-worker` las de `lead-core.advisors` e `intake.tenants`. Si un topic existente difiere de lo declarado (particiones
 o configuración), `ensure_topics` no lo toca y registra un `WARNING`. El productor interno lleva `allow.auto.create.topics=false`: un topic que se
 perdiera después debe fallar a la vista, no reaparecer sin compactación por la creación automática del
 bróker. Mientras los topics no existen, el canal `internal` no entrega y sus filas esperan en el
@@ -181,11 +183,14 @@ contrato con terceros.
 
 El `payload` depende del evento: `LeadAssigned`, `LeadReassigned` y `LeadLeftUnassigned` llevan
 `lead_id` (y `agent_id` los dos primeros, más `previous_agent_id` el segundo); `IntakeRejected`
-lleva `intake_record_id` y `reason`, y su `aggregate_id` es el `intake_record_id`.
+lleva `intake_record_id` y `reason`, y su `aggregate_id` es el `intake_record_id`. `AgentState` y
+`TenantState` llevan el estado completo de su fila con su `version`. El esquema de cada uno, y un
+sobre válido de ejemplo, están en `contracts/events/` y `contracts/fixtures/events/`.
 
 La clave del mensaje es el `aggregate_id` (el lead, el registro de ingesta, el agente o la organización), y `event_type` y
-`correlation_id` viajan también como cabeceras. `producer` es `lead-core` en todos los eventos:
-mientras sólo el monolito escribe, publica en nombre de todos los contextos.
+`correlation_id` viajan también como cabeceras. `producer` dice qué servicio publicó: `lead-core`
+en los de hechos, que el monolito publica también en nombre de la ingesta hasta F4, e `identity` en
+`AgentState` y `TenantState` desde F3. Ningún consumidor filtra por él.
 
 ### El consumidor de notificaciones
 
@@ -217,6 +222,19 @@ sobre `chassis.consumer`; el backend ya no consume ningún topic. Los grupos son
 - Al perder o ceder particiones en un *rebalance*, el bucle libera las que tenía bloqueadas; al parar,
   cierra el consumidor y vacía el productor de la DLQ.
 - `MemberConsumer` no usa `processed_events`: su *upsert* se condiciona por `version` en SQL.
+
+### Los consumidores de lead-core
+
+Desde F3 `backend-worker` vuelve a consumir, con el mismo `chassis.consumer` y un carril por grupo:
+
+| Grupo | Topic | Efecto |
+|---|---|---|
+| `lead-core.advisors` | `internal.identity.agents` | `AdvisorConsumer` mantiene la proyección `advisors`: el mismo *upsert* condicionado por `version` que `members`, sin `processed_events`. Nunca toca `group_id`, que es de lead-core |
+| `intake.tenants` | `internal.identity.tenants` | `TenantConsumer` crea las dos fuentes por defecto del primer `TenantState` de cada organización. Crear fuentes no es idempotente, así que escribe `processed_events` y la marca de `provisioned_tenants` en la misma transacción que las fuentes. Es código de ingesta que vive en el monolito hasta F4 |
+
+Los dos esperan a la base cuando no responde (`psycopg.OperationalError` es `retryable`): aparcar un
+estado dejaría `advisors` divergida, o una organización sin fuentes, para siempre. Un `TenantState`
+sin un `tenant_id` válido sí se aparca, al tercer intento, en `internal.dlq.intake.tenants`.
 
 ## Límites de hoy
 

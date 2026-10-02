@@ -246,39 +246,108 @@ después del corte. `backend` no contiene ningún módulo de notificaciones. La 
 
 ## F3 · Identity
 
+**Estado: implantada** (`61f697e..cf84fc9`, más el commit que registra este rango). Lo construido
+sigue el plan salvo las desviaciones de abajo. El corte copió 95 tenants, 197 agentes, 262 sesiones
+(236 activas), 10 desafíos, 2 MFA, 16 códigos de recuperación y 4 identidades sociales, con recuentos
+y `md5` idénticos en origen y destino; `advisors` quedó con 196 filas (todos menos el `ADMIN`) y
+`provisioned_tenants` con 95. Tras el corte: `backend-test` 618, `pytest -m unit` del backend 370,
+`identity-test` 417 y su `pytest -m unit` 263, `notifications-test` 93, `libs/chassis` 217,
+`verify-structure.sh` en verde y `verify-e2e.sh` con 314 checks en verde; los commits del rango
+posteriores al corte le añaden comprobaciones.
+
 **Objetivo.** Autenticación, organizaciones y agentes viven en su servicio; nadie más lee sus tablas.
 
 **Cambios**
 
 - `services/identity/`: casos de uso de auth, MFA, OAuth, tenants y agentes; repositorios de `tenants`,
   `agents`, `auth_*`, `agent_mfa`, `mfa_recovery_codes`, `social_identities`;
-  `KafkaCredentialProvisioner` y el principal `INTEGRATION`; CLI `sync_tenants`; rutas internas
-  `introspect`, `jwks`, `service-tokens`, `agents/{id}`; outbox con `AgentState` y `TenantState`.
-- `identity_db`. `scripts/migrate/f3_identity.sh` copia las tablas de identidad, **incluidas las
-  sesiones activas**: nadie tiene que volver a iniciar sesión. `agents` se copia sin `group_id`.
+  `KafkaCredentialProvisioner` y el principal `INTEGRATION`; CLI `sync_tenants` y
+  `publish_identity_snapshot`; rutas internas `introspect`, `jwks`, `service-tokens`,
+  `agents/{agent_id}`; outbox con `AgentState` y `TenantState`. `identity-worker` releva el canal
+  `internal` con `producer="identity"` y declara `internal.identity.agents` e
+  `internal.identity.tenants` (compactados).
+- `identity_db` (rol `identity_svc`, base de pruebas `identity_test`, las dos de `db/bootstrap.sql`).
+  `scripts/migrate/f3_identity.sh` copia las tablas de identidad, **incluidas las sesiones activas**:
+  nadie tiene que volver a iniciar sesión. `agents` se copia sin `group_id`. Verifica recuentos y
+  `md5`, y se niega a ejecutarse con el stack vivo, con eventos `internal` sin publicar en
+  `leads_db` o con filas en el outbox de `identity_db` (el corte ya se hizo y truncar borraría lo que
+  identity escribió).
+- `libs/chassis` v1: `chassis.auth` gana `ServiceTokenVerifier`, `ServiceTokenClient`,
+  `ServiceTokenUnavailable` y `SERVICE_PTYPE`; `chassis.testing.contracts` (`load_fixture`,
+  `assert_conforms`, `contracts_root`). `contracts/` v1 con el alcance de
+  [Condiciones para abrirla](#condiciones-para-abrirla).
 - En `backend`, **antes del corte**:
-    - Tabla `advisors`, sembrada desde `agents` (con `group_id`), y consumidor `lead-core.advisors`.
-    - `AdvisorDirectory` con hidratación desde identity; cliente de tokens de servicio.
+    - Tabla `advisors` (migración 017), sembrada desde `agents` (con `group_id`), y consumidor
+      `lead-core.advisors`.
+    - `AdvisorDirectory` con hidratación desde identity; cliente de tokens de servicio
+      (`IDENTITY_URL`, `SERVICE_CLIENT_ID`, `SERVICE_CLIENT_SECRET`).
     - `GET /advisors` y `PATCH /advisors/{agent_id}`; los grupos operan sobre `advisors.group_id`.
     - `RawSqlLeadRepository` pasa a `JOIN advisors`; `AssignLeadUseCase` usa `AdvisorDirectory`.
     - Consumidor `intake.tenants` que crea las fuentes por defecto, con `provisioned_tenants` sembrada
       con los tenants existentes. Es código de intake que vive en el monolito hasta F4.
-- Gateway: `/auth`, `/tenants`, `/agents` e `introspect` → `identity`.
-- `backend`: se eliminan los módulos de identidad, `MFA_ENCRYPTION_KEY`, OAuth y el provisionador de
-  Kafka.
-- Frontend: cambio de contrato 1 ([ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)).
-  `AgentCreate` y `AgentUpdate` declaran `extra="forbid"`: hoy Pydantic ignora un campo sobrante, y un
+- Gateway: `upstream identity`; `/_introspect*`, `/api/v1/auth/`, `/api/v1/agents` (exacta, con
+  introspección opcional) y `/api/v1/agents/`, `/api/v1/tenants` y `/api/v1/tenants/` → `identity`.
+  `/openapi.json` y `/docs` siguen siendo los de lead-core; cada servicio extraído publica el suyo en
+  `/openapi/identity.json` y `/openapi/notifications.json`.
+- `backend`: se eliminan los módulos de identidad, `MFA_ENCRYPTION_KEY`, `SIGNING_KEYS`, OAuth, el
+  provisionador de Kafka y sus dependencias. Verifica los tokens contra
+  `JWKS_URL=http://identity:8000/internal/v1/jwks`.
+- Cambio de contrato 1 ([ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)).
+  `AgentCreate` y `AgentUpdate` declaran `extra="forbid"`: Pydantic ignoraba un campo sobrante, y un
   cliente que siguiera enviando `group_id` creería haber asignado un grupo que nadie guardó.
+
+**Desviaciones respecto a lo anterior**
+
+- **Las FK `*.tenant_id → tenants` de `leads_db` se quitan en F3, no en F5.** Tras el corte los
+  tenants nuevos nacen en `identity_db`, y una fuente o un grupo suyo violaría la FK hacia la tabla
+  congelada. La migración 017 las busca por tabla de destino en `pg_constraint` (varias se
+  declararon en línea, con nombre automático) y las borra. Las FK de tablas que se congelan
+  (`agents.group_id`, `notifications.recipient_id`, `auth_*`) no estorban y esperan a F5.
+- **Las proyecciones `advisors` y `members` no usan `processed_events`.** El *upsert* condicionado
+  por `version` las hace idempotentes por construcción. `intake.tenants` sí la usa, junto con
+  `provisioned_tenants`, porque crear fuentes no es un *upsert*. Un `TenantState` sin un id de
+  organización válido falla y, al tercer intento, acaba en `internal.dlq.intake.tenants`.
+- **La introspección rechaza a los agentes de un tenant suspendido (401)**, también en `/auth/me` y
+  en el segundo factor. El monolito no lo comprobaba: sólo desactivaba a los agentes al suspender, y
+  uno reactivado después volvía a entrar. Un `tenant_id` sin fila en `tenants` se sigue aceptando,
+  como antes: repararlo es trabajo de `sync_tenants`.
+- **Configuración por proceso en identity:** `ApiSettings` y `WorkerSettings`, de modo que el worker
+  no recibe la clave de firma y la API no exige un broker. El backend conserva un único `Settings`
+  hasta F5, y por eso `backend-worker` e `intake-worker` también necesitan `JWKS_URL`.
+- **`SERVICE_CLIENTS`** = `client_id:audience[|audience]:sha256hex[,…]`. Sólo se configura el
+  SHA-256 del secreto: es un secreto generado de alta entropía, no una contraseña humana.
+- **Hidratación.** `AdvisorDirectory` busca primero la fila sin filtrar por organización: un agente
+  ajeno ya proyectado responde 404 en local, sin llamar a identity. Sólo una fila ausente pregunta a
+  identity, y si identity no responde la petición es `503 SERVICE_UNAVAILABLE`. En
+  `POST /leads/{id}/assign` el agente se resuelve antes que el lead: si fallan los dos, responde
+  `AGENT_NOT_FOUND`. Un destino `INTEGRATION` o `ADMIN` es `AGENT_NOT_FOUND`.
+- **`GET /advisors` lleva `has_more`**, como todos los listados, y sin `is_active` devuelve activos e
+  inactivos.
+- **Frontend.** El MVP nunca tuvo interfaz de grupo (fila «Asesores» de
+  [Frontend](../roadmap/frontend.md)): la pista D sólo quitó `group_id` del contrato de `/agents`, y
+  el frontend no llama a `/advisors`. Sus tipos se generan del OpenAPI de cada servicio
+  (`schema.d.ts`, `identity-schema.d.ts`, `notifications-schema.d.ts`).
+- **`bcrypt` directo** en identity en vez de `passlib`: verifica los mismos hashes `$2b$` con una
+  dependencia menos.
 
 **`verify_ms_f3`**
 
-- Los checks existentes de login, MFA, OAuth, `/auth/me` y credencial de integración pasan sin
-  modificarse.
-- Crear un agente y asignarle grupo de inmediato → 200 (hidratación).
-- Desactivar un agente → su siguiente petición es 401 y deja de recibir leads.
-- Suspender un tenant → sus agentes reciben 401.
-- `PATCH /agents/{id}` con `group_id` → 422.
+- `GET /auth/me` por el gateway llega a identity (`upstream=` del *access log*) con su
+  `X-Request-Id`; el backend ya no sirve `/api/v1/auth/me` (404).
+- El backend no tiene clave de firma, MFA ni OAuth; `identity_svc` no puede conectarse a `leads_db`.
+- Crear un agente en identity: la respuesta no lleva `group_id`; asignarle grupo al instante → 200
+  (hidratación) y `GET /advisors?group_id=` lo devuelve.
+- `PATCH /agents/{id}` con `group_id` → 422; el asesor de otra organización → 404.
+- La cadena de hidratación en sí: con las credenciales de servicio de `backend`, un token de
+  `POST /internal/v1/service-tokens` lee el agente en `GET /internal/v1/agents/{agent_id}` (200).
+- Desactivar un agente → su siguiente petición es 401 y queda inactivo en `advisors`.
 - Crear un tenant → en pocos segundos tiene sus dos fuentes y acepta una ingesta.
+- Suspender un tenant → su gestor recibe 401, en identity y en lead-core.
+- `lead-core.advisors`, `intake.tenants` y `notifications.members` sin *lag* y con su DLQ vacía; el
+  gestor del tenant nuevo llega a `members`.
+- Además, el `bootstrap` del script comprueba que cada organización recibe sus fuentes y cada asesor
+  llega a `advisors` (hasta 30 s), y `verify_ms_f0` para identity y lead-core por separado: cada
+  caída es un `503 SERVICE_UNAVAILABLE` y el servicio vuelve al arrancarlo.
 
 **Criterio de salida.** Ningún servicio salvo identity tiene credenciales sobre `identity_db` ni
 variables de MFA u OAuth.
@@ -327,7 +396,8 @@ prueba; ningún servicio salvo intake tiene credenciales sobre `intake_db`.
 **Cambios**
 
 - Migración en `leads_db` que borra las tablas copiadas en F2–F4 (`DROP TABLE IF EXISTS`, idempotente)
-  y las FK que apuntaban a ellas.
+  y las FK que todavía apunten a ellas. Las `*.tenant_id → tenants` no llegan hasta aquí: se quitaron
+  en F3 (migración 017).
 - `PostgresUnitOfWork` sólo con los repositorios de lead-core; `Settings` sin variables ajenas;
   `dependencies.py` sin cableado ajeno.
 - `git mv backend services/lead-core`; servicios de Compose `lead-core` y `lead-core-worker`;
@@ -389,16 +459,19 @@ flowchart TB
 
 La pista C es la única que toca `backend/` y va en serie dentro de su carril (primero `advisors`,
 después `admissions`). La pista D arranca en cuanto C publica los endpoints nuevos, que conviven con
-los viejos.
+los viejos. En F3 la pista D se quedó en quitar `group_id` del contrato de `/agents`: el frontend
+nunca tuvo interfaz de grupo.
 
 ### Condiciones para abrirla
 
 1. F0, F1 y F2 integradas en `main`, con `verify-e2e.sh` en verde.
 2. **`libs/chassis` v1 congelado.** Durante la ola sólo lo cambia quien orquesta. Una pista que lo
    necesite se detiene y lo reporta como hallazgo.
-3. **`contracts/` v1 congelado y versionado:** OpenAPI de las rutas internas (`introspect`, `jwks`,
-   `service-tokens`, `agents/{id}`, `admissions`), JSON Schema de cada evento interno y del mensaje de
-   `intake.jobs`, y un fixture por contrato que usan los tests de los dos lados.
+3. **`contracts/` v1 congelado y versionado:** OpenAPI de las rutas internas de identity
+   (`introspect`, `jwks`, `service-tokens`, `agents/{agent_id}`), JSON Schema del sobre y de cada
+   evento interno, y un fixture por contrato que usan los tests de los dos lados. Así se construyó en
+   F3. `admissions` y el mensaje de `intake.jobs` entran al abrir F4, como ficheros v1 nuevos: nadie
+   los consume antes.
 4. Notifications cortado: su árbol es el patrón de sólo lectura de las pistas A y B.
 5. Asignados de antemano: nombres de Compose, variables, bases y roles ([05](05-despliegue-local.md)),
    y un rango de numeración de migraciones por pista para lo que todavía cae en `leads_db`.

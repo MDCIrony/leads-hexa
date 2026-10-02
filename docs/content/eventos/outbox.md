@@ -91,8 +91,12 @@ los consumidores lo ponen en sus propias líneas de log: la misma petición se s
 | `channel` | Qué lleva | Destino | Despachadores |
 |---|---|---|---|
 | `product` | `LeadProcessedEvent`, `LeadDisqualified` | `leads.{tenant_id}` y los webhooks de la organización | `KafkaOutboundDispatcher`, `WebhookOutboundDispatcher` |
-| `internal` | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned`, `IntakeRejected`, `AgentState`, `TenantState` | Topics `internal.*` | `KafkaEventDispatcher` |
+| `internal` | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned`, `IntakeRejected` | Topics `internal.*` | `KafkaEventDispatcher` |
 | `job` | `IntakeJobRequested` | Cola `intake.jobs` | `RabbitJobDispatcher` |
+
+Desde F3 `AgentState` y `TenantState` ya no pasan por este outbox: los registra identity en el suyo
+(`identity_db`, sólo canal `internal`) y los entrega `identity-worker`, con el mismo
+`chassis.outbox` y `producer="identity"`.
 
 Un relay por canal, **cada uno en su hilo** dentro de `backend-worker`. La entrega es secuencial
 dentro de un relay, así que uno compartido dejaría a un Kafka interno inalcanzable reteniendo los
@@ -159,7 +163,7 @@ segundo camino en memoria.
 |---|---|---|
 | `IngestLeadUseCase` | `LeadProcessedEvent` o `LeadDisqualified`; `LeadAssigned`, `LeadLeftUnassigned` o `IntakeRejected` | `product` / `internal` |
 | `AssignLeadUseCase` | `LeadProcessedEvent`; `LeadAssigned` o `LeadReassigned` | `product` / `internal` |
-| Escrituras de agentes y organizaciones, incluida la desactivación en bloque al suspender una organización | `AgentState`, `TenantState` (con la `version` que sube la base) | `internal` |
+| Escrituras de agentes y organizaciones en identity, incluida la desactivación en bloque al suspender una organización | `AgentState`, `TenantState` (con la `version` que sube la base), en el outbox de `identity_db` | `internal` |
 | Recepción, `batch-upload` y reproceso de un trabajo | `IntakeJobRequested` | `job` |
 
 Los dos catálogos del canal `product` siguen siendo los de [ADR-0023](../decisiones/0023-eventos-del-canal-de-salida.md)
@@ -177,4 +181,5 @@ cliente y lo que se queda dentro son criterios distintos, y por eso son canales 
 | El almacén que lee el relay | `infrastructure/adapters/output/persistence/outbox_store.py` |
 | Los despachadores del producto | `infrastructure/adapters/output/events/*_outbound_dispatcher.py` |
 | Qué topic recibe cada evento interno | `infrastructure/adapters/output/events/internal_topics.py` |
-| El proceso que lo ejecuta | `infrastructure/worker/`, servicio `backend-worker`: sólo los relays; desde F2 ya no consume |
+| El proceso que lo ejecuta | `infrastructure/worker/`, servicio `backend-worker`: los relays y, desde F3, los consumidores `lead-core.advisors` e `intake.tenants` |
+| El outbox de identity | `services/identity/migrations/005_outbox.sql`, `services/identity/src/infrastructure/worker/` (`identity-worker`) |

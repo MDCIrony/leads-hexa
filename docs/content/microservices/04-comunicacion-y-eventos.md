@@ -5,11 +5,15 @@ Decisiones registradas en [ADR-0033](../decisiones/0033-eventos-internos-en-kafk
 [ADR-0034](../decisiones/0034-encolado-por-outbox-y-fichero-durable.md) y
 [ADR-0035](../decisiones/0035-admision-sincrona-idempotente.md).
 
-!!! note "Estado de F1"
+!!! note "Estado de F1 y F3"
     Lo que esta página describe de outbox, eventos internos, RabbitMQ y fichero durable está
     implantado desde F1. Los «hoy» de las secciones de outbox y RabbitMQ se refieren al sistema
     anterior a F1. Lo que se construyó difiere en lo que lista la
     [fase F1 del plan](06-plan-de-desacople.md#f1-durabilidad-en-el-monolito).
+
+    Desde F3, `internal.identity.*` lo produce identity (`identity-worker`, `producer="identity"`), y
+    los grupos `lead-core.advisors` e `intake.tenants` consumen en `backend-worker`. La admisión y lo
+    que la rodea son de F4.
 
 ## Regla de canal
 
@@ -32,8 +36,8 @@ outbox del servicio y el relay lo entrega después.
 | intake → RabbitMQ → intake-worker | Outbox + RabbitMQ | `ProcessIntakeJob` | No |
 | intake-worker → lead-core | HTTP | `POST /internal/v1/admissions` | No |
 | intake (promoción manual) → lead-core | HTTP | `POST /internal/v1/admissions` | Sí |
-| lead-core → identity | HTTP | `GET /internal/v1/agents/{id}` (sólo si falta la proyección) | A veces |
-| servicio → identity | HTTP | `POST /internal/v1/service-tokens` (caché 5 min) | No |
+| lead-core → identity | HTTP | `GET /internal/v1/agents/{agent_id}` (sólo si falta la proyección) | A veces |
+| servicio → identity | HTTP | `POST /internal/v1/service-tokens` (caché hasta 30 s antes de caducar) | No |
 | lead-core → clientes | Outbox + Kafka/webhook | `leads.{tenant_id}` | No |
 | identity → lead-core, notifications, intake | Outbox + Kafka | `internal.identity.*` | No |
 | lead-core → notifications | Outbox + Kafka | `internal.lead-core.events` | No |
@@ -52,8 +56,8 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
 | `leads.{tenant_id}` | lead-core | `lead_id` | `LeadProcessedEvent`, `LeadDisqualified`. **Contrato externo sin cambios** | Como hoy | Sistemas de cada tenant |
 | `internal.lead-core.events` | lead-core | `lead_id` | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned` | `delete`, 7 días | `notifications.lead-events` |
 | `internal.intake.events` | intake | `intake_record_id` | `IntakeRejected` | `delete`, 7 días | `notifications.intake-events` |
-| `internal.identity.agents` | identity | `agent_id` | `AgentState` completo + `version` | **`compact`** | `lead-core.advisors`, `notifications.members` |
-| `internal.identity.tenants` | identity | `tenant_id` | `TenantState` completo + `version` | **`compact`** | `intake.tenants` |
+| `internal.identity.agents` | identity (desde F3; antes, el monolito) | `agent_id` | `AgentState` completo + `version` | **`compact`** | `lead-core.advisors`, `notifications.members` |
+| `internal.identity.tenants` | identity (desde F3; antes, el monolito) | `tenant_id` | `TenantState` completo + `version` | **`compact`** | `intake.tenants` |
 
 - **Hechos frente a estado.** Los topics `*.events` llevan cosas que ocurrieron. Los topics
   `identity.*` llevan el **estado completo** de una entidad cada vez que cambia (*event-carried state
@@ -70,7 +74,9 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
 - **Las DLQ las declara el consumidor.** `internal.dlq.<grupo>` (1 partición, `cleanup.policy=delete`,
   7 días) la crea el servicio dueño del grupo, con `ensure_topics_until_ready()`, que reintenta con
   *backoff* hasta que el broker responde y sólo entonces deja arrancar los carriles. Desde F2 las de
-  los tres grupos de notifications son suyas; el backend ya no declara ninguna.
+  los tres grupos de notifications son suyas; desde F3 `backend-worker` declara las de sus dos grupos,
+  `internal.dlq.lead-core.advisors` e `internal.dlq.intake.tenants`, y ya no declara
+  `internal.identity.*`, que son de `identity-worker`.
 - **Cliente.** `chassis.kafka_config` fija los ajustes de productor y consumidor de todos los
   servicios; entre ellos, `topic.metadata.refresh.interval.ms=10000`, para que un grupo suscrito
   antes de que el productor cree su topic lo vea en segundos y no a los 5 minutos por defecto.
@@ -85,8 +91,8 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
 | `notifications.lead-events` | `internal.lead-core.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
 | `notifications.intake-events` | `internal.intake.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
 | `notifications.members` | `internal.identity.agents` | `notifications-worker` | F2 (nuevo; mantiene `members`) |
-| `lead-core.advisors` | `internal.identity.agents` | lead-core | F3 |
-| `intake.tenants` | `internal.identity.tenants` | intake (en el monolito hasta F4) | F3 |
+| `lead-core.advisors` | `internal.identity.agents` | `backend-worker` | F3 (nuevo; mantiene `advisors`) |
+| `intake.tenants` | `internal.identity.tenants` | `backend-worker` (código de intake en el monolito hasta F4) | F3 (nuevo; crea las fuentes por defecto) |
 
 ### Sobre de los eventos internos
 
@@ -141,7 +147,9 @@ flowchart TD
   en base. Si el proceso cae entre ambos, el mensaje se reentrega y la deduplicación lo descarta.
 - Las proyecciones de estado aplican además un *upsert* condicionado por `version`, **en SQL**: un
   mensaje viejo nunca pisa un estado más nuevo, aunque llegue después o lo escriba un segundo
-  consumidor a la vez. Por eso el de `members` no usa `processed_events`.
+  consumidor a la vez. Por eso los de `members` y `advisors` no usan `processed_events`: son
+  idempotentes por construcción. `intake.tenants` sí la escribe, en la misma transacción que las
+  fuentes y la marca de `provisioned_tenants`, porque crear una fuente no es un *upsert*.
 - Un mensaje que agota los intentos bloquea su partición hasta que está en la DLQ; el bucle libera
   las particiones bloqueadas al perderlas o cederlas en un *rebalance*, y al parar cierra el
   consumidor y vacía el productor de la DLQ.
@@ -330,7 +338,7 @@ Seguir un lead de punta a punta es filtrar los logs de los cinco servicios por u
 
 | Cae | Efecto | Recuperación |
 |---|---|---|
-| identity | Login y peticiones autenticadas → 503. Nada se procesa con una identidad sin verificar | Al volver, sin intervención |
+| identity | Login y peticiones autenticadas → 503. Nada se procesa con una identidad sin verificar. | Al volver, sin intervención |
 | lead-core | Las admisiones fallan → jobs interrumpidos → `nack` | RabbitMQ reentrega; tras 3 entregas, DLQ y reproceso |
 | intake | No se reciben leads nuevos; lo encolado sigue en RabbitMQ | Al volver |
 | notifications | La bandeja no responde; los eventos esperan en Kafka | El consumidor retoma desde su offset |

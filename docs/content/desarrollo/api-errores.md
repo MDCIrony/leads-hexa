@@ -1,15 +1,16 @@
 # API · Errores
 
 El formato de error unificado, de dónde sale cada código HTTP y qué significa cada código de
-dominio. La tabla de códigos es la autoridad real del sistema:
-`backend/src/infrastructure/adapters/input/api/exception_handlers.py`. Las respuestas que genera el
-gateway antes de llegar a la API se listan [al final](#errores-del-gateway) y salen de
-`gateway/nginx.conf`.
+dominio. Cada servicio tiene su tabla de códigos, con el mismo sobre y el mismo criterio, y esa
+tabla es la autoridad real: `infrastructure/adapters/input/api/exception_handlers.py` bajo
+`backend/src/` (lead-core), `services/identity/src/` (autenticación, organizaciones y agentes) y
+`services/notifications/src/`. Las respuestas que genera el gateway antes de llegar a un servicio se
+listan [al final](#errores-del-gateway) y salen de `gateway/nginx.conf`.
 
 ## El dominio no conoce HTTP
 
-Una excepción de dominio (`DomainException`, en
-`backend/src/domain/exceptions.py`) lleva un `message` y un
+Una excepción de dominio (`DomainException`, en `domain/exceptions.py` de cada servicio) lleva un
+`message` y un
 `error_code` estable, nunca un `status_code`: qué número HTTP le corresponde es una decisión del
 adaptador de entrada, no del dominio. El guardián de arquitectura falla si el dominio llega a
 importar algo que lo delate — ver [Convenciones](convenciones.md).
@@ -74,6 +75,20 @@ organización.
     silencioso: la petición responde, el cuerpo trae el código correcto, y sólo el número está mal.
 
     Al añadir un código de «no encontrado» nuevo, darlo de alta en esa tabla es parte de la tarea.
+
+## Servicio no disponible
+
+Todos responden **503**. A diferencia de los del gateway, los emite el propio servicio, con el sobre
+de dominio.
+
+| `error_code` | Quién | Significa |
+|---|---|---|
+| `SERVICE_UNAVAILABLE` | Cualquier servicio | No puede comprobar la firma del token interno: la JWKS no responde y el `kid` no se puede verificar todavía (`KeysUnavailable`). No es `401` a propósito: durante una rotación ese `kid` puede ser válido |
+| `SERVICE_UNAVAILABLE` | lead-core | Un asesor que su proyección todavía no tiene no se puede pedir a identity: identity no responde, no emite el token de servicio o contesta algo inesperado. Afecta a `POST /leads/{lead_id}/assign` y `PATCH /advisors/{agent_id}` |
+| `MESSAGING_UNAVAILABLE` | identity | Kafka no admite la credencial de integración en ese instante (`POST /agents/integration-credential`) |
+
+El `503 SERVICE_UNAVAILABLE` del gateway lleva el mismo `error_code`, pero otro `message` y otra
+causa: la introspección o el servicio destino no responden.
 
 ## Ya existe o está en uso
 
@@ -147,7 +162,7 @@ recibirlos:
 
 | `error_code` | Dónde vive | Por qué no se alcanza hoy |
 |---|---|---|
-| `CROSS_TENANT_ASSIGNMENT` | `Lead._bind_agent()` | `AssignLeadUseCase` resuelve al asesor acotado por organización antes de llamar aquí; uno ajeno ya responde `AGENT_NOT_FOUND` |
+| `CROSS_TENANT_ASSIGNMENT` | `Lead._bind_agent()` | `AssignLeadUseCase` resuelve al asesor con `AdvisorDirectory`, acotado por organización, antes de llamar aquí; uno ajeno ya responde `AGENT_NOT_FOUND` |
 | `EMPTY_CANDIDATE_POOL` | `AssignmentRule.advance_cursor()` | El motor de asignación filtra la lista de candidatos antes de rotar sobre ella |
 | `REJECTION_WITHOUT_ERRORS` | `IntakeRecord.reject()` | El único llamador siempre adjunta al menos un error de campo |
 | `INVALID_NOTIFICATION_MESSAGE` | `Notification` | Las notificaciones las crea el propio sistema; ningún endpoint recibe su mensaje como entrada |
@@ -188,10 +203,10 @@ Ninguno es una `DomainException`.
 |---|---|---|---|
 | `UNAUTHORIZED` | 401 | `Authentication required` | La introspección rechaza la credencial (también `X-Api-Key`) o no hay ninguna |
 | `FORBIDDEN` | 403 | `Origen no permitido` | Una escritura (`POST`, `PUT`, `PATCH`, `DELETE`) trae un `Origin` que no es uno de los permitidos. Se resuelve antes de autenticar. Una petición sin `Origin` no es de navegador y pasa |
-| `NOT_FOUND` | 404 | `Not Found` | Ruta fuera de `/api/v1/`, `/health`, `/openapi.json` y `/docs`; `/internal/*` nunca se publica |
+| `NOT_FOUND` | 404 | `Not Found` | Ruta fuera de `/api/v1/`, `/health`, `/openapi.json`, `/openapi/identity.json`, `/openapi/notifications.json` y `/docs`; `/internal/*` nunca se publica |
 | `PAYLOAD_TOO_LARGE` | 413 | `Request body too large` | Cuerpo de más de 10 MB |
 | `TOO_MANY_REQUESTS` | 429 | `Too many requests` | Más de 20 peticiones por segundo desde una IP (con ráfaga de 60) en `/api/v1/auth/`; es el único prefijo con límite |
-| `SERVICE_UNAVAILABLE` | 503 | `Service unavailable` | La introspección o el servicio destino no responden. Siempre cerrado: nunca deja pasar una petición sin autenticar. No confundir con `MESSAGING_UNAVAILABLE`, que genera la API |
+| `SERVICE_UNAVAILABLE` | 503 | `Service unavailable` | La introspección (identity) o el servicio destino no responden. Siempre cerrado: nunca deja pasar una petición sin autenticar. Los servicios emiten el mismo código por sus propias causas ([Servicio no disponible](#servicio-no-disponible)) |
 
 `FORBIDDEN` y `NOT_FOUND` comparten código con los de la API, pero el `message` del gateway es fijo.
 

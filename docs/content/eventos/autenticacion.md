@@ -26,13 +26,15 @@ exactamente el mismo aislamiento que 9094.
 El hueco que cerraba este trabajo —«cualquiera con acceso a la red lee los topics de todas las
 organizaciones»— vivía únicamente en `PLAINTEXT_HOST`. `PLAINTEXT` se queda abierto: nunca sale de
 la red de compose, el mismo perímetro de confianza que ya asume Postgres, y es además la vía que usa
-el propio backend para aprovisionar credenciales sin necesitar una cuenta de arranque propia —una
-conexión sin SASL resuelve al principal `User:ANONYMOUS`, declarado `super.users`.
+identity (desde F3; antes, el backend) para aprovisionar credenciales sin necesitar una cuenta de
+arranque propia —una conexión sin SASL resuelve al principal `User:ANONYMOUS`, declarado
+`super.users`.
 
 ```mermaid
 flowchart LR
     subgraph interna["Red de compose"]
-        Backend["backend"] -->|"9092 · sin auth<br/>produce y aprovisiona"| Kafka["kafka"]
+        Backend["backend-worker"] -->|"9092 · sin auth<br/>produce"| Kafka["kafka"]
+        Identity["identity"] -->|"9092 · sin auth<br/>aprovisiona"| Kafka
     end
     subgraph externa["Fuera de la red"]
         Cliente["Cliente externo<br/>(consume.py, un tercero)"] -->|"9094 · SASL/SCRAM"| Kafka
@@ -90,8 +92,8 @@ y distingue por `ptype`:
 ```mermaid
 flowchart TB
     Req["GET /leads"] --> GW["Gateway: introspección<br/>X-Api-Key gana a la cookie"]
-    GW -->|"X-Api-Key"| Api["resolve_integration_agent<br/>agent_id.secret → agents<br/>bearer ptype=integration"]
-    GW -->|"cookie"| Jwt["resolve_current_agent<br/>bearer ptype=human"]
+    GW -->|"X-Api-Key"| Api["identity · IntrospectUseCase<br/>agent_id.secret → agents<br/>bearer ptype=integration"]
+    GW -->|"cookie"| Jwt["identity · IntrospectUseCase<br/>sesión → agents<br/>bearer ptype=human"]
     Api --> Ctx["RequestContext"]
     Jwt --> Manager{"¿rol MANAGER?"}
     Manager -->|"Sí"| Ctx
@@ -134,12 +136,14 @@ teatro que este trabajo cierra. Verificado que ese fallo tarda hasta 10 s en con
 `POST /agents` (no se crea por la vía genérica, sólo por `POST /agents/integration-credential`, que
 genera su propio secreto en vez de aceptar uno en el cuerpo). Pero vivir en la tabla `agents` traía
 un hueco que el primer borrador de este trabajo no cerraba: `GET /agents` y el pool de candidatos del
-motor de asignación seguían devolviendo la fila.
+motor de asignación seguían devolviendo la fila. Desde F3 cada consulta vive en su servicio: el
+listado en identity y el pool en la proyección `advisors` de lead-core, que copia también al agente
+`INTEGRATION` porque `AgentState` no filtra por rol.
 
 Sin excluirla ahí, una credencial de API aparecería en la plantilla de asesores del gestor y podría
 acabar nombrada en una regla de asignación — recibiendo leads que nadie va a trabajar. Las dos
 consultas la excluyen en SQL (`role <> 'INTEGRATION'`), no en el caso de uso, porque los dos únicos
-llamadores quieren lo mismo. La búsqueda por identificador (`GET /agents/{agent_id}`,
+llamadores quieren lo mismo; `GET /advisors` y la asignación manual también (`AGENT_NOT_FOUND`). La búsqueda por identificador (`GET /agents/{agent_id}`,
 `DELETE /agents/{agent_id}`) se deja sin ese filtro a propósito: es la vía que usa la revocación, y
 filtrarla ahí la rompería.
 
@@ -154,8 +158,9 @@ filtrarla ahí la rompería.
 
 | Pieza | Fichero |
 |---|---|
-| El puerto de aprovisionamiento | `application/ports/output/messaging_credential_provisioner_port.py` |
-| El adaptador Kafka | `infrastructure/adapters/output/events/kafka_credential_provisioner.py` |
-| El caso de uso | `application/use_cases/agent_use_cases.py` (`IssueIntegrationCredentialUseCase`) |
-| La cabecera y el contexto | `infrastructure/adapters/input/api/dependencies.py` (`resolve_integration_agent`, `require_manager_or_integration`) y `internal_router.py` (introspección) |
+| El puerto de aprovisionamiento | `services/identity/src/application/ports/output/messaging.py` |
+| El adaptador Kafka | `services/identity/src/infrastructure/adapters/output/messaging/kafka_credential_provisioner.py` |
+| El caso de uso | `services/identity/src/application/use_cases/agents/integration_credential.py` (`IssueIntegrationCredentialUseCase`) |
+| La cabecera | `services/identity/src/application/use_cases/auth/introspect.py` (`IntrospectUseCase`), detrás de `GET /internal/v1/auth/introspect` |
+| El contexto en lead-core | `backend/src/infrastructure/adapters/input/api/dependencies.py` (`require_manager_or_integration`) |
 | El fichero JAAS | `kafka/kafka_server_jaas.conf` |

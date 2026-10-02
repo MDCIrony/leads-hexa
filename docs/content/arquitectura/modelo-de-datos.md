@@ -1,8 +1,15 @@
 # Modelo de datos
 
-El modelo entidad-relación completo, tal como lo dejan las ocho migraciones de
-`backend/migrations/`, y las tres máquinas de estados que gobiernan el ciclo de vida de un lead
-mientras lo atraviesa.
+El modelo entidad-relación completo, tal como lo dejan las migraciones de `backend/migrations/`, y
+las tres máquinas de estados que gobiernan el ciclo de vida de un lead mientras lo atraviesa.
+
+!!! note "Tras F3"
+    `TENANT` y `AGENT` viven en `identity_db` (`services/identity/migrations/`), sin `group_id`; sus
+    copias en `leads_db` se quedan congeladas hasta F5. lead-core enruta sobre su propia tabla
+    `ADVISOR` (`advisors`), una proyección de los agentes con el `group_id` que es suyo. La migración
+    017 quitó todas las claves foráneas `tenant_id → tenants` de `leads_db`: las relaciones con
+    `TENANT` del diagrama son lógicas, garantizadas por el token. `NOTIFICATION` vive en
+    `notifications_db` desde F2.
 
 ## Diagrama entidad-relación
 
@@ -17,17 +24,26 @@ erDiagram
     }
     AGENT {
         uuid id PK
-        uuid tenant_id FK "nulo sólo para ADMIN"
-        uuid group_id FK "nulo sin grupo"
+        uuid tenant_id "nulo sólo para ADMIN"
         text name
-        text email "único por organización"
+        text email "único en la plataforma"
         text role
         text hashed_password
         boolean is_active
+        bigint version
+    }
+    ADVISOR {
+        uuid agent_id PK "el id del agente en identity"
+        uuid tenant_id
+        text name
+        text role
+        boolean is_active
+        bigint version
+        uuid group_id FK "nulo sin grupo; de lead-core"
     }
     SALES_GROUP {
         uuid id PK
-        uuid tenant_id FK
+        uuid tenant_id
         text name "único por organización"
         text description
         text default_strategy
@@ -37,7 +53,7 @@ erDiagram
     }
     LEAD_SOURCE {
         uuid id PK
-        uuid tenant_id FK
+        uuid tenant_id
         text name "único por organización"
         text kind
         jsonb field_mapping
@@ -48,7 +64,7 @@ erDiagram
     }
     LEAD {
         uuid id PK
-        uuid tenant_id FK
+        uuid tenant_id
         uuid source_id FK
         text first_name
         text last_name
@@ -79,7 +95,7 @@ erDiagram
     }
     ASSIGNMENT_RULE {
         uuid id PK
-        uuid tenant_id FK
+        uuid tenant_id
         text name
         integer min_score
         integer max_score
@@ -94,7 +110,7 @@ erDiagram
     }
     DISQUALIFICATION_RULE {
         uuid id PK
-        uuid tenant_id FK
+        uuid tenant_id
         text name
         jsonb conditions
         integer priority
@@ -102,7 +118,7 @@ erDiagram
     }
     INTAKE_JOB {
         uuid id PK
-        uuid tenant_id FK
+        uuid tenant_id
         uuid source_id FK
         text kind
         text status
@@ -114,7 +130,7 @@ erDiagram
     }
     INTAKE_RECORD {
         uuid id PK
-        uuid tenant_id FK
+        uuid tenant_id
         uuid source_id FK
         uuid job_id FK
         jsonb payload
@@ -133,7 +149,7 @@ erDiagram
     }
     NOTIFICATION {
         uuid id PK
-        uuid tenant_id FK
+        uuid tenant_id
         uuid recipient_id FK
         text kind
         uuid lead_id "puntero sin clave foránea"
@@ -151,6 +167,7 @@ erDiagram
     }
 
     TENANT |o--o{ AGENT : tiene
+    AGENT ||--o| ADVISOR : "se proyecta en"
     TENANT ||--o{ SALES_GROUP : tiene
     TENANT ||--o{ LEAD_SOURCE : tiene
     TENANT ||--o{ LEAD : tiene
@@ -161,7 +178,7 @@ erDiagram
     TENANT ||--o{ INTAKE_RECORD : tiene
     TENANT ||--o{ NOTIFICATION : tiene
     TENANT ||--o{ WEBHOOK_CONFIG : tiene
-    SALES_GROUP |o--o{ AGENT : agrupa
+    SALES_GROUP |o--o{ ADVISOR : agrupa
     SALES_GROUP |o--o{ ASSIGNMENT_RULE : "destino de"
     LEAD_SOURCE ||--o{ LEAD : origina
     LEAD_SOURCE ||--o{ INTAKE_RECORD : origina
@@ -169,7 +186,7 @@ erDiagram
     INTAKE_JOB |o--o{ INTAKE_RECORD : agrupa
     INTAKE_RECORD ||--o{ INTAKE_ERROR : detalla
     INTAKE_RECORD ||--o| LEAD : promueve
-    AGENT |o--o{ LEAD : "asignado a"
+    ADVISOR |o--o{ LEAD : "asignado a"
     AGENT ||--o{ NOTIFICATION : recibe
 ```
 
@@ -177,30 +194,42 @@ erDiagram
 
 ### Tenant
 
-`domain/entities/tenant.py`, tabla `tenants`. Representa a la organización cliente. `name` no
-puede quedar vacío; `slug` se deriva del nombre plegando tildes y símbolos (`slugify()`) y es
-único en toda la plataforma, no sólo dentro de una organización — evita que "Solución" y
-"Solucion" produzcan dos organizaciones indistinguibles en el listado del administrador. Crear una
-organización crea, en la misma transacción, sus dos fuentes por defecto (`Formulario manual`,
-`Carga de fichero`) y su primer gestor.
+`services/identity/src/domain/tenants/tenant.py`, tabla `tenants` de `identity_db`. Representa a la
+organización cliente. `name` no puede quedar vacío; `slug` se deriva del nombre plegando tildes y
+símbolos (`slugify()`) y es único en toda la plataforma, no sólo dentro de una organización — evita
+que "Solución" y "Solucion" produzcan dos organizaciones indistinguibles en el listado del
+administrador. Crear una organización crea, en la misma transacción, su primer gestor; sus dos
+fuentes por defecto (`Formulario manual`, `Carga de fichero`) las crea lead-core en cuanto recibe el
+`TenantState` ([Organizaciones](../modulos/organizaciones.md#el-alta-una-transaccion-y-un-evento)).
+`version` sube en cada escritura.
 
 ### Agent
 
-`domain/entities/agent.py`, tabla `agents`. Es a la vez credencial de acceso y receptor de leads.
-`tenant_id` es nulo únicamente para `ADMIN`. `email` es único por organización, o único en toda la
-plataforma si `tenant_id` es nulo — lo garantizan los dos índices únicos parciales de
-`002_tenants.sql`, no una comprobación de aplicación. El hash de la contraseña vive en la misma
-fila (`hashed_password`); no hay un agregado de credenciales separado, y es el mapeador de
-respuesta del router quien evita que ese campo llegue al cliente, omitiéndolo explícitamente. El
-formato del correo no lo valida el dominio —`email` es un `str` llano— sino el esquema Pydantic de
-entrada.
+`services/identity/src/domain/agents/agent.py`, tabla `agents` de `identity_db`. Es la credencial
+de acceso; lo que lo hace receptor de leads es su copia en `advisors`. `tenant_id` es nulo
+únicamente para `ADMIN`, y no lleva clave foránea. `email` es único en toda la plataforma una vez
+normalizado (`idx_agents_email_normalized`, sobre `lower(email)`), porque el login busca la cuenta
+sólo por correo. El hash de la contraseña vive en la misma fila (`hashed_password`); no hay un
+agregado de credenciales separado, y es el mapeador de respuesta del router quien evita que ese
+campo llegue al cliente, omitiéndolo explícitamente. El formato del correo no lo valida el dominio
+—`email` es un `str` llano— sino el esquema Pydantic de entrada. No tiene grupo: el grupo es un dato
+de enrutado y vive en `advisors`.
+
+### Advisor
+
+`backend/src/domain/advisors/advisor.py`, tabla `advisors` de `leads_db` (migración 017). La copia
+del agente que lead-core necesita para enrutar: `name`, `role`, `is_active` y `version`, que escribe
+sólo el consumidor `lead-core.advisors` con un *upsert* condicionado por `version`, más `group_id`,
+que es de lead-core y sólo cambia `PATCH /advisors/{agent_id}`. La migración la sembró desde
+`agents` (con su `group_id`), sin el `ADMIN`. Junto a ella, `provisioned_tenants` marca las
+organizaciones cuyas fuentes por defecto ya se crearon.
 
 ### SalesGroup
 
 `domain/entities/sales_group.py`, tabla `sales_groups`. Agrupa asesores que comparten política de
 asignación. `name` no vacío y único por organización; `capacity_per_agent`, si se define, debe ser
 mayor que cero. Borrar un grupo no arrastra sus asesores ni las reglas que lo señalan: `group_id`
-en `agents` y `target_group_id` en `assignment_rules` quedan en `NULL`, así que el gestor ve el
+en `advisors` y `target_group_id` en `assignment_rules` quedan en `NULL`, así que el gestor ve el
 hueco en vez de perder datos en cascada.
 
 ### LeadSource

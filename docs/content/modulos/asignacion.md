@@ -6,7 +6,8 @@ asignación en cascada por prioridad y reparte según la estrategia que correspo
 ## Cómo funciona
 
 `AssignmentEngine.select_agent` recibe el lead, las `AssignmentRule` activas de la organización, los
-asesores disponibles, los grupos y la carga actual de cada asesor. No persiste nada por sí mismo:
+asesores disponibles (de la proyección `advisors` de lead-core, con su grupo; ver
+[Organizaciones](organizaciones.md#asesores-y-grupos)), los grupos y la carga actual de cada asesor. No persiste nada por sí mismo:
 sólo decide, y quien lo llama (`IngestLeadUseCase`) es quien aplica el resultado sobre el lead.
 
 1. Filtra las reglas cuyo rango `[min_score, max_score]` incluye el score del lead y cuyas

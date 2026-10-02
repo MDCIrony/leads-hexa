@@ -1,7 +1,10 @@
 # C4 · Componentes
 
-El tercer nivel del modelo C4, dentro del contenedor `backend`. Esta página conecta el hexágono de
-[Arquitectura](index.md) con los ficheros reales de `backend/src/`.
+El tercer nivel del modelo C4, dentro del contenedor `backend` (lead-core). Esta página conecta el
+hexágono de [Arquitectura](index.md) con los ficheros reales de `backend/src/`. Desde F3 la
+identidad —sesiones, MFA, OAuth, organizaciones y agentes— vive en `services/identity/`, con el mismo
+esqueleto ([Servicios y datos](../microservices/02-servicios-y-datos.md#identity)); aquí sólo quedan
+la verificación del token y la copia de los asesores.
 
 ```mermaid
 flowchart TD
@@ -24,7 +27,7 @@ flowchart TD
 
     subgraph SALIDA["Salida — infrastructure/adapters/output"]
         SQL["Repositorios PostgreSQL"]
-        SEC["Seguridad: bcrypt, PyJWT"]
+        IDHTTP["Cliente HTTP de identity"]
         OUTBOX["Escritura en el outbox"]
         HTTPX["Despachador de webhooks"]
         PARSER["Parser de ficheros"]
@@ -38,7 +41,7 @@ flowchart TD
     UC --> POL
     UC --> POUT
     POUT -.->|implementado por| SQL
-    POUT -.->|implementado por| SEC
+    POUT -.->|implementado por| IDHTTP
     POUT -.->|implementado por| OUTBOX
     POUT -.->|implementado por| HTTPX
     POUT -.->|implementado por| PARSER
@@ -47,15 +50,14 @@ flowchart TD
 
 ## Adaptadores de entrada
 
-Ocho routers, todos finos: convierten el cuerpo HTTP en un comando o consulta, invocan un caso de
+Seis routers, todos finos: convierten el cuerpo HTTP en un comando o consulta, invocan un caso de
 uso a través de su puerto y mapean la entidad de vuelta a un schema de respuesta. Ninguno decide
-una regla de negocio por su cuenta.
+una regla de negocio por su cuenta. `/auth`, `/tenants` y `/agents` ya no están aquí: los sirve
+identity.
 
 | Router (`infrastructure/adapters/input/api/`) | Prefijo | Qué expone |
 |---|---|---|
-| `auth_router.py` | `/api/v1/auth` | Login y la identidad del usuario autenticado |
-| `tenant_router.py` | `/api/v1/tenants` | Alta y listado de organizaciones — sólo `ADMIN` |
-| `agent_router.py` | `/api/v1/agents` | CRUD de asesores, incluida la regla de bootstrap del primer `ADMIN` |
+| `advisors/advisors_router.py` | `/api/v1/advisors` | Los asesores de la organización con su grupo y su carga; asignar grupo |
 | `sales_group_router.py` | `/api/v1/groups` | CRUD de grupos de venta |
 | `source_router.py` | `/api/v1/sources` | CRUD de fuentes de leads |
 | `rule_router.py` | `/api/v1/rules` | Reglas de puntuación, asignación y descalificación |
@@ -63,11 +65,16 @@ una regla de negocio por su cuenta.
 | `lead_router.py` | `/api/v1/leads` | Consulta de leads, asignación manual y descarte |
 
 Tres ficheros más, compartidos por todos los routers anteriores: `dependencies.py` construye el
-`RequestContext` a partir del bearer interno verificado (el JWT de 60 s que el gateway obtiene por introspección, [ADR-0032](../decisiones/0032-gateway-y-phantom-token.md)) y define las tres guardas de autorización
-(`require_platform_admin`, `require_organization_manager`, `require_organization_member`), además
+`RequestContext` a partir del bearer interno verificado (el JWT de 60 s que el gateway obtiene por introspección, [ADR-0032](../decisiones/0032-gateway-y-phantom-token.md)) y define las guardas de autorización
+(`require_organization_manager`, `require_organization_member` y `require_manager_or_integration`;
+la de plataforma, `require_platform_admin`, es de identity), además
 de una función `get_..._use_case` por caso de uso que lo instancia con sus dependencias resueltas.
 `exception_handlers.py` traduce cada excepción de dominio a su código HTTP. `schemas.py` contiene
 los modelos Pydantic de petición y respuesta — la única capa donde Pydantic existe.
+
+Los consumidores de Kafka son el otro adaptador de entrada, en `adapters/input/consumers/`:
+`advisor_consumer.py` (grupo `lead-core.advisors`) e `intake/tenant_consumer.py` (grupo
+`intake.tenants`), con su tabla de grupos en `groups.py`. Los ejecuta `backend-worker`.
 
 ## Casos de uso y puertos de entrada
 
@@ -79,8 +86,9 @@ Cada caso de uso implementa un puerto de entrada (una clase abstracta en
 | Ingesta | `ingest_lead_use_case.py` · `receive_intake_use_case.py` · `process_batch_use_case.py` · `process_intake_job_use_case.py` · `intake_job_use_cases.py` · `intake_record_use_cases.py` | `ingest_lead_use_case_port.py` · `intake_phase_use_case_ports.py` · `process_batch_use_case_port.py` · `intake_job_use_case_ports.py` · `intake_record_use_case_ports.py` |
 | Leads | `get_leads_use_case.py` · `lead_lifecycle_use_cases.py` | `get_leads_use_case_port.py` · `lead_lifecycle_use_case_ports.py` |
 | Reglas | `rule_use_cases.py` · `disqualification_rule_use_cases.py` | `rule_use_case_ports.py` · `disqualification_rule_use_case_ports.py` |
-| Catálogo | `agent_use_cases.py` · `sales_group_use_cases.py` · `lead_source_use_cases.py` | `agent_use_case_ports.py` · `sales_group_use_case_ports.py` · `lead_source_use_case_ports.py` |
-| Identidad y organizaciones | `auth_use_cases.py` · `tenant_use_cases.py` | `auth_use_case_port.py` · `tenant_use_case_ports.py` |
+| Catálogo | `sales_group_use_cases.py` · `lead_source_use_cases.py` | `sales_group_use_case_ports.py` · `lead_source_use_case_ports.py` |
+| Asesores | `advisors/advisor_use_cases.py` (listar, asignar grupo) · `advisors/project_advisor.py` (la proyección) | `advisors/` |
+| Fuentes por defecto | `intake/provision_tenant_sources.py` | `intake/provision_tenant_sources_port.py` |
 
 `application/dtos/` completa la capa: `commands.py` y `queries.py` son los `@dataclass(frozen=True)`
 que cruzan cada puerto, y `context.py` define `RequestContext`.
@@ -99,15 +107,15 @@ registra en el outbox los eventos que ese servicio consume.
 
 Ver [El recorrido de un lead](recorrido-de-un-lead.md) para lo que decide cada uno.
 
-Las entidades viven en `domain/entities/`: `tenant.py`, `agent.py`, `sales_group.py`,
-`lead_source.py`, `lead.py`, `rule.py` (`ScoringRule` y `AssignmentRule`),
-`disqualification_rule.py`, `intake_record.py` (`IntakeRecord` e `IntakeError`), `intake_job.py`
-y `webhook.py` (`WebhookConfig`). `domain/policies/authorization_policy.py`
+Las entidades viven en `domain/entities/`: `sales_group.py`, `lead_source.py`, `lead.py`, `rule.py`
+(`ScoringRule` y `AssignmentRule`), `disqualification_rule.py`, `intake_record.py` (`IntakeRecord` e
+`IntakeError`), `intake_job.py` y `webhook.py` (`WebhookConfig`). `domain/advisors/advisor.py` es el
+`Advisor`, la copia del agente que enruta; `domain/intake/default_sources.py`, las dos fuentes de
+cada organización nueva. `Tenant` y `Agent` ya no existen aquí. `domain/policies/authorization_policy.py`
 concentra `AuthorizationPolicy`. `domain/events/` declara los eventos que los casos de uso registran en el outbox:
 `lead_events.py` (los dos del canal de salida y `LeadAssigned`, `LeadReassigned` y
 `LeadLeftUnassigned`), `intake_events.py` (`IntakeRejected` e `IntakeJobRequested`, la orden del canal
-`job`), `identity_events.py` (`AgentState` y `TenantState`) y las bases `domain_event.py` e
-`internal_event.py`.
+`job`) y las bases `domain_event.py` e `internal_event.py`.
 
 ## Puertos y adaptadores de salida
 
@@ -119,8 +127,10 @@ composition root.
 | `LeadRepositoryPort` | `RawSqlLeadRepository` | `persistence/raw_sql_lead_repository.py` |
 | `RuleRepositoryPort` | `RawSqlRuleRepository` | `persistence/raw_sql_rule_repository.py` |
 | `DisqualificationRuleRepositoryPort` | `RawSqlDisqualificationRuleRepository` | `persistence/raw_sql_disqualification_rule_repository.py` |
-| `AgentRepositoryPort` | `RawSqlAgentRepository` | `persistence/raw_sql_agent_repository.py` |
-| `TenantRepositoryPort` | `RawSqlTenantRepository` | `persistence/raw_sql_tenant_repository.py` |
+| `AdvisorRepositoryPort` | `RawSqlAdvisorRepository` | `persistence/advisors/raw_sql_advisor_repository.py` |
+| `AdvisorDirectoryPort` | `HydratingAdvisorDirectory` | `persistence/advisors/hydrating_advisor_directory.py` |
+| `IdentityAgentsPort` | `HttpIdentityAgents` | `http/advisors/http_identity_agents.py` |
+| `ProvisionedTenantRepositoryPort` | `RawSqlProvisionedTenantRepository` | `persistence/intake/raw_sql_provisioned_tenant_repository.py` |
 | `SalesGroupRepositoryPort` | `RawSqlSalesGroupRepository` | `persistence/raw_sql_sales_group_repository.py` |
 | `LeadSourceRepositoryPort` | `RawSqlLeadSourceRepository` | `persistence/raw_sql_lead_source_repository.py` |
 | `IntakeRecordRepositoryPort` | `RawSqlIntakeRecordRepository` | `persistence/raw_sql_intake_record_repository.py` |
@@ -130,7 +140,6 @@ composition root.
 | `IntakeFileRepositoryPort` | `RawSqlIntakeFileRepository` | `persistence/raw_sql_intake_file_repository.py` |
 | `WebhookRepositoryPort` | `RawSqlWebhookRepository` | `persistence/raw_sql_webhook_repository.py` |
 | `UnitOfWorkPort` | `PostgresUnitOfWork` | `persistence/postgres_unit_of_work.py` |
-| `PasswordHasherPort` | `BcryptPasswordHasher` | `security/bcrypt_password_hasher.py` |
 | `ClockPort` | `SystemClock` | `system_clock.py` |
 | `IdGeneratorPort` | `UuidGenerator` | `uuid_generator.py` |
 | `WebhookDispatcherPort` | `HttpxWebhookDispatcher` | `http/httpx_webhook_dispatcher.py` |
@@ -144,15 +153,22 @@ sustituirlas: `persistence/connection.py` (`RawSqlDatabase`, el pool de conexion
 La entrega no pasa por un puerto de la aplicación: los casos de uso sólo escriben en
 `OutboxRepositoryPort`. Quien lee el outbox y entrega es `backend-worker` (ver
 [C4 · Contenedores](c4-contenedores.md)), con los despachadores de `chassis.outbox` y
-`chassis.rabbit` y los de `events/*_outbound_dispatcher.py`. El consumo de los eventos internos
-no está en el backend: lo hace `notifications-worker`, con adaptadores de entrada en
-`services/notifications/src/infrastructure/adapters/input/consumers/`.
+`chassis.rabbit` y los de `events/*_outbound_dispatcher.py`. Los eventos de lead e ingesta los
+consume `notifications-worker`, con adaptadores de entrada en
+`services/notifications/src/infrastructure/adapters/input/consumers/`; los de identidad, también
+`backend-worker` (ver arriba).
+
+`HttpIdentityAgents` habla con `GET /internal/v1/agents/{agent_id}` de identity a través de un único
+`httpx.Client` (2 s de *timeout*), que comparte con el `ServiceTokenClient` de `chassis.auth`; los
+dos se construyen una vez en el `Container`, y las dos peticiones llevan el `X-Request-Id` de la que
+las provocó. Cualquier fallo, incluido no obtener el token, se traduce a `SERVICE_UNAVAILABLE`; un
+`401` de identity además descarta el token cacheado, para que la siguiente llamada pida uno nuevo.
 
 ## El composition root
 
 `infrastructure/di/container.py` define `Container`: construye las implementaciones sin estado
-propio como instancias únicas para todo el proceso (`database`, `password_hasher`,
-`token_verifier`, `clock`, `id_generator`, `file_parser`, `assignment_engine`),
+propio como instancias únicas para todo el proceso (`database`, `token_verifier` —contra la JWKS de
+identity—, `clock`, `id_generator`, `file_parser`, `assignment_engine`, `advisor_directory`),
 y expone `unit_of_work()` como una fábrica — cada petición recibe la suya, porque una unidad de
 trabajo abre su propia transacción y no puede compartirse entre peticiones concurrentes. Es aquí
 donde se resolvió el defecto original del round-robin: el cursor ya no vive en una instancia que

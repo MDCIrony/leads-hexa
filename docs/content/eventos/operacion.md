@@ -5,16 +5,18 @@ Cómo se levanta, qué mirar cuando algo no llega, y qué no está resuelto toda
 ## Levantar la pila
 
 ```bash
-docker compose up -d db backend                # la API, sin mensajería
+docker compose up -d db backend identity       # las API, sin mensajería
 docker compose up -d kafka rabbitmq            # los brókeres
-docker compose up -d backend-worker            # los relays del outbox
+docker compose up -d backend-worker            # los relays del outbox y dos consumidores
+docker compose up -d identity-worker           # el relay del outbox de identity
 docker compose up -d notifications notifications-worker  # la bandeja y sus tres consumidores
 docker compose up -d intake-worker             # el trabajador de ingesta
 ```
 
 **El orden no importa y la API no espera a nadie.** Ni `kafka` ni `rabbitmq` son `depends_on`
 bloqueantes del servicio `backend`, que sólo escribe en el outbox: si no están, las filas esperan y
-`backend-worker` reintenta; `notifications-worker` lo hace con sus carriles. Está verificado — con ambos brókeres apagados, `/health` responde `200`
+`backend-worker` e `identity-worker` reintentan; `notifications-worker` y los consumidores de
+`backend-worker` lo hacen con sus carriles. Está verificado — con ambos brókeres apagados, `/health` responde `200`
 y los leads se guardan; con sólo RabbitMQ apagado, una ingesta responde `202` y su trabajo queda
 `PENDING` hasta que el bróker vuelve (`verify_ms_f1`).
 
@@ -23,8 +25,10 @@ canales independientes, así que Kafka caído no detiene los jobs ni RabbitMQ ca
 notificaciones. Al reiniciarlo no se pierde nada: una fila sin marcar se entrega otra vez, y los
 consumidores deduplican por `event_id`.
 
-`notifications-worker` espera a que `notifications` esté sano, porque la API aplica las migraciones al
-arrancar y los consumidores escriben esas tablas, pero no espera a Kafka: sus carriles reintentan
+`identity-worker` espera a que `identity` esté sano y releva el outbox de identity a
+`internal.identity.*`, que crea al arrancar; no recibe la clave de firma ni los secretos de MFA u
+OAuth. `notifications-worker` espera a que `notifications` esté sano, porque la API aplica las
+migraciones al arrancar y los consumidores escriben esas tablas, pero no espera a Kafka: sus carriles reintentan
 hasta que el bróker responde. No tiene *healthcheck*: ningún servicio depende de él, los carriles se
 reparan solos y su fallo queda en el log.
 
@@ -75,8 +79,9 @@ LIMIT 20;
 Un `attempts` que crece sin parar señala un destino roto. **Nada se descarta por eso**: la entrada se
 hunde en el orden del lote para no bloquear a las nuevas, y se sigue reintentando. El `channel` dice
 qué proceso mirar: `product` es Kafka del cliente y webhooks, `internal` son los topics `internal.*`
-y `job` es RabbitMQ; los tres entregan desde `backend-worker`. Lo que se entrega a `internal.*` lo
-consume `notifications-worker`.
+y `job` es RabbitMQ; los tres entregan desde `backend-worker`. El outbox de identity (`identity_db`,
+sólo canal `internal`) lo entrega `identity-worker`. Lo que se entrega a `internal.*` lo consumen
+`notifications-worker` y, para los topics `internal.identity.*`, también `backend-worker`.
 
 ### 2 · ¿Llegó al topic?
 
@@ -95,14 +100,15 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --property print.headers=true --timeout-ms 5000
 ```
 
-Si `internal.*` no aparece en la lista, `backend-worker` aún no ha podido crear sus topics: sus logs
-dicen `Kafka topics not ready` mientras reintenta. Lo mismo vale para `internal.dlq.*` y
-`notifications-worker`.
+Si `internal.*` no aparece en la lista, su productor aún no ha podido crear sus topics
+(`backend-worker` para los de hechos, `identity-worker` para `internal.identity.*`): sus logs dicen
+`Kafka topics not ready` mientras reintenta. Lo mismo vale para `internal.dlq.*` y el servicio dueño
+de cada grupo.
 
 ### 3 · ¿Se aplicó en el consumidor?
 
 ```bash
-docker compose logs notifications-worker --tail=50
+docker compose logs notifications-worker backend-worker --tail=50
 
 docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
   --bootstrap-server localhost:9092 --describe --group notifications.lead-events
@@ -111,8 +117,10 @@ docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
 `LAG` creciente es un consumidor parado o lento; con `Attempt n/3 failed` en el log, un evento que no
 se aplica y acabará en la DLQ. Si además aparece `not settled, rewinding` con un `OperationalError`, la base no
 responde: el evento queda retenido y se reintenta, nunca va a la DLQ. Los grupos son `notifications.lead-events`,
-`notifications.intake-events` y `notifications.members`. Un evento ya aplicado figura en
-`processed_events` de `notifications_db` (el grupo `notifications.members` no lo usa):
+`notifications.intake-events` y `notifications.members` (en `notifications-worker`), y
+`lead-core.advisors` e `intake.tenants` (en `backend-worker`). Un evento ya aplicado figura en
+`processed_events` de su base, `notifications_db` o `leads_db` (las proyecciones
+`notifications.members` y `lead-core.advisors` no la usan):
 
 ```bash
 docker compose exec db psql -U postgres -d notifications_db \
@@ -146,6 +154,8 @@ algo falla o se reintenta. Lo que prueba que el consumidor lo aplicó es el avis
 | `internal.dlq.notifications.lead-events` | Eventos de `internal.lead-core.events` que fallaron tres veces | kafka-ui, **Topics** |
 | `internal.dlq.notifications.intake-events` | Lo mismo para `internal.intake.events` | kafka-ui, **Topics** |
 | `internal.dlq.notifications.members` | Estados de agente que no se pudieron proyectar, de `internal.identity.agents` | kafka-ui, **Topics** |
+| `internal.dlq.lead-core.advisors` | Lo mismo para la proyección `advisors` de lead-core | kafka-ui, **Topics** |
+| `internal.dlq.intake.tenants` | Estados de organización que no crearon sus fuentes, de `internal.identity.tenants` | kafka-ui, **Topics** |
 | `intake.jobs.dlq` | Trabajos entregados tres veces sin terminar, o mensajes malformados | Consola de RabbitMQ ([localhost:15672](http://localhost:15672), **Queues**) |
 
 Un mensaje de `internal.dlq.<grupo>` es el sobre original, con las cabeceras originales más `error`,
@@ -173,11 +183,12 @@ desde que existen. Para publicar el estado actual de **todos** los agentes y org
 ejemplo antes de que un consumidor nuevo se suscriba:
 
 ```bash
-docker compose exec backend-worker python -m infrastructure.cli.publish_identity_snapshot
+docker compose exec identity-worker python -m infrastructure.cli.publish_identity_snapshot
 ```
 
-Registra un `AgentState` o `TenantState` por fila en el outbox `internal`, por páginas de 100, y
-`backend-worker` los entrega. Se puede repetir sin riesgo: cada mensaje lleva la `version` de su fila,
+Desde F3 el comando es de identity y sólo necesita `DATABASE_URL`. Registra un `AgentState` o
+`TenantState` por fila en el outbox `internal` de `identity_db`, por páginas de 100, e
+`identity-worker` los entrega. Se puede repetir sin riesgo: cada mensaje lleva la `version` de su fila,
 y una proyección descarta lo que ya tiene.
 
 ## Qué no está resuelto

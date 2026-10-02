@@ -5,8 +5,8 @@ primera ingesta. Todos los comandos son `curl` reales, verificados contra el có
 
 ## Requisitos
 
-Docker y el plugin `docker compose`. Nada más: las variables de entorno del backend están fijadas
-en `docker-compose.yml` para desarrollo local, así que no hace falta crear ningún `.env`.
+Docker y el plugin `docker compose`. Nada más: las variables de entorno de cada servicio están
+fijadas en `docker-compose.yml` para desarrollo local, así que no hace falta crear ningún `.env`.
 
 ## Arrancar la plataforma
 
@@ -17,11 +17,14 @@ docker compose up -d
 Levanta `db` (PostgreSQL 16), `backend` (la API, que aplica las migraciones pendientes al arrancar y
 recarga en caliente lo que cambie en `backend/src`), `gateway` (nginx, la única entrada de la API),
 `frontend` (nginx sirviendo la interfaz) y `docs` (este sitio), más `rabbitmq`, `kafka`, `kafka-ui`,
-`backend-worker` (la entrega: los relays del outbox), `intake-worker` y el servicio de notificaciones:
+`backend-worker` (la entrega: los relays del outbox, y las proyecciones de agentes y organizaciones),
+`intake-worker`, el servicio de identidad —`identity` (autenticación, organizaciones y agentes; aplica
+sus migraciones al arrancar) e `identity-worker` (publica sus eventos)— y el de notificaciones:
 `notifications` (su API; aplica sus migraciones al arrancar) y `notifications-worker` (sus consumidores
-de Kafka). Un servicio de una sola ejecución, `db-bootstrap`, crea antes el rol y las bases de
-`notifications`. `backend` espera a que `db` esté sano; `gateway` no espera a nadie (vuelve a resolver
-`backend` y `notifications` por DNS); `frontend` espera a que `gateway` esté sano.
+de Kafka). Un servicio de una sola ejecución, `db-bootstrap`, crea antes los roles y las bases de
+`identity` y `notifications`. `backend` espera a que `db` esté sano; `gateway` no espera a nadie
+(vuelve a resolver `backend`, `identity` y `notifications` por DNS); `frontend` espera a que `gateway`
+esté sano.
 
 Puertos reales en el host:
 
@@ -74,7 +77,6 @@ curl -s -X POST http://localhost:8001/api/v1/agents \
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "name": "Root",
   "email": "root@plat.test",
-  "group_id": null,
   "is_active": true,
   "role": "ADMIN",
   "tenant_id": null
@@ -124,7 +126,7 @@ GITHUB_CLIENT_SECRET=...
 GITHUB_REDIRECT_URI=http://localhost:8001/api/v1/auth/oauth/github/callback
 ```
 
-`FRONTEND_ORIGIN` debe estar incluido exactamente en `CORS_ORIGINS` (el backend sólo usa esa lista para esta validación). Los orígenes que el navegador puede usar los decide el `map $http_origin` de `gateway/nginx.conf`: cambiar uno obliga a tocar los dos sitios. Al completar las tres variables
+`FRONTEND_ORIGIN` debe estar incluido exactamente en `CORS_ORIGINS` (identity sólo usa esa lista para esta validación). Los orígenes que el navegador puede usar los decide el `map $http_origin` de `gateway/nginx.conf`: cambiar uno obliga a tocar los dos sitios. Al completar las tres variables
 de un proveedor aparece su botón en el login; sólo permite entrar a agentes humanos ya existentes con
 correo de proveedor verificado. La vuelta conserva PKCE y, si MFA está activo, continúa en `/mfa`.
 No hay auto-registro: crea antes el `Agent` activo de prueba con el mismo correo. `SESSION_COOKIE_SECURE=false`
@@ -168,7 +170,6 @@ curl -s -X POST http://localhost:8001/api/v1/tenants \
     "id": "11111111-1111-1111-1111-111111111111",
     "name": "Ana Ruiz",
     "email": "ana@acme.test",
-    "group_id": null,
     "is_active": true,
     "role": "MANAGER",
     "tenant_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
@@ -176,9 +177,10 @@ curl -s -X POST http://localhost:8001/api/v1/tenants \
 }
 ```
 
-La misma transacción crea también dos orígenes de leads (`LeadSource`) para la organización,
-`MANUAL_FORM` y `FILE_UPLOAD`: sin uno de ellos activo, la ingesta de la siguiente sección
-respondería `404 SOURCE_NOT_FOUND`.
+La organización recibe además dos orígenes de leads (`LeadSource`), `MANUAL_FORM` y `FILE_UPLOAD`,
+unos segundos después: identity publica la organización nueva y lead-core los crea al recibirla. Sin
+uno de ellos activo, la ingesta de la siguiente sección respondería `404 SOURCE_NOT_FOUND`;
+`GET /api/v1/sources` como gestor muestra cuándo están.
 
 ## Autenticarse como gestor
 

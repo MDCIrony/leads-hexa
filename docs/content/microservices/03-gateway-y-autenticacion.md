@@ -26,8 +26,9 @@ El gateway no tiene lógica de negocio ni base de datos. Hace sólo lo que es de
 | Límites | — | `client_max_body_size 10m`; `limit_req` sólo en `/api/v1/auth/` |
 
 **Orígenes permitidos.** Viven en dos sitios: el `map $http_origin` del gateway (comparación exacta,
-nunca por prefijo) y `CORS_ORIGINS` del backend, que éste sólo usa ya para validar que
-`FRONTEND_ORIGIN` es uno de ellos. Añadir un origen es tocar los dos.
+nunca por prefijo) y `CORS_ORIGINS` de identity, que éste sólo usa para validar que
+`FRONTEND_ORIGIN` (el destino de los redirect de OAuth) es uno de ellos. Añadir un origen es tocar
+los dos.
 
 **Límites.** `limit_req` (20 r/s por IP, `burst=60`, 429) sólo protege `/api/v1/auth/`: es donde está
 la fuerza bruta de login, y la carga legítima del frontend y de `verify-e2e.sh` no debe toparse con él.
@@ -38,11 +39,12 @@ la fuerza bruta de login, y la carga legítima del frontend y de `verify-e2e.sh`
 |---|---|---|---|
 | `/api/v1/auth/` | identity | **No** | Es la frontera de autenticación: valida su propia cookie y emite la sesión. Es el único prefijo con `limit_req` |
 | `/api/v1/agents` y `/api/v1/agents/` (ruta exacta) | identity | **Opcional** | `POST /agents` crea al administrador de plataforma sin credencial sobre una base vacía; ver [Bootstrap](#bootstrap-anonimo-de-post-agents) |
-| `/api/v1/tenants/`, `/api/v1/agents/` (resto) | identity | Sí | |
+| `/api/v1/tenants` (exacta) y `/api/v1/tenants/`, `/api/v1/agents/` (resto) | identity | Sí | |
 | `/api/v1/sources/`, `/api/v1/intake/` | intake | Sí | |
 | `/api/v1/leads/`, `/api/v1/rules/`, `/api/v1/groups/`, `/api/v1/advisors/` | lead-core | Sí | |
 | `/api/v1/notifications/` | notifications | Sí | |
 | `/openapi.json`, `/docs` | lead-core | **No** | Documentación de la API; el gateway quita `Cookie` |
+| `/openapi/identity.json`, `/openapi/notifications.json` | identity, notifications | **No** | El OpenAPI de cada servicio extraído, para generar los tipos del frontend; sin `Cookie` |
 | `/internal/` | — | — | `return 404`: nunca se publica |
 | `/health` | el propio gateway | No | |
 | Cualquier otra ruta | — | — | `404` con el sobre `NOT_FOUND` |
@@ -50,11 +52,13 @@ la fuerza bruta de login, y la carga legítima del frontend y de `verify-e2e.sh`
 Durante la migración, un prefijo cuyo servicio todavía no existe apunta a `lead-core` (el monolito).
 Mover una capacidad es añadir un `location` más específico con su `upstream`.
 
-!!! note "Hasta F2"
-    Todos los prefijos apuntan a `backend`, que además sirve la introspección y la JWKS, salvo
-    `/api/v1/notifications` (y con barra final), que ya va a `notifications` (F2). El contenedor
-    `identity` no existe todavía. El prefijo se declara en las dos formas, exacta y con barra, como
-    `/agents`: un `location` de prefijo solo mandaría la ruta sin barra al monolito.
+!!! note "Tras F3"
+    Van a `identity` la introspección (`/_introspect` y `/_introspect_optional`), `/api/v1/auth/`,
+    `/api/v1/agents` y `/api/v1/tenants`; a `notifications`, `/api/v1/notifications` (F2). Cada
+    prefijo extraído se declara en las dos formas, exacta y con barra: un `location` de prefijo solo
+    mandaría la ruta sin barra al monolito. `/api/v1/sources/` e `/api/v1/intake/` todavía caen en el
+    `location /api/v1/` genérico, que apunta a `backend`, hasta F4. `/openapi.json` y `/docs` son los
+    de lead-core; el contrato de identity se publica aparte, en `/openapi/identity.json`.
 
 ## *Phantom token*
 
@@ -102,8 +106,16 @@ autorización sigue en cada servicio, sobre el `Principal`.
 La ruta exacta `/api/v1/agents` (con o sin barra final) usa la introspección opcional
 (`?optional=true`): sin credencial devuelve `204` y el gateway reenvía la petición sin `Authorization`.
 **Cualquier credencial que llegue debe ser válida**: una inválida es `401`, nunca degrada a anónimo.
-La decisión es del servicio: una petición anónima sólo crea al `ADMIN` de plataforma sobre una base de
+La decisión es de identity: una petición anónima sólo crea al `ADMIN` de plataforma sobre una base de
 agentes vacía, y un principal de máquina en esa ruta es `401` (`get_optional_human_principal`).
+
+Un `401` de la introspección lleva el sobre JSON de error, como cualquier respuesta de identity, pero
+el gateway no lo reenvía: `auth_request` sólo mira el código de estado y el cliente recibe el sobre
+que compone nginx.
+
+Además de la sesión o la clave, la introspección exige que el agente esté activo y que su
+organización no esté suspendida: el agente de un tenant suspendido recibe `401` aunque se le haya
+reactivado por su cuenta. Un `tenant_id` sin fila en `tenants` no cuenta como suspendido.
 
 ### El token interno
 
@@ -220,19 +232,29 @@ todos los `location`; ver [Includes compartidos](#includes-compartidos).
 # Docker's embedded DNS: a recreated container (new IP) is picked up without a restart.
 resolver 127.0.0.11 valid=10s ipv6=off;
 
-upstream backend {
-    zone backend 64k;
-    server backend:8000 resolve;
+upstream identity {
+    zone identity 64k;
+    server identity:8000 resolve;
     keepalive 32;
 }
+# upstream backend y upstream notifications, iguales.
 
 location = /_introspect {
     internal;
-    proxy_pass http://backend/internal/v1/auth/introspect;
+    proxy_pass http://identity/internal/v1/auth/introspect;
     include    /etc/nginx/conf.d/introspect.inc;   # no body; Cookie, X-Api-Key, X-Request-Id; 1 s / 2 s
 }
 
-# Extracted service: both forms, or the bare path would fall through to the monolith.
+location /api/v1/auth/ {
+    limit_req zone=auth burst=60 nodelay;
+    limit_req_status 429;
+    include    /etc/nginx/conf.d/proxy_headers.inc; # no auth_request: identity reads its own cookie
+    proxy_pass http://identity;
+}
+
+# Extracted services: both forms, or the bare path would fall through to the monolith.
+location = /api/v1/tenants        { include /etc/nginx/conf.d/protected.inc; proxy_pass http://identity; }
+location   /api/v1/tenants/       { include /etc/nginx/conf.d/protected.inc; proxy_pass http://identity; }
 location = /api/v1/notifications  { include /etc/nginx/conf.d/protected.inc; proxy_pass http://notifications; }
 location   /api/v1/notifications/ { include /etc/nginx/conf.d/protected.inc; proxy_pass http://notifications; }
 
@@ -290,23 +312,35 @@ credentials* y verificados con el mismo código de `chassis`.
 
 ```text
 POST /internal/v1/service-tokens
-{ "client_id": "intake", "client_secret": "…", "audience": "lead-core" }
+{ "client_id": "lead-core", "client_secret": "…", "audience": "identity" }
 
 200 { "access_token": "<jwt>", "expires_in": 300 }
-     claims: iss=identity, sub=intake, aud=lead-core, ptype=service, exp=iat+300
+     claims: iss=identity, sub=lead-core, aud=identity, ptype=service, iat, exp=iat+300, jti
+401 sobre UNAUTHORIZED: cliente desconocido, secreto incorrecto o audiencia no permitida (un único mensaje)
 ```
 
-| Llamante | Audiencia permitida | Para |
-|---|---|---|
-| `intake` | `lead-core` | `POST /internal/v1/admissions` |
-| `lead-core` | `identity` | `GET /internal/v1/agents/{agent_id}` |
+| Llamante | Audiencia permitida | Para | Estado |
+|---|---|---|---|
+| `lead-core` | `identity` | `GET /internal/v1/agents/{agent_id}` | F3 |
+| `intake` | `lead-core` | `POST /internal/v1/admissions` | F4 |
 
-- Los clientes y sus audiencias permitidas son configuración de identity (`SERVICE_CLIENTS`), no una
-  tabla: son un conjunto fijo que sólo cambia cuando cambia la arquitectura. Identity guarda el hash
-  del secreto, nunca el secreto.
-- El llamante cachea el token y lo renueva cuando le quedan menos de 30 s.
-- Las rutas `/internal/v1/*` exigen `ptype=service`, `aud` igual al propio servicio y un `sub` de la
-  lista de llamantes permitidos para esa ruta.
+- Los clientes y sus audiencias permitidas son configuración de identity, no una tabla: son un
+  conjunto fijo que sólo cambia cuando cambia la arquitectura. `SERVICE_CLIENTS` tiene la forma
+  `client_id:audience[|audience]:sha256hex[,…]`: identity guarda el SHA-256 del secreto, nunca el
+  secreto. Basta un hash rápido porque el secreto es un valor generado de alta entropía, no una
+  contraseña humana. El llamante recibe el suyo en `SERVICE_CLIENT_ID` y `SERVICE_CLIENT_SECRET`.
+- El token lo firma la misma clave que el token interno, así que se verifica contra la misma JWKS.
+- El llamante usa `chassis.auth.ServiceTokenClient`: cachea el token y lo renueva cuando le quedan
+  menos de 30 s. Si no puede obtenerlo lanza `ServiceTokenUnavailable`, que lead-core contesta
+  `503 SERVICE_UNAVAILABLE`. Si el servicio llamado rechaza el token con 401 (una clave rotada, un
+  cliente cambiado), el llamante lo descarta con `invalidate()` y la llamada siguiente pide uno nuevo
+  en vez de esperar a que caduque.
+- La petición del token y la llamada que lo usa llevan el `X-Request-Id` de la petición que las
+  provocó.
+- Las rutas `/internal/v1/*` que lo exigen lo verifican con `chassis.auth.ServiceTokenVerifier`:
+  `ptype=service`, `aud` igual al propio servicio y un `sub` de la lista de llamantes permitidos para
+  esa ruta (`GET /internal/v1/agents/{agent_id}` sólo admite `lead-core`). El contrato está en
+  `contracts/openapi/identity-internal.v1.yaml`.
 - **El `tenant_id` de una llamada interna sale del dato persistido del llamante**, no de una entrada
   del usuario: la admisión lleva el `tenant_id` del `intake_record`, que a su vez se derivó del token
   del usuario al recibirlo. ADR-0004 se mantiene de punta a punta.
@@ -315,16 +349,19 @@ POST /internal/v1/service-tokens
 
 | Secreto | identity | intake | lead-core | notifications | gateway |
 |---|:-:|:-:|:-:|:-:|:-:|
-| Clave privada de firma | ✓ | | | | |
+| Clave privada de firma (`SIGNING_KEYS`) | ✓ | | | | |
 | `MFA_ENCRYPTION_KEY` | ✓ | | | | |
 | Secretos OAuth Google/GitHub | ✓ | | | | |
-| Hashes de los secretos de servicio | ✓ | | | | |
-| Secreto de servicio propio | | ✓ | ✓ | | |
+| Hashes de los secretos de servicio (`SERVICE_CLIENTS`) | ✓ | | | | |
+| Secreto de servicio propio (`SERVICE_CLIENT_SECRET`) | | F4 | ✓ | | |
 | DSN de su base | ✓ | ✓ | ✓ | ✓ | |
-| URL de la JWKS | | ✓ | ✓ | ✓ | |
+| URL de la JWKS (`JWKS_URL`) | | ✓ | ✓ | ✓ | |
 
-Hoy `MFA_ENCRYPTION_KEY` y `SIGNING_KEYS` (la semilla privada de firma) están en `backend`,
-`intake-worker` y `backend-test` porque comparten `Settings`. Tras F3 sólo los tiene identity.
+Desde F3 la tabla es la de `docker-compose.yml`. Sólo `identity` recibe la clave de firma, la de MFA y
+OAuth; `identity-worker` no recibe ninguna, porque su `WorkerSettings` no las pide. En lead-core sólo
+la API exige `SERVICE_CLIENT_SECRET` (lo comprueba al arrancar); `backend-worker` e `intake-worker`
+reciben `JWKS_URL` porque comparten con ella un único `Settings` hasta F5. La columna intake es hoy el
+`intake-worker`, que vive en la imagen del backend.
 
 ## Fuera de alcance, a propósito
 

@@ -87,10 +87,10 @@ hecho, no una decisión.
 | [0028](0028-autenticacion-de-la-mensajeria.md) | Autenticación de la mensajería | Aceptada |
 | [0029](0029-sesiones-opacas.md) | Sesiones humanas opacas | Aceptada |
 | [0030](0030-mfa-totp.md) | MFA TOTP opt-in para cuentas humanas | Aceptada |
-| [0031](0031-microservicios-por-contexto.md) | Microservicios por contexto, una base por servicio | Aceptada · F0–F5 |
-| [0032](0032-gateway-y-phantom-token.md) | Gateway nginx y *phantom token* | Aceptada · F0 |
+| [0031](0031-microservicios-por-contexto.md) | Microservicios por contexto, una base por servicio | Aceptada · F0–F5; F0–F3 implantadas |
+| [0032](0032-gateway-y-phantom-token.md) | Gateway nginx y *phantom token* | Aceptada · implantada en F0; introspección en identity desde F3 |
 | [0033](0033-eventos-internos-en-kafka.md) | Eventos internos en Kafka, outbox por canal y estado compactado | Aceptada · implantada en F1 |
 | [0034](0034-encolado-por-outbox-y-fichero-durable.md) | Encolado por outbox y fichero crudo durable | Aceptada · implantada en F1 |
 | [0035](0035-admision-sincrona-idempotente.md) | Admisión síncrona e idempotente entre Intake y Lead Core | Aceptada · F4 |
-| [0036](0036-cambios-de-contrato-publico.md) | Dos cambios en el contrato público | Aceptada · F3 y F4 |
+| [0036](0036-cambios-de-contrato-publico.md) | Dos cambios en el contrato público | Aceptada · cambio 1 implantado en F3; cambio 2 en F4 |
 | [0037](0037-estructura-y-tamano-del-codigo.md) | Estructura y tamaño del código | Aceptada · F1; el backend heredado, en F3–F5 |

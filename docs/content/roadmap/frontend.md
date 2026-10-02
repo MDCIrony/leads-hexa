@@ -69,8 +69,10 @@ su cuenta.
 
 Esta tabla es el alcance de la primera pieza a construir. Los contratos exactos —campos, tipos,
 obligatoriedad— no se copian aquí: se generan desde `/openapi.json`, que es la única fuente que no
-puede desincronizarse. Lo que fija esta tabla es **qué servicio existe, qué operaciones expone y qué
-contrato devuelve cada una**.
+puede desincronizarse. Desde F3 cada servicio publica el suyo a través del gateway: `/openapi.json`
+(lead-core), `/openapi/identity.json` (`auth`, `tenants`, `agents`) y `/openapi/notifications.json`;
+`npm run gen:api` genera un fichero de tipos por cada uno. Lo que fija esta tabla es **qué servicio
+existe, qué operaciones expone y qué contrato devuelve cada una**.
 
 | Servicio | Operaciones | Contrato de salida |
 |---|---|---|
@@ -114,7 +116,8 @@ de otra entidad. (`GET /leads/stats` sí trae nombres, porque su barra de carga 
 necesita y evitar una segunda petición era justamente su motivo.)
 
 **No existe `GET /groups/{id}`.** El detalle de un grupo sale de la lista, y sus miembros de
-`GET /agents?group_id=`.
+`GET /advisors?group_id=` (desde F3 el grupo de un asesor es de lead-core y `/agents` ya no lo
+lleva; [ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)).
 
 ## Los tres roles
 

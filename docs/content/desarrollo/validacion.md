@@ -12,19 +12,22 @@ cd bruno && bru run flows --env local -r               # contrato como cliente ~
 ```
 
 Cada servicio extraído trae su propia suite, con los mismos dos primeros comandos sobre su carpeta
-(hoy, notifications; ver [La suite de notifications](#la-suite-de-notifications)):
+(hoy, notifications e identity; ver [La suite de notifications](#la-suite-de-notifications) y
+[La suite de identity](#la-suite-de-identity)):
 
 ```bash
 docker compose --profile test run --rm notifications-test
 cd services/notifications && uv run pytest -m unit -q
+docker compose --profile test run --rm identity-test
+cd services/identity && uv run pytest -m unit -q
 ```
 
 ## Por qué no hace falta reconstruir
 
 El código de `backend/src`, sus tests y las migraciones están montados como volúmenes de sólo
-lectura en los contenedores `backend` y `backend-test`, y lo mismo vale para `services/notifications`
-y `libs/chassis/src` en `notifications`, `notifications-worker` y `notifications-test` (ver
-`docker-compose.yml`). La API además
+lectura en los contenedores `backend` y `backend-test`, y lo mismo vale para `services/notifications`,
+`services/identity` y `libs/chassis/src` en sus contenedores (`notifications`, `notifications-worker`,
+`notifications-test`, `identity`, `identity-worker`, `identity-test`; ver `docker-compose.yml`). La API además
 corre con recarga en caliente (`uvicorn --reload --reload-dir /app/src`, en `backend/Dockerfile`),
 así que un cambio guardado se refleja sin reiniciar nada.
 
@@ -32,7 +35,7 @@ Sólo hace falta reconstruir la imagen cuando cambia algo que se instala en tiem
 `pyproject.toml`, `uv.lock` o el propio `Dockerfile`.
 
 ```bash
-docker compose build backend backend-worker intake-worker backend-test notifications notifications-worker notifications-test
+docker compose build backend backend-worker intake-worker backend-test notifications notifications-worker notifications-test identity identity-worker identity-test
 ```
 
 ## Qué demuestra cada uno
@@ -43,18 +46,21 @@ docker compose build backend backend-worker intake-worker backend-test notificat
 (`leads_test`, un contenedor aparte de la de desarrollo), no contra un doble en memoria. Es la
 única de las tres que ejercita de verdad `backend/src/infrastructure/adapters/output/persistence`.
 Cubre los cuatro marcadores de `pyproject.toml`: `unit`, `integration`, `e2e` y `architecture`. Los
-tests e2e usan `GatewayClient` (`backend/tests/e2e/gateway_client.py`), un `TestClient` que se comporta
-como el gateway: introspecciona la cookie o la `X-Api-Key` contra `/internal/v1/auth/introspect` y
-reenvía sólo el bearer resultante, igual que `gateway/nginx.conf`, de modo que ejercitan la misma
-frontera de confianza que el stack. Siguen sin servidor HTTP real.
+tests e2e usan `GatewayClient` (`backend/tests/e2e/gateway_client.py`), un `TestClient` que hace a la
+vez de gateway y de identity: convierte el principal que declara el test en un bearer interno firmado
+con una clave de prueba (`tests/tokens.py`, cuya JWKS sustituye a la de identity) y quita siempre
+`Authorization`, `X-Api-Key` y `Cookie` del llamante, igual que `gateway/nginx.conf`. Sin principal la
+petición llega sin bearer y el backend responde 401. La hidratación de `AdvisorDirectory` habla con
+`IdentityDouble` (`tests/advisors_sync.py`), un mapa en memoria con la forma del contrato de identity.
+Siguen sin servidor HTTP real.
 
 Como la suite no levanta brókeres, `GatewayClient` hace también de `intake-worker`: tras cada petición
 reenviada **drena en el propio proceso** el canal `job` a través de `process_job_message`, con las
 mismas tres entregas que concede la cola antes de la DLQ. El canal `internal` no se drena: sus filas
 quedan sin publicar, porque desde F2 su único consumidor vive en notifications y se prueba en la suite
 de ese servicio. Por eso un test e2e ve el lead promovido al terminar su petición, sin esperas. Lo que
-ese atajo no ejercita —Kafka, RabbitMQ, los hilos del relay— lo cubre `verify-e2e.sh`.
-`test_internal_auth` usa un `TestClient` plano a propósito, porque habla con la app sin gateway.
+ese atajo no ejercita —Kafka, RabbitMQ, los hilos del relay, el identity de verdad— lo cubre
+`verify-e2e.sh`.
 
 !!! warning
     `docker compose run` reemplaza el `CMD` de la imagen, no lo extiende. Para correr sólo una
@@ -65,14 +71,15 @@ ese atajo no ejercita —Kafka, RabbitMQ, los hilos del relay— lo cubre `verif
 
 `cd backend && uv run pytest -m unit -q` corre sin PostgreSQL —ni falta el contenedor de base de
 datos, ni falta Docker— y sin que quien lo ejecuta tenga que exportar ninguna variable de entorno.
-`backend/tests/conftest.py` fija `DATABASE_URL`, `MFA_ENCRYPTION_KEY` y `SIGNING_KEYS` una única vez,
-con `os.environ.setdefault(...)`, antes de que se importe cualquier módulo de test.
+`backend/tests/conftest.py` fija `DATABASE_URL`, `JWKS_URL` (ficticia: nunca se descarga) y
+`SERVICE_CLIENT_SECRET` una única vez, con `os.environ.setdefault(...)`, antes de que se importe
+cualquier módulo de test.
 
 Si `pytest -m unit` empieza a fallar fuera de Docker, es la señal de que se infiltró una
 dependencia de infraestructura en el dominio: el marcador existe precisamente para detectar eso.
 
 !!! warning
-    Ningún fichero de test debe fijar `DATABASE_URL`, `MFA_ENCRYPTION_KEY` o `SIGNING_KEYS` por su cuenta. Copiar un
+    Ningún fichero de test debe fijar `DATABASE_URL`, `JWKS_URL` ni ninguna otra variable de `Settings` por su cuenta. Copiar un
     preámbulo `os.environ.setdefault(...)` de otro fichero reintroduce un fallo que depende del
     orden en que pytest importa los módulos: sólo pasa si `conftest.py` ya corrió antes.
 
@@ -94,7 +101,16 @@ que no necesita una base limpia para dar una respuesta correcta.
 plataforma levantada — ver [Puesta en marcha](puesta-en-marcha.md).
 
 `--reset` espera a que `GET /api/v1/auth/me` responda 401 antes de empezar: el gateway contesta
-`/health` antes de que el backend haya migrado, así que `/health` no indica que la API esté lista.
+`/health` antes de que los servicios hayan migrado, así que `/health` no indica que la API esté lista.
+Desde F3 esa ruta la sirve identity; como lead-core no tiene ninguna ruta anónima, después espera a
+que el *healthcheck* de `backend` diga `healthy`.
+
+Desde F3 también los agentes y las organizaciones llegan a lead-core de forma asíncrona. El
+`bootstrap` del script comprueba, tras crear cada organización, que tenga sus dos fuentes
+(`await_sources`) y, tras crear cada agente, que aparezca en `GET /advisors` (`await_advisor`). Cada
+espera dura hasta 30 s (en un arranque en frío el primer mensaje espera también a que el grupo se
+una) y, si se agota, el check falla en vez de dejar que la siguiente comprobación falle por otra
+razón.
 
 El script se amplía, nunca se reescribe: cada fase de trabajo añade su propia función `verify_fN` y
 la llama desde `main`, de modo que las comprobaciones anteriores siguen corriendo y probando que lo
@@ -151,6 +167,32 @@ Corre antes de `verify_ms_f1`, que rebobina un grupo. Comprueba que la bandeja y
 - **El monolito ya no la tiene.** `leads_db.notifications` no crece, el backend contesta 404 en
   `/api/v1/notifications` y `backend/src` no menciona notificaciones.
 
+### La identidad en su servicio: `verify_ms_f3`
+
+Corre después de `verify_ms_f2` y antes de `verify_ms_f1`. Comprueba que la identidad ya no está en
+el monolito y que lead-core sigue enrutando con su proyección:
+
+- **El enrutado.** `GET /auth/me` por el gateway → 200 y el *access log* muestra el `upstream` de
+  identity, con el `X-Request-Id` de la petición en el log de identity. El backend contesta 404 en
+  `/api/v1/auth/me`.
+- **El monolito ya no la tiene.** El backend no tiene clave de firma, MFA ni OAuth en su entorno,
+  `backend/src` no menciona MFA, OAuth ni sesiones, e `identity_svc` no puede conectarse a `leads_db`.
+- **Grupo sin esperar al evento.** Un asesor recién creado en identity no trae `group_id`;
+  `PATCH /advisors/{id}` con un grupo responde 200 al instante (hidratación) y
+  `GET /advisors?group_id=` lo devuelve. `PATCH /agents/{id}` con `group_id` → 422, y el asesor de
+  otra organización → 404. Como ese `PATCH` puede encontrar ya la proyección, la cadena de
+  hidratación se prueba aparte: desde el contenedor `backend`, con sus credenciales de servicio, un
+  token de `POST /internal/v1/service-tokens` lee el agente en `GET /internal/v1/agents/{agent_id}`
+  (200).
+- **Desactivar corta.** El asesor entra; tras `DELETE /agents/{id}` su siguiente petición es 401 y
+  aparece inactivo en `GET /advisors?is_active=false`.
+- **Alta y suspensión de una organización.** Una organización nueva tiene sus dos fuentes en pocos
+  segundos y acepta una ingesta que termina `COMPLETED`; al suspenderla, su gestor recibe 401 en
+  `/auth/me` y en `/leads`.
+- **Los grupos y las DLQ.** `lead-core.advisors`, `intake.tenants` y `notifications.members` llegan a
+  lag 0 en menos de 30 s y su `internal.dlq.<grupo>` existe y está vacía; el gestor de la
+  organización nueva llega a `members` de notifications.
+
 ### Los tests de fallo de entrega
 
 Lo que `verify_ms_f1` no puede provocar a voluntad se prueba con la base real y brókeres
@@ -188,7 +230,8 @@ Qué hacer con un mensaje que aparezca ahí: [Operar la mensajería](../eventos/
 ### El gateway: `verify_ms_f0`
 
 Lo que el borde garantiza sólo se puede probar contra el nginx real, y por eso vive en el script y no
-en la suite. `verify_ms_f0` corre la última, porque detiene y vuelve a arrancar el backend. Comprueba:
+en la suite. `verify_ms_f0` corre la última, porque detiene y vuelve a arrancar identity y después
+lead-core. Comprueba:
 
 - Un bearer basura o un JWT firmado con otra clave → 401, por el gateway y directo al servicio; el
   `Authorization` del cliente nunca llega al servicio.
@@ -200,14 +243,15 @@ en la suite. `verify_ms_f0` corre la última, porque detiene y vuelve a arrancar
   de autenticar.
 - `X-Api-Key` válida sólo en `GET /leads`; `POST /agents` anónimo con agentes ya creados → 401; un
   cuerpo de más de 10 MB → 413.
-- Con el backend parado, 503 `SERVICE_UNAVAILABLE` (siempre cerrado), y vuelve al arrancarlo.
+- Con identity parado, 503 `SERVICE_UNAVAILABLE` (siempre cerrado), y vuelve al arrancarlo. Lo
+  mismo con `backend` parado: el gateway responde 503 con el sobre y la API vuelve al arrancarla.
 - **Todo `location` de `/api/v1/` pasa por la autenticación.** Es una comprobación estática sobre
   `nginx -T`: `nginx -t` es válido, se ven `location /api/v1/…` (un volcado vacío daría cero por la
   razón equivocada) y todos, salvo `/api/v1/auth/`, incluyen `protected.inc` o
   `protected_optional.inc`. Un `location` que se salte el `include` serviría sin autenticar y ninguna
   prueba de petición lo vería.
 
-La comprobación social OAuth ya está integrada. Conserva la API habitual y arranca un backend efímero
+La comprobación social OAuth ya está integrada. Conserva la API habitual y arranca un identity efímero
 en `127.0.0.1` con `APP_ENV=test` y `OAUTH_TEST_MODE=true`; ese único proceso usa un adaptador
 determinista y sin red para el callback. Verifica start/PKCE/cookie, el primer enlace y el subject
 repetido, el rechazo de correo no verificado, la transición a MFA y el replay. El modo rechaza cualquier
@@ -217,8 +261,8 @@ entorno que no sea `test`, no usa credenciales de proveedor y el contenedor temp
 
 `./scripts/verify-structure.sh` aplica la regla de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md)
 a cada raíz Python del repositorio —`backend/src`, `backend/tests`, `libs/chassis/src`,
-`libs/chassis/tests`, `services/notifications/src`, `services/notifications/tests`, `test-consumer/`,
-`demo/` y `tools/`— con `python -m chassis.testing check`, sobre el entorno de `libs/chassis` y sin
+`libs/chassis/tests`, `services/notifications/src`, `services/notifications/tests`,
+`services/identity/src`, `services/identity/tests`, `test-consumer/`, `demo/` y `tools/`— con `python -m chassis.testing check`, sobre el entorno de `libs/chassis` y sin
 Docker. Las fuentes no pasan de 150 líneas por fichero; fuentes y
 tests, de 12 ficheros `.py` por carpeta. Lo heredado se compara con su lista base, que sólo encoge;
 imprime `ok` por raíz, o lo que falla y por qué, y sale con código distinto de cero si alguna falla.
@@ -272,6 +316,26 @@ la carpeta (`unit`, `integration`, `e2e`, `architecture`):
 | `tests/integration/consumers/` | `NotificationConsumer`, `MemberConsumer` y la DLQ, con la base real |
 | `tests/e2e/` | La API con tokens firmados y una JWKS de prueba |
 | `tests/architecture/` | Los cuatro guardianes y la estructura |
+
+## La suite de identity
+
+`docker compose --profile test run --rm identity-test` corre contra `identity_test`, que también crea
+`db-bootstrap`. `cd services/identity && uv run pytest -m unit -q` corre sin base ni variables de
+entorno; `tests/conftest.py` fija `DATABASE_URL`, `SIGNING_KEYS`, `MFA_ENCRYPTION_KEY` y
+`SERVICE_CLIENTS` una sola vez, con los valores de prueba de `tests/environment.py`. Mismos marcadores
+por carpeta:
+
+| Carpeta | Qué cubre |
+|---|---|
+| `tests/unit/` | Dominio, casos de uso con dobles, `ApiSettings`/`WorkerSettings`, `SERVICE_CLIENTS` y los tokens |
+| `tests/integration/` | Migraciones, repositorios, `bcrypt`, `sync_tenants` y `publish_identity_snapshot` sobre PostgreSQL |
+| `tests/e2e/` | Auth, MFA, OAuth, tenants, agentes y las rutas internas, con su propio `GatewayClient`; los eventos del outbox contra `contracts/` |
+| `tests/architecture/` | Los cuatro guardianes y la estructura |
+
+Los tests de contrato (`chassis.testing.contracts`) comprueban en los dos lados que lo que identity
+produce —sus eventos, el agente de `GET /internal/v1/agents/{agent_id}`, el token de servicio—
+conforma `contracts/`, y que lead-core sabe leer sus fixtures. `contracts/` se monta de sólo lectura
+en `/srv/contracts` (servicios extraídos) o en `/contracts` (`backend-test`).
 
 ## El test de contrato de serialización
 
