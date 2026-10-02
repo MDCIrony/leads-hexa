@@ -4,7 +4,7 @@ from auth_helpers import admin_headers, agent_of, seed_org_manager
 from gateway_client import GatewayClient, subject_of, tenant_of
 
 from infrastructure.main import app
-from _intake_helpers import ingest_and_resolve
+from _admission_helpers import admit_lead
 
 
 def _bootstrap_admin(client: GatewayClient) -> dict:
@@ -38,7 +38,7 @@ def _create_agent(client: GatewayClient, manager_token: dict) -> tuple[dict, str
 
 def _ingest_qualified_lead(client: GatewayClient, manager_token: dict, tenant_id: str) -> str:
     headers = manager_token
-    record = ingest_and_resolve(
+    record = admit_lead(
         client,
         headers,
         {

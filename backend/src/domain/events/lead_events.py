@@ -55,7 +55,7 @@ class LeadProcessedEvent(OutboundEvent):
     def of(cls, lead: Lead) -> "LeadProcessedEvent":
         """Build the outbound contract from the lead it describes.
 
-        Two use cases publish it — ingestion and manual assignment — and a
+        Two use cases publish it — admission and manual assignment — and a
         field added on only one of them is a contract that drifts."""
         return cls(
             tenant_id=str(lead.tenant_id.value),

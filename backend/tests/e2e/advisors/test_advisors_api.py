@@ -5,7 +5,7 @@ from domain.exceptions import DomainException
 from infrastructure.main import app
 from tests.advisors_sync import project_identity, seed_advisor
 from tests.e2e.auth_helpers import admin_headers, principal_of, seed_org_manager
-from tests.e2e._intake_helpers import ingest_and_resolve
+from tests.e2e._admission_helpers import admit_lead
 from tests.e2e.gateway_client import GatewayClient, tenant_of
 
 
@@ -34,7 +34,7 @@ def _assigned_lead(client, manager: dict, agent_id: str) -> None:
         "score_delta": 50,
     })
     assert rule.status_code == 201, rule.text
-    record = ingest_and_resolve(client, manager, {
+    record = admit_lead(client, manager, {
         "first_name": "Lead", "last_name": "X", "email": f"{uuid.uuid4().hex[:6]}@x.test",
         "company": "Acme", "budget": 1000, "industry": "tech",
     })

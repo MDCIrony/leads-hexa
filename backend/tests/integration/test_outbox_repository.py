@@ -1,23 +1,12 @@
 import uuid
 
 import pytest
-
-from application.dtos.commands import IngestLeadCommand
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
-from infrastructure.adapters.output.admissions.in_process_lead_admission import InProcessLeadAdmission
-from application.use_cases.intake.payloads import payload_of
-from domain.entities.intake_record import IntakeRecord
-from domain.entities.lead_source import LeadSource
-from domain.events.lead_events import LeadDisqualified
-from domain.value_objects.enums import LeadSourceKind
 from chassis.web import request_id_var
+
+from application.dtos.admissions import AdmissionCandidate, AdmissionRequest
+from application.use_cases.admissions.admit_lead import AdmitLeadUseCase
+from domain.events.lead_events import LeadDisqualified
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import (
-    RawSqlIntakeRecordRepository,
-)
-from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
-    RawSqlLeadSourceRepository,
-)
 from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
 
 
@@ -45,15 +34,6 @@ def _event_for(lead_id: str) -> LeadDisqualified:
         source_id=str(uuid.uuid4()),
         reason="Sin forma de contactar",
     )
-
-
-def _seed_source(conn, tenant_id: uuid.UUID) -> uuid.UUID:
-    """intake_records.source_id is a real foreign key (migration 005): a full
-    ingestion needs a persisted source, unlike outbox_events itself."""
-    source = RawSqlLeadSourceRepository(conn).save(
-        LeadSource.create(tenant_id=tenant_id, name="Formulario", kind=LeadSourceKind.MANUAL_FORM)
-    )
-    return source.id.value
 
 
 def test_record_and_list_unpublished_round_trips_the_payload(test_db):
@@ -123,33 +103,14 @@ def test_a_rolled_back_record_leaves_no_row(test_db):
         ctx.__exit__(None, None, None)
 
 
-def test_a_full_ingestion_leaves_exactly_one_unpublished_entry(test_db):
+def test_a_full_admission_leaves_exactly_one_unpublished_entry(test_db):
     tenant_id = uuid.uuid4()
-    with test_db.get_connection(autocommit=True) as conn:
-        source_id = _seed_source(conn, tenant_id)
-
-    command = IngestLeadCommand(
-        tenant_id=tenant_id,
-        source_id=source_id,
-        first_name="Ana",
-        last_name="Diaz",
-        email="ana@x.test",
-        phone=None,
-        company="Acme",
-        budget=1000.0,
-        industry="tech",
-        custom_attributes={},
-    )
-    existing = IntakeRecord.create(tenant_id=tenant_id, source_id=source_id, payload=payload_of(command))
-    # Persisted before the call, as the real pipeline does: the use case claims
-    # its record with a locking read, which a row that only exists in memory
-    # cannot answer.
-    with test_db.get_connection(autocommit=True) as conn:
-        RawSqlIntakeRecordRepository(conn).save(existing)
-
-    admission = InProcessLeadAdmission(lambda: PostgresUnitOfWork(test_db))
-    result = IngestLeadUseCase(uow=PostgresUnitOfWork(test_db), admission=admission).execute(
-        command, existing_record=existing)
+    request = AdmissionRequest(
+        tenant_id=tenant_id, intake_record_id=uuid.uuid4(), source_id=uuid.uuid4(),
+        candidate=AdmissionCandidate(
+            first_name="Ana", last_name="Diaz", email="ana@x.test", phone=None, company="Acme",
+            industry="tech", budget="1000.0", custom_attributes={}))
+    result = AdmitLeadUseCase(PostgresUnitOfWork(test_db)).execute(request)
 
     repo, conn, ctx = _repo(test_db)
     try:
@@ -193,7 +154,6 @@ def test_an_event_goes_out_only_through_its_own_channel(test_db):
 
         assert [entry.id for entry in repo.list_unpublished("internal", 10)] == [event.event_id]
         assert repo.list_unpublished("product", 10) == []
-        assert repo.list_unpublished("job", 10) == []
         assert repo.list_unpublished("internal", 10)[0].channel == "internal"
     finally:
         ctx.__exit__(None, None, None)

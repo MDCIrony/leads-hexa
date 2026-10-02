@@ -6,7 +6,7 @@ tree measures, or already within the limit, fails too. Regenerate with
 `cd libs/chassis && uv run python -m chassis.testing measure ../../backend/tests --no-line-limit`."""
 
 BASELINE = {
-    "e2e/": 18,
-    "integration/": 20,
-    "unit/domain/": 16,
+    "e2e/": 14,
+    "integration/": 14,
+    "unit/domain/": 13,
 }

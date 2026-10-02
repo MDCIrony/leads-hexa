@@ -1,29 +1,14 @@
-from types import SimpleNamespace
 """What the delivery chain promises when a hop fails: a relay that dies after
-delivering re-delivers and publishes once, a failing job is retried by the
-broker and bounded by its delivery limit. Real database, doubles for the brokers."""
+delivering re-delivers and publishes once. Real database, doubles for the brokers."""
 from contextlib import contextmanager
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from chassis.outbox import OutboxRelay
 
-from application.dtos.commands import ReceiveIntakeCommand
-from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
-from domain.value_objects.tenant_id import TenantId
-from domain.entities.lead_source import LeadSource
 from domain.events.lead_events import LeadAssigned
-from domain.services.assignment_engine import AssignmentEngine
-from domain.value_objects.enums import (
-    IntakeJobStatus, IntakeRecordStatus, LeadSourceKind,
-)
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.queue.intake_queue_topology import (
-    DLQ_NAME, QUEUE_NAME, declare_intake_topology,
-)
-from infrastructure.intake_worker import messages as job_messages
-from infrastructure.intake_worker.messages import process_job_message
 
 
 def _count(test_db, sql: str, params: tuple = ()) -> int:
@@ -81,63 +66,3 @@ def test_a_row_delivered_twice_after_a_relay_crash_is_published_once(test_db):
     assert [row.id for row in dispatcher.delivered] == [event.event_id, event.event_id]
 
     assert _count(test_db, "SELECT COUNT(*) AS n FROM outbox_events WHERE published_at IS NOT NULL") == 1
-
-
-class _Container:
-    def __init__(self, test_db) -> None:
-        self._db = test_db
-        self.assignment_engine = AssignmentEngine()
-        self.file_parser = None
-
-    def unit_of_work(self):
-        return PostgresUnitOfWork(self._db)
-
-
-class _FailingIngest:
-    def execute(self, command, existing_record=None):
-        raise RuntimeError("scoring blew up")
-
-
-def test_a_job_with_a_failing_record_is_nacked_and_stays_unfinished(test_db, monkeypatch):
-    payload = {"first_name": "Maria", "last_name": "Gomez", "company": "TechCorp",
-               "budget": 5000, "industry": "Tech", "email": "mgomez@techcorp.com"}
-    with PostgresUnitOfWork(test_db) as uow:
-        tenant = SimpleNamespace(id=TenantId())
-        tenant_id = tenant.id.value
-        uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="Form", kind=LeadSourceKind.MANUAL_FORM))
-        uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="Upload", kind=LeadSourceKind.FILE_UPLOAD))
-    received = ReceiveIntakeUseCase(uow=PostgresUnitOfWork(test_db)).execute(
-        ReceiveIntakeCommand(tenant_id=tenant_id, kind="SINGLE", payloads=[payload], filename=None, content=None)
-    )
-    message = {"tenant_id": str(tenant_id), "job_id": received.job_id, "correlation_id": None}
-    monkeypatch.setattr(job_messages, "get_ingest_lead_use_case", lambda uow, container: _FailingIngest())
-
-    assert process_job_message(_Container(test_db), message) == "nack"
-
-    with PostgresUnitOfWork(test_db) as uow:
-        [record] = uow.intake_records.list_by_tenant(tenant_id, job_id=UUID(received.job_id))
-        job = uow.intake_jobs.get_by_id_and_tenant(UUID(received.job_id), tenant_id)
-    assert record.status == IntakeRecordStatus.PENDING
-    assert job.status != IntakeJobStatus.COMPLETED
-
-
-class _Channel:
-    def __init__(self) -> None:
-        self.queues = {}
-
-    def queue_declare(self, queue, durable=False, arguments=None):
-        self.queues[queue] = {"durable": durable, "arguments": arguments or {}}
-
-
-def test_the_queue_still_dead_letters_after_three_deliveries():
-    channel = _Channel()
-
-    declare_intake_topology(channel)
-
-    assert channel.queues[DLQ_NAME]["durable"] is True
-    assert channel.queues[QUEUE_NAME]["arguments"] == {
-        "x-queue-type": "quorum",
-        "x-delivery-limit": 3,
-        "x-dead-letter-exchange": "",
-        "x-dead-letter-routing-key": DLQ_NAME,
-    }

@@ -4,19 +4,15 @@ import uuid
 from application.dtos.admissions import AdmissionCandidate, AdmissionRequest
 from application.use_cases.admissions.admit_lead import AdmitLeadUseCase
 from domain.advisors.advisor import Advisor
-from domain.entities.intake_record import IntakeRecord
 from domain.entities.lead import Lead
-from domain.entities.lead_source import LeadSource
 from domain.entities.rule import AssignmentRule
 from domain.entities.sales_group import SalesGroup
 from domain.value_objects.agent_id import AgentId
-from domain.value_objects.enums import AgentRole, AssignmentStrategy, IntakeRecordStatus, LeadSourceKind
+from domain.value_objects.enums import AgentRole, AssignmentStrategy
 from domain.value_objects.tenant_id import TenantId
 from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import RawSqlIntakeRecordRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
-from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import RawSqlLeadSourceRepository
 from infrastructure.adapters.output.persistence.raw_sql_rule_repository import RawSqlRuleRepository
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
 
@@ -73,20 +69,3 @@ def test_the_loser_answers_with_the_winners_lead_and_leaves_no_trace(test_db, mo
         tenant_id=tenant_id, intake_record_id=uuid.uuid4(), source_id=uuid.uuid4(), candidate=candidate))
     with test_db.get_connection(autocommit=True) as conn:
         assert _counts(conn, tenant_id)[2] != before[2]
-
-
-def test_a_discarded_record_cannot_be_claimed(test_db):
-    tenant_id = uuid.uuid4()
-    with test_db.get_connection(autocommit=True) as conn:
-        source = RawSqlLeadSourceRepository(conn).save(
-            LeadSource.create(tenant_id=tenant_id, name="Form", kind=LeadSourceKind.MANUAL_FORM))
-        repo = RawSqlIntakeRecordRepository(conn)
-        records = {status: repo.save(IntakeRecord.create(
-            tenant_id=tenant_id, source_id=source.id.value, payload={}, status=status))
-            for status in (IntakeRecordStatus.PENDING, IntakeRecordStatus.REJECTED, IntakeRecordStatus.DISCARDED)}
-
-        claimed = {status: repo.claim_unpromoted(record.id.value, tenant_id) is not None
-                   for status, record in records.items()}
-
-    assert claimed == {IntakeRecordStatus.PENDING: True, IntakeRecordStatus.REJECTED: True,
-                       IntakeRecordStatus.DISCARDED: False}

@@ -5,26 +5,9 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from domain.entities.disqualification_rule import DisqualificationRule
-    from domain.entities.intake_job import IntakeJob
-    from domain.entities.intake_record import IntakeRecord
     from domain.entities.lead import Lead
-    from domain.entities.lead_source import LeadSource
     from domain.entities.rule import ScoringRule
     from domain.entities.sales_group import SalesGroup
-
-
-@dataclass(frozen=True)
-class IngestLeadCommand:
-    tenant_id: UUID
-    source_id: UUID
-    first_name: str
-    last_name: str
-    company: str
-    budget: float
-    industry: str
-    custom_attributes: Dict[str, Any] = field(default_factory=dict)
-    phone: Optional[str] = None
-    email: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -70,8 +53,8 @@ class CreateSalesGroupCommand:
 class UpdateSalesGroupCommand:
     tenant_id: UUID
     group_id: UUID
-    # Every field below is None-means-unchanged (same convention as
-    # UpdateLeadSourceCommand). That makes capacity_per_agent unable to be
+    # Every field below is None-means-unchanged (same
+    # convention as the rule updates). That makes capacity_per_agent unable to be
     # PATCHed back to "uncapped" without a sentinel value; no brief exercises
     # that case, so it is not worth the extra machinery yet.
     name: Optional[str] = None
@@ -155,35 +138,6 @@ class DisqualificationRulesPageResult:
 
 
 @dataclass(frozen=True)
-class FailedRow:
-    row_number: int
-    # Optional since T2: a lead without an email is valid, and a row can
-    # still fail for another reason (e.g. a bad budget) while missing one.
-    email: Optional[str]
-    error: str
-    # A row can fail without a domain error code — an unexpected parse failure
-    # carries a message but no stable code for the client to branch on.
-    error_code: Optional[str] = None
-    # What the failure is recoverable from: the manager fixes the payload
-    # sitting in this IntakeRecord instead of re-submitting the whole row.
-    intake_record_id: str = ""
-
-
-@dataclass(frozen=True)
-class LeadProcessedResult:
-    lead_id: str
-    status: str
-    score: int
-    assigned_agent_id: Optional[str] = None
-    applied_rules_count: int = 0
-    error: Optional[str] = None
-    error_code: Optional[str] = None
-    # Always populated, success or rejection: the link from a result back to
-    # the payload that produced it.
-    intake_record_id: str = ""
-
-
-@dataclass(frozen=True)
 class LeadsPageResult:
     items: List["Lead"]
     total: int
@@ -204,78 +158,6 @@ class DiscardLeadCommand:
 
 
 @dataclass(frozen=True)
-class BatchProcessResult:
-    job_id: str
-    total_rows: int
-    successful_ingestions: int
-    failed_rows: List[FailedRow]
-
-
-@dataclass(frozen=True)
-class CreateLeadSourceCommand:
-    tenant_id: UUID
-    name: str
-    kind: str
-    field_mapping: Optional[Dict[str, str]] = None
-
-
-@dataclass(frozen=True)
-class UpdateLeadSourceCommand:
-    tenant_id: UUID
-    source_id: UUID
-    # None-means-unchanged, same convention as UpdateSalesGroupCommand.
-    name: Optional[str] = None
-    field_mapping: Optional[Dict[str, str]] = None
-    is_active: Optional[bool] = None
-
-
-@dataclass(frozen=True)
-class LeadSourcesPageResult:
-    items: List["LeadSource"]
-    total: int
-
-
-@dataclass(frozen=True)
-class PromoteIntakeRecordCommand:
-    tenant_id: UUID
-    record_id: UUID
-    # The full corrected payload, not a patch: the manager resends the whole
-    # form from the inbox.
-    payload: Dict[str, Any]
-
-
-@dataclass(frozen=True)
-class IntakeRecordsPageResult:
-    items: List["IntakeRecord"]
-    total: int
-
-
-@dataclass(frozen=True)
-class ReceiveIntakeCommand:
-    tenant_id: UUID
-    kind: str  # IntakeJobKind as str: DTOs do not import domain enums
-    # A list, not a dict: unit intake sends one payload and bulk intake sends
-    # none yet, because the file is parsed in phase 2.
-    payloads: List[Dict[str, Any]]
-    # The uploaded file of a batch, kept as received; parsing is the worker's.
-    filename: Optional[str] = None
-    content: Optional[bytes] = None
-
-
-@dataclass(frozen=True)
-class ReceiveIntakeResult:
-    job_id: str
-    record_ids: List[str]
-    status: str
-
-
-@dataclass(frozen=True)
-class IntakeJobsPageResult:
-    items: List["IntakeJob"]
-    total: int
-
-
-@dataclass(frozen=True)
 class AgentLoad:
     agent_id: UUID
     name: str
@@ -287,7 +169,6 @@ class LeadStatsResult:
     total: int
     by_status: Dict[str, int]
     unassigned: int
-    pending_intake: int
     load_by_agent: List[AgentLoad]
 
 
@@ -307,14 +188,3 @@ class OutboxEntry:
     occurred_on: datetime
     channel: str = "product"
     correlation_id: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class StoredIntakeFile:
-    """An uploaded file as received, kept before anything parses it."""
-
-    job_id: UUID
-    tenant_id: UUID
-    filename: str
-    content: bytes
-    parsed_at: Optional[datetime] = None

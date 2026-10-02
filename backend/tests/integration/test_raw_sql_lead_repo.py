@@ -2,18 +2,14 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
-from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
-    RawSqlLeadSourceRepository,
-)
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
     RawSqlSalesGroupRepository,
 )
 from domain.advisors.advisor import Advisor
 from domain.entities.lead import Lead
-from domain.entities.lead_source import LeadSource
 from domain.entities.sales_group import SalesGroup
 from domain.value_objects import LeadStatus
-from domain.value_objects.enums import AgentRole, LeadSourceKind
+from domain.value_objects.enums import AgentRole
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.tenant_id import TenantId
 
@@ -26,21 +22,12 @@ def _seed_advisor(connection, name: str, group_id: uuid.UUID, tenant_id: uuid.UU
     return advisor
 
 
-def _seed_source(connection, tenant_id: uuid.UUID) -> uuid.UUID:
-    """leads.source_id is a real foreign key (migration 005): an invented
-    UUID is rejected, so every test needs a persisted source of its own."""
-    source = RawSqlLeadSourceRepository(connection).save(
-        LeadSource.create(tenant_id=tenant_id, name="Formulario", kind=LeadSourceKind.MANUAL_FORM)
-    )
-    return source.id.value
-
-
 def test_raw_sql_lead_repository_lifecycle(test_db):
     with test_db.get_connection() as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
         lead_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         lead = Lead.create(
             tenant_id=tenant_id,
@@ -80,7 +67,7 @@ def test_a_lead_without_an_email_round_trips_as_none(test_db):
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
         lead_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         lead = Lead.create(
             tenant_id=tenant_id,
@@ -125,7 +112,7 @@ def test_active_load_by_agent_counts_only_currently_assigned_leads(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
         ana, beto = uuid.uuid4(), uuid.uuid4()
 
         for i in range(3):
@@ -180,7 +167,7 @@ def test_status_filter_returns_only_matching_leads(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW)
         _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW)
@@ -196,10 +183,8 @@ def test_source_filter_returns_only_matching_leads(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_a = _seed_source(connection, tenant_id)
-        source_b = RawSqlLeadSourceRepository(connection).save(
-            LeadSource.create(tenant_id=tenant_id, name="Referido", kind=LeadSourceKind.MANUAL_FORM)
-        ).id.value
+        source_a = uuid.uuid4()
+        source_b = uuid.uuid4()
 
         _seed_lead(connection, tenant_id, source_a)
         _seed_lead(connection, tenant_id, source_b)
@@ -214,7 +199,7 @@ def test_assigned_agent_id_filter(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
         agent_one, agent_two = uuid.uuid4(), uuid.uuid4()
 
         lead_one = _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
@@ -237,7 +222,7 @@ def test_group_id_filter_scopes_agents_to_the_tenant(test_db):
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
         other_tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         group = RawSqlSalesGroupRepository(connection).save(
             SalesGroup.create(tenant_id=tenant_id, name="Sales")
@@ -251,7 +236,6 @@ def test_group_id_filter_scopes_agents_to_the_tenant(test_db):
         found = repo.list_by_tenant(tenant_id, group_id=group.id.value)
         assert len(found) == 1
 
-        _seed_source(connection, other_tenant_id)
         other_group = RawSqlSalesGroupRepository(connection).save(
             SalesGroup.create(tenant_id=other_tenant_id, name="Other Sales")
         )
@@ -262,7 +246,7 @@ def test_two_filters_combine_with_and(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW, company="Acme")
         _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED, company="Acme")
@@ -278,7 +262,7 @@ def test_search_matches_name_email_and_company_but_not_unrelated_leads(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         _seed_lead(connection, tenant_id, source_id, first_name="Valentina", last_name="Rios")
         _seed_lead(connection, tenant_id, source_id, first_name="Pedro", last_name="Valentin")
@@ -297,7 +281,7 @@ def test_search_with_a_literal_percent_is_not_treated_as_a_wildcard(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         _seed_lead(connection, tenant_id, source_id, company="50% Off Corp")
         _seed_lead(connection, tenant_id, source_id, company="Regular Corp 501")
@@ -313,7 +297,7 @@ def test_search_with_a_literal_underscore_is_not_treated_as_a_wildcard(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         _seed_lead(connection, tenant_id, source_id, company="a_b Corp")
         _seed_lead(connection, tenant_id, source_id, company="axb Corp")
@@ -327,7 +311,7 @@ def test_pagination_with_a_filter_reports_the_full_total(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         for _ in range(3):
             _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
@@ -345,7 +329,7 @@ def test_count_by_status_fills_all_six_statuses_with_zero(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW)
         _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW)
@@ -367,7 +351,7 @@ def test_count_by_status_respects_the_date_range(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         now = datetime.now(timezone.utc)
         _seed_lead(connection, tenant_id, source_id, status=LeadStatus.NEW, created_at=now)
@@ -385,7 +369,7 @@ def test_active_load_by_agent_with_names_only_counts_assigned_and_orders_by_load
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
 
         group = RawSqlSalesGroupRepository(connection).save(
             SalesGroup.create(tenant_id=tenant_id, name="Sales")
@@ -416,7 +400,7 @@ def test_updated_since_returns_only_what_changed_after_the_instant(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
         cutoff = datetime.now(timezone.utc)
 
         stale = _seed_lead(connection, tenant_id, source_id, updated_at=cutoff - timedelta(hours=1))
@@ -438,7 +422,7 @@ def test_catching_up_pages_in_ascending_update_order(test_db):
     with test_db.get_connection(autocommit=True) as connection:
         repo = RawSqlLeadRepository(connection)
         tenant_id = uuid.uuid4()
-        source_id = _seed_source(connection, tenant_id)
+        source_id = uuid.uuid4()
         cutoff = datetime.now(timezone.utc)
 
         # Created newest-first, updated oldest-first: the two orders disagree,

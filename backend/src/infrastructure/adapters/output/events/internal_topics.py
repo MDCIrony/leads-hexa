@@ -11,12 +11,10 @@ _TOPIC_BY_EVENT_TYPE = {
     "LeadAssigned": "internal.lead-core.events",
     "LeadReassigned": "internal.lead-core.events",
     "LeadLeftUnassigned": "internal.lead-core.events",
-    "IntakeRejected": "internal.intake.events",
 }
 
 INTERNAL_TOPIC_SPECS: list[TopicSpec] = [
     TopicSpec("internal.lead-core.events", 3, _EVENTS),
-    TopicSpec("internal.intake.events", 3, _EVENTS),
 ]
 
 

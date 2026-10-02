@@ -62,30 +62,6 @@ class GetLeadQuery:
 
 
 @dataclass(frozen=True)
-class GetLeadSourcesQuery:
-    tenant_id: UUID
-    limit: int = 100
-    offset: int = 0
-
-
-@dataclass(frozen=True)
-class GetIntakeRecordsQuery:
-    tenant_id: UUID
-    status: Optional[str] = None
-    job_id: Optional[UUID] = None
-    limit: int = 100
-    offset: int = 0
-
-
-@dataclass(frozen=True)
-class GetIntakeJobsQuery:
-    tenant_id: UUID
-    status: Optional[str] = None
-    limit: int = 100
-    offset: int = 0
-
-
-@dataclass(frozen=True)
 class GetLeadStatsQuery:
     tenant_id: UUID
     date_from: Optional[datetime] = None

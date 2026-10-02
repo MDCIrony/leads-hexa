@@ -1,7 +1,7 @@
 """lead-core's half of an ingestion: decide what a candidate becomes (ADR-0035).
 
 Knows nothing of intake records beyond their id: claiming and closing the
-record is intake's half, which reaches this one through LeadAdmissionPort."""
+record is intake's half, which reaches this one over /internal/v1/admissions."""
 from typing import Dict, Optional
 from uuid import UUID
 

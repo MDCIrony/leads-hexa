@@ -2,25 +2,12 @@ import uuid
 from typing import Optional
 
 from domain.entities.lead import Lead
-from domain.entities.lead_source import LeadSource
-from domain.value_objects.enums import LeadSourceKind, LeadStatus
+from domain.value_objects.enums import LeadStatus
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import (
     RawSqlLeadRepository,
 )
-from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
-    RawSqlLeadSourceRepository,
-)
 
 _TENANT = uuid.uuid4()
-
-
-def _seed_source(conn, tenant_id: uuid.UUID) -> uuid.UUID:
-    """leads.source_id is a real foreign key (migration 005): an invented
-    UUID is rejected, so every test needs a persisted source of its own."""
-    source = RawSqlLeadSourceRepository(conn).save(
-        LeadSource.create(tenant_id=tenant_id, name="Formulario", kind=LeadSourceKind.MANUAL_FORM)
-    )
-    return source.id.value
 
 
 def _lead(email: str, source_id: uuid.UUID, tenant_id: Optional[uuid.UUID] = None) -> Lead:
@@ -34,7 +21,7 @@ def _lead(email: str, source_id: uuid.UUID, tenant_id: Optional[uuid.UUID] = Non
 def test_the_assignment_trace_survives_a_round_trip(test_db):
     with test_db.get_connection(autocommit=True) as conn:
         repo = RawSqlLeadRepository(conn)
-        source_id = _seed_source(conn, _TENANT)
+        source_id = uuid.uuid4()
         agent = uuid.uuid4()
         lead = _lead(f"trace-{uuid.uuid4()}@x.test", source_id)
         lead.assign_to(agent, _TENANT)
@@ -50,7 +37,7 @@ def test_the_assignment_trace_survives_a_round_trip(test_db):
 def test_a_discarded_lead_keeps_its_reason(test_db):
     with test_db.get_connection(autocommit=True) as conn:
         repo = RawSqlLeadRepository(conn)
-        source_id = _seed_source(conn, _TENANT)
+        source_id = uuid.uuid4()
         lead = _lead(f"disc-{uuid.uuid4()}@x.test", source_id)
         lead.discard("duplicado")
         repo.save(lead)
@@ -65,7 +52,7 @@ def test_an_agent_only_sees_their_own_leads(test_db):
     with test_db.get_connection(autocommit=True) as conn:
         repo = RawSqlLeadRepository(conn)
         tenant = uuid.uuid4()
-        source_id = _seed_source(conn, tenant)
+        source_id = uuid.uuid4()
         mine, theirs = uuid.uuid4(), uuid.uuid4()
 
         a = _lead(f"mine-{uuid.uuid4()}@x.test", source_id, tenant); a.assign_to(mine, tenant); repo.save(a)
@@ -80,7 +67,7 @@ def test_an_agent_only_sees_their_own_leads(test_db):
 def test_reading_a_lead_of_another_organization_returns_nothing(test_db):
     with test_db.get_connection(autocommit=True) as conn:
         repo = RawSqlLeadRepository(conn)
-        source_id = _seed_source(conn, _TENANT)
+        source_id = uuid.uuid4()
         lead = _lead(f"other-{uuid.uuid4()}@x.test", source_id)
         repo.save(lead)
 

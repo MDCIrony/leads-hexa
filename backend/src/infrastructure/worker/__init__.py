@@ -1,4 +1,4 @@
-"""Delivery process: relays the outbox to Kafka, webhooks and RabbitMQ, and runs
+"""Delivery process: relays the outbox to Kafka and webhooks, and runs
 the consumers that keep lead-core's projections current.
 
 Its own compose service, not threads inside the API, so a slow broker or a

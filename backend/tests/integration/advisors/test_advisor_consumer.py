@@ -6,7 +6,7 @@ from chassis.testing.contracts import load_fixture
 
 from infrastructure.adapters.input.consumers.advisor_consumer import AdvisorConsumer
 from infrastructure.adapters.input.consumers.groups import (
-    ADVISORS_GROUP, CONSUMER_GROUPS, DLQ_TOPIC_SPECS, INTAKE_TENANTS_GROUP,
+    ADVISORS_GROUP, CONSUMER_GROUPS, DLQ_TOPIC_SPECS,
 )
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 
@@ -51,8 +51,7 @@ def test_the_platform_admin_state_is_ignored(test_db):
 
 
 def test_each_group_reads_its_identity_topic_and_declares_its_own_dead_letter_topic():
-    assert CONSUMER_GROUPS == {ADVISORS_GROUP: "internal.identity.agents",
-                               INTAKE_TENANTS_GROUP: "internal.identity.tenants"}
+    assert CONSUMER_GROUPS == {ADVISORS_GROUP: "internal.identity.agents"}
     dlq = {"cleanup.policy": "delete", "retention.ms": "604800000"}
     assert [(spec.name, spec.partitions, spec.config) for spec in DLQ_TOPIC_SPECS] == [
-        ("internal.dlq.lead-core.advisors", 1, dlq), ("internal.dlq.intake.tenants", 1, dlq)]
+        ("internal.dlq.lead-core.advisors", 1, dlq)]

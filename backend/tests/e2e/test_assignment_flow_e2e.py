@@ -4,7 +4,7 @@ from auth_helpers import admin_headers, agent_of, seed_org_manager
 from gateway_client import GatewayClient, tenant_of
 
 from infrastructure.main import app
-from _intake_helpers import ingest_and_resolve
+from _admission_helpers import admit_lead
 
 
 def _bootstrap_admin_headers(client: GatewayClient) -> dict:
@@ -99,7 +99,7 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
             assert scoring_resp.status_code == 201, scoring_resp.text
 
         def _ingest(budget: float) -> dict:
-            record = ingest_and_resolve(
+            record = admit_lead(
                 client,
                 headers,
                 {
