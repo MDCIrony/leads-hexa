@@ -6,21 +6,24 @@
 
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', role, password)
 FROM (VALUES ('notifications_svc', :'notifications_password'),
-             ('identity_svc', :'identity_password')) AS roles (role, password)
+             ('identity_svc', :'identity_password'),
+             ('intake_svc', :'intake_password')) AS roles (role, password)
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role)
 \gexec
 
 -- Unconditional: keeps each role's password in step with Compose when it changes.
 SELECT format('ALTER ROLE %I PASSWORD %L', role, password)
 FROM (VALUES ('notifications_svc', :'notifications_password'),
-             ('identity_svc', :'identity_password')) AS roles (role, password)
+             ('identity_svc', :'identity_password'),
+             ('intake_svc', :'intake_password')) AS roles (role, password)
 \gexec
 
 -- The test databases exist up front because no service role has CREATEDB.
 CREATE TEMP TABLE service_databases (name text, owner text);
 INSERT INTO service_databases VALUES
     ('notifications_db', 'notifications_svc'), ('notifications_test', 'notifications_svc'),
-    ('identity_db', 'identity_svc'), ('identity_test', 'identity_svc');
+    ('identity_db', 'identity_svc'), ('identity_test', 'identity_svc'),
+    ('intake_db', 'intake_svc'), ('intake_test', 'intake_svc');
 
 -- CREATE DATABASE cannot run in a transaction or a DO block; \gexec sends each statement on its own.
 SELECT format('CREATE DATABASE %I OWNER %I', name, owner)

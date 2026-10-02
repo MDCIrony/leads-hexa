@@ -26,7 +26,7 @@ services:
     volumes:
       # A directory, not a file, for the same reason as the gateway config.
       - ./db:/bootstrap:ro
-    command: ["psql", "-h", "db", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "notifications_password=notificationspassword", "-v", "identity_password=identitypassword", "-f", "/bootstrap/bootstrap.sql"]
+    command: ["psql", "-h", "db", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "notifications_password=notificationspassword", "-v", "identity_password=identitypassword", "-v", "intake_password=intakepassword", "-f", "/bootstrap/bootstrap.sql"]
     depends_on:
       db:
         condition: service_healthy
@@ -533,6 +533,30 @@ services:
     environment:
       - DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_test
       - TEST_DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_test
+      - PYTHONDONTWRITEBYTECODE=1
+    command: ["pytest", "-q"]
+
+  intake-test:
+    profiles: ["test"]
+    build:
+      context: ./services/intake
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: test
+    volumes:
+      - ./services/intake/src:/srv/services/intake/src:ro
+      - ./services/intake/tests:/srv/services/intake/tests:ro
+      - ./services/intake/migrations:/srv/services/intake/migrations:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+      - ./contracts:/srv/contracts:ro
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    # The role has no CREATEDB: intake_test already exists, made by db-bootstrap.
+    environment:
+      - DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_test
+      - TEST_DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_test
       - PYTHONDONTWRITEBYTECODE=1
     command: ["pytest", "-q"]
 

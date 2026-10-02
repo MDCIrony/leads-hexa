@@ -1,0 +1,17 @@
+{
+  "tenant_id": "3f2b8c1e-6d4a-4b7e-9c1f-2a5d8e7b6c40",
+  "intake_record_id": "5b9d1e7a-2c3f-4d86-a1b0-7e4c9f2d8a13",
+  "source_id": "c4e7a9b2-1d3f-4a58-b6c0-8f2e5d7a9b31",
+  "candidate": {
+    "first_name": "Lucía",
+    "last_name": "Fernández",
+    "email": "lucia.fernandez@example.com",
+    "phone": "+34600111222",
+    "company": "Fernández e Hijos",
+    "industry": "retail",
+    "budget": "9000.00",
+    "custom_attributes": {
+      "campaign": "autumn"
+    }
+  }
+}

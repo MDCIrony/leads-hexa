@@ -1,0 +1,10 @@
+{
+  "outcome": "REJECTED",
+  "errors": [
+    {
+      "field": "email",
+      "message": "Invalid email address",
+      "error_code": "INVALID_EMAIL"
+    }
+  ]
+}

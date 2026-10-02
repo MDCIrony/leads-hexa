@@ -8,19 +8,23 @@ quien produce demuestra que su salida conforma; quien consume, que sabe leer las
 | Ruta | Contenido |
 |---|---|
 | `openapi/identity-internal.v1.yaml` | OpenAPI 3.1 de las rutas internas de identity: introspección, JWKS, tokens de servicio y `GET /internal/v1/agents/{agent_id}` |
+| `openapi/lead-core-internal.v1.yaml` | OpenAPI 3.1 de las rutas internas de lead-core: `POST` y `GET /internal/v1/admissions` (admisión idempotente y reconciliación) |
 | `events/envelope.v1.schema.json` | El sobre de todo evento interno (`$id` `envelope.v1`), tal como lo escribe `chassis.outbox.envelope` y lo lee `chassis.consumer.envelope` |
 | `events/<EventType>.v1.schema.json` | Un esquema por evento interno: el sobre más su `event_type` y su `payload` |
 | `schemas/identity/*.v1.schema.json` | Los cuerpos JSON de la API interna de identity; el OpenAPI los referencia con `$ref` relativo |
+| `schemas/lead-core/*.v1.schema.json` | Los cuerpos de la admisión: petición, resultado (`ADMITTED` o `REJECTED`) y consulta de reconciliación |
+| `schemas/intake/job-message.v1.schema.json` | El mensaje de la cola `intake.jobs` de RabbitMQ (`$id` `intake.job-message.v1`) |
 | `fixtures/events/<EventType>.v1.json` | Un sobre completo y válido por evento |
 | `fixtures/identity/*.v1.json` | Un cuerpo de respuesta válido por esquema de identity. El `access_token` de muestra es `"<opaque>"`, no un JWT |
+| `fixtures/lead-core/*.v1.json` | Una petición, un resultado `ADMITTED`, uno `REJECTED` y una consulta de admisión válidos |
+| `fixtures/intake/job-message.v1.json` | Un mensaje de job válido |
 
 Los esquemas son JSON Schema 2020-12 y se identifican por su `$id` (`envelope.v1`, `AgentState.v1`,
 `identity.agent.v1`…), no por su ruta.
 
 Eventos en v1: `AgentState`, `TenantState`, `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned`,
 `IntakeRejected`. El `payload` es el `as_payload()` del evento: sus campos sin `event_id` ni
-`occurred_on`, con `tenant_id`. `admissions` y el mensaje de `intake.jobs` entran en F4 como ficheros
-v1 nuevos.
+`occurred_on`, con `tenant_id`.
 
 ## Versionado
 

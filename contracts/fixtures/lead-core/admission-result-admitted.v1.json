@@ -1,0 +1,8 @@
+{
+  "outcome": "ADMITTED",
+  "lead_id": "e1f2a3b4-5c6d-4e7f-8091-a2b3c4d5e6f7",
+  "status": "ASSIGNED",
+  "score": 65,
+  "assigned_agent_id": "8a1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d",
+  "applied_rules_count": 3
+}

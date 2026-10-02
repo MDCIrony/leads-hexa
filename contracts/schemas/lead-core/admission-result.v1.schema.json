@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lead-core.admission-result.v1",
+  "title": "Admission result, v1",
+  "description": "200 body of POST /internal/v1/admissions: the lead admitted or the validation errors.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "outcome",
+        "lead_id",
+        "status",
+        "score",
+        "assigned_agent_id",
+        "applied_rules_count"
+      ],
+      "properties": {
+        "outcome": {
+          "const": "ADMITTED"
+        },
+        "lead_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "status": {
+          "enum": [
+            "ASSIGNED",
+            "UNASSIGNED",
+            "DISQUALIFIED",
+            "QUALIFIED"
+          ]
+        },
+        "score": {
+          "type": "integer"
+        },
+        "assigned_agent_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "applied_rules_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "type": "object",
+      "required": [
+        "outcome",
+        "errors"
+      ],
+      "properties": {
+        "outcome": {
+          "const": "REJECTED"
+        },
+        "errors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "field",
+              "message",
+              "error_code"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "error_code": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}

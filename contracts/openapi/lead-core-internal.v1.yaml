@@ -1,0 +1,115 @@
+openapi: 3.1.0
+info:
+  title: lead-core — API interna
+  version: "1"
+  description: >
+    Rutas que lead-core sirve sólo dentro de la red de Compose. El gateway responde 404 a
+    cualquier `/internal/` que llegue de fuera. Diseño en
+    docs/content/microservices/04-comunicacion-y-eventos.md §Contrato de admisión (ADR-0035).
+servers:
+  - url: http://backend:8000
+paths:
+  /internal/v1/admissions:
+    post:
+      operationId: admitLead
+      summary: Admite un candidato como lead. Idempotente por (tenant_id, intake_record_id).
+      description: >
+        Lo llama intake con un token de servicio (`sub=intake`, `aud=lead-core`). Si el registro ya
+        produjo un lead, devuelve ese mismo lead (con su estado real) y no publica nada. `REJECTED`
+        no guarda nada y es determinista. `budget` viaja como texto decimal; un valor ilegible da
+        `REJECTED` con `INVALID_BUDGET`, nunca 422.
+      security:
+        - serviceToken: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "../schemas/lead-core/admission-request.v1.schema.json"}
+      responses:
+        "200":
+          description: El lead admitido o los errores de validación.
+          content:
+            application/json:
+              schema: {$ref: "../schemas/lead-core/admission-result.v1.schema.json"}
+        "401":
+          description: >
+            Token de servicio ausente, inválido o de otro llamante (no se distinguen).
+            `error_code`: `UNAUTHORIZED`.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "422":
+          description: El cuerpo no tiene la forma del contrato.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "5xx":
+          description: Error del servicio o claves de verificación no disponibles (503). El llamante lo trata como fallo transitorio.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+    get:
+      operationId: lookupAdmissions
+      summary: Qué registros de intake conoce lead-core y con qué lead (reconciliación).
+      description: >
+        Los ids desconocidos no aparecen en la respuesta.
+      security:
+        - serviceToken: []
+      parameters:
+        - name: intake_record_ids
+          in: query
+          required: true
+          description: Parámetro repetido, de 1 a 200 ids.
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 200
+            items: {type: string, format: uuid}
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Los registros conocidos.
+          content:
+            application/json:
+              schema: {$ref: "../schemas/lead-core/admission-lookup.v1.schema.json"}
+        "401":
+          description: Token de servicio ausente, inválido o de otro llamante.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "422":
+          description: Más de 200 ids, ninguno, o alguno inválido.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "5xx":
+          description: Error del servicio o claves de verificación no disponibles (503).
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de `POST /internal/v1/service-tokens` de identity con `audience=lead-core`.
+  parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: El `correlation_id` del job; recorre el camino de punta a punta.
+      schema: {type: string, pattern: "^[A-Za-z0-9._-]{1,128}$"}
+  schemas:
+    Error:
+      type: object
+      required: [error, error_code, message]
+      properties:
+        error: {const: true}
+        error_code: {type: string, examples: [UNAUTHORIZED, VALIDATION_ERROR]}
+        message: {type: string}
