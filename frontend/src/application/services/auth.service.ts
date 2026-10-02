@@ -1,5 +1,5 @@
 import { apiClient, loginRequest } from '../../infrastructure/api/api-client';
-import type { components } from '../../infrastructure/api/schema';
+import type { components } from '../../infrastructure/api/identity-schema';
 
 export type CurrentUser = components['schemas']['CurrentUserResponse'];
 export type LoginResult = components['schemas']['LoginResponse'];

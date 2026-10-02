@@ -1,5 +1,5 @@
 import { apiClient } from '../../infrastructure/api/api-client';
-import type { components } from '../../infrastructure/api/schema';
+import type { components } from '../../infrastructure/api/identity-schema';
 import type { PaginatedEnvelope } from '../data/use-paginated';
 
 export type Tenant = components['schemas']['TenantResponse'];

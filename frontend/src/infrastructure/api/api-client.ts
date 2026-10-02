@@ -1,5 +1,5 @@
 import axios, { type AxiosRequestConfig } from 'axios';
-import type { components } from './schema';
+import type { components } from './identity-schema';
 
 // baseURL empty: every call passes the full '/api/v1/...' path, the same
 // string that indexes the generated schema types. Splitting the prefix

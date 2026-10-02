@@ -367,25 +367,24 @@ export interface paths {
         patch: operations["update_disqualification_rule_api_v1_rules_disqualification__rule_id__patch"];
         trace?: never;
     };
-    "/api/v1/agents": {
+    "/api/v1/advisors": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Agents */
-        get: operations["list_agents_api_v1_agents_get"];
+        /** List Advisors */
+        get: operations["list_advisors_api_v1_advisors_get"];
         put?: never;
-        /** Create Agent */
-        post: operations["create_agent_api_v1_agents_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/agents/integration-credential": {
+    "/api/v1/advisors/{agent_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -394,31 +393,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Issue Integration Credential */
-        post: operations["issue_integration_credential_api_v1_agents_integration_credential_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/agents/{agent_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Agent */
-        get: operations["get_agent_api_v1_agents__agent_id__get"];
-        put?: never;
-        post?: never;
-        /** Deactivate Agent */
-        delete: operations["deactivate_agent_api_v1_agents__agent_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Agent */
-        patch: operations["update_agent_api_v1_agents__agent_id__patch"];
+        /** Set Advisor Group */
+        patch: operations["set_advisor_group_api_v1_advisors__agent_id__patch"];
         trace?: never;
     };
     "/api/v1/groups": {
@@ -493,300 +473,40 @@ export interface paths {
         patch: operations["update_source_api_v1_sources__source_id__patch"];
         trace?: never;
     };
-    "/api/v1/auth/oauth/providers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Oauth Providers */
-        get: operations["oauth_providers_api_v1_auth_oauth_providers_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/oauth/{provider}/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Start Oauth Login */
-        get: operations["start_oauth_login_api_v1_auth_oauth__provider__start_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/oauth/{provider}/callback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Oauth Callback */
-        get: operations["oauth_callback_api_v1_auth_oauth__provider__callback_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Login */
-        post: operations["login_api_v1_auth_login_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Logout */
-        post: operations["logout_api_v1_auth_logout_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Verify Mfa Login */
-        post: operations["verify_mfa_login_api_v1_auth_mfa_verify_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/setup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Setup Mfa */
-        post: operations["setup_mfa_api_v1_auth_mfa_setup_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/setup/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Confirm Mfa Setup */
-        post: operations["confirm_mfa_setup_api_v1_auth_mfa_setup_confirm_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/recovery-codes/regenerate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Regenerate Recovery Codes */
-        post: operations["regenerate_recovery_codes_api_v1_auth_mfa_recovery_codes_regenerate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/mfa/disable": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Disable Mfa */
-        post: operations["disable_mfa_api_v1_auth_mfa_disable_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Current User */
-        get: operations["get_current_user_api_v1_auth_me_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Tenants */
-        get: operations["list_tenants_api_v1_tenants_get"];
-        put?: never;
-        /** Create Tenant */
-        post: operations["create_tenant_api_v1_tenants_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tenants/{tenant_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Tenant */
-        patch: operations["update_tenant_api_v1_tenants__tenant_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Notifications */
-        get: operations["list_notifications_api_v1_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/notifications/read-all": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Mark All Notifications Read */
-        post: operations["mark_all_notifications_read_api_v1_notifications_read_all_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/notifications/{notification_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Mark Notification Read */
-        post: operations["mark_notification_read_api_v1_notifications__notification_id__read_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AgentCreate */
-        AgentCreate: {
+        /** AdvisorGroupUpdate */
+        AdvisorGroupUpdate: {
+            /** Group Id */
+            group_id: string | null;
+        };
+        /** AdvisorResponse */
+        AdvisorResponse: {
+            /** Agent Id */
+            agent_id: string;
             /** Name */
             name: string;
-            /** Email */
-            email: string;
             /** Group Id */
-            group_id?: string | null;
-            /**
-             * Is Active
-             * @default true
-             */
+            group_id: string | null;
+            /** Is Active */
             is_active: boolean;
-            /** Password */
-            password: string;
-            /** @default AGENT */
-            role: components["schemas"]["AgentRole"];
+            /** Active Load */
+            active_load: number;
+        };
+        /** AdvisorsPageResponse */
+        AdvisorsPageResponse: {
+            /** Items */
+            items: components["schemas"]["AdvisorResponse"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Has More */
+            has_more: boolean;
         };
         /** AgentLoadResponse */
         AgentLoadResponse: {
@@ -807,37 +527,6 @@ export interface components {
          * @enum {string}
          */
         AgentMatchMode: "ANY" | "ONLY";
-        /** AgentResponse */
-        AgentResponse: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Email */
-            email: string;
-            /** Group Id */
-            group_id?: string | null;
-            /** Is Active */
-            is_active: boolean;
-            /** Role */
-            role: string;
-            /** Tenant Id */
-            tenant_id?: string | null;
-        };
-        /**
-         * AgentRole
-         * @enum {string}
-         */
-        AgentRole: "ADMIN" | "MANAGER" | "AGENT" | "INTEGRATION";
-        /** AgentUpdate */
-        AgentUpdate: {
-            /** Name */
-            name?: string | null;
-            /** Group Id */
-            group_id?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
-        };
         /** AppliedRuleResponse */
         AppliedRuleResponse: {
             /** Rule Id */
@@ -939,30 +628,6 @@ export interface components {
             /** File */
             file: string;
         };
-        /** Body_login_api_v1_auth_login_post */
-        Body_login_api_v1_auth_login_post: {
-            /** Grant Type */
-            grant_type?: string | null;
-            /** Username */
-            username: string;
-            /**
-             * Password
-             * Format: password
-             */
-            password: string;
-            /**
-             * Scope
-             * @default
-             */
-            scope: string;
-            /** Client Id */
-            client_id?: string | null;
-            /**
-             * Client Secret
-             * Format: password
-             */
-            client_secret?: string | null;
-        };
         /** CriterionSchema */
         CriterionSchema: {
             /** Field */
@@ -970,25 +635,6 @@ export interface components {
             operator: components["schemas"]["Operator"];
             /** Value */
             value?: unknown;
-        };
-        /** CurrentUserResponse */
-        CurrentUserResponse: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Email */
-            email: string;
-            /** Role */
-            role: string;
-            /** Tenant Id */
-            tenant_id?: string | null;
-            /** Tenant Name */
-            tenant_name?: string | null;
-            /** Mfa Enabled */
-            mfa_enabled: boolean;
-            /** Linked Oauth Providers */
-            linked_oauth_providers?: string[];
         };
         /** DiscardLeadRequest */
         DiscardLeadRequest: {
@@ -1158,28 +804,6 @@ export interface components {
             offset: number;
             /** Has More */
             has_more: boolean;
-        };
-        /**
-         * IntegrationCredentialResponse
-         * @description Deliberately not AgentResponse plus a field: the secrets here must
-         *     never be echoed back by GET /agents/{agent_id}, so the two shapes stay
-         *     separate on purpose.
-         */
-        IntegrationCredentialResponse: {
-            /** Agent Id */
-            agent_id: string;
-            /** Tenant Id */
-            tenant_id: string;
-            /** Api Key */
-            api_key: string;
-            /** Kafka Username */
-            kafka_username: string;
-            /** Kafka Password */
-            kafka_password: string;
-            /** Kafka Bootstrap Servers */
-            kafka_bootstrap_servers: string;
-            /** Kafka Topic */
-            kafka_topic: string;
         };
         /** LeadDetailResponse */
         LeadDetailResponse: {
@@ -1351,98 +975,11 @@ export interface components {
             /** Load By Agent */
             load_by_agent: components["schemas"]["AgentLoadResponse"][];
         };
-        /** LoginResponse */
-        LoginResponse: {
-            /** Status */
-            status: string;
-        };
-        /** MfaCodeRequest */
-        MfaCodeRequest: {
-            /** Code */
-            code: string;
-        };
-        /** MfaFactorRequest */
-        MfaFactorRequest: {
-            /** Password */
-            password: string;
-            /** Code */
-            code: string;
-        };
-        /** MfaPasswordRequest */
-        MfaPasswordRequest: {
-            /** Password */
-            password: string;
-        };
-        /** MfaRecoveryCodesResponse */
-        MfaRecoveryCodesResponse: {
-            /** Recovery Codes */
-            recovery_codes: string[];
-        };
-        /** MfaSetupResponse */
-        MfaSetupResponse: {
-            /** Secret */
-            secret: string;
-            /** Otpauth Uri */
-            otpauth_uri: string;
-        };
-        /** NotificationResponse */
-        NotificationResponse: {
-            /** Id */
-            id: string;
-            /** Kind */
-            kind: string;
-            /** Message */
-            message: string;
-            /** Lead Id */
-            lead_id?: string | null;
-            /** Intake Record Id */
-            intake_record_id?: string | null;
-            /** Is Read */
-            is_read: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-        };
-        /** NotificationsPageResponse */
-        NotificationsPageResponse: {
-            /** Items */
-            items: components["schemas"]["NotificationResponse"][];
-            /** Total */
-            total: number;
-            /** Limit */
-            limit: number;
-            /** Offset */
-            offset: number;
-            /** Has More */
-            has_more: boolean;
-            /** Unread Count */
-            unread_count: number;
-        };
-        /** OAuthProvidersResponse */
-        OAuthProvidersResponse: {
-            /** Providers */
-            providers: string[];
-        };
         /**
          * Operator
          * @enum {string}
          */
         Operator: "EQUALS" | "NOT_EQUALS" | "GREATER_THAN" | "LESS_THAN" | "CONTAINS" | "IN" | "IS_EMPTY" | "IS_NOT_EMPTY";
-        /** PaginatedAgentsResponse */
-        PaginatedAgentsResponse: {
-            /** Items */
-            items: components["schemas"]["AgentResponse"][];
-            /** Total */
-            total: number;
-            /** Limit */
-            limit: number;
-            /** Offset */
-            offset: number;
-            /** Has More */
-            has_more: boolean;
-        };
         /** PaginatedAssignmentRulesResponse */
         PaginatedAssignmentRulesResponse: {
             /** Items */
@@ -1512,19 +1049,6 @@ export interface components {
         PaginatedSourcesResponse: {
             /** Items */
             items: components["schemas"]["LeadSourceResponse"][];
-            /** Total */
-            total: number;
-            /** Limit */
-            limit: number;
-            /** Offset */
-            offset: number;
-            /** Has More */
-            has_more: boolean;
-        };
-        /** PaginatedTenantsResponse */
-        PaginatedTenantsResponse: {
-            /** Items */
-            items: components["schemas"]["TenantResponse"][];
             /** Total */
             total: number;
             /** Limit */
@@ -1625,44 +1149,6 @@ export interface components {
             score_delta?: number | null;
             /** Priority */
             priority?: number | null;
-            /** Is Active */
-            is_active?: boolean | null;
-        };
-        /** TenantCreate */
-        TenantCreate: {
-            /** Name */
-            name: string;
-            manager: components["schemas"]["TenantManagerCreate"];
-        };
-        /** TenantManagerCreate */
-        TenantManagerCreate: {
-            /** Name */
-            name: string;
-            /** Email */
-            email: string;
-            /** Password */
-            password: string;
-        };
-        /** TenantResponse */
-        TenantResponse: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Slug */
-            slug: string;
-            /** Is Active */
-            is_active: boolean;
-            /** Created At */
-            created_at: string;
-            /** Agent Count */
-            agent_count?: number | null;
-            manager?: components["schemas"]["AgentResponse"] | null;
-        };
-        /** TenantUpdate */
-        TenantUpdate: {
-            /** Name */
-            name?: string | null;
             /** Is Active */
             is_active?: boolean | null;
         };
@@ -2559,7 +2045,7 @@ export interface operations {
             };
         };
     };
-    list_agents_api_v1_agents_get: {
+    list_advisors_api_v1_advisors_get: {
         parameters: {
             query?: {
                 group_id?: string | null;
@@ -2579,7 +2065,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedAgentsResponse"];
+                    "application/json": components["schemas"]["AdvisorsPageResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2593,122 +2079,7 @@ export interface operations {
             };
         };
     };
-    create_agent_api_v1_agents_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    issue_integration_credential_api_v1_agents_integration_credential_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IntegrationCredentialResponse"];
-                };
-            };
-        };
-    };
-    get_agent_api_v1_agents__agent_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agent_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    deactivate_agent_api_v1_agents__agent_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agent_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_agent_api_v1_agents__agent_id__patch: {
+    set_advisor_group_api_v1_advisors__agent_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -2719,7 +2090,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AgentUpdate"];
+                "application/json": components["schemas"]["AdvisorGroupUpdate"];
             };
         };
         responses: {
@@ -2729,7 +2100,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AgentResponse"];
+                    "application/json": components["schemas"]["AdvisorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2989,503 +2360,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LeadSourceResponse"];
                 };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    oauth_providers_api_v1_auth_oauth_providers_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OAuthProvidersResponse"];
-                };
-            };
-        };
-    };
-    start_oauth_login_api_v1_auth_oauth__provider__start_get: {
-        parameters: {
-            query?: {
-                return_path?: string;
-            };
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Redirección al proveedor OAuth */
-            303: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    oauth_callback_api_v1_auth_oauth__provider__callback_get: {
-        parameters: {
-            query?: {
-                code?: string | null;
-                state?: string | null;
-            };
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Redirección tras OAuth */
-            303: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    login_api_v1_auth_login_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/x-www-form-urlencoded": components["schemas"]["Body_login_api_v1_auth_login_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoginResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    logout_api_v1_auth_logout_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    verify_mfa_login_api_v1_auth_mfa_verify_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaCodeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LoginResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    setup_mfa_api_v1_auth_mfa_setup_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaPasswordRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfaSetupResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    confirm_mfa_setup_api_v1_auth_mfa_setup_confirm_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaCodeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfaRecoveryCodesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    regenerate_recovery_codes_api_v1_auth_mfa_recovery_codes_regenerate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaFactorRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfaRecoveryCodesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    disable_mfa_api_v1_auth_mfa_disable_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MfaFactorRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_current_user_api_v1_auth_me_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CurrentUserResponse"];
-                };
-            };
-        };
-    };
-    list_tenants_api_v1_tenants_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaginatedTenantsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_tenant_api_v1_tenants_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_tenant_api_v1_tenants__tenant_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                tenant_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_notifications_api_v1_notifications_get: {
-        parameters: {
-            query?: {
-                unread_only?: boolean;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationsPageResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mark_all_notifications_read_api_v1_notifications_read_all_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    mark_notification_read_api_v1_notifications__notification_id__read_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                notification_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {
