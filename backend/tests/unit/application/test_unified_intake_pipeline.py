@@ -2,7 +2,6 @@ import uuid
 from typing import List
 
 from application.dtos.commands import IngestLeadCommand
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
 from domain.entities.intake_job import IntakeJob
@@ -12,6 +11,7 @@ from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
+from tests.unit.mocks.in_process_ingest import in_process_ingest
 
 
 def _command(**overrides) -> IngestLeadCommand:
@@ -60,7 +60,7 @@ def _existing_record(uow: InMemoryUnitOfWork, command: IngestLeadCommand) -> Int
 def test_valid_payload_promotes_the_intake_record_to_the_created_lead():
     tenant_id = uuid.uuid4()
     uow = _new_uow()
-    use_case = IngestLeadUseCase(uow=uow)
+    use_case = in_process_ingest(uow)
     command = _command(tenant_id=tenant_id)
     existing = _existing_record(uow, command)
 
@@ -77,7 +77,7 @@ def test_valid_payload_promotes_the_intake_record_to_the_created_lead():
 def test_invalid_email_rejects_the_intake_record_without_creating_a_lead():
     tenant_id = uuid.uuid4()
     uow = _new_uow()
-    use_case = IngestLeadUseCase(uow=uow)
+    use_case = in_process_ingest(uow)
     command = _command(tenant_id=tenant_id, email="not-an-email")
     existing = _existing_record(uow, command)
 
@@ -98,7 +98,7 @@ def test_payload_without_email_still_promotes_the_lead():
     # other: a missing email is valid data, not a rejection.
     tenant_id = uuid.uuid4()
     uow = _new_uow()
-    use_case = IngestLeadUseCase(uow=uow)
+    use_case = in_process_ingest(uow)
     command = _command(tenant_id=tenant_id, email=None)
     existing = _existing_record(uow, command)
 
@@ -118,7 +118,7 @@ class _BatchRun:
     def __init__(self, uow: InMemoryUnitOfWork, commands: List[IngestLeadCommand]) -> None:
         self._uow = uow
         self._parse = ProcessBatchUseCase(uow=uow, file_parser=_StubFileParser(commands))
-        self._process = ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow))
+        self._process = ProcessIntakeJobUseCase(uow=uow, ingest=in_process_ingest(uow))
 
     def execute(self, tenant_id, job_id, file_content: bytes, filename: str) -> None:
         self._uow.intake_files.save(job_id, tenant_id, filename, file_content)

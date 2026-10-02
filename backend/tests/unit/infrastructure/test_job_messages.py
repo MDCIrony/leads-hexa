@@ -6,15 +6,16 @@ from chassis.outbox import OutboxRow
 from chassis.web import request_id_var
 
 from application.dtos.commands import IngestLeadCommand, ReceiveIntakeCommand
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from domain.entities.lead_source import LeadSource
 from domain.services.assignment_engine import AssignmentEngine
 from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus, IntakeRecordStatus, LeadSourceKind
+from infrastructure.adapters.output.admissions.in_process_lead_admission import InProcessLeadAdmission
 from infrastructure.intake_worker import messages as job_messages
 from infrastructure.adapters.output.queue.job_message import job_message
 from infrastructure.intake_worker.messages import process_job_message
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
+from tests.unit.mocks.in_process_ingest import in_process_ingest
 
 _PAYLOAD = {
     "first_name": "Maria", "last_name": "Gomez", "company": "TechCorp",
@@ -34,6 +35,7 @@ class _Container:
         self._uow = uow
         self.assignment_engine = AssignmentEngine()
         self.file_parser = _Parser()
+        self.lead_admission = InProcessLeadAdmission(self.unit_of_work, self.assignment_engine)
 
     def unit_of_work(self) -> InMemoryUnitOfWork:
         return self._uow
@@ -112,7 +114,7 @@ def test_a_redelivered_message_for_a_finished_job_is_acked():
 
 def test_the_work_runs_under_the_correlation_id_of_the_request(monkeypatch):
     uow, _, _, message = _received(IntakeJobKind.SINGLE)
-    spy = _SpyIngest(IngestLeadUseCase(uow=uow))
+    spy = _SpyIngest(in_process_ingest(uow))
     monkeypatch.setattr(job_messages, "get_ingest_lead_use_case", lambda uow, container: spy)
 
     process_job_message(_Container(uow), message)

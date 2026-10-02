@@ -4,7 +4,7 @@ from uuid import uuid4
 import psycopg
 import pytest
 
-from application.use_cases.ingest_lead_use_case import command_from_record, payload_of
+from application.use_cases.intake.payloads import command_from_record, payload_of
 from domain.value_objects.tenant_id import TenantId
 from domain.entities.intake_record import IntakeRecord
 from domain.entities.lead import Lead

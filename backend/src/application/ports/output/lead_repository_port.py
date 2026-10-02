@@ -2,13 +2,27 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
+from application.dtos.admissions import AdmissionLookupItem
 from domain.entities.lead import Lead
 from domain.value_objects.enums import LeadStatus
+
+
+class DuplicateAdmission(Exception):
+    """Another admission of the same intake record committed first."""
+
 
 class LeadRepositoryPort(ABC):
     @abstractmethod
     def save(self, lead: Lead) -> Lead:
+        """Raises DuplicateAdmission when the lead's intake record already has a lead."""
+
+    @abstractmethod
+    def get_by_intake_record(self, tenant_id: UUID, intake_record_id: UUID) -> Optional[Lead]:
         pass
+
+    @abstractmethod
+    def list_by_intake_records(self, intake_record_ids: List[UUID]) -> List[AdmissionLookupItem]:
+        """Across organizations on purpose: only the service that owns the records asks."""
 
     @abstractmethod
     def get_by_id(self, lead_id: UUID) -> Optional[Lead]:

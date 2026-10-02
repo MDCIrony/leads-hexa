@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
+from application.use_cases.intake.payloads import payload_of
 from application.dtos.commands import IngestLeadCommand
 from domain.entities import AssignmentRule
 from domain.entities.disqualification_rule import DisqualificationRule
@@ -14,6 +14,7 @@ from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
+from tests.unit.mocks.in_process_ingest import in_process_ingest
 
 
 def _uow() -> InMemoryUnitOfWork:
@@ -45,7 +46,7 @@ def _ingest(uow: InMemoryUnitOfWork, command: IngestLeadCommand):
     existing = uow.intake_records.save(
         IntakeRecord.create(tenant_id=command.tenant_id, source_id=command.source_id, payload=payload_of(command))
     )
-    return IngestLeadUseCase(uow=uow).execute(command, existing_record=existing), existing
+    return in_process_ingest(uow).execute(command, existing_record=existing), existing
 
 
 def _internal(uow: InMemoryUnitOfWork):

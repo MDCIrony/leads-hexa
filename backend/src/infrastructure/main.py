@@ -12,6 +12,7 @@ from infrastructure.adapters.input.api.advisors.advisors_router import router as
 from infrastructure.adapters.input.api.sales_group_router import router as sales_group_router
 from infrastructure.adapters.input.api.source_router import router as source_router
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
+from infrastructure.adapters.input.internal.admissions_router import router as admissions_router
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
 from infrastructure.logging_config import configure_logging
@@ -57,3 +58,5 @@ app.include_router(rule_router, prefix="/api/v1/rules", tags=["Rules"])
 app.include_router(advisors_router, prefix="/api/v1/advisors", tags=["Advisors"])
 app.include_router(sales_group_router, prefix="/api/v1/groups", tags=["Groups"])
 app.include_router(source_router, prefix="/api/v1/sources", tags=["Sources"])
+# Outside /api/v1: service to service, never through the gateway.
+app.include_router(admissions_router, prefix="/internal/v1/admissions")

@@ -80,10 +80,7 @@ def get_ingest_lead_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),
     container: Container = Depends(get_container),
 ) -> IngestLeadInputPort:
-    return IngestLeadUseCase(
-        uow=uow,
-        engine=container.assignment_engine,
-    )
+    return IngestLeadUseCase(uow=uow, admission=container.lead_admission)
 
 def get_get_intake_records_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeRecordsInputPort:
     return GetIntakeRecordsUseCase(uow=uow)

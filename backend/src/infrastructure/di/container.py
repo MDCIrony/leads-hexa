@@ -1,14 +1,17 @@
 from collections.abc import Callable
 
 import httpx
-from chassis.auth import AUDIENCE, ISSUER, JwksCache, ServiceTokenClient, TokenVerifier, http_jwks
+from chassis.auth import (AUDIENCE, ISSUER, JwksCache, ServiceTokenClient, ServiceTokenVerifier, TokenVerifier,
+                          http_jwks)
 from chassis.web import request_id_var
 from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.clock_port import ClockPort
 from application.ports.output.file_parser_port import FileParserPort
 from application.ports.output.id_generator_port import IdGeneratorPort
+from application.ports.output.intake.lead_admission_port import LeadAdmissionPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.services.assignment_engine import AssignmentEngine
+from infrastructure.adapters.output.admissions.in_process_lead_admission import InProcessLeadAdmission
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
 from infrastructure.adapters.output.http.advisors.http_identity_agents import HttpIdentityAgents
 from infrastructure.adapters.output.persistence.advisors.hydrating_advisor_directory import HydratingAdvisorDirectory
@@ -44,9 +47,11 @@ class Container:
         self._assignment_engine = AssignmentEngine()
         self._file_parser = PandasFileParser()
         # Lazy: the first verification fetches the keys, not construction.
-        self._token_verifier = TokenVerifier(
-            JwksCache(jwks_fetch or http_jwks(settings.jwks_url)), issuer=ISSUER, audience=AUDIENCE
-        )
+        jwks = JwksCache(jwks_fetch or http_jwks(settings.jwks_url))
+        self._token_verifier = TokenVerifier(jwks, issuer=ISSUER, audience=AUDIENCE)
+        # Same keys, other audience: what intake calls /internal/v1/admissions with.
+        self._service_token_verifier = ServiceTokenVerifier(jwks, audience="lead-core")
+        self._lead_admission = InProcessLeadAdmission(self.unit_of_work, self._assignment_engine)
         # Built once: the token client caches its token, the HTTP client its connections.
         self._identity_http = httpx.Client(timeout=2.0)
         tokens = ServiceTokenClient(settings.identity_url.rstrip("/") + "/internal/v1/service-tokens",
@@ -66,6 +71,14 @@ class Container:
     @property
     def token_verifier(self) -> TokenVerifier:
         return self._token_verifier
+
+    @property
+    def service_token_verifier(self) -> ServiceTokenVerifier:
+        return self._service_token_verifier
+
+    @property
+    def lead_admission(self) -> LeadAdmissionPort:
+        return self._lead_admission
 
     @property
     def clock(self) -> ClockPort:
