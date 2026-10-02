@@ -27,8 +27,11 @@
             "ASSIGNED",
             "UNASSIGNED",
             "DISQUALIFIED",
-            "QUALIFIED"
-          ]
+            "QUALIFIED",
+            "NEW",
+            "DISCARDED"
+          ],
+          "description": "The lead's current status: a repeated admission reports the lead as it stands now, which may have moved on since it was first admitted."
         },
         "score": {
           "type": "integer"
