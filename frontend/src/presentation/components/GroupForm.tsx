@@ -52,6 +52,9 @@ export function GroupForm({ initial, submitLabel, onSubmit, onCancel }: GroupFor
   }
 
   const capacityError = error?.code === 'INVALID_GROUP_CAPACITY' ? error.message : undefined;
+  // The API's PATCH reads null as "unchanged", so a value once set can be changed, not cleared.
+  const keepsDescription = Boolean(initial?.description);
+  const keepsCapacity = initial?.capacity_per_agent != null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -59,8 +62,8 @@ export function GroupForm({ initial, submitLabel, onSubmit, onCancel }: GroupFor
         <Field label="Nombre del grupo" error={capacityError ? undefined : error?.message}>
           <Input value={name} onChange={(e) => setName(e.target.value)} required />
         </Field>
-        <Field label="Descripción">
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+        <Field label={keepsDescription ? 'Descripción (se puede cambiar, no vaciar)' : 'Descripción'}>
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} required={keepsDescription} />
         </Field>
         <Field label="Estrategia por defecto">
           <Select value={strategy} onChange={(e) => setStrategy(e.target.value as AssignmentStrategy)}>
@@ -71,8 +74,9 @@ export function GroupForm({ initial, submitLabel, onSubmit, onCancel }: GroupFor
             ))}
           </Select>
         </Field>
-        <Field label="Capacidad por asesor" error={capacityError}>
-          <Input type="number" min={1} placeholder="Sin límite" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
+        <Field label={keepsCapacity ? 'Capacidad por asesor (se puede cambiar, no quitar)' : 'Capacidad por asesor'} error={capacityError}>
+          <Input type="number" min={1} placeholder="Sin límite" value={capacity} onChange={(e) => setCapacity(e.target.value)}
+            required={keepsCapacity} />
         </Field>
       </div>
       <div className="flex justify-end gap-2">

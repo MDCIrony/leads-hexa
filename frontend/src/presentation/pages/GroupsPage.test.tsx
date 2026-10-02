@@ -71,6 +71,15 @@ describe('GroupsPage', () => {
     );
   });
 
+  it('does not offer to clear a capacity the API cannot clear', async () => {
+    mockGroups({ 'GET /api/v1/groups': { data: { ...groupsPageFixture, items: [{ ...fixtureGroup, capacity_per_agent: 3 }] } } });
+    renderWithProviders(<GroupsPage />, { role: 'MANAGER' });
+
+    await screen.findByText(fixtureGroup.name);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect(screen.getByLabelText('Capacidad por asesor (se puede cambiar, no quitar)')).toBeRequired();
+  });
+
   it('deletes only after confirming', async () => {
     mockGroups({ [`DELETE /api/v1/groups/${fixtureGroup.id}`]: { status: 204, data: undefined } });
     renderWithProviders(<GroupsPage />, { role: 'MANAGER' });
