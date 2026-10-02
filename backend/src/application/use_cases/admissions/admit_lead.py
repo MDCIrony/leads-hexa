@@ -25,6 +25,9 @@ _FIELD_BY_ERROR_CODE = {
     "INVALID_BUDGET": "budget",
     "INVALID_UUID": "_record",
 }
+# NOT NULL in leads: a null here must be a deterministic REJECTED, not a
+# database error the caller would retry forever.
+_REQUIRED_TEXT = ("first_name", "last_name", "company", "industry")
 
 
 class AdmitLeadUseCase(AdmitLeadInputPort):
@@ -44,6 +47,11 @@ class AdmitLeadUseCase(AdmitLeadInputPort):
                 existing = self.uow.leads.get_by_intake_record(request.tenant_id, request.intake_record_id)
                 if existing is not None:
                     return _admitted(existing)
+                missing = tuple(
+                    AdmissionError(field=name, message=f"{name} is required", error_code="MISSING_REQUIRED_FIELD")
+                    for name in _REQUIRED_TEXT if getattr(request.candidate, name) is None)
+                if missing:
+                    return AdmissionResult(outcome="REJECTED", errors=missing)
                 try:
                     lead = _lead_of(request)
                 except DomainException as exc:

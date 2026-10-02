@@ -18,6 +18,10 @@ BEGIN
     END IF;
 END $$;
 
+-- The lookup asks by record alone, across organizations: the unique
+-- constraint leads with tenant_id and cannot serve it.
+CREATE INDEX IF NOT EXISTS idx_leads_intake_record ON leads (intake_record_id);
+
 -- After the cut new sources are born in intake_db, and a lead admitted from
 -- one would violate a foreign key to this frozen table. Looked up by target
 -- rather than by name, as in 017: it was declared inline, auto-named.

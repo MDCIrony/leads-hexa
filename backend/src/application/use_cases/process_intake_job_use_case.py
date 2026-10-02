@@ -35,6 +35,12 @@ class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
         for record in pending:
             try:
                 self.ingest.execute(command_from_record(record), existing_record=record)
+            except DomainException as exc:
+                # Discarded by a manager while this run held it: finished, not
+                # pending, so it must not keep the job from completing.
+                if exc.error_code != "INVALID_INTAKE_TRANSITION":
+                    interrupted = True
+                continue
             except Exception:
                 # The record stays PENDING on purpose: it is the only state
                 # reprocessing reads, so a failure here is recoverable instead

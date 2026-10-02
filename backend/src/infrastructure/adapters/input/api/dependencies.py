@@ -213,7 +213,7 @@ def build_request_context(principal: Principal) -> RequestContext:
     return RequestContext(principal=principal, tenant_id=principal.tenant_id)
 
 
-def _bearer_token(request: Request) -> Optional[str]:
+def bearer_token(request: Request) -> Optional[str]:
     header = request.headers.get("authorization")
     if not header:
         return None
@@ -240,7 +240,7 @@ def _principal_from_token(token: str, container: Container) -> Principal:
 
 def get_principal(request: Request, container: Container = Depends(get_container)) -> Principal:
     """The bearer is the gateway's, never the client's: nginx overwrites it."""
-    token = _bearer_token(request)
+    token = bearer_token(request)
     if token is None:
         raise UnauthorizedException("Authentication required")
     return _principal_from_token(token, container)

@@ -5,12 +5,16 @@ from decimal import Decimal
 import pytest
 
 from application.dtos.admissions import AdmissionError, AdmissionResult
-from application.dtos.commands import IngestLeadCommand
+from application.dtos.commands import IngestLeadCommand, ReceiveIntakeCommand
 from application.ports.output.intake.lead_admission_port import AdmissionUnavailable, LeadAdmissionPort
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.intake.payloads import candidate_of, payload_of
+from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
+from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from domain.entities.intake_record import IntakeRecord
-from domain.value_objects.enums import IntakeRecordStatus
+from domain.entities.lead_source import LeadSource
+from domain.exceptions import DomainException
+from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus, IntakeRecordStatus, LeadSourceKind
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 _LEAD_ID = str(uuid.uuid4())
@@ -118,3 +122,46 @@ def test_the_candidate_travels_as_text():
     assert candidate_of(_command(budget=Decimal("9000.00"))).budget == "9000.00"
     assert candidate_of(_command(budget="12")).budget == "12"
     assert candidate.custom_attributes == {"a": 1}
+
+
+class _DiscardingAdmission(_FakeAdmission):
+    """A manager discards the record while lead-core is deciding."""
+
+    def __init__(self, uow, record) -> None:
+        super().__init__(_admitted())
+        self.uow, self.record = uow, record
+
+    def admit(self, request):
+        self.record.discard()
+        self.uow.intake_records.save(self.record)
+        return super().admit(request)
+
+
+def test_a_record_discarded_during_the_admission_is_not_claimed():
+    uow, command = InMemoryUnitOfWork(), _command()
+    record = _stored(uow, command)
+
+    with pytest.raises(DomainException) as raised:
+        IngestLeadUseCase(uow, _DiscardingAdmission(uow, record)).execute(command, existing_record=record)
+
+    assert raised.value.error_code == "INVALID_INTAKE_TRANSITION"
+    assert uow.intake_records.get_by_id_and_tenant(record.id.value, command.tenant_id).status == (
+        IntakeRecordStatus.DISCARDED)
+
+
+def test_a_discarded_record_does_not_interrupt_its_job():
+    tenant_id = uuid.uuid4()
+    uow = InMemoryUnitOfWork()
+    uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="Form", kind=LeadSourceKind.MANUAL_FORM))
+    received = ReceiveIntakeUseCase(uow=uow).execute(ReceiveIntakeCommand(
+        tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[{"first_name": "Ana"}]))
+
+    class _Discarded:
+        def execute(self, command, existing_record=None):
+            raise DomainException("discarded meanwhile", error_code="INVALID_INTAKE_TRANSITION")
+
+    interrupted = ProcessIntakeJobUseCase(uow=uow, ingest=_Discarded()).execute(tenant_id, uuid.UUID(received.job_id))
+
+    assert interrupted is False
+    assert uow.intake_jobs.get_by_id_and_tenant(uuid.UUID(received.job_id), tenant_id).status == (
+        IntakeJobStatus.COMPLETED)

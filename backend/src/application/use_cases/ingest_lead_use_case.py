@@ -46,10 +46,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
         if current.status == IntakeRecordStatus.DISCARDED:
             # Refused before asking: once lead-core admits, a lead exists that
             # no record would point to.
-            raise DomainException(
-                f"Cannot promote an intake record from status {current.status.value}",
-                error_code="INVALID_INTAKE_TRANSITION",
-            )
+            raise _not_promotable(current)
 
         # No transaction is open across this call: after the cut it is an HTTP
         # round trip, and the record's lock would be held for all of it. Two
@@ -64,8 +61,10 @@ class IngestLeadUseCase(IngestLeadInputPort):
             # over the same job finds out here, and answers with the winner.
             record = self.uow.intake_records.claim_unpromoted(record_id, tenant_id)
             if record is None:
-                return _already_promoted(
-                    self.uow.intake_records.get_by_id_and_tenant(record_id, tenant_id) or current)
+                latest = self.uow.intake_records.get_by_id_and_tenant(record_id, tenant_id) or current
+                if latest.status != IntakeRecordStatus.PROMOTED:
+                    raise _not_promotable(latest)
+                return _already_promoted(latest)
             if result.outcome == "ADMITTED":
                 record.promote(UUID(result.lead_id))
                 self.uow.intake_records.save(record)
@@ -80,6 +79,13 @@ class IngestLeadUseCase(IngestLeadInputPort):
                 lead_id="", intake_record_id=str(record.id), status=IntakeRecordStatus.REJECTED.value,
                 score=0, error=errors[0].message, error_code=errors[0].error_code,
             )
+
+
+def _not_promotable(record: IntakeRecord) -> DomainException:
+    return DomainException(
+        f"Cannot promote an intake record from status {record.status.value}",
+        error_code="INVALID_INTAKE_TRANSITION",
+    )
 
 
 def _promoted(record: IntakeRecord, result: AdmissionResult) -> LeadProcessedResult:

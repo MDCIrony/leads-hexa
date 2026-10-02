@@ -15,7 +15,7 @@ from application.ports.input.admissions.admission_ports import AdmitLeadInputPor
 from application.use_cases.admissions.admit_lead import AdmitLeadUseCase
 from application.use_cases.admissions.lookup_admissions import LookupAdmissionsUseCase
 from domain.exceptions import DomainException, UnauthorizedException
-from infrastructure.adapters.input.api.dependencies import _bearer_token, get_container
+from infrastructure.adapters.input.api.dependencies import bearer_token, get_container
 from infrastructure.di.container import Container
 
 _CALLERS = frozenset({"intake"})
@@ -24,7 +24,7 @@ _CALLERS = frozenset({"intake"})
 def require_service_caller(request: Request, container: Container = Depends(get_container)) -> ServiceClaims:
     """Missing, invalid or someone else's token are one 401: telling them apart
     would only tell a prober which callers exist."""
-    token = _bearer_token(request)
+    token = bearer_token(request)
     if token is None:
         raise UnauthorizedException("Authentication required")
     try:

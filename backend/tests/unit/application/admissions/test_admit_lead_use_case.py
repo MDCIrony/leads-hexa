@@ -142,3 +142,15 @@ def test_the_events_belong_to_the_transaction_of_the_lead():
         AdmitLeadUseCase(uow).execute(_request())
 
     assert uow.outbox._entries == {}
+
+
+def test_a_missing_required_text_field_is_rejected_before_the_database():
+    uow = InMemoryUnitOfWork()
+
+    result = AdmitLeadUseCase(uow).execute(_request(first_name=None, industry=None))
+
+    assert result.outcome == "REJECTED"
+    assert [(e.field, e.error_code) for e in result.errors] == [
+        ("first_name", "MISSING_REQUIRED_FIELD"), ("industry", "MISSING_REQUIRED_FIELD")]
+    assert uow.leads.leads == {}
+    assert uow.outbox._entries == {}

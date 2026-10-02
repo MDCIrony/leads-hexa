@@ -134,3 +134,13 @@ def test_unavailable_signing_keys_are_a_503_not_the_callers_fault():
         require_service_caller(request, container)
 
     assert raised.value.error_code == "SERVICE_UNAVAILABLE"
+
+
+def test_a_missing_required_field_is_a_rejection_not_a_400(test_db):
+    with TestClient(app) as client:
+        response = client.post(_URL, json=_request(last_name=None), headers=_as(_service_token()))
+
+    assert response.status_code == 200, response.text
+    assert_conforms(response.json(), "schemas/lead-core/admission-result.v1.schema.json")
+    assert [(e["field"], e["error_code"]) for e in response.json()["errors"]] == [
+        ("last_name", "MISSING_REQUIRED_FIELD")]

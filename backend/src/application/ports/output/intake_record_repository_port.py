@@ -15,8 +15,8 @@ class IntakeRecordRepositoryPort(abc.ABC):
 
     @abc.abstractmethod
     def claim_unpromoted(self, record_id: UUID, tenant_id: UUID) -> Optional[IntakeRecord]:
-        """Take this record for the caller's transaction, or None if it has
-        already become a lead.
+        """Take this record for the caller's transaction, or None unless it is
+        PENDING or REJECTED (already a lead, or discarded).
 
         The one guard against processing the same record twice at once. Two
         concurrent runs over one job — a manual reprocess landing on a job the

@@ -18,20 +18,18 @@ class RawSqlLeadRepository(LeadAdmissionLookups, LeadRepositoryPort):
     def save(self, lead: Lead) -> Lead:
         return save_lead(self.connection, lead)
 
-    _row_to_lead = staticmethod(row_to_lead)
-
     def get_by_id(self, lead_id: UUID) -> Optional[Lead]:
         cursor = self.connection.execute("SELECT * FROM leads WHERE id = %s", (lead_id,))
         row = cursor.fetchone()
         if not row:
             return None
-        return self._row_to_lead(row)
+        return row_to_lead(row)
 
     def get_by_id_and_tenant(self, lead_id: UUID, tenant_id: UUID) -> Optional[Lead]:
         row = self.connection.execute(
             "SELECT * FROM leads WHERE id = %s AND tenant_id = %s", (lead_id, tenant_id)
         ).fetchone()
-        return self._row_to_lead(row) if row else None
+        return row_to_lead(row) if row else None
 
     def _filters(
         self,
@@ -117,7 +115,7 @@ class RawSqlLeadRepository(LeadAdmissionLookups, LeadRepositoryPort):
             query += " ORDER BY created_at DESC, id LIMIT %s OFFSET %s"
         query_params += [limit, offset]
         rows = self.connection.execute(query, query_params).fetchall()
-        return [self._row_to_lead(row) for row in rows]
+        return [row_to_lead(row) for row in rows]
 
     def count_by_tenant(
         self,
@@ -166,7 +164,7 @@ class RawSqlLeadRepository(LeadAdmissionLookups, LeadRepositoryPort):
         query += " ORDER BY assigned_at DESC NULLS LAST, id LIMIT %s OFFSET %s"
         query_params += [limit, offset]
         rows = self.connection.execute(query, query_params).fetchall()
-        return [self._row_to_lead(row) for row in rows]
+        return [row_to_lead(row) for row in rows]
 
     def count_by_agent(
         self,

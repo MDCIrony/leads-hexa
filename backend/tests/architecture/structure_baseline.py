@@ -20,7 +20,7 @@ BASELINE = {
     "infrastructure/adapters/input/api/rule_router.py": 285,
     "infrastructure/adapters/input/api/schemas.py": 347,
     "infrastructure/adapters/output/persistence/": 16,
-    "infrastructure/adapters/output/persistence/raw_sql_intake_record_repository.py": 171,
-    "infrastructure/adapters/output/persistence/raw_sql_lead_repository.py": 248,
+    "infrastructure/adapters/output/persistence/raw_sql_intake_record_repository.py": 170,
+    "infrastructure/adapters/output/persistence/raw_sql_lead_repository.py": 246,
     "infrastructure/adapters/output/persistence/raw_sql_rule_repository.py": 177,
 }
