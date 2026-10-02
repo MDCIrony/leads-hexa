@@ -63,7 +63,6 @@ services:
       - SERVICE_CLIENT_ID=lead-core
       - SERVICE_CLIENT_SECRET=lead-core-dev-secret-0c7f2a9e4b1d
       - LOG_LEVEL=INFO
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     depends_on:
       db:
         condition: service_healthy
@@ -266,7 +265,6 @@ services:
       - ./libs/chassis/src:/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_db
-      - JWKS_URL=http://identity:8000/internal/v1/jwks
       - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     # Reloaded on change, like the API. Stopping mid-pass is safe by design: an
