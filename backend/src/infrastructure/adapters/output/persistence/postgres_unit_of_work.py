@@ -2,11 +2,11 @@ from contextlib import AbstractContextManager
 from typing import Optional
 
 import psycopg
+from chassis.persistence import RawSqlDatabase
 
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 # infrastructure → domain is an allowed direction; the inverse is not.
 from domain.exceptions import DomainException
-from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
 from infrastructure.adapters.output.persistence.raw_sql_rule_repository import RawSqlRuleRepository
 from infrastructure.adapters.output.persistence.raw_sql_disqualification_rule_repository import (
@@ -14,9 +14,6 @@ from infrastructure.adapters.output.persistence.raw_sql_disqualification_rule_re
 )
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
 from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
-from infrastructure.adapters.output.persistence.raw_sql_processed_event_repository import (
-    RawSqlProcessedEventRepository,
-)
 from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
 
 
@@ -41,7 +38,6 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.disqualification_rules = RawSqlDisqualificationRuleRepository(self.connection)
         self.groups = RawSqlSalesGroupRepository(self.connection)
         self.outbox = RawSqlOutboxRepository(self.connection)
-        self.processed_events = RawSqlProcessedEventRepository(self.connection)
         self.advisors = RawSqlAdvisorRepository(self.connection)
         return super().__enter__()
 

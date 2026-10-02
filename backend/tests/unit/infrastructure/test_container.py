@@ -1,10 +1,11 @@
-from infrastructure.config.settings import Settings
+from infrastructure.config.settings import ApiSettings
 from infrastructure.di.container import Container
 from tests.tokens import jwks, mint_token
 
-_SETTINGS = Settings(
+_SETTINGS = ApiSettings(
     database_url="postgresql://u:p@host:5432/db",
     jwks_url="http://jwks.invalid/internal/v1/jwks",
+    service_client_secret="s",
 )
 
 
@@ -47,7 +48,7 @@ def test_the_advisor_directory_asks_identity_for_a_token_meant_for_identity():
     """The e2e suite replaces the HTTP adapter, so this is what pins its wiring."""
     from dataclasses import replace
 
-    container = Container(replace(_SETTINGS, identity_url="http://identity.test/", service_client_secret="s"))
+    container = Container(replace(_SETTINGS, identity_url="http://identity.test/"))
     identity = container.advisor_directory._identity
 
     assert identity._url == "http://identity.test/internal/v1/agents/"

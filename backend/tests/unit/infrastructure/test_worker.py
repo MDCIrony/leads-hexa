@@ -1,3 +1,5 @@
+import threading
+import types
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -5,6 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from chassis.outbox import OutboxRow
 
+from infrastructure.worker import main as worker
 from infrastructure.worker.relays import build_dispatchers, build_relays
 
 
@@ -87,3 +90,51 @@ def test_the_internal_topic_of_intake_is_not_this_services_to_publish_on():
             event_type="IntakeRejected", payload={}, occurred_on=datetime.now(timezone.utc),
             correlation_id=None))
     assert [spec.name for spec in INTERNAL_TOPIC_SPECS] == ["internal.lead-core.events"]
+
+
+class _Database:
+    def __init__(self, dsn):
+        self.dsn, self.closed = dsn, False
+
+    def close(self):
+        self.closed = True
+
+
+class _Quiet:
+    """Stands in for every Kafka client: no broker is reached."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+class _StoppedEvent(threading.Event):
+    def wait(self, timeout=None):
+        return True
+
+
+def test_the_worker_starts_from_its_own_settings_and_builds_no_container(monkeypatch):
+    """No JWKS and no service secret in the environment: the worker never verifies a bearer nor calls identity."""
+    from infrastructure.di import container as container_module
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka.test:9092")
+    monkeypatch.delenv("JWKS_URL")
+    monkeypatch.delenv("SERVICE_CLIENT_SECRET")
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the worker must not build the API container")
+
+    databases = []
+    monkeypatch.setattr(container_module, "Container", refuse)
+    monkeypatch.setattr(worker, "RawSqlDatabase", lambda dsn: databases.append(_Database(dsn)) or databases[-1])
+    for name in ("Producer", "AdminClient"):
+        monkeypatch.setattr(worker, name, _Quiet)
+    for name in ("run_relay", "ensure_topics_until_ready", "run_consumer_lane"):
+        monkeypatch.setattr(worker, name, lambda *args, **kwargs: None)
+    monkeypatch.setattr(worker, "signal", types.SimpleNamespace(
+        signal=lambda *args: None, SIGTERM=15, SIGINT=2))
+    monkeypatch.setattr(worker, "threading", types.SimpleNamespace(Event=_StoppedEvent, Thread=threading.Thread))
+
+    assert worker.main() == 0
+    assert not hasattr(worker, "Container")
+    assert [(db.dsn, db.closed) for db in databases] == [("postgresql://u:p@host:5432/db", True)]

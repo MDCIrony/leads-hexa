@@ -1,4 +1,4 @@
-from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
+from chassis.persistence import RawSqlDatabase
 
 
 def test_connections_are_reused_across_calls(test_db):

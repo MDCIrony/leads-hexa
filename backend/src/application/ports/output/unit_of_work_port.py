@@ -7,7 +7,6 @@ from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.disqualification_rule_repository_port import DisqualificationRuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
-from application.ports.output.processed_event_repository_port import ProcessedEventRepositoryPort
 from application.ports.output.advisors.advisor_repository_port import AdvisorRepositoryPort
 
 class UnitOfWorkPort(abc.ABC):
@@ -16,7 +15,6 @@ class UnitOfWorkPort(abc.ABC):
     disqualification_rules: DisqualificationRuleRepositoryPort
     groups: SalesGroupRepositoryPort
     outbox: OutboxRepositoryPort
-    processed_events: ProcessedEventRepositoryPort
     advisors: AdvisorRepositoryPort
 
     def __enter__(self) -> UnitOfWorkPort:

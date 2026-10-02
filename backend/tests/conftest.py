@@ -12,7 +12,7 @@ _MARKER_BY_DIRECTORY = {
 
 _TESTS_ROOT = Path(__file__).parent
 
-_DEFAULT_TEST_DSN = "postgresql://postgres:postgrespassword@localhost:5433/leads_test"
+_DEFAULT_TEST_DSN = "postgresql://lead_core_svc:leadcorepassword@localhost:5433/leads_test"
 
 # Truncating this one would make the runner reapply every migration on the next
 # test that touches the database.
@@ -23,8 +23,8 @@ def _test_dsn() -> str:
     return os.getenv("TEST_DATABASE_URL", _DEFAULT_TEST_DSN)
 
 
-# Set at import time rather than in a fixture: `infrastructure.main` reads
-# Settings at module level, so an e2e module that imports the app needs these
+# Set at import time rather than in a fixture: `infrastructure.main` builds
+# its settings from the environment, so an e2e module that imports the app needs these
 # already present when its own import statement runs. conftest is imported
 # before any test module, so one copy here covers every test — each e2e file
 # used to carry its own, which meant a file without one passed only when
@@ -45,33 +45,15 @@ def pytest_collection_modifyitems(items):
             item.add_marker(getattr(pytest.mark, marker))
 
 
-def _ensure_test_database_exists(dsn: str) -> None:
-    """Create the test database if it is missing, connecting to the maintenance
-    database first. CREATE DATABASE cannot run inside a transaction."""
-    import psycopg
-    from urllib.parse import urlparse
-
-    parsed = urlparse(dsn)
-    database = parsed.path.lstrip("/")
-    admin_dsn = dsn.replace(f"/{database}", "/postgres")
-
-    with psycopg.connect(admin_dsn, autocommit=True) as conn:
-        exists = conn.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s", (database,)
-        ).fetchone()
-        if not exists:
-            conn.execute(f'CREATE DATABASE "{database}"')
-
-
 @pytest.fixture(scope="session")
 def test_db():
-    from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
+    from chassis.persistence import MigrationRunner, RawSqlDatabase
 
-    dsn = _test_dsn()
-    _ensure_test_database_exists(dsn)
-    database = RawSqlDatabase(dsn=dsn)
-    database.init_db()
-    return database
+    # The database itself is created by db-bootstrap: the service role has no CREATEDB.
+    database = RawSqlDatabase(_test_dsn())
+    MigrationRunner(database, _TESTS_ROOT.parent / "migrations").apply_pending()
+    yield database
+    database.close()
 
 
 @pytest.fixture(autouse=True)

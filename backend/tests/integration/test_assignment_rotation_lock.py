@@ -14,7 +14,7 @@ import pytest
 from domain.entities.rule import AssignmentRule
 from domain.entities.sales_group import SalesGroup
 from domain.value_objects.enums import AssignmentStrategy
-from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
+from chassis.persistence import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.persistence.raw_sql_rule_repository import RawSqlRuleRepository
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (

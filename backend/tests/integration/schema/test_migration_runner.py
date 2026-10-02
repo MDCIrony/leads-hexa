@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
+from chassis.persistence import MigrationRunner
 from tests.integration.schema.tables import FOREIGN_TABLES, LEAD_CORE_TABLES, tables_in
 
 _MIGRATIONS_DIR = Path(__file__).resolve().parents[3] / "migrations"
