@@ -25,6 +25,10 @@ def _record(uow: InMemoryUnitOfWork, tenant_id=None, **fields) -> IntakeRecord:
     ))
 
 
+def _stored(uow, record) -> IntakeRecord:
+    return uow.intake_records.get_by_id_and_tenant(record.id.value, record.tenant_id.value)
+
+
 def _promote(uow, admission, record, payload=None, tenant_id=None):
     return PromoteIntakeRecordUseCase(uow, IngestLeadUseCase(uow, admission)).execute(PromoteIntakeRecordCommand(
         tenant_id=tenant_id or record.tenant_id.value, record_id=record.id.value, payload=payload or _CORRECTED,
@@ -42,7 +46,7 @@ def test_promoting_asks_lead_core_with_the_corrected_payload_over_the_records_so
     assert request.candidate.email == "maria@techcorp.com"
     assert request.source_id == record.source_id.value
     assert result.status == "QUALIFIED"
-    assert record.status == IntakeRecordStatus.PROMOTED
+    assert _stored(uow, record).status == IntakeRecordStatus.PROMOTED
 
 
 def test_a_promotion_lead_core_rejects_comes_back_as_a_rejected_result_not_an_error():
@@ -62,7 +66,7 @@ def test_promoting_with_lead_core_down_surfaces_lead_core_unavailable():
         _promote(uow, FakeLeadAdmission(uow, unavailable), record)
 
     assert caught.value.error_code == "LEAD_CORE_UNAVAILABLE"
-    assert record.status == IntakeRecordStatus.PENDING
+    assert _stored(uow, record).status == IntakeRecordStatus.PENDING
 
 
 def test_promoting_a_promoted_record_is_refused_without_calling_lead_core():
@@ -96,7 +100,7 @@ def test_discarding_closes_a_record_and_a_closed_one_cannot_be_discarded_again()
 
     DiscardIntakeRecordUseCase(uow).execute(record.tenant_id.value, record.id.value)
 
-    assert record.status == IntakeRecordStatus.DISCARDED
+    assert _stored(uow, record).status == IntakeRecordStatus.DISCARDED
     with pytest.raises(DomainException) as caught:
         DiscardIntakeRecordUseCase(uow).execute(record.tenant_id.value, record.id.value)
     assert caught.value.error_code == "INVALID_INTAKE_TRANSITION"

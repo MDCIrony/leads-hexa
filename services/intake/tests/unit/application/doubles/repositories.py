@@ -1,4 +1,9 @@
-"""In-memory repositories with the same observable rules as the SQL ones."""
+"""In-memory repositories with the same observable rules as the SQL ones.
+
+Records and jobs are copied on the way in and out, as a database does: a use case that
+forgets `save` must fail its test instead of passing through a shared reference.
+"""
+import copy
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
@@ -49,21 +54,21 @@ class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
         self._records: Dict[UUID, IntakeRecord] = {}
 
     def save(self, record: IntakeRecord) -> IntakeRecord:
-        self._records[record.id.value] = record
+        self._records[record.id.value] = copy.deepcopy(record)
         return record
 
     def get_by_id_and_tenant(self, record_id: UUID, tenant_id: UUID) -> Optional[IntakeRecord]:
         record = self._records.get(record_id)
-        return record if record and record.tenant_id.value == tenant_id else None
+        return copy.deepcopy(record) if record and record.tenant_id.value == tenant_id else None
 
     def claim_unpromoted(self, record_id: UUID, tenant_id: UUID) -> Optional[IntakeRecord]:
         # A single-threaded double cannot race with itself: the status check is the whole behaviour.
         record = self.get_by_id_and_tenant(record_id, tenant_id)
-        return record if record and record.status != IntakeRecordStatus.PROMOTED else None
+        return record if record and record.status in (IntakeRecordStatus.PENDING, IntakeRecordStatus.REJECTED) else None
 
     def _matching(self, tenant_id: UUID, status: Optional[IntakeRecordStatus], job_id: Optional[UUID]):
         return [
-            r for r in self._records.values()
+            copy.deepcopy(r) for r in self._records.values()
             if r.tenant_id.value == tenant_id
             and (status is None or r.status == status)
             and (job_id is None or (r.job_id is not None and r.job_id.value == job_id))
@@ -93,15 +98,15 @@ class InMemoryIntakeJobRepository(IntakeJobRepositoryPort):
         self._jobs: Dict[UUID, IntakeJob] = {}
 
     def save(self, job: IntakeJob) -> IntakeJob:
-        self._jobs[job.id.value] = job
+        self._jobs[job.id.value] = copy.deepcopy(job)
         return job
 
     def get_by_id_and_tenant(self, job_id: UUID, tenant_id: UUID) -> Optional[IntakeJob]:
         job = self._jobs.get(job_id)
-        return job if job and job.tenant_id.value == tenant_id else None
+        return copy.deepcopy(job) if job and job.tenant_id.value == tenant_id else None
 
     def _matching(self, tenant_id: UUID, status: Optional[IntakeJobStatus]) -> List[IntakeJob]:
-        return [j for j in self._jobs.values()
+        return [copy.deepcopy(j) for j in self._jobs.values()
                 if j.tenant_id.value == tenant_id and (status is None or j.status == status)]
 
     def list_by_tenant(
@@ -113,6 +118,10 @@ class InMemoryIntakeJobRepository(IntakeJobRepositoryPort):
 
     def count_by_tenant(self, tenant_id: UUID, status: Optional[IntakeJobStatus] = None) -> int:
         return len(self._matching(tenant_id, status))
+
+    def count_by_source(self, tenant_id: UUID, source_id: UUID) -> int:
+        return sum(1 for j in self._jobs.values()
+                   if j.tenant_id.value == tenant_id and j.source_id.value == source_id)
 
 
 class InMemoryIntakeFileRepository(IntakeFileRepositoryPort):

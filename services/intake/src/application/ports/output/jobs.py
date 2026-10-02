@@ -20,3 +20,6 @@ class IntakeJobRepositoryPort(ABC):
 
     @abstractmethod
     def count_by_tenant(self, tenant_id: UUID, status: Optional[IntakeJobStatus] = None) -> int: ...
+
+    @abstractmethod
+    def count_by_source(self, tenant_id: UUID, source_id: UUID) -> int: ...

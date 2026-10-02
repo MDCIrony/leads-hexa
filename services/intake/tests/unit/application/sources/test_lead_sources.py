@@ -10,7 +10,9 @@ from application.use_cases.sources.lead_sources import (
     UpdateLeadSourceUseCase,
 )
 from domain.exceptions import DomainException
+from domain.jobs.intake_job import IntakeJob
 from domain.records.intake_record import IntakeRecord
+from domain.value_objects.enums import IntakeJobKind
 from tests.unit.application.doubles.uow import InMemoryUnitOfWork
 
 
@@ -81,7 +83,18 @@ def test_a_source_with_intake_records_cannot_be_deleted():
     assert uow.sources.get_by_id_and_tenant(source.id.value, tenant_id) is not None
 
 
-def test_a_source_without_records_is_deleted():
+def test_a_source_referenced_only_by_a_failed_batch_job_cannot_be_deleted():
+    uow, tenant_id = InMemoryUnitOfWork(), uuid4()
+    source = _create(uow, tenant_id)
+    job = IntakeJob.create(tenant_id=tenant_id, source_id=source.id.value, kind=IntakeJobKind.BATCH)
+    job.fail()
+    uow.intake_jobs.save(job)
+
+    assert _code(lambda: DeleteLeadSourceUseCase(uow).execute(tenant_id, source.id.value)) == "SOURCE_IN_USE"
+    assert uow.sources.get_by_id_and_tenant(source.id.value, tenant_id) is not None
+
+
+def test_a_source_without_records_or_jobs_is_deleted():
     uow, tenant_id = InMemoryUnitOfWork(), uuid4()
     source = _create(uow, tenant_id)
 

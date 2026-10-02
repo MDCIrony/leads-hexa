@@ -15,8 +15,10 @@ class IntakeRecordRepositoryPort(ABC):
 
     @abstractmethod
     def claim_unpromoted(self, record_id: UUID, tenant_id: UUID) -> Optional[IntakeRecord]:
-        """Take the record for the caller's transaction, or None if it already became a lead.
+        """Take the record for the caller's transaction, or None if it is not open.
 
+        Open means PENDING or REJECTED: a PROMOTED record already became a lead and a
+        DISCARDED one was closed by a manager, so neither may be closed again.
         The guard against two concurrent runs closing the same record: a manual
         reprocess landing on a job a worker is still draining."""
 

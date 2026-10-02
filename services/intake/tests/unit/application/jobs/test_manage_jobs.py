@@ -26,9 +26,11 @@ def test_reprocessing_resets_the_counters_and_queues_the_job_instead_of_running_
     uow, tenant_id = InMemoryUnitOfWork(), uuid4()
     job = _job(uow, tenant_id, IntakeJobStatus.PROCESSING)
     job.succeeded, job.failed = 3, 1
+    uow.intake_jobs.save(job)
 
     ReprocessIntakeJobUseCase(uow).execute(tenant_id, job.id.value)
 
+    job = uow.intake_jobs.get_by_id_and_tenant(job.id.value, tenant_id)
     assert (job.status, job.succeeded, job.failed) == (IntakeJobStatus.PENDING, 0, 0)
     [event] = uow.events("IntakeJobRequested")
     assert (event.channel, event.payload) == ("job", {"tenant_id": str(tenant_id), "job_id": str(job.id)})

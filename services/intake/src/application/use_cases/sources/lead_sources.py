@@ -85,11 +85,13 @@ class DeleteLeadSourceUseCase(DeleteLeadSourceInputPort):
     def execute(self, tenant_id: UUID, source_id: UUID) -> None:
         with self.uow:
             _get_owned_source(self.uow, tenant_id, source_id)
-            # The records are what a source is "used" by now: its leads live in
-            # another service and no longer constrain this one.
-            if self.uow.intake_records.count_by_source(tenant_id, source_id) > 0:
+            # A source is in use while any record or job points at it: both
+            # reference it, and a record's job_id is nullable, so neither count
+            # covers the other. Its leads live in another service and no longer constrain it.
+            if (self.uow.intake_records.count_by_source(tenant_id, source_id) > 0
+                    or self.uow.intake_jobs.count_by_source(tenant_id, source_id) > 0):
                 raise DomainException(
-                    "El origen tiene registros de recepción asociados y no puede eliminarse",
+                    "El origen tiene registros o trabajos de recepción asociados y no puede eliminarse",
                     error_code="SOURCE_IN_USE",
                 )
             self.uow.sources.delete(source_id, tenant_id)

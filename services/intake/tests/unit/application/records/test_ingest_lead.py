@@ -10,6 +10,7 @@ from application.use_cases.records.ingest_lead import IngestLeadUseCase
 from application.use_cases.reception.payloads import command_from_record
 from domain.exceptions import DomainException
 from domain.records.intake_record import IntakeRecord
+from domain.value_objects.lead_id import LeadId
 from domain.value_objects.enums import IntakeRecordStatus
 from tests.unit.application.doubles.admissions import FakeLeadAdmission, admitted, rejected, unavailable
 from tests.unit.application.doubles.uow import InMemoryUnitOfWork
@@ -116,6 +117,7 @@ def test_losing_the_claim_answers_with_the_winners_lead_and_writes_nothing():
         # Between the call and the claim, another run closes the same record.
         stored = _stored(uow, record)
         stored.promote(lead_id)
+        uow.intake_records.save(stored)
         return admitted(str(lead_id))
 
     result = _ingest(uow, FakeLeadAdmission(uow, other_run_wins), record)
@@ -135,7 +137,9 @@ def test_an_unavailable_lead_core_propagates_and_leaves_the_record_pending():
     assert uow.events() == []
 
 
-@pytest.mark.parametrize("answer", [AdmissionResult(outcome="ADMITTED"), AdmissionResult(outcome="MAYBE")])
+@pytest.mark.parametrize("answer", [
+    AdmissionResult(outcome="ADMITTED"), AdmissionResult(outcome="REJECTED"), AdmissionResult(outcome="MAYBE"),
+])
 def test_an_answer_that_is_not_a_decision_counts_as_unavailable(answer):
     uow = InMemoryUnitOfWork()
     record = _record(uow)
@@ -193,3 +197,60 @@ def test_a_command_with_missing_fields_still_builds_a_request():
 
     assert admission.requests[0].candidate.email is None
     assert isinstance(admission.requests[0].intake_record_id, UUID)
+
+
+def test_a_stale_record_in_hand_is_judged_by_what_the_store_says_before_asking():
+    uow, admission = InMemoryUnitOfWork(), FakeLeadAdmission()
+    lead_id = uuid4()
+    stale = _record(uow)
+    stored = _stored(uow, stale)
+    stored.status, stored.lead_id = IntakeRecordStatus.PROMOTED, LeadId(lead_id)
+    uow.intake_records.save(stored)
+
+    result = _ingest(uow, admission, stale)
+
+    assert (result.lead_id, result.status) == (str(lead_id), "PROMOTED")
+    assert admission.requests == []
+
+
+def test_a_record_discarded_since_it_was_read_is_refused_before_asking():
+    uow, admission = InMemoryUnitOfWork(), FakeLeadAdmission()
+    stale = _record(uow)
+    stored = _stored(uow, stale)
+    stored.discard()
+    uow.intake_records.save(stored)
+
+    with pytest.raises(DomainException) as caught:
+        _ingest(uow, admission, stale)
+
+    assert caught.value.error_code == "INVALID_INTAKE_TRANSITION"
+    assert admission.requests == []
+
+
+def test_a_record_that_no_longer_exists_is_not_found_before_asking():
+    uow, admission = InMemoryUnitOfWork(), FakeLeadAdmission()
+    ghost = IntakeRecord.create(tenant_id=uuid4(), source_id=uuid4(), payload=_PAYLOAD)
+
+    with pytest.raises(DomainException) as caught:
+        _ingest(uow, admission, ghost)
+
+    assert caught.value.error_code == "INTAKE_RECORD_NOT_FOUND"
+    assert admission.requests == []
+
+
+def test_a_discard_that_lands_before_the_claim_is_refused_and_writes_nothing():
+    uow = InMemoryUnitOfWork()
+    record = _record(uow)
+
+    def discarded_meanwhile(_):
+        stored = _stored(uow, record)
+        stored.discard()
+        uow.intake_records.save(stored)
+        return rejected()
+
+    with pytest.raises(DomainException) as caught:
+        _ingest(uow, FakeLeadAdmission(uow, discarded_meanwhile), record)
+
+    assert caught.value.error_code == "INVALID_INTAKE_TRANSITION"
+    assert _stored(uow, record).status == IntakeRecordStatus.DISCARDED
+    assert uow.events() == []

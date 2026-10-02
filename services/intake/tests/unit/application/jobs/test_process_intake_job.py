@@ -104,6 +104,7 @@ def test_a_redelivered_job_does_not_ask_lead_core_about_records_already_promoted
     _process(uow, admission, tenant_id, job_id)
     job = uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
     job.status = IntakeJobStatus.PROCESSING  # what a worker that died after the last record leaves
+    uow.intake_jobs.save(job)
 
     _process(uow, admission, tenant_id, job_id)
 
@@ -116,7 +117,9 @@ def test_counters_are_recovered_from_the_records_after_a_run_that_died_before_sa
     _process(uow, admission, tenant_id, job_id)
     job = uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
     job.status, job.succeeded, job.failed, job.completed_at = IntakeJobStatus.PROCESSING, 0, 0, None
+    uow.intake_jobs.save(job)
 
     _process(uow, admission, tenant_id, job_id)
 
+    job = uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
     assert (job.succeeded, job.failed) == (2, 0)
