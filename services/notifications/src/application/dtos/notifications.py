@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List
 from uuid import UUID
 
 from domain.notifications.notification import Notification
@@ -21,6 +20,6 @@ class MarkNotificationReadCommand:
 
 @dataclass(frozen=True)
 class NotificationsPageResult:
-    items: List[Notification]
+    items: list[Notification]
     total: int
     unread_count: int

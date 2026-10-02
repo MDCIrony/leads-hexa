@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import abc
+from abc import ABC, abstractmethod
 from typing import Any
 
 from application.ports.output.member_repository import MemberRepositoryPort
@@ -8,7 +8,7 @@ from application.ports.output.notification_repository import NotificationReposit
 from application.ports.output.processed_event_repository import ProcessedEventRepositoryPort
 
 
-class UnitOfWorkPort(abc.ABC):
+class UnitOfWorkPort(ABC):
     notifications: NotificationRepositoryPort
     members: MemberRepositoryPort
     processed_events: ProcessedEventRepositoryPort
@@ -22,8 +22,8 @@ class UnitOfWorkPort(abc.ABC):
         else:
             self.commit()
 
-    @abc.abstractmethod
+    @abstractmethod
     def commit(self) -> None: ...
 
-    @abc.abstractmethod
+    @abstractmethod
     def rollback(self) -> None: ...

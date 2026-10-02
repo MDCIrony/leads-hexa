@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Literal
 from uuid import UUID
 
 
@@ -9,9 +9,9 @@ class Principal:
     a service that needs a name or an email asks the owner of that data."""
 
     agent_id: UUID
-    tenant_id: Optional[UUID]
+    tenant_id: UUID | None
     role: str
-    principal_type: str  # "human" | "integration"
+    principal_type: Literal["human", "integration"]
 
 
 @dataclass(frozen=True)
@@ -19,4 +19,4 @@ class RequestContext:
     """Who is acting and on which organization, built once per request from the verified token."""
 
     principal: Principal
-    tenant_id: Optional[UUID]
+    tenant_id: UUID | None

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 from uuid import UUID
 
 MANAGER_ROLE = "MANAGER"
@@ -24,6 +23,6 @@ class Member:
     def receives_organization_notices(self) -> bool:
         return self.role == MANAGER_ROLE and self.is_active
 
-    def supersedes(self, other: Optional[Member]) -> bool:
+    def supersedes(self, other: Member | None) -> bool:
         # Strictly newer: a redelivered or reordered event must not undo a later change.
         return other is None or self.version > other.version

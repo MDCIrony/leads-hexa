@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from application.ports.input.members import ProjectMemberInputPort
@@ -9,7 +8,7 @@ from domain.members.member import Member
 class ProjectMemberUseCase(ProjectMemberInputPort):
     """Keeps the local member projection current from the identity service's agent events."""
 
-    def apply(self, tenant_id: Optional[str], payload: dict, uow: UnitOfWorkPort) -> bool:
+    def apply(self, tenant_id: str | None, payload: dict, uow: UnitOfWorkPort) -> bool:
         if tenant_id is None:
             # The platform administrator has no organization and receives no organization notices.
             return False

@@ -1,13 +1,12 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional, Union
 from uuid import UUID, uuid4
 
 from domain.exceptions import DomainException
 from domain.notifications.kind import NotificationKind
 
 
-def _as_uuid(value: Union[str, UUID]) -> UUID:
+def _as_uuid(value: str | UUID) -> UUID:
     try:
         return value if isinstance(value, UUID) else UUID(str(value))
     except ValueError:
@@ -28,23 +27,23 @@ class Notification:
     recipient_id: UUID
     kind: NotificationKind
     message: str
-    lead_id: Optional[UUID] = None
-    intake_record_id: Optional[UUID] = None
+    lead_id: UUID | None = None
+    intake_record_id: UUID | None = None
     is_read: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @classmethod
     def create(
         cls,
-        tenant_id: Union[str, UUID],
-        recipient_id: Union[str, UUID],
-        kind: Union[str, NotificationKind],
+        tenant_id: str | UUID,
+        recipient_id: str | UUID,
+        kind: str | NotificationKind,
         message: str,
-        lead_id: Optional[Union[str, UUID]] = None,
-        intake_record_id: Optional[Union[str, UUID]] = None,
-        notification_id: Optional[Union[str, UUID]] = None,
+        lead_id: str | UUID | None = None,
+        intake_record_id: str | UUID | None = None,
+        notification_id: str | UUID | None = None,
         is_read: bool = False,
-        created_at: Optional[datetime] = None,
+        created_at: datetime | None = None,
     ) -> "Notification":
         """Builds a notice from raw identifiers and enforces its invariants."""
         return cls(

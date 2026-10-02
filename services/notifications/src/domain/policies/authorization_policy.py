@@ -1,11 +1,11 @@
-from typing import Optional, Protocol
+from typing import Protocol
 from uuid import UUID
 
 from domain.exceptions import ForbiddenException
 
 
 class Actor(Protocol):
-    tenant_id: Optional[UUID]
+    tenant_id: UUID | None
 
 
 class AuthorizationPolicy:

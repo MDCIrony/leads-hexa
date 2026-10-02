@@ -6,6 +6,7 @@ from application.dtos.notifications import (
     MarkNotificationReadCommand,
     NotificationsPageResult,
 )
+from application.ports.output.unit_of_work import UnitOfWorkPort
 
 
 class GetNotificationsInputPort(ABC):
@@ -21,3 +22,9 @@ class MarkNotificationReadInputPort(ABC):
 class MarkAllNotificationsReadInputPort(ABC):
     @abstractmethod
     def execute(self, recipient_id: UUID) -> int: ...
+
+
+class NotificationHandlerInputPort(ABC):
+    @abstractmethod
+    def apply(self, event_type: str, tenant_id: str, payload: dict, uow: UnitOfWorkPort) -> None:
+        """Turns an internal event into notices, inside the unit of work the consumer adapter owns."""

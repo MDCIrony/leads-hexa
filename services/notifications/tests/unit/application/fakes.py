@@ -1,5 +1,4 @@
 """In-memory unit of work for the application tests. No database, no I/O."""
-from typing import Dict, List, Optional, Set, Tuple
 from uuid import UUID
 
 from application.ports.output.member_repository import MemberRepositoryPort
@@ -12,19 +11,19 @@ from domain.notifications.notification import Notification
 
 class InMemoryNotificationRepository(NotificationRepositoryPort):
     def __init__(self) -> None:
-        self._notifications: Dict[UUID, Notification] = {}
+        self._notifications: dict[UUID, Notification] = {}
 
     def save(self, notification: Notification) -> Notification:
         self._notifications[notification.id] = notification
         return notification
 
-    def get_by_id_and_recipient(self, notification_id: UUID, recipient_id: UUID) -> Optional[Notification]:
+    def get_by_id_and_recipient(self, notification_id: UUID, recipient_id: UUID) -> Notification | None:
         notification = self._notifications.get(notification_id)
         return notification if notification and notification.recipient_id == recipient_id else None
 
     def list_by_recipient(
         self, recipient_id: UUID, unread_only: bool = False, limit: int = 100, offset: int = 0
-    ) -> List[Notification]:
+    ) -> list[Notification]:
         items = [n for n in self._notifications.values()
                  if n.recipient_id == recipient_id and (not unread_only or not n.is_read)]
         items.sort(key=lambda n: n.created_at, reverse=True)
@@ -43,9 +42,9 @@ class InMemoryNotificationRepository(NotificationRepositoryPort):
 
 class InMemoryMemberRepository(MemberRepositoryPort):
     def __init__(self) -> None:
-        self._members: Dict[UUID, Member] = {}
+        self._members: dict[UUID, Member] = {}
 
-    def get(self, agent_id: UUID) -> Optional[Member]:
+    def get(self, agent_id: UUID) -> Member | None:
         return self._members.get(agent_id)
 
     def save(self, member: Member) -> None:
@@ -58,7 +57,7 @@ class InMemoryMemberRepository(MemberRepositoryPort):
 
 class InMemoryProcessedEventRepository(ProcessedEventRepositoryPort):
     def __init__(self) -> None:
-        self._seen: Set[Tuple[str, UUID]] = set()
+        self._seen: set[tuple[str, UUID]] = set()
 
     def mark(self, consumer: str, event_id: UUID) -> bool:
         if (consumer, event_id) in self._seen:

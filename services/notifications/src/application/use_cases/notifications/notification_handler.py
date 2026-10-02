@@ -1,12 +1,13 @@
-from typing import Iterable, Optional
+from collections.abc import Iterable
 from uuid import UUID
 
+from application.ports.input.notifications import NotificationHandlerInputPort
 from application.ports.output.unit_of_work import UnitOfWorkPort
 from domain.notifications.kind import NotificationKind
 from domain.notifications.notification import Notification
 
 
-class NotificationHandler:
+class NotificationHandler(NotificationHandlerInputPort):
     """Turns internal events into notices for whoever must act.
 
     Works inside the unit of work it is handed and never opens its own: the
@@ -39,8 +40,8 @@ class NotificationHandler:
         recipient_ids: Iterable[UUID],
         kind: NotificationKind,
         message: str,
-        lead_id: Optional[str] = None,
-        intake_record_id: Optional[str] = None,
+        lead_id: str | None = None,
+        intake_record_id: str | None = None,
     ) -> None:
         for recipient_id in recipient_ids:
             uow.notifications.save(Notification.create(
