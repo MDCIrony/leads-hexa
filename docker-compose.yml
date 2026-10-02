@@ -64,14 +64,12 @@ services:
       - SERVICE_CLIENT_SECRET=lead-core-dev-secret-0c7f2a9e4b1d
       - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
     depends_on:
       db:
         condition: service_healthy
-      # No condition on kafka (ADR-0026) or rabbitmq (ADR-0027): the API only
-      # records to the outbox and enqueues on request, and delivery retries in
-      # backend-worker, so it must come up and keep serving leads whether or
-      # not either broker is reachable yet.
+      # No condition on kafka (ADR-0026): the API only records to the outbox and
+      # backend-worker delivers, so it must come up and keep serving leads
+      # whether or not the broker is reachable yet.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -268,7 +266,6 @@ services:
       - JWKS_URL=http://identity:8000/internal/v1/jwks
       - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
     # Reloaded on change, like the API. Stopping mid-pass is safe by design: an
     # unmarked outbox row is delivered again and consumers deduplicate by event id.
     command: ["watchfiles", "python -m infrastructure.worker", "/app/src", "/libs/chassis/src"]
@@ -519,10 +516,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # No RABBITMQ_URL: it falls back to Settings' localhost default, which is
-    # unreachable from inside this container by construction. That keeps the
-    # suite hermetic (ADR-0027, same reasoning as no Kafka broker in 2.2) and
-    # exercises the enqueue-fails fallback path for free on every run.
     environment:
       - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test
       - TEST_DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_test

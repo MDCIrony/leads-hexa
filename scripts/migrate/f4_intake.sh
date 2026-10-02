@@ -120,11 +120,11 @@ printf 'Verifying…\n'
 # concat_ws, not ||: a NULL (total_items, lead_id) would otherwise drop the whole row from the digest.
 digest() { printf "SELECT count(*) || ' rows, md5 ' || coalesce(md5(string_agg(%s, ',' ORDER BY %s)), '-') FROM %s" "$1" "$1" "$2"; }
 check_table() { verify "$1" "$(digest "$2" "$3")" "$(digest "$2" "$3")"; }
-check_table lead_sources "concat_ws('/', id, tenant_id, is_active)" lead_sources
+check_table lead_sources "concat_ws('/', id, tenant_id, name, kind, is_active, md5(field_mapping::text))" lead_sources
 check_table provisioned_tenants "tenant_id::text" provisioned_tenants
-check_table intake_jobs "concat_ws('/', id, source_id, status, total_items, succeeded, failed)" intake_jobs
-check_table intake_records "concat_ws('/', id, job_id, status, lead_id)" intake_records
-check_table intake_errors "concat_ws('/', id, intake_record_id)" intake_errors
+check_table intake_jobs "concat_ws('/', id, tenant_id, source_id, kind, status, total_items, succeeded, failed, correlation_id)" intake_jobs
+check_table intake_records "concat_ws('/', id, tenant_id, source_id, job_id, status, lead_id, md5(payload::text))" intake_records
+check_table intake_errors "concat_ws('/', id, intake_record_id, field, message, error_code)" intake_errors
 check_table intake_files "concat_ws('/', job_id, md5(content))" intake_files
 check_table "processed (intake.tenants)" "event_id::text" \
   "(SELECT event_id FROM processed_events WHERE consumer = 'intake.tenants') AS p"
