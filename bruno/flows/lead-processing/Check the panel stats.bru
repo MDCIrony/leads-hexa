@@ -28,6 +28,10 @@ tests {
     expect(res.body.total).to.equal(sum);
     expect(res.body.unassigned).to.equal(res.body.by_status.UNASSIGNED);
   });
+
+  test("pending_intake ya no es de este endpoint", function() {
+    expect(res.body).to.not.have.property("pending_intake");
+  });
 }
 
 docs {

@@ -1,0 +1,42 @@
+meta {
+  name: Intake stats
+  type: http
+  seq: 20
+  tags: [
+    flow
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/stats
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
+}
+
+tests {
+  test("devuelve los tres contadores", function() {
+    expect(res.status).to.equal(200);
+    expect(res.body.pending).to.be.a("number");
+    expect(res.body.rejected).to.be.a("number");
+    expect(res.body.pending_intake).to.be.a("number");
+  });
+
+  test("pending_intake es pending más rejected", function() {
+    expect(res.body.pending_intake).to.equal(res.body.pending + res.body.rejected);
+  });
+}
+
+docs {
+  # Los pendientes de ingesta tienen su propio endpoint
+
+  `pending_intake` salió de `GET /leads/stats` en F4: los registros de entrada son de intake. El paso
+  anterior comprueba que ya no está allí; éste lo lee de `GET /intake/stats` y comprueba que la
+  cifra agregada es la suma de sus dos partes.
+
+  No compara contra un número absoluto: la organización puede arrastrar registros de ejecuciones
+  anteriores del mismo flujo.
+}

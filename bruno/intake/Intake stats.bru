@@ -1,0 +1,62 @@
+meta {
+  name: Intake stats
+  type: http
+  seq: 9
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/intake/stats
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.pending: isNumber
+  res.body.rejected: isNumber
+  res.body.pending_intake: isNumber
+}
+
+docs {
+  # `GET /intake/stats`
+
+  Los registros de entrada sobre los que un gestor tiene algo pendiente. Exige `MANAGER`. Desde F4
+  lo sirve el servicio intake; el gateway lo expone bajo la misma ruta pública (`/api/v1/intake`).
+
+  ## Qué devuelve
+
+  ```json
+  { "pending": 12, "rejected": 5, "pending_intake": 17 }
+  ```
+
+  | Campo | De dónde sale |
+  |---|---|
+  | `pending` | Registros de la organización en `PENDING`: llegaron y aún no se han procesado |
+  | `rejected` | Registros en `REJECTED`: no se pudieron interpretar y esperan corrección o descarte |
+  | `pending_intake` | `pending + rejected`. Es la cifra que antes devolvía `GET /leads/stats` |
+
+  ## Qué toca
+
+  Sólo lee `intake_records` de la organización de la sesión, que nunca sale de un parámetro. Nada se
+  cachea: se cuenta en el momento de la lectura.
+
+  ## Por qué existe
+
+  `pending_intake` vivía en `GET /leads/stats`, pero los registros de entrada pertenecen a intake y
+  lead-core ya no los lee (ADR-0036, cambio de contrato 2). El Panel hace ahora dos lecturas:
+  `/leads/stats` y esta.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `403` | Lo pide un `AGENT` o un `ADMIN` |
+  | `401` | Sin sesión, con la sesión caducada o revocada, o con el agente desactivado |
+}

@@ -27,14 +27,15 @@ assert {
   res.body.total: isNumber
   res.body.by_status: isJson
   res.body.unassigned: isNumber
-  res.body.pending_intake: isNumber
+  res.body.pending_intake: isUndefined
   res.body.load_by_agent: isArray
 }
 
 docs {
   # `GET /leads/stats`
 
-  Los cinco indicadores que pinta el Panel del gestor, en una sola petición. Exige `MANAGER`.
+  Los indicadores de leads que pinta el Panel del gestor, en una sola petición. Exige `MANAGER`. Los
+  pendientes de ingesta ya no viajan aquí: son de `GET /intake/stats`.
 
   ## Los parámetros
 
@@ -57,7 +58,6 @@ docs {
       "UNASSIGNED": 40, "ASSIGNED": 700, "DISCARDED": 100
     },
     "unassigned": 40,
-    "pending_intake": 17,
     "load_by_agent": [
       { "agent_id": "5c8a...", "name": "Ana Ruiz", "active_leads": 23 }
     ]
@@ -69,19 +69,23 @@ docs {
   | `total` | La suma de `by_status`. Nunca puede discreparse de esa suma |
   | `by_status` | Siempre los seis valores de `LeadStatus`, con `0` donde no haya leads |
   | `unassigned` | Redundante a propósito con `by_status["UNASSIGNED"]`: el indicador propio que pide el Panel, sin que el cliente tenga que saber que "sin asignar" se llama así dentro del dominio |
-  | `pending_intake` | Registros de entrada en `PENDING` más `REJECTED`: los dos estados sobre los que un gestor tiene algo pendiente |
   | `load_by_agent` | La misma consulta que usa el motor de asignación (`active_load_by_agent`), con el nombre del asesor añadido para que el Panel no necesite una segunda petición a `GET /agents` |
 
-  Nada se cachea ni se materializa: las cuatro cifras se derivan en la misma transacción, en el
+  Nada se cachea ni se materializa: las cifras se derivan en la misma transacción, en el
   momento de la lectura.
 
   ## Qué toca
 
-  Sólo lee: los leads y registros de entrada de la organización de la sesión, sin traerse ninguna
+  Sólo lee: los leads de la organización de la sesión, sin traerse ninguna
   entidad completa al navegador.
 
   Está declarada **antes** de `/{{lead_id}}` en el router, igual que `/mine`: si fuera después,
   `stats` caería en la ruta paramétrica y se rechazaría como UUID inválido.
+
+  ## Qué ya no devuelve
+
+  `pending_intake` salió de esta respuesta en F4 (ADR-0036, cambio de contrato 2): los registros de
+  entrada son de intake. El campo está ausente, no a `0`; se pide en `GET /intake/stats`.
 
   ## Errores
 
