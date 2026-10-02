@@ -4,7 +4,7 @@ import * as intakeJobsService from '../services/intake-jobs.service';
 import * as leadsService from '../services/leads.service';
 import * as agentsService from '../services/agents.service';
 import type { IngestLeadRequest } from '../services/intake.service';
-import type { components } from '../../infrastructure/api/schema';
+import type { components } from '../../infrastructure/api/intake-schema';
 import { LeadStatus, type LeadModel } from '../../domain/lead.model';
 
 export type IntakeError = components['schemas']['IntakeErrorResponse'];

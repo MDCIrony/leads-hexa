@@ -146,6 +146,7 @@ async function main() {
   await save('agents-page.json', (await call('GET', '/agents', { token: managerToken })).data);
   await save('advisors-page.json', (await call('GET', '/advisors', { token: managerToken })).data);
   await save('lead-stats.json', (await call('GET', '/leads/stats', { token: managerToken })).data);
+  await save('intake-stats.json', (await call('GET', '/intake/stats', { token: managerToken })).data);
   // The assignment rule above targets this agent, so LEAD_ASSIGNED lands in their own inbox.
   await save('notifications-page.json', (await call('GET', '/notifications', { token: agentToken })).data);
 

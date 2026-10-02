@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "gen:api": "openapi-typescript http://localhost:8001/openapi.json -o src/infrastructure/api/schema.d.ts && openapi-typescript http://localhost:8001/openapi/identity.json -o src/infrastructure/api/identity-schema.d.ts && openapi-typescript http://localhost:8001/openapi/notifications.json -o src/infrastructure/api/notifications-schema.d.ts",
+    "gen:api": "openapi-typescript http://localhost:8001/openapi.json -o src/infrastructure/api/schema.d.ts && openapi-typescript http://localhost:8001/openapi/identity.json -o src/infrastructure/api/identity-schema.d.ts && openapi-typescript http://localhost:8001/openapi/notifications.json -o src/infrastructure/api/notifications-schema.d.ts && openapi-typescript http://localhost:8001/openapi/intake.json -o src/infrastructure/api/intake-schema.d.ts",
     "gen:fixtures": "node scripts/gen-fixtures.mjs"
   },
   "dependencies": {

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { apiClient } from '../../infrastructure/api/api-client';
 import { renderWithProviders } from '../../test/render';
 import { mockApiClient } from '../../test/mock-api';
-import type { components } from '../../infrastructure/api/schema';
+import type { components } from '../../infrastructure/api/intake-schema';
 import intakeAcceptedFixture from '../../test/fixtures/intake-accepted.json';
 import intakeJobCompletedFixture from '../../test/fixtures/intake-job-completed.json';
 import leadDetailFixture from '../../test/fixtures/lead-detail.json';

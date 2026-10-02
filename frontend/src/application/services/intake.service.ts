@@ -1,5 +1,5 @@
 import { apiClient, multipartConfig } from '../../infrastructure/api/api-client';
-import type { components } from '../../infrastructure/api/schema';
+import type { components } from '../../infrastructure/api/intake-schema';
 import type { PaginatedEnvelope } from '../data/use-paginated';
 
 export type IngestLeadRequest = components['schemas']['IngestLeadRequest'];
@@ -8,7 +8,7 @@ export type IntakeRecord = components['schemas']['IntakeRecordResponse'];
 export type LeadProcessedResponse = components['schemas']['LeadProcessedResponse'];
 
 // Real paths are under /intake/leads and /intake/records, not /leads/ingest or /records —
-// see schema.d.ts. Neither ingest nor batchUpload return a lead: the record still has to
+// see intake-schema.d.ts. Neither ingest nor batchUpload return a lead: the record still has to
 // be processed asynchronously, which is what intakeJobs.waitForJob is for.
 export async function ingest(body: IngestLeadRequest): Promise<IntakeAcceptedResponse> {
   const { data } = await apiClient.post<IntakeAcceptedResponse>('/api/v1/intake/leads/ingest', body);
