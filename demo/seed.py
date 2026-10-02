@@ -183,25 +183,22 @@ def ensure_groups(api):
 
 def ensure_advisors(api, group_ids):
     status, page = api.get("/agents?limit=1000")
-    existing = {a["email"] for a in page.get("items", [])} if status == 200 else set()
+    existing = {a["email"]: a["id"] for a in page.get("items", [])} if status == 200 else {}
     created = 0
     for name, handle, group in ADVISORS:
         email = f"{handle}@{DOMAIN}"
-        if email in existing:
-            continue
-        status, agent = api.post(
-            "/agents",
-            {
-                "name": name,
-                "email": email,
-                "password": PASSWORD,
-                "role": "AGENT",
-                "group_id": group_ids[group],
-            },
-        )
-        if status != 201:
-            die(f"no se pudo crear al asesor {email}: {agent}")
-        created += 1
+        agent_id = existing.get(email)
+        if agent_id is None:
+            status, agent = api.post(
+                "/agents", {"name": name, "email": email, "password": PASSWORD, "role": "AGENT"}
+            )
+            if status != 201:
+                die(f"no se pudo crear al asesor {email}: {agent}")
+            agent_id, created = agent["id"], created + 1
+        # The team is lead-core's since F3 (ADR-0036); the PATCH is idempotent, so a rerun converges.
+        status, advisor = api.patch(f"/advisors/{agent_id}", {"group_id": group_ids[group]})
+        if status != 200:
+            die(f"no se pudo asignar el equipo de {email}: {advisor}")
     step(f"{len(ADVISORS)} asesores ({created} nuevos)")
 
 

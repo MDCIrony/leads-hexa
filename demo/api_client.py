@@ -45,6 +45,9 @@ class Api:
     def post(self, path, body=None, form=None):
         return self._call("POST", path, body=body, form=form)
 
+    def patch(self, path, body):
+        return self._call("PATCH", path, body=body)
+
     def logout(self):
         """Best effort: an unclosed session expires by itself and must not fail a finished seed."""
         try:
