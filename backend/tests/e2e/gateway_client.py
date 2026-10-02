@@ -10,7 +10,7 @@ answers 401 the way it does behind a gateway that found no session.
 Outbox rows are never drained: they stay unpublished, as with no worker running."""
 import json
 
-import httpx
+import httpx2
 from fastapi.testclient import TestClient
 
 from tests.tokens import mint_token
@@ -40,10 +40,10 @@ class GatewayClient(TestClient):
     def request(self, method, url, **kwargs):
         merged = self._merge_url(url)
         path = merged.path
-        headers = httpx.Headers(kwargs.pop("headers", None))
+        headers = httpx2.Headers(kwargs.pop("headers", None))
 
         if path not in _PUBLIC_EXACT and not path.startswith("/api/v1/"):
-            return httpx.Response(404, json=_NOT_FOUND, request=httpx.Request(method, merged))
+            return httpx2.Response(404, json=_NOT_FOUND, request=httpx2.Request(method, merged))
 
         principal = headers.get(_PRINCIPAL)
         for name in _CLIENT_CREDENTIALS:
@@ -51,7 +51,7 @@ class GatewayClient(TestClient):
         if principal and path not in _PUBLIC_EXACT:
             agent_id, tenant_id, role, ptype = json.loads(principal)
             headers["Authorization"] = f"Bearer {mint_token(agent_id, tenant_id, role, ptype)}"
-        # An empty Cookie header stops httpx from adding the client's jar.
+        # An empty Cookie header stops httpx2 from adding the client's jar.
         headers["Cookie"] = ""
         kwargs.pop("cookies", None)
         return super().request(method, url, headers=headers, **kwargs)

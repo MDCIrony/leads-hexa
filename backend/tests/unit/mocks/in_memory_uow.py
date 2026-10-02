@@ -6,7 +6,6 @@ from application.ports.output.disqualification_rule_repository_port import (
 )
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
-from application.ports.output.processed_event_repository_port import ProcessedEventRepositoryPort
 from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
@@ -94,18 +93,6 @@ class InMemoryOutboxRepository(OutboxRepositoryPort):
         self.failed_ids.append(event_id)
 
 
-class InMemoryProcessedEventRepository(ProcessedEventRepositoryPort):
-    def __init__(self) -> None:
-        self._seen: set = set()
-
-    def mark(self, consumer: str, event_id: UUID) -> bool:
-        key = (consumer, event_id)
-        if key in self._seen:
-            return False
-        self._seen.add(key)
-        return True
-
-
 class InMemoryUnitOfWork(UnitOfWorkPort):
     def __init__(
         self,
@@ -132,7 +119,6 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
             self.groups.advisor_repo = self.advisors
         self.disqualification_rules = disqualification_rules or InMemoryDisqualificationRuleRepository()
         self.outbox = outbox or InMemoryOutboxRepository()
-        self.processed_events = InMemoryProcessedEventRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         # Only the outbox honours rollback: it is the one write whose survival

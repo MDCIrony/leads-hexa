@@ -1,27 +1,24 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
+from chassis.persistence import MigrationRunner
 from chassis.web import RequestIdMiddleware
 from fastapi import FastAPI
 
-from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
 from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.rule_router import router as rule_router
 from infrastructure.adapters.input.api.advisors.advisors_router import router as advisors_router
 from infrastructure.adapters.input.api.sales_group_router import router as sales_group_router
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 from infrastructure.adapters.input.internal.admissions_router import router as admissions_router
-from infrastructure.config.settings import Settings
+from infrastructure.config.settings import ApiSettings
 from infrastructure.di.container import Container
 from infrastructure.logging_config import configure_logging
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    configure_logging()
-    settings = Settings.from_environment()
-    if not settings.service_client_secret:
-        # Only the API hydrates advisors from identity; failing here beats a 503 on the first assignment.
-        raise ValueError("SERVICE_CLIENT_SECRET is required by the API and has no default")
+    settings = ApiSettings.from_environment()
+    configure_logging(settings.log_level)
     container = Container(settings)
     migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
     MigrationRunner(container.database, migrations_dir).apply_pending()

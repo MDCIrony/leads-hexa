@@ -1,11 +1,13 @@
 import logging
 import signal
 import threading
+from collections.abc import Callable
 
 import psycopg
 from chassis.consumer import ConsumerLoop, dlq_topic, ensure_topics_until_ready, run_consumer_lane
 from chassis.kafka_config import consumer_config, producer_config
 from chassis.outbox import KafkaEventDispatcher, run_relay
+from chassis.persistence import RawSqlDatabase
 from confluent_kafka import Consumer, Producer
 from confluent_kafka.admin import AdminClient
 
@@ -16,8 +18,9 @@ from infrastructure.adapters.output.events.webhook_outbound_dispatcher import We
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import PooledWebhookRepository
-from infrastructure.config.settings import Settings
-from infrastructure.di.container import Container
+from application.ports.output.unit_of_work_port import UnitOfWorkPort
+from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.config.settings import WorkerSettings
 from infrastructure.logging_config import configure_logging
 from infrastructure.worker.producers import PRODUCER_NAME
 from infrastructure.worker.relays import build_dispatchers, build_relays
@@ -27,14 +30,14 @@ _LOGGER = logging.getLogger(__name__)
 _JOIN_TIMEOUT_SECONDS = 15.0
 
 
-def _consumer_loop(container: Container, bootstrap: str, group: str, topic: str) -> ConsumerLoop:
+def _consumer_loop(uow_factory: Callable[[], UnitOfWorkPort], bootstrap: str, group: str, topic: str) -> ConsumerLoop:
     _LOGGER.info("Consumer group %s subscribing to %s (dead letters: %s)", group, topic, dlq_topic(group))
     return ConsumerLoop(
         Consumer(consumer_config(bootstrap, group)),
         Producer(producer_config(bootstrap, auto_create_topics=False)),
         group,
         [topic],
-        handler_for(group, container.unit_of_work),
+        handler_for(group, uow_factory),
         # A database outage is waited out: dead-lettering a state event would
         # leave the advisors projection diverged, silently and for good.
         retryable=lambda exc: isinstance(exc, psycopg.OperationalError),
@@ -42,9 +45,10 @@ def _consumer_loop(container: Container, bootstrap: str, group: str, topic: str)
 
 
 def main() -> int:
-    configure_logging()
-    settings = Settings.from_environment()
-    container = Container(settings)
+    settings = WorkerSettings.from_environment()
+    configure_logging(settings.log_level)
+    database = RawSqlDatabase(settings.database_url)
+    uow_factory = lambda: PostgresUnitOfWork(database)
     bootstrap = settings.kafka_bootstrap_servers
     stop, consumers_ready = threading.Event(), threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -52,7 +56,7 @@ def main() -> int:
 
     product_dispatchers = [
         WebhookOutboundDispatcher(
-            webhook_repo=PooledWebhookRepository(container.database),
+            webhook_repo=PooledWebhookRepository(database),
             webhook_dispatcher=HttpxWebhookDispatcher(timeout=settings.webhook_timeout_seconds),
         ),
         KafkaOutboundDispatcher(producer=Producer(producer_config(bootstrap))),
@@ -65,7 +69,7 @@ def main() -> int:
     def activate_internal() -> None:
         dispatchers["internal"].append(internal_dispatcher)
 
-    relays = build_relays(lambda: open_outbox_store(container.database), dispatchers)
+    relays = build_relays(lambda: open_outbox_store(database), dispatchers)
     admin = AdminClient({"bootstrap.servers": bootstrap})
     threads = [
         *(
@@ -90,7 +94,7 @@ def main() -> int:
         *(
             threading.Thread(
                 target=run_consumer_lane,
-                args=(group, lambda group=group, topic=topic: _consumer_loop(container, bootstrap, group, topic),
+                args=(group, lambda group=group, topic=topic: _consumer_loop(uow_factory, bootstrap, group, topic),
                       consumers_ready, stop),
                 name=f"consumer-{group}", daemon=True,
             )
@@ -106,5 +110,5 @@ def main() -> int:
     _LOGGER.info("Stopping")
     for thread in threads:
         thread.join(timeout=_JOIN_TIMEOUT_SECONDS)
-    container.database.close()
+    database.close()
     return 0

@@ -4,9 +4,9 @@ from typing import Iterator
 from uuid import UUID
 
 from chassis.outbox import OutboxRow, OutboxStore
+from chassis.persistence import RawSqlDatabase
 
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
-from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 
 
