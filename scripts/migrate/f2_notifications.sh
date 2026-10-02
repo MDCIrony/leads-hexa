@@ -10,10 +10,21 @@
 #        and wait for it to be healthy;
 #   6    cut: start notifications-worker, backend-worker and gateway.
 #
-# Repeatable: it truncates the target before copying and only reads the source.
+# Precondition: frozen. It refuses to run while notifications-worker,
+# backend-worker or gateway is running: before the cut a live consumer would
+# leave processed_events incomplete, and after it the truncate would delete the
+# notices written since. While frozen it is repeatable: it truncates the target
+# before copying and only reads the source.
 # Exits non-zero if any count or id digest differs between the two databases.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+
+running=$(docker compose ps --status running --format '{{.Service}}' notifications-worker backend-worker gateway)
+if [ -n "$running" ]; then
+  printf 'Refusing to copy: running now: %s.\n' "$(printf '%s' "$running" | tr '\n' ' ' | sed 's/ $//')"
+  printf 'Freeze first (docker compose stop gateway backend-worker), or the cut is already done.\n'
+  exit 1
+fi
 
 PROCESSED_CONSUMERS="'notifications.lead-events', 'notifications.intake-events'"
 

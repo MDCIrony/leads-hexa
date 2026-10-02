@@ -113,7 +113,7 @@ await_job() {
 }
 
 # await_notice <session> <expression over d> — waits until the inbox satisfies it.
-# Notifications are written by backend-worker once Kafka delivers the event: one
+# Notifications are written by notifications-worker once Kafka delivers the event: one
 # hop after the job completes, so the reads below must not race it. Bounded
 # polling like await_job; the check that follows still decides pass or fail.
 await_notice() {
@@ -1294,7 +1294,7 @@ verify_ms_f2() {
   # access log's upstream is what proves where the request landed.
   ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q notifications)")
   check "el gateway la envía al servicio notifications" True \
-    "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -q "upstream=$ip:8000" && printf True || printf False)"
+    "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -qF "upstream=$ip:8000" && printf True || printf False)"
 
   section "Microservicios F2 · avisos escritos por notifications-worker"
   r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
@@ -1341,9 +1341,9 @@ verify_ms_f2() {
     f "next((n['is_read'] for n in d['items'] if n['id'] == '$notif_id'), None)")"
   check "marcar todas" 204 "$(code "$(req -X POST "$API/notifications/read-all" -H "Authorization: Bearer $TOKEN_1")")"
   check "el contador queda en cero" 0 "$(body "$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_1")" | f 'd.get("unread_count")')"
-  check "otra organización no puede marcarla (404)" 404 "$(code "$(req -X POST "$API/notifications/$notif_id/read" -H "Authorization: Bearer $MGR_B")")"
+  check "otra organización no puede marcarla (404)" 404 "$(code "$(req -X POST "$API/notifications/${notif_id:-missing}/read" -H "Authorization: Bearer $MGR_B")")"
   check "ni la ve en su lista" False "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $MGR_B")" | \
-    f "any(n['id'] == '$notif_id' for n in d['items'])")"
+    f "any(n['id'] == '${notif_id:-missing}' for n in d['items']) or '${notif_id}' == ''")"
 
   section "Microservicios F2 · grupos y colas de error"
   for group in notifications.lead-events notifications.intake-events notifications.members; do
