@@ -25,6 +25,10 @@ class AdvisorRepositoryPort(ABC):
     ) -> List[Advisor]: ...
 
     @abstractmethod
+    def count(self, tenant_id: UUID, group_id: Optional[UUID] = None, is_active: Optional[bool] = None) -> int:
+        """What `list` would return without its page."""
+
+    @abstractmethod
     def count_by_group(self, tenant_id: UUID, group_id: UUID) -> int:
         """Active advisors in the group, as the groups listing shows them."""
 

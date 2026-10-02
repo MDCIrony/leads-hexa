@@ -9,9 +9,7 @@ from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
-from application.ports.input.intake_phase_use_case_ports import (
-    ProcessIntakeJobInputPort, ReceiveIntakeInputPort,
-)
+from application.ports.input.intake_phase_use_case_ports import ProcessIntakeJobInputPort, ReceiveIntakeInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
 from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInputPort
@@ -237,8 +235,10 @@ def get_update_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> U
 def get_delete_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteLeadSourceInputPort:
     return DeleteLeadSourceUseCase(uow=uow)
 
-def get_assign_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> AssignLeadInputPort:
-    return AssignLeadUseCase(uow=uow)
+def get_assign_lead_use_case(
+    uow: UnitOfWorkPort = Depends(get_uow), container: Container = Depends(get_container),
+) -> AssignLeadInputPort:
+    return AssignLeadUseCase(uow=uow, directory=container.advisor_directory)
 
 def get_discard_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DiscardLeadInputPort:
     return DiscardLeadUseCase(uow=uow)

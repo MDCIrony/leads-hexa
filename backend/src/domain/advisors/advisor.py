@@ -32,8 +32,13 @@ class Advisor:
         return self.agent_id
 
     @property
+    def is_routable(self) -> bool:
+        """A role work can be given to, active or not."""
+        return self.role not in _NEVER_ROUTED
+
+    @property
     def is_assignable(self) -> bool:
-        return self.is_active and self.role not in _NEVER_ROUTED
+        return self.is_active and self.is_routable
 
     def supersedes(self, other: Optional[Advisor]) -> bool:
         # Strictly newer: a redelivered or reordered event must not undo a later change.

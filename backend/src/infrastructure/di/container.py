@@ -1,4 +1,6 @@
-from chassis.auth import JwksCache, TokenVerifier, load_signers
+import httpx
+from chassis.auth import JwksCache, ServiceTokenClient, TokenVerifier, load_signers
+from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.clock_port import ClockPort
 from application.ports.output.file_parser_port import FileParserPort
 from application.ports.output.id_generator_port import IdGeneratorPort
@@ -9,6 +11,8 @@ from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.services.assignment_engine import AssignmentEngine
 from infrastructure.adapters.output.events.kafka_credential_provisioner import KafkaCredentialProvisioner
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
+from infrastructure.adapters.output.http.advisors.http_identity_agents import HttpIdentityAgents
+from infrastructure.adapters.output.persistence.advisors.hydrating_advisor_directory import HydratingAdvisorDirectory
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
@@ -65,6 +69,13 @@ class Container:
             self._oauth_identity_providers["GOOGLE"] = GoogleOAuthIdentityProvider(settings.google_oauth)
         if settings.github_oauth.enabled:
             self._oauth_identity_providers["GITHUB"] = GitHubOAuthIdentityProvider(settings.github_oauth)
+        # Built once: the token client caches its token, the HTTP client its connections.
+        identity_http = httpx.Client(timeout=2.0)
+        tokens = ServiceTokenClient(settings.identity_url.rstrip("/") + "/internal/v1/service-tokens",
+                                    settings.service_client_id, settings.service_client_secret, "identity",
+                                    post=identity_http.post)
+        self._advisor_directory = HydratingAdvisorDirectory(
+            self.unit_of_work, HttpIdentityAgents(settings.identity_url, tokens, identity_http))
 
     @property
     def settings(self) -> Settings:
@@ -113,6 +124,10 @@ class Container:
     @property
     def messaging_credential_provisioner(self) -> MessagingCredentialProvisionerPort:
         return self._messaging_credential_provisioner
+
+    @property
+    def advisor_directory(self) -> AdvisorDirectoryPort:
+        return self._advisor_directory
 
     def oauth_identity_provider(self, provider: str) -> OAuthIdentityProviderPort | None:
         return self._oauth_identity_providers.get(provider)

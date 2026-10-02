@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 from uuid import UUID
 
 import psycopg
@@ -45,15 +45,9 @@ class RawSqlAdvisorRepository(AdvisorRepositoryPort):
         rows = self.connection.execute(sql + " ORDER BY name, agent_id", tuple(params)).fetchall()
         return [self._to_advisor(row) for row in rows]
 
-    def list(
-        self,
-        tenant_id: UUID,
-        group_id: Optional[UUID] = None,
-        is_active: Optional[bool] = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> List[Advisor]:
-        sql = "SELECT * FROM advisors WHERE " + _ROUTABLE
+    @staticmethod
+    def _filtered(tenant_id: UUID, group_id: Optional[UUID], is_active: Optional[bool]) -> Tuple[str, List[Any]]:
+        sql = " FROM advisors WHERE " + _ROUTABLE
         params: List[Any] = [tenant_id]
         if group_id is not None:
             sql += " AND group_id = %s"
@@ -62,9 +56,24 @@ class RawSqlAdvisorRepository(AdvisorRepositoryPort):
         if is_active is not None:
             sql += " AND is_active = %s"
             params.append(is_active)
-        sql += " ORDER BY name, agent_id LIMIT %s OFFSET %s"
+        return sql, params
+
+    def list(
+        self,
+        tenant_id: UUID,
+        group_id: Optional[UUID] = None,
+        is_active: Optional[bool] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Advisor]:
+        where, params = self._filtered(tenant_id, group_id, is_active)
+        sql = "SELECT *" + where + " ORDER BY name, agent_id LIMIT %s OFFSET %s"
         rows = self.connection.execute(sql, (*params, limit, offset)).fetchall()
         return [self._to_advisor(row) for row in rows]
+
+    def count(self, tenant_id: UUID, group_id: Optional[UUID] = None, is_active: Optional[bool] = None) -> int:
+        where, params = self._filtered(tenant_id, group_id, is_active)
+        return int(self.connection.execute("SELECT COUNT(*) AS count" + where, tuple(params)).fetchone()["count"])
 
     def count_by_group(self, tenant_id: UUID, group_id: UUID) -> int:
         row = self.connection.execute(

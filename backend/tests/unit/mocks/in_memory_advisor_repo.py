@@ -2,9 +2,11 @@ from dataclasses import replace
 from typing import Dict, List, Optional
 from uuid import UUID
 
+from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.advisors.advisor_repository_port import AdvisorRepositoryPort
 from domain.advisors.advisor import Advisor
 from domain.entities.agent import Agent
+from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole
 from domain.value_objects.group_id import GroupId
 
@@ -42,6 +44,9 @@ class InMemoryAdvisorRepository(AdvisorRepositoryPort):
         found = [a for a in self._routable(tenant_id, group_id) if is_active is None or a.is_active == is_active]
         return found[offset:offset + limit]
 
+    def count(self, tenant_id, group_id=None, is_active=None) -> int:
+        return len(self.list(tenant_id, group_id, is_active, limit=len(self.advisors)))
+
     def count_by_group(self, tenant_id: UUID, group_id: UUID) -> int:
         return len(self.list_available(tenant_id, group_id))
 
@@ -64,3 +69,16 @@ class InMemoryAdvisorRepository(AdvisorRepositoryPort):
         for advisor in list(self.advisors.values()):
             if advisor.group_id is not None and advisor.group_id.value == group_id:
                 self.advisors[advisor.agent_id.value] = replace(advisor, group_id=None)
+
+
+class ProjectionOnlyDirectory(AdvisorDirectoryPort):
+    """AdvisorDirectory with no identity behind it: what the projection holds is all there is."""
+
+    def __init__(self, uow) -> None:
+        self.uow = uow
+
+    def get(self, agent_id: UUID, tenant_id: UUID) -> Advisor:
+        advisor = self.uow.advisors.get(agent_id, tenant_id)
+        if advisor is None or not advisor.is_routable:
+            raise DomainException("El asesor no existe", error_code="AGENT_NOT_FOUND")
+        return advisor

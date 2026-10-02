@@ -13,7 +13,7 @@ from domain.entities.agent import Agent
 from domain.entities.lead import Lead
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole, LeadStatus
-from tests.unit.mocks.in_memory_advisor_repo import advisor_of
+from tests.unit.mocks.in_memory_advisor_repo import ProjectionOnlyDirectory, advisor_of
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 _TENANT = uuid.uuid4()
@@ -39,7 +39,7 @@ def test_assigning_moves_the_lead_to_the_agent():
     uow.leads.save(lead)
     uow.advisors.seed(advisor_of(agent))
 
-    result = AssignLeadUseCase(uow).execute(
+    result = AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=agent.id.value)
     )
 
@@ -57,7 +57,7 @@ def test_assigning_a_lead_of_another_organization_is_not_found():
     uow.advisors.seed(advisor_of(agent))
 
     with pytest.raises(DomainException) as exc:
-        AssignLeadUseCase(uow).execute(
+        AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
             AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=agent.id.value)
         )
     assert exc.value.error_code == "LEAD_NOT_FOUND"
@@ -74,7 +74,7 @@ def test_assigning_an_agent_of_another_organization_is_refused():
     uow.advisors.seed(advisor_of(agent))
 
     with pytest.raises(DomainException) as exc:
-        AssignLeadUseCase(uow).execute(
+        AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
             AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=agent.id.value)
         )
     assert exc.value.error_code == "AGENT_NOT_FOUND"
@@ -89,7 +89,7 @@ def test_reassigning_an_already_assigned_lead_lands_on_the_new_agent():
     uow.advisors.seed(advisor_of(first_agent))
     uow.advisors.seed(advisor_of(second_agent))
 
-    result = AssignLeadUseCase(uow).execute(
+    result = AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=second_agent.id.value)
     )
 
@@ -109,7 +109,7 @@ def test_assigning_by_hand_republishes_the_lead_to_the_customer():
     uow.leads.save(lead)
     uow.advisors.seed(advisor_of(agent))
 
-    AssignLeadUseCase(uow).execute(
+    AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=agent.id.value)
     )
 
@@ -136,7 +136,7 @@ def test_reassigning_records_lead_reassigned_with_the_previous_agent():
     uow.advisors.seed(advisor_of(first_agent))
     uow.advisors.seed(advisor_of(second_agent))
 
-    AssignLeadUseCase(uow).execute(
+    AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=second_agent.id.value)
     )
 

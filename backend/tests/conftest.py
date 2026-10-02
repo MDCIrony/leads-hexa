@@ -33,6 +33,7 @@ os.environ.setdefault("DATABASE_URL", _test_dsn())
 os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
 os.environ.setdefault("MFA_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 os.environ.setdefault("SIGNING_KEYS", "test-1=We6wZYLn41lq5z4FdSgMD7Jmla3wUOhIe8MBaNQiuuk")
+os.environ.setdefault("SERVICE_CLIENT_SECRET", "test-service-secret-do-not-use")
 
 
 def pytest_collection_modifyitems(items):
@@ -104,6 +105,18 @@ def clean_tables(request):
                 sql.SQL(", ").join(sql.Identifier(row["tablename"]) for row in rows)
             )
         )
+
+
+@pytest.fixture(autouse=True)
+def identity_double(request, monkeypatch):
+    """No identity runs next to the e2e suite: the Container the app builds
+    asks the monolith's own agents table instead, through the same port."""
+    if "e2e" not in request.node.keywords:
+        return
+    from tests.advisors_sync import IdentityFromAgentsTable
+
+    monkeypatch.setattr(IdentityFromAgentsTable, "dsn", _test_dsn())
+    monkeypatch.setattr("infrastructure.di.container.HttpIdentityAgents", IdentityFromAgentsTable)
 
 
 @pytest.fixture

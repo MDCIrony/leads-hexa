@@ -9,6 +9,7 @@ from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.intake_router import router as intake_router
 from infrastructure.adapters.input.api.rule_router import router as rule_router
 from infrastructure.adapters.input.api.agent_router import router as agent_router
+from infrastructure.adapters.input.api.advisors.advisors_router import router as advisors_router
 from infrastructure.adapters.input.api.sales_group_router import router as sales_group_router
 from infrastructure.adapters.input.api.source_router import router as source_router
 from infrastructure.adapters.input.api.auth_router import router as auth_router
@@ -23,6 +24,9 @@ from infrastructure.logging_config import configure_logging
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging()
     settings = Settings.from_environment()
+    if not settings.service_client_secret:
+        # Only the API hydrates advisors from identity; failing here beats a 503 on the first assignment.
+        raise ValueError("SERVICE_CLIENT_SECRET is required by the API and has no default")
     container = Container(settings)
     migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
     MigrationRunner(container.database, migrations_dir).apply_pending()
@@ -55,6 +59,7 @@ app.include_router(lead_router, prefix="/api/v1/leads", tags=["Leads"])
 app.include_router(intake_router, prefix="/api/v1/intake", tags=["Intake"])
 app.include_router(rule_router, prefix="/api/v1/rules", tags=["Rules"])
 app.include_router(agent_router, prefix="/api/v1/agents", tags=["Agents"])
+app.include_router(advisors_router, prefix="/api/v1/advisors", tags=["Advisors"])
 app.include_router(sales_group_router, prefix="/api/v1/groups", tags=["Groups"])
 app.include_router(source_router, prefix="/api/v1/sources", tags=["Sources"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])

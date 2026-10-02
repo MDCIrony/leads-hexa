@@ -94,3 +94,29 @@ def test_oauth_test_mode_requires_an_explicit_test_environment(monkeypatch):
     settings = Settings.from_environment()
     assert settings.oauth_test_mode is True
     assert settings.google_oauth.enabled is True
+
+
+def test_identity_settings_default_to_the_compose_names(monkeypatch):
+    for name in ("IDENTITY_URL", "SERVICE_CLIENT_ID", "SERVICE_CLIENT_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = Settings.from_environment()
+
+    assert (settings.identity_url, settings.service_client_id) == ("http://identity:8000", "lead-core")
+    # Not required here: the worker builds the same Settings and never calls identity.
+    assert settings.service_client_secret == ""
+
+
+def test_the_api_refuses_to_start_without_a_service_secret(monkeypatch):
+    import asyncio
+
+    from infrastructure.main import app, lifespan
+
+    monkeypatch.setenv("SERVICE_CLIENT_SECRET", "")
+
+    async def start() -> None:
+        async with lifespan(app):
+            pass
+
+    with pytest.raises(ValueError, match="SERVICE_CLIENT_SECRET"):
+        asyncio.run(start())

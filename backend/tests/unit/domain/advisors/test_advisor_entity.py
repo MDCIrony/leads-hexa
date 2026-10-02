@@ -33,6 +33,12 @@ def test_an_inactive_advisor_is_not_assignable():
     assert not _advisor(is_active=False).is_assignable
 
 
+@pytest.mark.parametrize("role, expected", [(AgentRole.AGENT, True), (AgentRole.MANAGER, True),
+                                            (AgentRole.INTEGRATION, False), (AgentRole.ADMIN, False)])
+def test_routability_depends_on_the_role_alone(role, expected):
+    assert _advisor(role=role, is_active=False).is_routable is expected
+
+
 def test_the_engine_reads_the_agent_id_as_id():
     advisor = _advisor()
     assert advisor.id == advisor.agent_id

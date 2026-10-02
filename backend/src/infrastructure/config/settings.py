@@ -75,6 +75,10 @@ class Settings:
     # instead of failing it.
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/%2F"
     cors_origins: List[str] = field(default_factory=list)
+    identity_url: str = "http://identity:8000"
+    service_client_id: str = "lead-core"
+    # Empty is allowed here because the worker never calls identity; the API refuses to start without it.
+    service_client_secret: str = ""
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -128,4 +132,7 @@ class Settings:
             kafka_external_bootstrap_servers=os.getenv("KAFKA_EXTERNAL_BOOTSTRAP_SERVERS", "localhost:9094"),
             rabbitmq_url=os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/%2F"),
             cors_origins=origins,
+            identity_url=os.getenv("IDENTITY_URL", "http://identity:8000"),
+            service_client_id=os.getenv("SERVICE_CLIENT_ID", "lead-core"),
+            service_client_secret=os.getenv("SERVICE_CLIENT_SECRET", ""),
         )

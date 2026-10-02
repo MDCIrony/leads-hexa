@@ -80,3 +80,6 @@ def test_available_advisors_are_the_active_people_ordered_by_name(test_db):
         assert [a.name for a in repo.list(tenant, is_active=False)] == ["Off"]
         assert [a.name for a in repo.list(tenant, limit=1, offset=1)] == ["Beto"]
         assert repo.count_by_group(tenant, group.id.value) == 1
+        assert repo.count(tenant) == 3
+        assert repo.count(tenant, is_active=False) == 1
+        assert repo.count(tenant, group.id.value, is_active=True) == 1

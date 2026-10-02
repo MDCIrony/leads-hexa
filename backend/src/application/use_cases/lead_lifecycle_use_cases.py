@@ -8,8 +8,8 @@ from application.ports.input.lead_lifecycle_use_case_ports import (
     GetLeadInputPort,
     GetMyLeadsInputPort,
 )
+from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.advisors.advisor import Advisor
 from domain.entities.lead import Lead
 from domain.events.lead_events import LeadAssigned, LeadProcessedEvent, LeadReassigned
 from domain.exceptions import DomainException
@@ -25,23 +25,17 @@ def _get_owned_lead(uow: UnitOfWorkPort, tenant_id: UUID, lead_id: UUID) -> Lead
     return lead
 
 
-def _get_owned_agent(uow: UnitOfWorkPort, tenant_id: UUID, agent_id: UUID) -> Advisor:
-    """Same existence-hiding reason as _get_owned_lead: an agent belonging to
-    another organization must read back as missing, not merely forbidden."""
-    agent = uow.advisors.get(agent_id, tenant_id)
-    if agent is None:
-        raise DomainException("El asesor no existe", error_code="AGENT_NOT_FOUND")
-    return agent
-
-
 class AssignLeadUseCase(AssignLeadInputPort):
-    def __init__(self, uow: UnitOfWorkPort) -> None:
+    def __init__(self, uow: UnitOfWorkPort, directory: AdvisorDirectoryPort) -> None:
         self.uow = uow
+        self.directory = directory
 
     def execute(self, command: AssignLeadCommand) -> Lead:
+        # Outside the transaction: hydrating an advisor commits on its own
+        # connection, and an agent created a moment ago must be assignable.
+        agent = self.directory.get(command.agent_id, command.tenant_id)
         with self.uow:
             lead = _get_owned_lead(self.uow, command.tenant_id, command.lead_id)
-            agent = _get_owned_agent(self.uow, command.tenant_id, command.agent_id)
             # One action for the manager regardless of the lead's current
             # state: reassign_to is explicit about replacing an existing
             # agent, assign_to refuses to do that silently.
