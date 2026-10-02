@@ -145,7 +145,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             params.append(assigned_agent_id)
         if group_id is not None:
             clauses.append(
-                "assigned_agent_id IN (SELECT id FROM agents WHERE group_id = %s AND tenant_id = %s)"
+                "assigned_agent_id IN (SELECT agent_id FROM advisors WHERE group_id = %s AND tenant_id = %s)"
             )
             params += [group_id, tenant_id]
         if source_id is not None:
@@ -318,7 +318,7 @@ class RawSqlLeadRepository(LeadRepositoryPort):
             """
             SELECT l.assigned_agent_id, a.name, COUNT(*) AS load
             FROM leads l
-            JOIN agents a ON a.id = l.assigned_agent_id
+            JOIN advisors a ON a.agent_id = l.assigned_agent_id
             WHERE l.tenant_id = %s
               AND l.assigned_agent_id IS NOT NULL
               AND l.status = %s

@@ -27,6 +27,7 @@ from infrastructure.adapters.output.persistence.raw_sql_processed_event_reposito
     RawSqlProcessedEventRepository,
 )
 from infrastructure.adapters.output.persistence.raw_sql_intake_file_repository import RawSqlIntakeFileRepository
+from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):
@@ -61,6 +62,7 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.social_identities = RawSqlSocialIdentityRepository(self.connection)
         self.processed_events = RawSqlProcessedEventRepository(self.connection)
         self.intake_files = RawSqlIntakeFileRepository(self.connection)
+        self.advisors = RawSqlAdvisorRepository(self.connection)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

@@ -11,6 +11,7 @@ from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import IntakeRecordStatus
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
+from tests.unit.mocks.in_memory_advisor_repo import advisor_of
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
@@ -58,6 +59,7 @@ def test_ingest_lead_use_case_successful_flow():
     )
 
     uow = InMemoryUnitOfWork(lead_repo, rule_repo, agent_repo, groups=group_repo)
+    uow.advisors.seed(advisor_of(agent))
     use_case = IngestLeadUseCase(uow=uow)
 
     cmd = IngestLeadCommand(
@@ -133,7 +135,7 @@ def test_rollback_on_persistence_error():
     mock_uow.__exit__.side_effect = mock_exit
     mock_uow.rules.get_scoring_rules_by_tenant.return_value = []
     mock_uow.rules.get_assignment_rules_by_tenant.return_value = []
-    mock_uow.agents.get_available_agents.return_value = []
+    mock_uow.advisors.list_available.return_value = []
     mock_uow.groups.list_by_tenant.return_value = []
     mock_uow.leads.active_load_by_agent.return_value = {}
 

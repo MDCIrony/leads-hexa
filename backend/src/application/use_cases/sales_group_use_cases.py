@@ -15,13 +15,12 @@ from application.ports.input.sales_group_use_case_ports import (
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.sales_group import SalesGroup
-from domain.events.identity_events import AgentState
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AssignmentStrategy
 
 # MVP scale: a tenant is expected to hold a handful of groups, so scanning
-# all of them to check a name or list an agent's siblings is simpler than
-# adding a dedicated lookup to the repository port for just this.
+# all of them to check a name is simpler than adding a dedicated lookup to the
+# repository port for just this.
 _EFFECTIVELY_UNBOUNDED = 10_000
 
 
@@ -72,9 +71,7 @@ class GetSalesGroupsUseCase(GetSalesGroupsInputPort):
             items = [
                 SalesGroupSummary(
                     group=group,
-                    agent_count=self.uow.agents.count_by_tenant(
-                        query.tenant_id, group_id=group.id.value
-                    ),
+                    agent_count=self.uow.advisors.count_by_group(query.tenant_id, group.id.value),
                 )
                 for group in groups
             ]
@@ -111,15 +108,7 @@ class DeleteSalesGroupUseCase(DeleteSalesGroupInputPort):
     def execute(self, tenant_id: UUID, group_id: UUID) -> None:
         with self.uow:
             _get_owned_group(self.uow, tenant_id, group_id)
-            # The FK (migration 003, ON DELETE SET NULL) gives Postgres the
-            # same outcome, but the in-memory repository the unit tests use
-            # has no cascade, so the use case owns the invariant directly
-            # instead of leaning on infrastructure to provide it.
-            orphaned = self.uow.agents.list_by_tenant(
-                tenant_id, group_id=group_id, limit=_EFFECTIVELY_UNBOUNDED
-            )
-            for agent in orphaned:
-                agent.group_id = None
-                self.uow.agents.save(agent)
-                self.uow.outbox.record(AgentState.of(agent), channel="internal")
+            # Its advisors are orphaned by the foreign key (ON DELETE SET NULL,
+            # migrations 003 and 017), not by a loop here: group_id is not
+            # identity data, so no agent event has anything to announce.
             self.uow.groups.delete(group_id)

@@ -4,6 +4,7 @@ from gateway_client import GatewayClient
 
 from infrastructure.main import app
 from _intake_helpers import ingest_and_resolve
+from tests.advisors_sync import project_agents_of
 
 
 def _bootstrap_admin_headers(client: GatewayClient) -> dict:
@@ -91,6 +92,8 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
 
         enterprise_agent_ids = {_create_agent(enterprise_id), _create_agent(enterprise_id)}
         pyme_agent_id = _create_agent(pyme_id)
+        # No worker runs here to project them, and nothing writes an advisor's group before C2.
+        project_agents_of(app.state.container.database)
 
         # 4. Two assignment rules: high scores to Enterprise (priority 10),
         # the rest to PYME (priority 1).

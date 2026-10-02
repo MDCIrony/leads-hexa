@@ -9,9 +9,9 @@ class InMemoryLeadRepository(LeadRepositoryPort):
     def __init__(self) -> None:
         self.leads: Dict[UUID, Lead] = {}
         # Wired by InMemoryUnitOfWork after both repos exist: resolving
-        # group_id needs each lead's assigned agent, which this repo has no
+        # group_id needs each lead's assigned advisor, which this repo has no
         # other way to reach.
-        self.agent_repo = None
+        self.advisor_repo = None
 
     def save(self, lead: Lead) -> Lead:
         self.leads[lead.id.value] = lead
@@ -49,8 +49,8 @@ class InMemoryLeadRepository(LeadRepositoryPort):
             return False
         if group_id is not None:
             agent = None
-            if lead.assigned_agent_id is not None and self.agent_repo is not None:
-                agent = self.agent_repo.agents.get(lead.assigned_agent_id.value)
+            if lead.assigned_agent_id is not None and self.advisor_repo is not None:
+                agent = self.advisor_repo.advisors.get(lead.assigned_agent_id.value)
             agent_group_id = agent.group_id.value if agent and agent.group_id else None
             if agent_group_id != group_id:
                 return False
@@ -178,9 +178,9 @@ class InMemoryLeadRepository(LeadRepositoryPort):
     def active_load_by_agent_with_names(self, tenant_id: UUID) -> List[Tuple[UUID, str, int]]:
         loads = self.active_load_by_agent(tenant_id)
         named = [
-            (agent_id, self.agent_repo.agents[agent_id].name, load)
+            (agent_id, self.advisor_repo.advisors[agent_id].name, load)
             for agent_id, load in loads.items()
-            if self.agent_repo is not None and agent_id in self.agent_repo.agents
+            if self.advisor_repo is not None and agent_id in self.advisor_repo.advisors
         ]
         named.sort(key=lambda entry: (-entry[2], entry[1]))
         return named

@@ -18,6 +18,7 @@ from application.ports.output.agent_mfa_repository_port import AgentMfaRepositor
 from application.ports.output.social_identity_repository_port import SocialIdentityRepositoryPort
 from application.ports.output.processed_event_repository_port import ProcessedEventRepositoryPort
 from application.ports.output.intake_file_repository_port import IntakeFileRepositoryPort
+from application.ports.output.advisors.advisor_repository_port import AdvisorRepositoryPort
 
 class UnitOfWorkPort(abc.ABC):
     leads: LeadRepositoryPort
@@ -36,6 +37,7 @@ class UnitOfWorkPort(abc.ABC):
     social_identities: SocialIdentityRepositoryPort
     processed_events: ProcessedEventRepositoryPort
     intake_files: IntakeFileRepositoryPort
+    advisors: AdvisorRepositoryPort
 
     def __enter__(self) -> UnitOfWorkPort:
         return self

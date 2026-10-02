@@ -6,6 +6,7 @@ from domain.value_objects.enums import AgentRole, LeadSourceKind
 
 from _intake_helpers import ingest_and_resolve
 from auth_helpers import session_headers
+from tests.advisors_sync import project_agents_of
 
 
 def _manager_auth_headers(tenant_id: str) -> dict:
@@ -46,6 +47,7 @@ def _agent_auth_headers(tenant_id: str, group_id: str = None) -> dict:
     )
     with uow:
         uow.agents.save(agent)
+    project_agents_of(db)
 
     return session_headers(agent), str(agent.id)
 

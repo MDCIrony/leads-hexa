@@ -6,6 +6,7 @@ from infrastructure.main import app
 
 from _intake_helpers import ingest_and_resolve
 from auth_helpers import session_headers
+from tests.advisors_sync import project_agents_of
 
 
 def _bootstrap_admin_headers(client: GatewayClient) -> dict:
@@ -79,6 +80,7 @@ def test_full_system_lead_routing_flow_e2e():
         assert agent_resp.status_code == 201
         agent_data = agent_resp.json()
         agent_id = agent_data["id"]
+        project_agents_of(app.state.container.database)
 
         # 2. Crear regla de scoring
         scoring_resp = client.post(

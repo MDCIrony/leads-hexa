@@ -9,8 +9,9 @@ from chassis.auth import Ed25519Signer, JwksCache, TokenVerifier
 
 from domain.entities.agent import Agent
 from domain.entities.auth_session import AuthSession
-from domain.exceptions import ForbiddenException, UnauthorizedException
+from domain.exceptions import DomainException, ForbiddenException, UnauthorizedException
 from domain.value_objects.enums import AgentRole
+from infrastructure.adapters.input.api.exception_handlers import STATUS_BY_ERROR_CODE
 from infrastructure.adapters.input.api.dependencies import (
     get_optional_human_principal,
     get_optional_principal,
@@ -239,6 +240,21 @@ def test_an_invalid_or_expired_bearer_is_unauthorized(token):
 def test_a_bearer_with_an_unknown_role_is_unauthorized():
     with pytest.raises(UnauthorizedException):
         _principal(_bearer(role="SUPERUSER"))
+
+
+def test_unreachable_signing_keys_are_a_503_not_a_401():
+    def _unreachable() -> dict:
+        raise ConnectionError("jwks down")
+
+    container = SimpleNamespace(token_verifier=TokenVerifier(
+        JwksCache(_unreachable), issuer="identity", audience="lead-router",
+    ))
+
+    with pytest.raises(DomainException) as raised:
+        get_principal(_request(_bearer()), container)
+
+    assert raised.value.error_code == "SERVICE_UNAVAILABLE"
+    assert STATUS_BY_ERROR_CODE[raised.value.error_code] == 503
 
 
 def test_a_bearer_with_a_non_uuid_subject_is_unauthorized():

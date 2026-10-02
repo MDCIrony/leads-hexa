@@ -25,6 +25,7 @@ from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
 from domain.value_objects.enums import IntakeJobStatus, IntakeRecordStatus
 from infrastructure.adapters.output.persistence.correlation import current_correlation_id
+from tests.unit.mocks.in_memory_advisor_repo import InMemoryAdvisorRepository
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_lead_source_repo import InMemoryLeadSourceRepository
@@ -404,6 +405,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         intake_jobs: Optional[IntakeJobRepositoryPort] = None,
         disqualification_rules: Optional[DisqualificationRuleRepositoryPort] = None,
         outbox: Optional[OutboxRepositoryPort] = None,
+        advisors: Optional[InMemoryAdvisorRepository] = None,
     ) -> None:
         # Defaulting to a fresh in-memory repo (instead of None) is what lets
         # a test that only cares about leads and agents write
@@ -411,11 +413,14 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.leads = leads if leads is not None else (lead_repo or InMemoryLeadRepository())
         self.rules = rules if rules is not None else (rule_repo or InMemoryRuleRepository())
         self.agents = agents if agents is not None else (agent_repo or InMemoryAgentRepository())
-        # group_id filtering on leads needs each lead's assigned agent.
-        if isinstance(self.leads, InMemoryLeadRepository) and isinstance(self.agents, InMemoryAgentRepository):
-            self.leads.agent_repo = self.agents
+        self.advisors = advisors or InMemoryAdvisorRepository()
+        # group_id filtering on leads needs each lead's assigned advisor.
+        if isinstance(self.leads, InMemoryLeadRepository):
+            self.leads.advisor_repo = self.advisors
         self.tenants = tenants or InMemoryTenantRepository()
         self.groups = groups or InMemorySalesGroupRepository()
+        if isinstance(self.groups, InMemorySalesGroupRepository):
+            self.groups.advisor_repo = self.advisors
         self.sources = sources or InMemoryLeadSourceRepository()
         self.intake_records = intake_records or InMemoryIntakeRecordRepository()
         self.intake_jobs = intake_jobs or InMemoryIntakeJobRepository()

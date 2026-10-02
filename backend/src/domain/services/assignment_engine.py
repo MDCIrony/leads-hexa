@@ -1,11 +1,28 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Protocol, TypeVar
 from uuid import UUID
 
-from domain.entities.agent import Agent
 from domain.entities.lead import Lead
 from domain.entities.rule import AssignmentRule
 from domain.entities.sales_group import SalesGroup
+from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
+from domain.value_objects.group_id import GroupId
+
+
+class Candidate(Protocol):
+    """What the engine reads off an agent: an Advisor in production."""
+
+    @property
+    def id(self) -> AgentId: ...
+
+    @property
+    def group_id(self) -> Optional[GroupId]: ...
+
+    @property
+    def is_active(self) -> bool: ...
+
+
+CandidateT = TypeVar("CandidateT", bound=Candidate)
 
 
 class AssignmentEngine:
@@ -19,10 +36,10 @@ class AssignmentEngine:
         self,
         lead: Lead,
         rules: List[AssignmentRule],
-        agents: List[Agent],
+        agents: List[CandidateT],
         groups: Dict[UUID, SalesGroup],
         loads: Dict[UUID, int],
-    ) -> Optional[Agent]:
+    ) -> Optional[CandidateT]:
         for rule in self._ordered_rules(rules, lead):
             group = groups.get(rule.target_group_id) if rule.target_group_id else None
             candidates = self._candidates_for(rule, group, agents, groups, loads)
@@ -43,10 +60,10 @@ class AssignmentEngine:
         self,
         rule: AssignmentRule,
         group: Optional[SalesGroup],
-        agents: List[Agent],
+        agents: List[CandidateT],
         groups: Dict[UUID, SalesGroup],
         loads: Dict[UUID, int],
-    ) -> List[Agent]:
+    ) -> List[CandidateT]:
         named = {str(aid) for aid in rule.target_agent_ids}
         in_group = (
             {str(a.id) for a in agents if a.group_id and a.group_id.value == group.id.value}
@@ -66,7 +83,7 @@ class AssignmentEngine:
 
     @staticmethod
     def _is_eligible(
-        agent: Agent,
+        agent: CandidateT,
         groups: Dict[UUID, SalesGroup],
         loads: Dict[UUID, int],
     ) -> bool:
@@ -85,9 +102,9 @@ class AssignmentEngine:
         lead: Lead,
         rule: AssignmentRule,
         group: Optional[SalesGroup],
-        candidates: List[Agent],
+        candidates: List[CandidateT],
         loads: Dict[UUID, int],
-    ) -> Agent:
+    ) -> CandidateT:
         strategy = rule.resolve_strategy(group)
 
         if strategy == AssignmentStrategy.ROUND_ROBIN:

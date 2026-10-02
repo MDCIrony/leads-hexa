@@ -2,13 +2,15 @@ import logging
 import signal
 import threading
 
-from chassis.consumer import ensure_topics_until_ready
-from chassis.kafka_config import producer_config
+import psycopg
+from chassis.consumer import ConsumerLoop, dlq_topic, ensure_topics_until_ready, run_consumer_lane
+from chassis.kafka_config import consumer_config, producer_config
 from chassis.outbox import KafkaEventDispatcher, run_relay
 from chassis.rabbit import RabbitJobDispatcher
-from confluent_kafka import Producer
+from confluent_kafka import Consumer, Producer
 from confluent_kafka.admin import AdminClient
 
+from infrastructure.adapters.input.consumers.groups import CONSUMER_GROUPS, DLQ_TOPIC_SPECS, handler_for
 from infrastructure.adapters.output.events.internal_topics import INTERNAL_TOPIC_SPECS, topic_for
 from infrastructure.adapters.output.events.kafka_outbound_dispatcher import KafkaOutboundDispatcher
 from infrastructure.adapters.output.events.webhook_outbound_dispatcher import WebhookOutboundDispatcher
@@ -28,12 +30,26 @@ _LOGGER = logging.getLogger(__name__)
 _JOIN_TIMEOUT_SECONDS = 15.0
 
 
+def _consumer_loop(container: Container, bootstrap: str, group: str, topic: str) -> ConsumerLoop:
+    _LOGGER.info("Consumer group %s subscribing to %s (dead letters: %s)", group, topic, dlq_topic(group))
+    return ConsumerLoop(
+        Consumer(consumer_config(bootstrap, group)),
+        Producer(producer_config(bootstrap, auto_create_topics=False)),
+        group,
+        [topic],
+        handler_for(group, container.unit_of_work),
+        # A database outage is waited out: dead-lettering an AgentState would
+        # leave the advisors projection silently diverged for good.
+        retryable=lambda exc: isinstance(exc, psycopg.OperationalError),
+    )
+
+
 def main() -> int:
     configure_logging()
     settings = Settings.from_environment()
     container = Container(settings)
     bootstrap = settings.kafka_bootstrap_servers
-    stop = threading.Event()
+    stop, consumers_ready = threading.Event(), threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
@@ -69,6 +85,22 @@ def main() -> int:
             target=ensure_topics_until_ready,
             args=(admin, [*INTERNAL_TOPIC_SPECS], stop, activate_internal),
             name="ensure-topics", daemon=True,
+        ),
+        # Consumers wait only for their own dead-letter topics; the topics they
+        # read belong to their producers.
+        threading.Thread(
+            target=ensure_topics_until_ready,
+            args=(admin, DLQ_TOPIC_SPECS, stop, consumers_ready.set),
+            name="ensure-dlq-topics", daemon=True,
+        ),
+        *(
+            threading.Thread(
+                target=run_consumer_lane,
+                args=(group, lambda group=group, topic=topic: _consumer_loop(container, bootstrap, group, topic),
+                      consumers_ready, stop),
+                name=f"consumer-{group}", daemon=True,
+            )
+            for group, topic in CONSUMER_GROUPS.items()
         ),
     ]
     for thread in threads:

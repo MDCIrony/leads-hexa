@@ -14,6 +14,7 @@ from domain.entities.lead_source import LeadSource
 from domain.entities.sales_group import SalesGroup
 from domain.value_objects import LeadStatus
 from domain.value_objects.enums import AgentRole, LeadSourceKind
+from tests.advisors_sync import project_agents
 
 
 def _seed_source(connection, tenant_id: uuid.UUID) -> uuid.UUID:
@@ -243,6 +244,8 @@ def test_group_id_filter_scopes_agents_to_the_tenant(test_db):
             )
         )
 
+        project_agents(connection)
+
         lead = _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
         lead.assign_to(agent.id.value, lead.tenant_id)
         repo.save(lead)
@@ -395,6 +398,7 @@ def test_active_load_by_agent_with_names_only_counts_assigned_and_orders_by_load
         beto = RawSqlAgentRepository(connection).save(
             Agent.create("Beto Cruz", "beto@example.com", group.id.value, role=AgentRole.AGENT, tenant_id=tenant_id)
         )
+        project_agents(connection)
 
         for i in range(2):
             lead = _lead_for_load_test(tenant_id, source_id, f"ana{i}@example.com")

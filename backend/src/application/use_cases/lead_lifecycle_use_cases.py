@@ -9,7 +9,7 @@ from application.ports.input.lead_lifecycle_use_case_ports import (
     GetMyLeadsInputPort,
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.entities.agent import Agent
+from domain.advisors.advisor import Advisor
 from domain.entities.lead import Lead
 from domain.events.lead_events import LeadAssigned, LeadProcessedEvent, LeadReassigned
 from domain.exceptions import DomainException
@@ -25,10 +25,10 @@ def _get_owned_lead(uow: UnitOfWorkPort, tenant_id: UUID, lead_id: UUID) -> Lead
     return lead
 
 
-def _get_owned_agent(uow: UnitOfWorkPort, tenant_id: UUID, agent_id: UUID) -> Agent:
+def _get_owned_agent(uow: UnitOfWorkPort, tenant_id: UUID, agent_id: UUID) -> Advisor:
     """Same existence-hiding reason as _get_owned_lead: an agent belonging to
     another organization must read back as missing, not merely forbidden."""
-    agent = uow.agents.get_by_id_and_tenant(agent_id, tenant_id)
+    agent = uow.advisors.get(agent_id, tenant_id)
     if agent is None:
         raise DomainException("El asesor no existe", error_code="AGENT_NOT_FOUND")
     return agent

@@ -8,6 +8,9 @@ from domain.entities.sales_group import SalesGroup
 class InMemorySalesGroupRepository(SalesGroupRepositoryPort):
     def __init__(self) -> None:
         self.groups: Dict[UUID, SalesGroup] = {}
+        # Wired by InMemoryUnitOfWork: deleting a group orphans its advisors,
+        # as the foreign key's ON DELETE SET NULL does in Postgres.
+        self.advisor_repo = None
 
     def save(self, group: SalesGroup) -> SalesGroup:
         self.groups[group.id.value] = group
@@ -28,3 +31,5 @@ class InMemorySalesGroupRepository(SalesGroupRepositoryPort):
 
     def delete(self, group_id: UUID) -> None:
         self.groups.pop(group_id, None)
+        if self.advisor_repo is not None:
+            self.advisor_repo.orphan_group(group_id)

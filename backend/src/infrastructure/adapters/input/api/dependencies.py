@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from uuid import UUID
 from fastapi import Request, Depends
-from chassis.auth import TokenError
+from chassis.auth import KeysUnavailable, TokenError
 from application.dtos.context import Principal, RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
@@ -83,12 +83,10 @@ from application.ports.input.auth_use_case_port import LoginInputPort
 from application.use_cases.auth_use_cases import (
     LoginUseCase, MfaUseCase, OAuthChallengeUseCase, SocialLoginUseCase,
 )
-from application.ports.input.tenant_use_case_ports import (
-    CreateTenantInputPort, GetTenantsInputPort, UpdateTenantInputPort
-)
+from application.ports.input.tenant_use_case_ports import CreateTenantInputPort, GetTenantsInputPort, UpdateTenantInputPort
 from application.use_cases.tenant_use_cases import CreateTenantUseCase, GetTenantsUseCase, UpdateTenantUseCase
 from domain.entities.agent import Agent
-from domain.exceptions import UnauthorizedException
+from domain.exceptions import DomainException, UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
 from domain.value_objects.enums import AgentRole
 from infrastructure.di.container import Container
@@ -343,6 +341,8 @@ def _principal_from_token(token: str, container: Container) -> Principal:
             role=AgentRole(claims.role),
             principal_type=claims.ptype,
         )
+    except KeysUnavailable as error:  # before TokenError, its parent: an outage is not the caller's fault
+        raise DomainException("Signing keys unavailable", error_code="SERVICE_UNAVAILABLE") from error
     except (TokenError, ValueError) as error:
         raise UnauthorizedException("Authentication required") from error
 

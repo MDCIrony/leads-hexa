@@ -4,6 +4,7 @@ from gateway_client import GatewayClient
 
 from infrastructure.main import app
 from _intake_helpers import ingest_and_resolve
+from tests.advisors_sync import project_agents_of
 
 
 def _bootstrap_admin(client: GatewayClient) -> str:
@@ -78,6 +79,8 @@ def _create_agent(client: GatewayClient, manager_token: str) -> tuple[str, str]:
 
 
 def _ingest_qualified_lead(client: GatewayClient, manager_token: str, tenant_id: str) -> str:
+    # The agents created so far must be advisors before anyone assigns to them.
+    project_agents_of(app.state.container.database)
     headers = {"Cookie": f"leads_session={manager_token}"}
     record = ingest_and_resolve(
         client,

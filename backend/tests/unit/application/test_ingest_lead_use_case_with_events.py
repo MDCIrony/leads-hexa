@@ -9,6 +9,7 @@ from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator
+from tests.unit.mocks.in_memory_advisor_repo import advisor_of
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
@@ -57,6 +58,7 @@ def test_an_assigned_lead_records_one_lead_assigned_next_to_the_product_event() 
     uow = _uow()
     tenant_id = uuid.uuid4()
     agent = uow.agents.save(Agent.create(name="Carlos", email="carlos@x.test", tenant_id=tenant_id))
+    uow.advisors.seed(advisor_of(agent))
     uow.rules.save_assignment_rule(
         tenant_id,
         AssignmentRule.create(tenant_id=tenant_id, name="Catch-all", target_agent_ids=[agent.id.value]),

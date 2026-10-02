@@ -130,7 +130,7 @@ class IngestLeadUseCase(IngestLeadInputPort):
                         # rotation cursor, and a plain read lets a concurrent
                         # ingestion overwrite the increment.
                         assignment_rules = self.uow.rules.lock_assignment_rules_by_tenant(lead.tenant_id.value)
-                        available_agents = self.uow.agents.get_available_agents(lead.tenant_id.value)
+                        available_agents = self.uow.advisors.list_available(lead.tenant_id.value)
                         groups_by_id: Dict[UUID, SalesGroup] = {
                             group.id.value: group
                             for group in self.uow.groups.list_by_tenant(lead.tenant_id.value, limit=10_000)

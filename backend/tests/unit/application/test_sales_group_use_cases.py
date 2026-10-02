@@ -10,7 +10,12 @@ from application.use_cases.sales_group_use_cases import (
     GetSalesGroupsUseCase,
     UpdateSalesGroupUseCase,
 )
+from domain.advisors.advisor import Advisor
 from domain.entities.agent import Agent
+from domain.value_objects.agent_id import AgentId
+from domain.value_objects.enums import AgentRole
+from domain.value_objects.group_id import GroupId
+from domain.value_objects.tenant_id import TenantId
 from domain.exceptions import DomainException
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
@@ -26,6 +31,11 @@ def _uow() -> InMemoryUnitOfWork:
         InMemoryAgentRepository(),
         groups=InMemorySalesGroupRepository(),
     )
+
+
+def _advisor(tenant_id: uuid.UUID, group_id, is_active: bool = True) -> Advisor:
+    return Advisor(AgentId(), TenantId(tenant_id), "Ana", AgentRole.AGENT, is_active, 1,
+                   GroupId(group_id) if group_id else None)
 
 
 def _command(tenant_id: uuid.UUID, name: str = "Ventas Norte") -> CreateSalesGroupCommand:
@@ -116,37 +126,40 @@ class TestUpdateSalesGroup:
 
 
 class TestDeleteSalesGroup:
-    def test_deleting_a_group_leaves_its_agents_without_a_group(self):
+    def test_deleting_a_group_leaves_its_advisors_without_a_group(self):
         uow = _uow()
         tenant = uuid.uuid4()
         group = CreateSalesGroupUseCase(uow=uow).execute(_command(tenant))
-        agent = uow.agents.save(
-            Agent.create(
-                name="Ana", email="ana@acme.test", group_id=group.id.value, tenant_id=tenant
-            )
-        )
+        advisor = uow.advisors.seed(_advisor(tenant, group.id.value))
 
         DeleteSalesGroupUseCase(uow=uow).execute(tenant_id=tenant, group_id=group.id.value)
 
         assert uow.groups.get_by_id(group.id.value) is None
-        survivor = uow.agents.get_by_id(agent.id.value)
+        survivor = uow.advisors.get(advisor.agent_id.value, tenant)
         assert survivor is not None
         assert survivor.group_id is None
 
 
-def test_deleting_a_group_records_each_orphaned_agent():
-    """Clearing group_id is an agent write: its version moves, so downstream
-    copies must hear about it even though AgentState does not carry the group."""
+def test_deleting_a_group_records_no_agent_event():
+    """group_id is lead-core's, not identity data: orphaning an advisor is no agent write."""
     uow = _uow()
     tenant = uuid.uuid4()
     group = CreateSalesGroupUseCase(uow=uow).execute(_command(tenant))
-    agent = uow.agents.save(
-        Agent.create(name="Ana", email="ana@acme.test", group_id=group.id.value, tenant_id=tenant)
-    )
+    uow.advisors.seed(_advisor(tenant, group.id.value))
 
     DeleteSalesGroupUseCase(uow=uow).execute(tenant_id=tenant, group_id=group.id.value)
 
-    entries = uow.outbox.list_unpublished("internal", 10)
-    assert [(e.event_type, e.payload["agent_id"], e.payload["version"]) for e in entries] == [
-        ("AgentState", str(agent.id), 2)
-    ]
+    assert uow.outbox.list_unpublished("internal", 10) == []
+
+
+def test_the_listing_counts_the_active_advisors_of_each_group():
+    uow = _uow()
+    tenant = uuid.uuid4()
+    group = CreateSalesGroupUseCase(uow=uow).execute(_command(tenant))
+    uow.advisors.seed(_advisor(tenant, group.id.value))
+    uow.advisors.seed(_advisor(tenant, group.id.value, is_active=False))
+    uow.advisors.seed(_advisor(tenant, None))
+
+    page = GetSalesGroupsUseCase(uow=uow).execute(GetSalesGroupsQuery(tenant_id=tenant))
+
+    assert [item.agent_count for item in page.items] == [1]

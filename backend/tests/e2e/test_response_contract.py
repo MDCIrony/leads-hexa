@@ -28,6 +28,7 @@ from infrastructure.adapters.input.api import schemas
 
 from _intake_helpers import ingest_and_resolve
 from auth_helpers import session_headers
+from tests.advisors_sync import project_agents_of
 
 
 # --- Auth / seeding helpers, same shortcuts as test_lead_endpoints.py ---
@@ -188,6 +189,7 @@ def test_lead_assigned_agent_id_and_assigned_at_get_filled_when_assigned():
                               role=AgentRole.AGENT, tenant_id=tenant_id)
         with uow:
             uow.agents.save(agent)
+        project_agents_of(app.state.container.database)
 
         record = ingest_and_resolve(client, headers, {
             "first_name": "Ana", "last_name": "Soto", "email": "ana@assign.test",
