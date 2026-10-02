@@ -327,12 +327,9 @@ listener = KafkaListener()
 
 # ------------------------------------------------------------------- api ---
 
-def call_api(method: str, path: str, *, token=None, api_key=None, form=None, timeout=20):
+def call_api(method: str, path: str, *, opener=None, api_key=None, form=None, timeout=20):
     url = f"{API_BASE}{path}"
-    headers = {}
-    data = None
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    headers, data = {}, None
     if api_key:
         headers["X-Api-Key"] = api_key
     if form is not None:
@@ -340,7 +337,7 @@ def call_api(method: str, path: str, *, token=None, api_key=None, form=None, tim
         headers["Content-Type"] = "application/x-www-form-urlencoded"
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with (opener or urllib.request.build_opener()).open(request, timeout=timeout) as response:
             raw = response.read()
             return response.status, (json.loads(raw) if raw else None)
     except urllib.error.HTTPError as error:
@@ -373,17 +370,20 @@ class Registration(BaseModel):
 def register(body: Registration):
     """What an integrator does once: get a key for the machine, not for a person.
 
-    Two calls to the product, both of them public contract: log in as the
-    manager who authorises the integration, then ask for the credential. The
-    manager's password is never stored — only the credential that comes back."""
-    status, data = call_api("POST", "/auth/login", form={"username": body.email, "password": body.password})
-    if status != 200 or not data.get("access_token"):
-        raise HTTPException(401, "usuario o contraseña incorrectos para el router de leads")
-
-    status, credential_data = call_api("POST", "/agents/integration-credential", token=data["access_token"])
-    if status != 201:
-        raise HTTPException(status, f"el router no emitió la credencial: {credential_data}")
-
+    Log in as the manager who authorises the integration, ask for the credential
+    and log out. Only the credential is stored, never the password or the cookie."""
+    session = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
+    try:
+        status, data = call_api("POST", "/auth/login", form={"username": body.email, "password": body.password}, opener=session)
+        if data.get("status") == "MFA_REQUIRED":
+            raise HTTPException(403, "la cuenta tiene MFA activo y este cliente no lo soporta")
+        if status != 200 or data.get("status") != "AUTHENTICATED":
+            raise HTTPException(401, "usuario o contraseña incorrectos para el router de leads")
+        status, credential_data = call_api("POST", "/agents/integration-credential", opener=session)
+        if status != 201:
+            raise HTTPException(status, f"el router no emitió la credencial: {credential_data}")
+    finally:
+        call_api("POST", "/auth/logout", opener=session)
     put_setting("credential", json.dumps(credential_data))
     put_setting("registered_at", now())
     listener.start()

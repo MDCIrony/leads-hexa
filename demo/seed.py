@@ -122,13 +122,12 @@ ASSIGNMENT_BANDS = [
 class Api:
     def __init__(self, base: str) -> None:
         self.base = base.rstrip("/")
-        self.token = None
+        # One cookie jar per instance: the admin and the manager never share a session.
+        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
 
     def _call(self, method, path, body=None, form=None):
         url = f"{self.base}{path}"
         headers = {}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
         if form is not None:
             data = urllib.parse.urlencode(form).encode()
             headers["Content-Type"] = "application/x-www-form-urlencoded"
@@ -139,7 +138,7 @@ class Api:
             data = None
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with self.opener.open(request, timeout=30) as response:
                 raw = response.read()
                 return response.status, (json.loads(raw) if raw else None)
         except urllib.error.HTTPError as error:
@@ -159,7 +158,9 @@ class Api:
 
     def login(self, email, password):
         status, data = self.post("/auth/login", form={"username": email, "password": password})
-        return data.get("access_token") if status == 200 else None
+        if status == 200 and data.get("status") == "MFA_REQUIRED":
+            die(f"{email} tiene MFA activo y este cliente no lo soporta")
+        return status == 200 and data.get("status") == "AUTHENTICATED"
 
 
 def die(message):
@@ -175,20 +176,17 @@ def section(title):
     print(f"\n\033[1m{title}\033[0m")
 
 
-def platform_admin_token(api):
+def platform_admin_login(api):
     """The very first agent is created unauthenticated; after that the same
     call is refused, and logging in is the only way in."""
     email, password = PLATFORM_ADMIN
-    api.token = None
     api.post("/agents", {"name": "Root", "email": email, "password": password, "role": "ADMIN"})
-    token = api.login(email, password)
-    if not token:
+    if not api.login(email, password):
         die(f"no hay forma de entrar como admin de plataforma ({email})")
-    return token
 
 
 def ensure_tenant(api):
-    api.token = platform_admin_token(api)
+    platform_admin_login(api)
     status, page = api.get("/tenants?limit=1000")
     if status != 200:
         die(f"no se pueden listar las organizaciones: {page}")
@@ -320,19 +318,20 @@ def main():
     parser.add_argument("--api", default="http://localhost:8001/api/v1")
     args = parser.parse_args()
 
-    api = Api(args.api)
+    admin, api = Api(args.api), Api(args.api)
 
     section(f"{COMPANY} · sembrando sobre {args.api}")
-    tenant_id = ensure_tenant(api)
-
-    api.token = api.login(MANAGER_EMAIL, PASSWORD)
-    if not api.token:
-        die(f"la organización existe pero no se puede entrar como {MANAGER_EMAIL}")
-
-    group_ids = ensure_groups(api)
-    ensure_advisors(api, group_ids)
-    ensure_rules(api, group_ids)
-    credential = issue_credential(api, tenant_id, Path(__file__).parent / "credenciales.local.json")
+    try:
+        tenant_id = ensure_tenant(admin)
+        if not api.login(MANAGER_EMAIL, PASSWORD):
+            die(f"la organización existe pero no se puede entrar como {MANAGER_EMAIL}")
+        group_ids = ensure_groups(api)
+        ensure_advisors(api, group_ids)
+        ensure_rules(api, group_ids)
+        credential = issue_credential(api, tenant_id, Path(__file__).parent / "credenciales.local.json")
+    finally:
+        for session in (admin, api):
+            session.post("/auth/logout")
 
     section("Listo")
     print(f"  organización   {tenant_id}")

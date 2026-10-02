@@ -8,5 +8,5 @@ TEST_CONSUMER = {
 }
 
 DEMO = {
-    "seed.py": 348,
+    "seed.py": 347,
 }
