@@ -51,12 +51,13 @@ USER root
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
 RUN uv pip install --python .venv/bin/python watchfiles
 USER appuser
-# --reload-dir is explicit: the default watches the whole working directory,
-# which would also cover migrations/, where a change needs a restart that
-# re-runs them, not a hot reload.
-CMD ["uvicorn", "infrastructure.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--app-dir", "src", "--reload", "--reload-dir", "/srv/services/identity/src", \
-     "--reload-dir", "/srv/libs/chassis/src"]
+# Restarted by watchfiles, not by uvicorn --reload: the reloader hands its
+# socket to the child by file descriptor, and asyncio then leaves TCP_NODELAY
+# off on every connection, so each keep-alive response waits ~40 ms for a
+# delayed ACK (measured on service-to-service calls in F4). Only src/ and
+# chassis are watched: a migration change needs a restart that re-runs it.
+CMD ["watchfiles", "uvicorn infrastructure.main:app --host 0.0.0.0 --port 8000 --app-dir src", \
+     "/srv/services/identity/src", "/srv/libs/chassis/src"]
 
 # Stage 4: test runner. Inherits from `builder` (already ran `COPY . .`); only
 # pytest is missing because the builder installs with --no-dev.
