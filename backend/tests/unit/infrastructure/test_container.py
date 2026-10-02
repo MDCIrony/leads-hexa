@@ -39,3 +39,16 @@ def test_issued_tokens_verify_against_the_published_keys():
     assert container.token_verifier.verify(token).role == "ADMIN"
     assert [key["kid"] for key in container.jwks["keys"]] == ["unit-1"]
     assert all("d" not in key for key in container.jwks["keys"])
+
+
+def test_the_advisor_directory_asks_identity_for_a_token_meant_for_identity():
+    """The e2e suite replaces the HTTP adapter, so this is what pins its wiring."""
+    from dataclasses import replace
+
+    container = Container(replace(_SETTINGS, identity_url="http://identity.test/", service_client_secret="s"))
+    identity = container.advisor_directory._identity
+
+    assert identity._url == "http://identity.test/internal/v1/agents/"
+    assert (identity._tokens._url, identity._tokens._client_id, identity._tokens._audience) == (
+        "http://identity.test/internal/v1/service-tokens", "lead-core", "identity")
+    container.close()

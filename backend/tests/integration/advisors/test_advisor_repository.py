@@ -60,6 +60,7 @@ def test_an_advisor_of_another_organization_reads_back_as_missing(test_db):
         repo.upsert_identity(_advisor(tenant, agent_id))
 
         assert repo.get(agent_id, uuid4()) is None
+        assert repo.get_any(agent_id).tenant_id.value == tenant
         assert repo.set_group(agent_id, uuid4(), None) is False
 
 

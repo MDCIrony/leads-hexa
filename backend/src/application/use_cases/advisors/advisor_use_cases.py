@@ -2,7 +2,8 @@ from application.dtos.advisors import AdvisorsPage, AdvisorView, ListAdvisorsQue
 from application.ports.input.advisors.advisor_use_case_ports import ListAdvisorsInputPort, SetAdvisorGroupInputPort
 from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.use_cases.sales_group_use_cases import _get_owned_group
+from application.use_cases.sales_group_use_cases import get_owned_group
+from domain.exceptions import DomainException
 
 
 class ListAdvisorsUseCase(ListAdvisorsInputPort):
@@ -29,8 +30,10 @@ class SetAdvisorGroupUseCase(SetAdvisorGroupInputPort):
         self.directory.get(command.agent_id, command.tenant_id)
         with self.uow:
             if command.group_id is not None:
-                _get_owned_group(self.uow, command.tenant_id, command.group_id)
-            self.uow.advisors.set_group(command.agent_id, command.tenant_id, command.group_id)
+                get_owned_group(self.uow, command.tenant_id, command.group_id)
+            if not self.uow.advisors.set_group(command.agent_id, command.tenant_id, command.group_id):
+                # Resolved a moment ago, gone now: say so instead of failing on a missing row.
+                raise DomainException("El asesor no existe", error_code="AGENT_NOT_FOUND")
             advisor = self.uow.advisors.get(command.agent_id, command.tenant_id)
             load = self.uow.leads.active_load_by_agent(command.tenant_id).get(command.agent_id, 0)
         return AdvisorView(advisor, load)

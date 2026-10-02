@@ -11,6 +11,10 @@ class AdvisorRepositoryPort(ABC):
         """None for an advisor of another organization: a 403 would confirm it exists."""
 
     @abstractmethod
+    def get_any(self, agent_id: UUID) -> Optional[Advisor]:
+        """Whatever organization it belongs to; callers enforce the tenant themselves."""
+
+    @abstractmethod
     def list_available(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> List[Advisor]:
         """Active advisors a lead can be routed to, ordered by name then id."""
 

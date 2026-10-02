@@ -36,6 +36,10 @@ class RawSqlAdvisorRepository(AdvisorRepositoryPort):
         ).fetchone()
         return self._to_advisor(row) if row else None
 
+    def get_any(self, agent_id: UUID) -> Optional[Advisor]:
+        row = self.connection.execute("SELECT * FROM advisors WHERE agent_id = %s", (agent_id,)).fetchone()
+        return self._to_advisor(row) if row else None
+
     def list_available(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> List[Advisor]:
         sql = "SELECT * FROM advisors WHERE " + _ROUTABLE + " AND is_active"
         params: List[Any] = [tenant_id]

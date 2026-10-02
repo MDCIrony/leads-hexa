@@ -24,7 +24,7 @@ from domain.value_objects.enums import AssignmentStrategy
 _EFFECTIVELY_UNBOUNDED = 10_000
 
 
-def _get_owned_group(uow: UnitOfWorkPort, tenant_id: UUID, group_id: UUID) -> SalesGroup:
+def get_owned_group(uow: UnitOfWorkPort, tenant_id: UUID, group_id: UUID) -> SalesGroup:
     """A group from another organization must read back as missing, never as
     a 403 that would confirm it exists elsewhere."""
     group = uow.groups.get_by_id(group_id)
@@ -84,7 +84,7 @@ class UpdateSalesGroupUseCase(UpdateSalesGroupInputPort):
 
     def execute(self, command: UpdateSalesGroupCommand) -> SalesGroup:
         with self.uow:
-            group = _get_owned_group(self.uow, command.tenant_id, command.group_id)
+            group = get_owned_group(self.uow, command.tenant_id, command.group_id)
             if command.name is not None:
                 group.rename(command.name)
             if command.description is not None:
@@ -107,7 +107,7 @@ class DeleteSalesGroupUseCase(DeleteSalesGroupInputPort):
 
     def execute(self, tenant_id: UUID, group_id: UUID) -> None:
         with self.uow:
-            _get_owned_group(self.uow, tenant_id, group_id)
+            get_owned_group(self.uow, tenant_id, group_id)
             # Its advisors are orphaned by the foreign key (ON DELETE SET NULL,
             # migrations 003 and 017), not by a loop here: group_id is not
             # identity data, so no agent event has anything to announce.

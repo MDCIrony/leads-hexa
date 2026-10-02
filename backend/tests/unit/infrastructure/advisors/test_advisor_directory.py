@@ -66,7 +66,7 @@ def test_hydration_keeps_the_group_and_a_newer_stored_state():
     uow.advisors.seed(Advisor(AgentId(agent_id), TenantId(_TENANT), "Fresh", AgentRole.AGENT, True, 5, group))
 
     # Forced through _hydrate: a stored row normally short-circuits before it.
-    assert directory._hydrate(agent_id, _TENANT).name == "Fresh"
+    assert directory._hydrate(agent_id).name == "Fresh"
     assert uow.advisors.get(agent_id, _TENANT).group_id == group
 
 
@@ -81,6 +81,17 @@ def test_an_agent_of_another_organization_is_not_found_never_forbidden():
 
     assert _error_code(directory, agent_id) == "AGENT_NOT_FOUND"
     assert uow.advisors.get(agent_id, _TENANT) is None
+
+
+def test_a_foreign_agent_already_projected_is_not_found_without_asking_identity():
+    """Even with identity down: tenant isolation is answered from the projection."""
+    agent_id = uuid.uuid4()
+    identity = _Identity(error=DomainException("identity is unavailable", error_code="SERVICE_UNAVAILABLE"))
+    directory, uow = _directory(identity)
+    uow.advisors.seed(_advisor(agent_id, tenant=uuid.uuid4()))
+
+    assert _error_code(directory, agent_id) == "AGENT_NOT_FOUND"
+    assert identity.calls == 0
 
 
 @pytest.mark.parametrize("role", [AgentRole.INTEGRATION, AgentRole.ADMIN])

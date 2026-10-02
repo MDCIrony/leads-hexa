@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 from uuid import UUID
 
 from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
@@ -19,15 +19,18 @@ class HydratingAdvisorDirectory(AdvisorDirectoryPort):
         self._identity = identity
 
     def get(self, agent_id: UUID, tenant_id: UUID) -> Advisor:
+        # Looked up across organizations on purpose: an agent already projected
+        # under another tenant is a local 404, not a reason to ask identity, so
+        # tenant isolation never depends on identity being up.
         with self._unit_of_work() as uow:
-            advisor = uow.advisors.get(agent_id, tenant_id)
+            advisor = uow.advisors.get_any(agent_id)
         if advisor is None:
-            advisor = self._hydrate(agent_id, tenant_id)
-        if advisor is None or not advisor.is_routable:
+            advisor = self._hydrate(agent_id)
+        if advisor is None or str(advisor.tenant_id) != str(tenant_id) or not advisor.is_routable:
             raise DomainException("El asesor no existe", error_code="AGENT_NOT_FOUND")
         return advisor
 
-    def _hydrate(self, agent_id: UUID, tenant_id: UUID):
+    def _hydrate(self, agent_id: UUID) -> Optional[Advisor]:
         fetched = self._identity.fetch(agent_id)
         if fetched is None:
             return None
@@ -35,6 +38,5 @@ class HydratingAdvisorDirectory(AdvisorDirectoryPort):
             # The consumer's own version-gated write: whichever arrives second,
             # event or hydration, cannot undo a newer state.
             uow.advisors.upsert_identity(fetched)
-            # Re-read rather than trust `fetched`: the stored row may be newer,
-            # and an agent of another organization reads back as missing.
-            return uow.advisors.get(agent_id, tenant_id)
+            # Re-read rather than trust `fetched`: the stored row may be newer.
+            return uow.advisors.get_any(agent_id)

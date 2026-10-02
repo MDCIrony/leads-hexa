@@ -75,7 +75,10 @@ def test_the_manager_lists_advisors_with_their_group_and_active_load(test_db):
 
         page = client.get("/api/v1/advisors", headers=manager, params={"limit": 2, "offset": 0}).json()
 
-        assert (page["total"], page["limit"], page["offset"]) == (3, 2, 0)  # the manager is an advisor too
+        # The manager is an advisor too.
+        assert (page["total"], page["limit"], page["offset"], page["has_more"]) == (3, 2, 0, True)
+        last = client.get("/api/v1/advisors", headers=manager, params={"limit": 2, "offset": 2}).json()
+        assert (len(last["items"]), last["has_more"]) == (1, False)
         assert set(page["items"][0]) == {"agent_id", "name", "group_id", "is_active", "active_load"}
         items = _items(client, manager)
         assert items[ana] == {"agent_id": ana, "name": "Ana", "group_id": None, "is_active": True,
@@ -125,6 +128,7 @@ def test_another_organizations_agent_or_group_is_a_404(test_db):
         group = client.patch(f"/api/v1/advisors/{mine}", headers=manager_a, json={"group_id": foreign_group})
 
         assert (agent.status_code, agent.json()["error_code"]) == (404, "AGENT_NOT_FOUND")
+        assert app.state.container.advisor_directory._identity.calls == 0  # answered by the projection
         assert (group.status_code, group.json()["error_code"]) == (404, "GROUP_NOT_FOUND")
         assert foreign_agent not in _items(client, manager_a)
 
@@ -148,7 +152,10 @@ def test_only_the_organization_manager_reaches_advisors(test_db):
         client.post("/api/v1/agents", headers=manager, json={
             "name": "Ana", "email": email, "password": "agent-pass-123", "role": "AGENT"})
 
-        assert client.get("/api/v1/advisors", headers=_login(client, email, "agent-pass-123")).status_code == 403
+        agent = _login(client, email, "agent-pass-123")
+        assert client.get("/api/v1/advisors", headers=agent).status_code == 403
+        own_id = client.get("/api/v1/agents", headers=manager).json()["items"][0]["id"]
+        assert client.patch(f"/api/v1/advisors/{own_id}", headers=agent, json={"group_id": None}).status_code == 403
 
 
 def test_identity_down_is_a_503(test_db, monkeypatch):

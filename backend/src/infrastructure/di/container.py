@@ -70,12 +70,12 @@ class Container:
         if settings.github_oauth.enabled:
             self._oauth_identity_providers["GITHUB"] = GitHubOAuthIdentityProvider(settings.github_oauth)
         # Built once: the token client caches its token, the HTTP client its connections.
-        identity_http = httpx.Client(timeout=2.0)
+        self._identity_http = httpx.Client(timeout=2.0)
         tokens = ServiceTokenClient(settings.identity_url.rstrip("/") + "/internal/v1/service-tokens",
                                     settings.service_client_id, settings.service_client_secret, "identity",
-                                    post=identity_http.post)
+                                    post=self._identity_http.post)
         self._advisor_directory = HydratingAdvisorDirectory(
-            self.unit_of_work, HttpIdentityAgents(settings.identity_url, tokens, identity_http))
+            self.unit_of_work, HttpIdentityAgents(settings.identity_url, tokens, self._identity_http))
 
     @property
     def settings(self) -> Settings:
@@ -135,6 +135,10 @@ class Container:
     @property
     def oauth_providers(self) -> list[str]:
         return list(self._oauth_identity_providers)
+
+    def close(self) -> None:
+        self._identity_http.close()
+        self._database.close()
 
     def unit_of_work(self) -> UnitOfWorkPort:
         """A fresh unit of work per call: it owns a transaction, which must not

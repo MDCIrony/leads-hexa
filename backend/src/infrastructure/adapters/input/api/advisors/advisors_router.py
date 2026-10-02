@@ -40,8 +40,9 @@ def list_advisors(
     context: RequestContext = Depends(require_organization_manager),
 ):
     page = use_case.execute(ListAdvisorsQuery(context.tenant_id, group_id, is_active, limit, offset))
-    return AdvisorsPageResponse(items=[_to_response(view) for view in page.items], total=page.total,
-                                limit=limit, offset=offset)
+    items = [_to_response(view) for view in page.items]
+    return AdvisorsPageResponse(items=items, total=page.total, limit=limit, offset=offset,
+                                has_more=(offset + len(items)) < page.total)
 
 
 @router.patch("/{agent_id}", response_model=AdvisorResponse)

@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 from uuid import UUID
 
@@ -12,7 +13,12 @@ from domain.value_objects.enums import AgentRole
 from domain.value_objects.tenant_id import TenantId
 
 
-def _unavailable() -> DomainException:
+_LOGGER = logging.getLogger(__name__)
+
+
+def _unavailable(reason: str) -> DomainException:
+    # Only the reason: never the token, the secret or identity's body.
+    _LOGGER.warning("identity unavailable for advisor hydration: %s", reason)
     return DomainException("identity is unavailable", error_code="SERVICE_UNAVAILABLE")
 
 
@@ -28,14 +34,14 @@ class HttpIdentityAgents(IdentityAgentsPort):
         try:
             token = self._tokens.token()
             response = self._client.get(self._url + str(agent_id), headers={"Authorization": f"Bearer {token}"})
-        except (ServiceTokenUnavailable, httpx.HTTPError):
-            raise _unavailable() from None
+        except (ServiceTokenUnavailable, httpx.HTTPError) as error:
+            raise _unavailable(type(error).__name__) from None
         if response.status_code == 404:
             return None
         if response.status_code != 200:
             # A 401 included: a token identity refuses is a misconfiguration
             # here, not an answer about the agent.
-            raise _unavailable()
+            raise _unavailable(f"answered {response.status_code}")
         try:
             body = response.json()
             if body["tenant_id"] is None:
@@ -50,4 +56,4 @@ class HttpIdentityAgents(IdentityAgentsPort):
                 version=int(body["version"]),
             )
         except (ValueError, KeyError, TypeError, DomainException):
-            raise _unavailable() from None
+            raise _unavailable("malformed agent body") from None

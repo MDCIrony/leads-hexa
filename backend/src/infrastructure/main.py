@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # so the API owns nothing but request handling.
     app.state.container = container
     yield
-    container.database.close()
+    container.close()
 
 app = FastAPI(
     title="Lead Router Platform",

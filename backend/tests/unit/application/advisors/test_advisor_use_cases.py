@@ -99,3 +99,17 @@ def test_the_agent_is_resolved_through_the_directory():
         SetAdvisorGroupUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
             SetAdvisorGroupCommand(_TENANT, foreign.agent_id.value, None))
     assert exc.value.error_code == "AGENT_NOT_FOUND"
+
+
+def test_an_advisor_gone_between_resolution_and_update_is_not_found():
+    uow = InMemoryUnitOfWork()
+    advisor = _seed(uow, "Ana")
+
+    class _Resolves:
+        def get(self, agent_id, tenant_id):
+            uow.advisors.advisors.pop(agent_id)
+            return advisor
+
+    with pytest.raises(DomainException) as exc:
+        SetAdvisorGroupUseCase(uow, _Resolves()).execute(SetAdvisorGroupCommand(_TENANT, advisor.agent_id.value, None))
+    assert exc.value.error_code == "AGENT_NOT_FOUND"

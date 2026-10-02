@@ -37,6 +37,9 @@ class InMemoryAdvisorRepository(AdvisorRepositoryPort):
         advisor = self.advisors.get(agent_id)
         return advisor if advisor is not None and advisor.tenant_id.value == tenant_id else None
 
+    def get_any(self, agent_id: UUID) -> Optional[Advisor]:
+        return self.advisors.get(agent_id)
+
     def list_available(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> List[Advisor]:
         return [a for a in self._routable(tenant_id, group_id) if a.is_active]
 
