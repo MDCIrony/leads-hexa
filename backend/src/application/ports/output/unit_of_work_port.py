@@ -19,6 +19,7 @@ from application.ports.output.social_identity_repository_port import SocialIdent
 from application.ports.output.processed_event_repository_port import ProcessedEventRepositoryPort
 from application.ports.output.intake_file_repository_port import IntakeFileRepositoryPort
 from application.ports.output.advisors.advisor_repository_port import AdvisorRepositoryPort
+from application.ports.output.intake.provisioned_tenant_repository_port import ProvisionedTenantRepositoryPort
 
 class UnitOfWorkPort(abc.ABC):
     leads: LeadRepositoryPort
@@ -38,6 +39,7 @@ class UnitOfWorkPort(abc.ABC):
     processed_events: ProcessedEventRepositoryPort
     intake_files: IntakeFileRepositoryPort
     advisors: AdvisorRepositoryPort
+    provisioned_tenants: ProvisionedTenantRepositoryPort
 
     def __enter__(self) -> UnitOfWorkPort:
         return self

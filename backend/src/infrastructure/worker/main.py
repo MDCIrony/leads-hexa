@@ -38,8 +38,9 @@ def _consumer_loop(container: Container, bootstrap: str, group: str, topic: str)
         group,
         [topic],
         handler_for(group, container.unit_of_work),
-        # A database outage is waited out: dead-lettering an AgentState would
-        # leave the advisors projection silently diverged for good.
+        # A database outage is waited out: dead-lettering a state event would
+        # leave the advisors projection diverged, or a tenant without its
+        # default sources, silently and for good.
         retryable=lambda exc: isinstance(exc, psycopg.OperationalError),
     )
 

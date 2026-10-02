@@ -14,11 +14,11 @@ from application.ports.input.tenant_use_case_ports import (
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent, normalize_email
-from domain.entities.lead_source import LeadSource
 from domain.entities.tenant import Tenant, slugify
 from domain.events.identity_events import AgentState, TenantState
 from domain.exceptions import DomainException
-from domain.value_objects.enums import AgentRole, LeadSourceKind
+from domain.intake.default_sources import default_sources
+from domain.value_objects.enums import AgentRole
 
 
 class CreateTenantUseCase(CreateTenantInputPort):
@@ -51,11 +51,8 @@ class CreateTenantUseCase(CreateTenantInputPort):
             # Same transaction, same reason as the manager below: an
             # organization that cannot receive leads is not a useful
             # intermediate state.
-            for name, kind in (("Formulario manual", LeadSourceKind.MANUAL_FORM),
-                               ("Carga de fichero", LeadSourceKind.FILE_UPLOAD)):
-                self.uow.sources.save(
-                    LeadSource.create(tenant_id=tenant.id, name=name, kind=kind)
-                )
+            for source in default_sources(tenant.id):
+                self.uow.sources.save(source)
 
             manager = self.uow.agents.save(
                 Agent.create(

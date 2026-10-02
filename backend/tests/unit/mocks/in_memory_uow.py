@@ -12,6 +12,7 @@ from application.ports.output.lead_repository_port import LeadRepositoryPort
 from application.ports.output.lead_source_repository_port import LeadSourceRepositoryPort
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from application.ports.output.processed_event_repository_port import ProcessedEventRepositoryPort
+from application.ports.output.intake.provisioned_tenant_repository_port import ProvisionedTenantRepositoryPort
 from application.ports.output.intake_file_repository_port import IntakeFileRepositoryPort
 from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
@@ -372,6 +373,17 @@ class InMemoryProcessedEventRepository(ProcessedEventRepositoryPort):
         return True
 
 
+class InMemoryProvisionedTenantRepository(ProvisionedTenantRepositoryPort):
+    def __init__(self) -> None:
+        self.tenant_ids: set = set()
+
+    def mark(self, tenant_id: UUID) -> bool:
+        if tenant_id in self.tenant_ids:
+            return False
+        self.tenant_ids.add(tenant_id)
+        return True
+
+
 class InMemoryIntakeFileRepository(IntakeFileRepositoryPort):
     def __init__(self) -> None:
         self._files: Dict[UUID, StoredIntakeFile] = {}
@@ -432,6 +444,7 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.social_identities = InMemorySocialIdentityRepository()
         self.processed_events = InMemoryProcessedEventRepository()
         self.intake_files = InMemoryIntakeFileRepository()
+        self.provisioned_tenants = InMemoryProvisionedTenantRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         # Only the outbox honours rollback: it is the one write whose survival
