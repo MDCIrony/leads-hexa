@@ -6,6 +6,7 @@ from psycopg.types.json import Jsonb
 
 from application.dtos.commands import OutboxEntry
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
+from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
 from infrastructure.adapters.output.persistence.correlation import current_correlation_id
 
@@ -13,7 +14,7 @@ class RawSqlOutboxRepository(OutboxRepositoryPort):
     def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
 
-    def record(self, event: OutboundEvent, channel: str = "product") -> None:
+    def record(self, event: OutboundEvent | InternalEvent, channel: str = "product") -> None:
         # Read here and not passed in: the application has no notion of the
         # request that triggered the event, only the adapter sees the ContextVar.
         self.connection.execute(

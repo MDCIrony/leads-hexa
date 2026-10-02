@@ -26,7 +26,6 @@ from infrastructure.adapters.input.api.internal_router import router as internal
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
-from infrastructure.di.event_wiring import subscribe_notification_handlers
 from infrastructure.logging_config import configure_logging
 
 @asynccontextmanager
@@ -64,8 +63,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         relay_thread = OutboxRelayThread(relay, interval_seconds=settings.outbox_relay_interval_seconds)
         relay_thread.start()
-
-        subscribe_notification_handlers(container)
 
         app.state.container = container
         yield

@@ -1,5 +1,4 @@
 import uuid
-from unittest.mock import Mock
 
 import pytest
 
@@ -12,7 +11,6 @@ from application.use_cases.lead_lifecycle_use_cases import (
 )
 from domain.entities.agent import Agent
 from domain.entities.lead import Lead
-from domain.events.notification_events import LeadAssigned
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole, LeadStatus
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
@@ -103,20 +101,20 @@ def test_reassigning_an_already_assigned_lead_lands_on_the_new_agent():
 def test_assigning_by_hand_republishes_the_lead_to_the_customer():
     """Ingestion published it as UNASSIGNED because routing found nobody. The
     customer's copy stays frozen there unless the manual assignment records
-    the contract again, this time with an owner — through the outbox now
-    (ADR-0025), not the in-process publisher."""
+    the contract again, this time with an owner — through the outbox
+    (ADR-0025)."""
     uow = InMemoryUnitOfWork()
-    publisher = Mock()
     lead, agent = _lead(), _agent()
     uow.leads.save(lead)
     uow.agents.save(agent)
 
-    AssignLeadUseCase(uow, event_publisher=publisher).execute(
+    AssignLeadUseCase(uow).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=agent.id.value)
     )
 
-    published = [call.args[0] for call in publisher.publish.call_args_list]
-    assert [type(event) for event in published] == [LeadAssigned]
+    internal = uow.outbox.list_unpublished("internal", 10)
+    assert [entry.event_type for entry in internal] == ["LeadAssigned"]
+    assert internal[0].payload["agent_id"] == str(agent.id)
 
     outbox_entries = uow.outbox.list_unpublished("product", 10)
     assert [entry.event_type for entry in outbox_entries] == ["LeadProcessedEvent"]
@@ -126,6 +124,26 @@ def test_assigning_by_hand_republishes_the_lead_to_the_customer():
     assert outbound["assigned_at"] is not None
     assert outbound["lead_id"] == str(lead.id)
 
+
+
+def test_reassigning_records_lead_reassigned_with_the_previous_agent():
+    uow = InMemoryUnitOfWork()
+    first_agent, second_agent = _agent(), _agent()
+    lead = _lead()
+    lead.assign_to(first_agent.id, first_agent.tenant_id)
+    uow.leads.save(lead)
+    uow.agents.save(first_agent)
+    uow.agents.save(second_agent)
+
+    AssignLeadUseCase(uow).execute(
+        AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=second_agent.id.value)
+    )
+
+    internal = uow.outbox.list_unpublished("internal", 10)
+    assert [entry.event_type for entry in internal] == ["LeadReassigned"]
+    assert internal[0].partition_key == str(lead.id)
+    assert internal[0].payload["agent_id"] == str(second_agent.id)
+    assert internal[0].payload["previous_agent_id"] == str(first_agent.id)
 
 def test_discarding_records_the_reason():
     uow = InMemoryUnitOfWork()

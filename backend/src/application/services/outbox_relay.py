@@ -47,8 +47,7 @@ class OutboxRelay:
     def _deliver(self, entry: OutboxEntry) -> Optional[str]:
         """Hands the entry to every dispatcher. Returns the last error, if any.
 
-        A dispatcher that fails must not stop the others from trying — same
-        rule as InMemoryEventPublisher with its handlers. The entry counts as
+        A dispatcher that fails must not stop the others from trying. The entry counts as
         delivered only once every dispatcher has it, so a partial failure is
         retried in full, and a consumer that sees it twice deduplicates by
         event id."""

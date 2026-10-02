@@ -15,6 +15,7 @@ from application.ports.input.sales_group_use_case_ports import (
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.sales_group import SalesGroup
+from domain.events.identity_events import AgentState
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AssignmentStrategy
 
@@ -120,4 +121,5 @@ class DeleteSalesGroupUseCase(DeleteSalesGroupInputPort):
             for agent in orphaned:
                 agent.group_id = None
                 self.uow.agents.save(agent)
+                self.uow.outbox.record(AgentState.of(agent), channel="internal")
             self.uow.groups.delete(group_id)

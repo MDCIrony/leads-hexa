@@ -16,6 +16,7 @@ from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent, normalize_email
 from domain.entities.lead_source import LeadSource
 from domain.entities.tenant import Tenant, slugify
+from domain.events.identity_events import AgentState, TenantState
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole, LeadSourceKind
 
@@ -45,6 +46,7 @@ class CreateTenantUseCase(CreateTenantInputPort):
                 )
 
             tenant = self.uow.tenants.save(Tenant.create(name=command.name))
+            self.uow.outbox.record(TenantState.of(tenant), channel="internal")
 
             # Same transaction, same reason as the manager below: an
             # organization that cannot receive leads is not a useful
@@ -64,6 +66,7 @@ class CreateTenantUseCase(CreateTenantInputPort):
                     tenant_id=tenant.id,
                 )
             )
+            self.uow.outbox.record(AgentState.of(manager), channel="internal")
         return TenantWithManagerResult(tenant=tenant, manager=manager)
 
 
@@ -107,7 +110,9 @@ class UpdateTenantUseCase(UpdateTenantInputPort):
                     tenant.deactivate()
                     # A suspended organization must not leave working credentials
                     # behind, so its users are deactivated with it.
-                    self.uow.agents.deactivate_all_by_tenant(command.tenant_id)
+                    for agent in self.uow.agents.deactivate_all_by_tenant(command.tenant_id):
+                        self.uow.outbox.record(AgentState.of(agent), channel="internal")
 
             self.uow.tenants.save(tenant)
+            self.uow.outbox.record(TenantState.of(tenant), channel="internal")
         return tenant

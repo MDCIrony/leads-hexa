@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand, LeadsPageResult
@@ -9,7 +8,6 @@ from application.ports.input.lead_lifecycle_use_case_ports import (
     GetLeadInputPort,
     GetMyLeadsInputPort,
 )
-from application.ports.output.domain_event_publisher_port import DomainEventPublisherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent
 from domain.entities.lead import Lead
@@ -38,16 +36,10 @@ def _get_owned_agent(uow: UnitOfWorkPort, tenant_id: UUID, agent_id: UUID) -> Ag
 
 
 class AssignLeadUseCase(AssignLeadInputPort):
-    def __init__(
-        self,
-        uow: UnitOfWorkPort,
-        event_publisher: Optional[DomainEventPublisherPort] = None,
-    ) -> None:
+    def __init__(self, uow: UnitOfWorkPort) -> None:
         self.uow = uow
-        self.event_publisher = event_publisher
 
     def execute(self, command: AssignLeadCommand) -> Lead:
-        previous_agent_id = None
         with self.uow:
             lead = _get_owned_lead(self.uow, command.tenant_id, command.lead_id)
             agent = _get_owned_agent(self.uow, command.tenant_id, command.agent_id)
@@ -55,8 +47,8 @@ class AssignLeadUseCase(AssignLeadInputPort):
             # state: reassign_to is explicit about replacing an existing
             # agent, assign_to refuses to do that silently.
             reassigning = lead.status == LeadStatus.ASSIGNED
+            previous_agent_id = lead.assigned_agent_id
             if reassigning:
-                previous_agent_id = lead.assigned_agent_id
                 lead.reassign_to(agent.id, agent.tenant_id)
             else:
                 lead.assign_to(agent.id, agent.tenant_id)
@@ -66,24 +58,21 @@ class AssignLeadUseCase(AssignLeadInputPort):
             # now; the transaction is what guarantees it is never lost
             # (ADR-0025).
             self.uow.outbox.record(LeadProcessedEvent.of(saved_lead))
-
-        # Published after the transaction commits (N1): a failing notice must
-        # not undo an assignment that already happened.
-        if self.event_publisher:
-            if reassigning:
-                self.event_publisher.publish(LeadReassigned(
+            # In the same transaction too: the notice is applied later, by a
+            # consumer, so it can no longer undo the assignment by failing.
+            self.uow.outbox.record(
+                LeadReassigned(
                     tenant_id=str(saved_lead.tenant_id.value),
                     lead_id=str(saved_lead.id),
                     agent_id=str(agent.id),
                     previous_agent_id=str(previous_agent_id) if previous_agent_id else None,
-                ))
-            else:
-                self.event_publisher.publish(LeadAssigned(
+                ) if reassigning else LeadAssigned(
                     tenant_id=str(saved_lead.tenant_id.value),
                     lead_id=str(saved_lead.id),
                     agent_id=str(agent.id),
-                ))
-
+                ),
+                channel="internal",
+            )
         return saved_lead
 
 

@@ -17,7 +17,6 @@ def test_stateless_adapters_are_shared_across_the_container_lifetime():
 
     assert container.assignment_engine is container.assignment_engine
     assert container.password_hasher is container.password_hasher
-    assert container.event_publisher is container.event_publisher
 
 
 def test_unit_of_work_is_built_fresh_on_every_call():

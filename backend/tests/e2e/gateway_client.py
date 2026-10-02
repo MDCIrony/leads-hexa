@@ -3,9 +3,20 @@
 Mirrors gateway/nginx.conf: it authenticates through the internal
 introspection endpoint and forwards only the resulting bearer, so e2e tests
 exercise the same trust boundary the stack runs with. Tests that deliberately
-talk to the app without a gateway (test_internal_auth) keep a plain TestClient."""
+talk to the app without a gateway (test_internal_auth) keep a plain TestClient.
+
+It also stands in for the outbox worker (F1): after every forwarded request it
+drains the internal channel into the notification consumers, in process."""
+import dataclasses
+import json
+
 import httpx
+from chassis.consumer import Envelope
+from chassis.outbox import OutboxRow, envelope
 from fastapi.testclient import TestClient
+
+from infrastructure.adapters.input.events.notification_consumer import NotificationConsumer
+from infrastructure.adapters.output.events.internal_topics import NOTIFICATION_GROUPS, topic_for
 
 _INTROSPECT = "/internal/v1/auth/introspect"
 _PUBLIC_PREFIX = "/api/v1/auth/"
@@ -29,7 +40,7 @@ class GatewayClient(TestClient):
             # Public routes see everything but a client-supplied bearer or key.
             for name in ("authorization", "x-api-key"):
                 headers.pop(name, None)
-            return super().request(method, url, headers=headers, **kwargs)
+            return self._forward(method, url, headers=headers, **kwargs)
 
         introspection_headers = {
             name: headers[name] for name in ("cookie", "x-api-key") if name in headers
@@ -52,4 +63,34 @@ class GatewayClient(TestClient):
         # service must never see the session cookie.
         headers["Cookie"] = ""
         kwargs.pop("cookies", None)
-        return super().request(method, url, headers=headers, **kwargs)
+        return self._forward(method, url, headers=headers, **kwargs)
+
+    def _forward(self, method, url, **kwargs):
+        response = super().request(method, url, **kwargs)
+        self._drain_internal()
+        return response
+
+    def _drain_internal(self) -> None:
+        """What the relay plus the Kafka consumers will do, minus the broker.
+
+        The envelope goes through bytes and back, the same path a real message
+        takes. Identity state has no consumer in F1, so it is only marked."""
+        container = getattr(self.app.state, "container", None)
+        if container is None:
+            return
+        consumers = {
+            topic: NotificationConsumer(container.unit_of_work, group)
+            for group, topic in NOTIFICATION_GROUPS.items()
+        }
+        while True:
+            with container.unit_of_work() as uow:
+                entries = uow.outbox.list_unpublished("internal", 100)
+            if not entries:
+                return
+            for entry in entries:
+                row = OutboxRow(**dataclasses.asdict(entry))
+                consumer = consumers.get(topic_for(row))
+                if consumer is not None:
+                    consumer(Envelope.from_bytes(json.dumps(envelope(row, "lead-core")).encode()))
+                with container.unit_of_work() as uow:
+                    uow.outbox.mark_published(entry.id)

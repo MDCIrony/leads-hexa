@@ -23,8 +23,10 @@ from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
 from domain.entities.notification import Notification
+from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
 from domain.value_objects.enums import IntakeJobStatus, IntakeRecordStatus
+from infrastructure.adapters.output.persistence.correlation import current_correlation_id
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_lead_source_repo import InMemoryLeadSourceRepository
@@ -371,7 +373,7 @@ class InMemoryOutboxRepository(OutboxRepositoryPort):
         self.published_ids: List[UUID] = []
         self.failed_ids: List[UUID] = []
 
-    def record(self, event: OutboundEvent, channel: str = "product") -> None:
+    def record(self, event: OutboundEvent | InternalEvent, channel: str = "product") -> None:
         self._entries[event.event_id] = OutboxEntry(
             id=event.event_id,
             tenant_id=event.tenant_id,
@@ -380,6 +382,7 @@ class InMemoryOutboxRepository(OutboxRepositoryPort):
             payload=event.as_payload(),
             occurred_on=event.occurred_on,
             channel=channel,
+            correlation_id=current_correlation_id(),
         )
 
     def list_unpublished(self, channel: str, limit: int) -> List[OutboxEntry]:
@@ -471,10 +474,15 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.intake_files = InMemoryIntakeFileRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
+        # Only the outbox honours rollback: it is the one write whose survival
+        # a test needs to tell apart from the transaction it belongs to.
+        if isinstance(self.outbox, InMemoryOutboxRepository):
+            self._outbox_snapshot = dict(self.outbox._entries)
         return self
 
     def commit(self) -> None:
         pass
 
     def rollback(self) -> None:
-        pass
+        if isinstance(self.outbox, InMemoryOutboxRepository):
+            self.outbox._entries = self._outbox_snapshot

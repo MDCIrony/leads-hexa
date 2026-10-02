@@ -16,7 +16,6 @@ from domain.events.notification_events import (
     LeadReassigned,
 )
 from domain.value_objects.enums import AgentRole, IntakeRecordStatus, NotificationKind
-from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
 from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
@@ -40,10 +39,10 @@ def _agent(tenant_id) -> Agent:
     )
 
 
-def _handler(uow: InMemoryUnitOfWork) -> NotificationHandler:
-    # A shared instance, not a fresh one per call: it is what lets the test
-    # inspect what got saved through the same repository the handler wrote to.
-    return NotificationHandler(uow_factory=lambda: uow)
+def _apply(uow: InMemoryUnitOfWork, event) -> None:
+    """Hands the event over the way a consumer receives it: type, tenant and
+    the JSON payload, never the object itself."""
+    NotificationHandler().apply(event.event_type, event.tenant_id, event.as_payload(), uow)
 
 
 class TestLeadAssigned:
@@ -52,13 +51,12 @@ class TestLeadAssigned:
         agent_id = uuid.uuid4()
         lead_id = str(uuid.uuid4())
 
-        _handler(uow).handle_lead_assigned(
-            LeadAssigned(tenant_id=str(uuid.uuid4()), lead_id=lead_id, agent_id=str(agent_id))
-        )
+        _apply(uow, LeadAssigned(tenant_id=str(uuid.uuid4()), lead_id=lead_id, agent_id=str(agent_id)))
 
         notifications = uow.notifications.list_by_recipient(agent_id)
         assert len(notifications) == 1
         assert notifications[0].kind == NotificationKind.LEAD_ASSIGNED
+        assert notifications[0].message == "Tienes un lead nuevo asignado"
         assert str(notifications[0].lead_id.value) == lead_id
 
 
@@ -68,14 +66,12 @@ class TestLeadReassigned:
         new_agent_id = uuid.uuid4()
         lead_id = str(uuid.uuid4())
 
-        _handler(uow).handle_lead_reassigned(
-            LeadReassigned(
-                tenant_id=str(uuid.uuid4()),
-                lead_id=lead_id,
-                agent_id=str(new_agent_id),
-                previous_agent_id=str(uuid.uuid4()),
-            )
-        )
+        _apply(uow, LeadReassigned(
+            tenant_id=str(uuid.uuid4()),
+            lead_id=lead_id,
+            agent_id=str(new_agent_id),
+            previous_agent_id=str(uuid.uuid4()),
+        ))
 
         notifications = uow.notifications.list_by_recipient(new_agent_id)
         assert len(notifications) == 1
@@ -91,9 +87,7 @@ class TestLeadLeftUnassigned:
         manager_two = agent_repo.save(_manager(tenant_id))
         uow = InMemoryUnitOfWork(agents=agent_repo)
 
-        _handler(uow).handle_lead_left_unassigned(
-            LeadLeftUnassigned(tenant_id=str(tenant_id), lead_id=str(uuid.uuid4()))
-        )
+        _apply(uow, LeadLeftUnassigned(tenant_id=str(tenant_id), lead_id=str(uuid.uuid4())))
 
         assert len(uow.notifications.list_by_recipient(manager_one.id.value)) == 1
         assert len(uow.notifications.list_by_recipient(manager_two.id.value)) == 1
@@ -105,9 +99,7 @@ class TestLeadLeftUnassigned:
         inactive = agent_repo.save(_manager(tenant_id, is_active=False))
         uow = InMemoryUnitOfWork(agents=agent_repo)
 
-        _handler(uow).handle_lead_left_unassigned(
-            LeadLeftUnassigned(tenant_id=str(tenant_id), lead_id=str(uuid.uuid4()))
-        )
+        _apply(uow, LeadLeftUnassigned(tenant_id=str(tenant_id), lead_id=str(uuid.uuid4())))
 
         assert len(uow.notifications.list_by_recipient(active.id.value)) == 1
         assert len(uow.notifications.list_by_recipient(inactive.id.value)) == 0
@@ -116,9 +108,7 @@ class TestLeadLeftUnassigned:
         uow = InMemoryUnitOfWork()
 
         # The only assertion that matters is that this line does not raise.
-        _handler(uow).handle_lead_left_unassigned(
-            LeadLeftUnassigned(tenant_id=str(uuid.uuid4()), lead_id=str(uuid.uuid4()))
-        )
+        _apply(uow, LeadLeftUnassigned(tenant_id=str(uuid.uuid4()), lead_id=str(uuid.uuid4())))
 
     def test_an_agent_who_is_not_a_manager_is_not_notified(self):
         tenant_id = uuid.uuid4()
@@ -126,9 +116,7 @@ class TestLeadLeftUnassigned:
         plain_agent = agent_repo.save(_agent(tenant_id))
         uow = InMemoryUnitOfWork(agents=agent_repo)
 
-        _handler(uow).handle_lead_left_unassigned(
-            LeadLeftUnassigned(tenant_id=str(tenant_id), lead_id=str(uuid.uuid4()))
-        )
+        _apply(uow, LeadLeftUnassigned(tenant_id=str(tenant_id), lead_id=str(uuid.uuid4())))
 
         assert len(uow.notifications.list_by_recipient(plain_agent.id.value)) == 0
 
@@ -141,24 +129,37 @@ class TestIntakeRejected:
         uow = InMemoryUnitOfWork(agents=agent_repo)
         record_id = str(uuid.uuid4())
 
-        _handler(uow).handle_intake_rejected(
-            IntakeRejected(
-                tenant_id=str(tenant_id),
-                intake_record_id=record_id,
-                reason="Formato de correo electrónico inválido",
-            )
-        )
+        _apply(uow, IntakeRejected(
+            tenant_id=str(tenant_id),
+            intake_record_id=record_id,
+            reason="Formato de correo electrónico inválido",
+        ))
 
         notifications = uow.notifications.list_by_recipient(manager.id.value)
         assert len(notifications) == 1
         assert notifications[0].kind == NotificationKind.INTAKE_REJECTED
         assert str(notifications[0].intake_record_id.value) == record_id
-        assert "Formato de correo electrónico inválido" in notifications[0].message
+        assert notifications[0].message == (
+            "Un registro de entrada no se pudo interpretar: Formato de correo electrónico inválido"
+        )
+
+
+def test_an_unknown_event_type_does_nothing():
+    """A topic can carry types this consumer has no rule for; skipping them is
+    what keeps one new event from dead-lettering everything behind it."""
+    tenant_id = uuid.uuid4()
+    agent_repo = InMemoryAgentRepository()
+    manager = agent_repo.save(_manager(tenant_id))
+    uow = InMemoryUnitOfWork(agents=agent_repo)
+
+    NotificationHandler().apply("LeadArchived", str(tenant_id), {"lead_id": str(uuid.uuid4())}, uow)
+
+    assert uow.notifications.list_by_recipient(manager.id.value) == []
 
 
 class _RaisingNotificationRepository(NotificationRepositoryPort):
-    """Stands in for a broken adapter. Only save() is exercised by the
-    handler; the rest exist to satisfy the abstract port."""
+    """Stands in for a broken adapter. Only save() would be exercised; the
+    rest exist to satisfy the abstract port."""
 
     def save(self, notification: Notification) -> Notification:
         raise RuntimeError("notifications table is down")
@@ -179,21 +180,14 @@ class _RaisingNotificationRepository(NotificationRepositoryPort):
 
 
 def test_a_failing_notification_repository_does_not_fail_the_ingestion():
-    """The test that justifies the whole design (acceptance criterion 8): the
-    notification repository blows up on save, published through the real
-    InMemoryEventPublisher — not a Mock — because what is under test is
-    precisely whether the publisher absorbs the failure. If this cannot be
-    written, publication ended up inside the use case's transaction."""
+    """Acceptance criterion 8: ingestion only records the notice; turning it
+    into notifications is the consumer's job, in its own transaction, so a
+    broken notifications table cannot undo a lead."""
     tenant_id = uuid.uuid4()
     agent_repo = InMemoryAgentRepository()
     agent_repo.save(_manager(tenant_id))
     uow = InMemoryUnitOfWork(agents=agent_repo, notifications=_RaisingNotificationRepository())
 
-    publisher = InMemoryEventPublisher()
-    handler = NotificationHandler(uow_factory=lambda: uow)
-    publisher.subscribe(LeadLeftUnassigned, handler.handle_lead_left_unassigned)
-
-    use_case = IngestLeadUseCase(uow=uow, event_publisher=publisher)
     command = IngestLeadCommand(
         tenant_id=tenant_id,
         source_id=uuid.uuid4(),
@@ -209,10 +203,10 @@ def test_a_failing_notification_repository_does_not_fail_the_ingestion():
         IntakeRecord.create(tenant_id=command.tenant_id, source_id=command.source_id, payload=payload_of(command))
     )
 
-    # No rules and no available agent means the lead ends up UNASSIGNED,
-    # which is what triggers the LeadLeftUnassigned publish below.
-    result = use_case.execute(command, existing_record=existing)
+    # No rules and no available agent means the lead ends up UNASSIGNED.
+    result = IngestLeadUseCase(uow=uow).execute(command, existing_record=existing)
 
     assert result.error is None
     assert result.status == "UNASSIGNED"
     assert existing.status == IntakeRecordStatus.PROMOTED
+    assert [e.event_type for e in uow.outbox.list_unpublished("internal", 10)] == ["LeadLeftUnassigned"]

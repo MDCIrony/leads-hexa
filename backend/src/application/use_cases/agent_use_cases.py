@@ -25,6 +25,7 @@ from application.ports.output.messaging_credential_provisioner_port import (
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent, normalize_email
+from domain.events.identity_events import AgentState
 from domain.exceptions import AgentNotFoundException, DomainException
 from domain.value_objects.enums import AgentRole
 from domain.value_objects.group_id import GroupId
@@ -84,7 +85,11 @@ class CreateAgentUseCase(CreateAgentInputPort):
                 hashed_password=self.password_hasher.hash(command.password),
                 tenant_id=command.tenant_id,
             )
-            return self.uow.agents.save(agent)
+            saved = self.uow.agents.save(agent)
+            # Every agent write records its new state in the same transaction:
+            # services that keep a copy of the agent learn it from nowhere else.
+            self.uow.outbox.record(AgentState.of(saved), channel="internal")
+            return saved
 
 
 def _integration_email(tenant) -> str:
@@ -143,6 +148,7 @@ class IssueIntegrationCredentialUseCase(IssueIntegrationCredentialInputPort):
                     hashed_password=hashed,
                     tenant_id=command.tenant_id,
                 ))
+            self.uow.outbox.record(AgentState.of(agent), channel="internal")
 
         return IntegrationCredentialResult(
             agent=agent,
@@ -180,7 +186,9 @@ class UpdateAgentUseCase(UpdateAgentInputPort):
                 agent.group_id = GroupId(command.group_id)
             if command.is_active is not None:
                 agent.is_active = command.is_active
-            return self.uow.agents.save(agent)
+            saved = self.uow.agents.save(agent)
+            self.uow.outbox.record(AgentState.of(saved), channel="internal")
+            return saved
 
 
 class DeactivateAgentUseCase(DeactivateAgentInputPort):
@@ -196,6 +204,7 @@ class DeactivateAgentUseCase(DeactivateAgentInputPort):
             # on is_active, so it simply stops receiving new ones.
             agent.is_active = False
             saved = self.uow.agents.save(agent)
+            self.uow.outbox.record(AgentState.of(saved), channel="internal")
         # Outside the transaction and best-effort, on purpose: Kafka's admin
         # API is not transactional with Postgres, and a revoke that fails
         # here must not roll back the deactivation that already committed —

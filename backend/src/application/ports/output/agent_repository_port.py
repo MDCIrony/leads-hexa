@@ -68,8 +68,10 @@ class AgentRepositoryPort(ABC):
         403 would confirm that the identifier exists."""
 
     @abstractmethod
-    def deactivate_all_by_tenant(self, tenant_id: UUID) -> int:
-        """Deactivate every active agent of this organization, returning how many.
+    def deactivate_all_by_tenant(self, tenant_id: UUID) -> List[Agent]:
+        """Deactivate every active agent of this organization, returning them
+        as they are now, new version included: each one is a write that
+        downstream copies of the agent must hear about.
 
         A single statement rather than a paged loop: suspending an organization
         must leave no working credential behind, and any page size is a silent

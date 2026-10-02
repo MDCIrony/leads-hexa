@@ -3,12 +3,13 @@ from typing import List
 from uuid import UUID
 
 from application.dtos.commands import OutboxEntry
+from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
 
 
 class OutboxRepositoryPort(ABC):
     @abstractmethod
-    def record(self, event: OutboundEvent, channel: str = "product") -> None:
+    def record(self, event: OutboundEvent | InternalEvent, channel: str = "product") -> None:
         """Write the event inside the caller's transaction.
 
         Not a side effect: an INSERT that a rollback takes with it, which is

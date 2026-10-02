@@ -21,7 +21,6 @@ from infrastructure.adapters.input.api.dependencies import (
 from infrastructure.adapters.output.queue.rabbitmq_job_queue import QUEUE_NAME, declare_intake_topology
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
-from infrastructure.di.event_wiring import subscribe_notification_handlers
 from infrastructure.logging_config import configure_logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -55,9 +54,6 @@ def main() -> None:
     configure_logging()
     settings = Settings.from_environment()
     container = Container(settings)
-    # The worker now runs the use case, so it is the process that publishes
-    # its events: without this the manager's notifications vanish silently.
-    subscribe_notification_handlers(container)
 
     # ponytail: one connection attempt, no reconnect loop — compose's
     # `restart: on-failure` recovers a dropped broker the same way it

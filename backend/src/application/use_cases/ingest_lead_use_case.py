@@ -4,10 +4,8 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
-from application.ports.output.domain_event_publisher_port import DomainEventPublisherPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.dtos.commands import IngestLeadCommand, LeadProcessedResult
-from domain.entities.agent import Agent
 from domain.entities.intake_record import IntakeError, IntakeRecord
 from domain.entities.lead import Lead
 from domain.entities.sales_group import SalesGroup
@@ -33,11 +31,9 @@ class IngestLeadUseCase(IngestLeadInputPort):
     def __init__(
         self,
         uow: UnitOfWorkPort,
-        event_publisher: Optional[DomainEventPublisherPort] = None,
         engine: Optional[AssignmentEngine] = None,
     ) -> None:
         self.uow = uow
-        self.event_publisher = event_publisher
         self.scoring_engine = ScoringEngine()
         self.viability_engine = ViabilityEngine()
         # The engine is stateless (the rotation cursor lives on the
@@ -62,11 +58,6 @@ class IngestLeadUseCase(IngestLeadInputPort):
     def execute(self, command: IngestLeadCommand, existing_record: IntakeRecord) -> LeadProcessedResult:
         assigned_agent = None
         left_unassigned = False
-        # Set instead of returned from inside `with self.uow`: an early return
-        # there would publish IntakeRejected before the block commits, and a
-        # later rollback would leave the notice describing a rejection that
-        # never happened (N1).
-        rejection_result: Optional[LeadProcessedResult] = None
         with self.uow:
             # The record always exists by now: ReceiveIntakeUseCase (or the
             # batch pipeline) persisted it on arrival, so this use case only
@@ -104,7 +95,12 @@ class IngestLeadUseCase(IngestLeadInputPort):
                     error_code=exc.error_code,
                 )])
                 self.uow.intake_records.save(record)
-                rejection_result = LeadProcessedResult(
+                self.uow.outbox.record(IntakeRejected(
+                    tenant_id=str(record.tenant_id.value),
+                    intake_record_id=str(record.id),
+                    reason=str(exc),
+                ), channel="internal")
+                return LeadProcessedResult(
                     lead_id="",
                     intake_record_id=str(record.id),
                     status=IntakeRecordStatus.REJECTED.value,
@@ -170,12 +166,19 @@ class IngestLeadUseCase(IngestLeadInputPort):
                     ) if saved_lead.status == LeadStatus.DISQUALIFIED
                     else LeadProcessedEvent.of(saved_lead)
                 )
-
-        if rejection_result is not None:
-            self._publish_rejection(record, rejection_result.error)
-            return rejection_result
-
-        self._publish_notices(saved_lead, assigned_agent, left_unassigned)
+                # Same transaction, same reason: a notice about a lead that
+                # was rolled back would point at nothing.
+                if assigned_agent is not None:
+                    self.uow.outbox.record(LeadAssigned(
+                        tenant_id=str(saved_lead.tenant_id.value),
+                        lead_id=str(saved_lead.id),
+                        agent_id=str(assigned_agent.id),
+                    ), channel="internal")
+                elif left_unassigned:
+                    self.uow.outbox.record(LeadLeftUnassigned(
+                        tenant_id=str(saved_lead.tenant_id.value),
+                        lead_id=str(saved_lead.id),
+                    ), channel="internal")
 
         return LeadProcessedResult(
             lead_id=str(saved_lead.id),
@@ -199,44 +202,6 @@ class IngestLeadUseCase(IngestLeadInputPort):
             status=IntakeRecordStatus.PROMOTED.value,
             score=0,
         )
-
-    def _publish_rejection(self, record: IntakeRecord, reason: Optional[str]) -> None:
-        if not self.event_publisher:
-            return
-        self.event_publisher.publish(IntakeRejected(
-            tenant_id=str(record.tenant_id.value),
-            intake_record_id=str(record.id),
-            reason=reason or "",
-        ))
-
-    def _publish_notices(
-        self,
-        lead: Lead,
-        assigned_agent: Optional[Agent],
-        left_unassigned: bool,
-    ) -> None:
-        """Internal-only notices: LeadAssigned / LeadLeftUnassigned.
-
-        Called once the unit of work has committed, never inside it: a notice
-        that fails must not undo a lead that is already saved. The outbound
-        facts a customer receives (LeadProcessedEvent, LeadDisqualified) went
-        through the outbox already, inside the same transaction as the lead
-        (ADR-0025) — a disqualified lead reaches neither branch below, since
-        assigned_agent and left_unassigned are only ever set on the path
-        that skips disqualification."""
-        if not self.event_publisher:
-            return
-        if assigned_agent is not None:
-            self.event_publisher.publish(LeadAssigned(
-                tenant_id=str(lead.tenant_id.value),
-                lead_id=str(lead.id),
-                agent_id=str(assigned_agent.id),
-            ))
-        elif left_unassigned:
-            self.event_publisher.publish(LeadLeftUnassigned(
-                tenant_id=str(lead.tenant_id.value),
-                lead_id=str(lead.id),
-            ))
 
     @staticmethod
     def _field_of(exc: DomainException) -> str:

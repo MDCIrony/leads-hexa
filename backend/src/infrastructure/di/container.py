@@ -8,7 +8,6 @@ from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.oauth_identity_provider_port import OAuthIdentityProviderPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.services.assignment_engine import AssignmentEngine
-from infrastructure.adapters.output.events.in_memory_event_publisher import InMemoryEventPublisher
 from infrastructure.adapters.output.events.kafka_credential_provisioner import KafkaCredentialProvisioner
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
@@ -46,7 +45,6 @@ class Container:
         # reason not to.
         self._assignment_engine = AssignmentEngine()
         self._file_parser = PandasFileParser()
-        self._event_publisher = InMemoryEventPublisher()
         # Safe to build eagerly: connecting happens per enqueue call, not at
         # construction (ADR-0027), so a RabbitMQ outage never blocks startup.
         self._job_queue = RabbitMQJobQueue(settings.rabbitmq_url)
@@ -116,10 +114,6 @@ class Container:
     @property
     def file_parser(self) -> FileParserPort:
         return self._file_parser
-
-    @property
-    def event_publisher(self) -> InMemoryEventPublisher:
-        return self._event_publisher
 
     @property
     def job_queue(self) -> JobQueuePort:

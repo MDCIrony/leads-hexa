@@ -11,6 +11,9 @@ class InMemoryTenantRepository(TenantRepositoryPort):
         self._agent_counts: Dict[str, int] = {}
 
     def save(self, tenant: Tenant) -> Tenant:
+        # Same rule as the SQL upsert: 1 on insert, +1 on every update.
+        previous = self._tenants.get(str(tenant.id))
+        tenant.version = previous.version + 1 if previous else 1
         self._tenants[str(tenant.id)] = tenant
         return tenant
 

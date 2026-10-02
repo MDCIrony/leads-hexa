@@ -21,6 +21,9 @@ class InMemoryAgentRepository(AgentRepositoryPort):
         return self._filter_by_group(agents, group_id)
 
     def save(self, agent: Agent) -> Agent:
+        # Same rule as the SQL upsert: 1 on insert, +1 on every update.
+        previous = self.agents.get(agent.id.value)
+        agent.version = previous.version + 1 if previous else 1
         self.agents[agent.id.value] = agent
         return agent
 
@@ -78,7 +81,7 @@ class InMemoryAgentRepository(AgentRepositoryPort):
             return None
         return agent
 
-    def deactivate_all_by_tenant(self, tenant_id: UUID) -> int:
+    def deactivate_all_by_tenant(self, tenant_id: UUID) -> List[Agent]:
         affected = [
             a
             for a in self.agents.values()
@@ -86,7 +89,8 @@ class InMemoryAgentRepository(AgentRepositoryPort):
         ]
         for agent in affected:
             agent.is_active = False
-        return len(affected)
+            agent.version += 1
+        return affected
 
     def distinct_tenant_ids(self) -> List[UUID]:
         return list({a.tenant_id.value for a in self.agents.values() if a.tenant_id is not None})

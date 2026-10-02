@@ -160,12 +160,13 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         ).fetchone()
         return self._row_to_agent(row) if row else None
 
-    def deactivate_all_by_tenant(self, tenant_id: UUID) -> int:
-        cursor = self.connection.execute(
-            "UPDATE agents SET is_active = FALSE, version = version + 1 WHERE tenant_id = %s AND is_active = TRUE",
+    def deactivate_all_by_tenant(self, tenant_id: UUID) -> List[Agent]:
+        rows = self.connection.execute(
+            "UPDATE agents SET is_active = FALSE, version = version + 1"
+            " WHERE tenant_id = %s AND is_active = TRUE RETURNING *",
             (tenant_id,),
-        )
-        return cursor.rowcount
+        ).fetchall()
+        return [self._row_to_agent(row) for row in rows]
 
     def distinct_tenant_ids(self) -> List[UUID]:
         # Not part of Task 5's literal spec (only declared abstract there,

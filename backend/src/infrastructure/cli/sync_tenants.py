@@ -8,6 +8,7 @@ startup: it is a one-off repair, not part of the boot sequence."""
 from typing import List
 
 from domain.entities.tenant import Tenant
+from domain.events.identity_events import TenantState
 
 
 def sync_tenants(uow) -> List[str]:
@@ -19,9 +20,10 @@ def sync_tenants(uow) -> List[str]:
                 continue
             short = str(tenant_id)[:8]
             # The identifier is preserved: existing agents already reference it.
-            uow.tenants.save(
+            tenant = uow.tenants.save(
                 Tenant.create(name=f"Organización {short}", tenant_id=tenant_id)
             )
+            uow.outbox.record(TenantState.of(tenant), channel="internal")
             created.append(short)
     return created
 

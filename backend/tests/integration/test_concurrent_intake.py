@@ -101,7 +101,8 @@ def test_two_runs_over_the_same_record_produce_one_lead(test_db, concurrent_db):
             "SELECT COUNT(*) AS n FROM leads WHERE tenant_id = %s", (tenant_id,)
         ).fetchone()["n"]
         events = conn.execute(
-            "SELECT COUNT(*) AS n FROM outbox_events WHERE tenant_id = %s", (str(tenant_id),)
+            "SELECT COUNT(*) AS n FROM outbox_events WHERE tenant_id = %s AND channel = 'product'",
+            (str(tenant_id),),
         ).fetchone()["n"]
 
     assert leads == 1

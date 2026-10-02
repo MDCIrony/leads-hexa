@@ -132,3 +132,21 @@ class TestDeleteSalesGroup:
         survivor = uow.agents.get_by_id(agent.id.value)
         assert survivor is not None
         assert survivor.group_id is None
+
+
+def test_deleting_a_group_records_each_orphaned_agent():
+    """Clearing group_id is an agent write: its version moves, so downstream
+    copies must hear about it even though AgentState does not carry the group."""
+    uow = _uow()
+    tenant = uuid.uuid4()
+    group = CreateSalesGroupUseCase(uow=uow).execute(_command(tenant))
+    agent = uow.agents.save(
+        Agent.create(name="Ana", email="ana@acme.test", group_id=group.id.value, tenant_id=tenant)
+    )
+
+    DeleteSalesGroupUseCase(uow=uow).execute(tenant_id=tenant, group_id=group.id.value)
+
+    entries = uow.outbox.list_unpublished("internal", 10)
+    assert [(e.event_type, e.payload["agent_id"], e.payload["version"]) for e in entries] == [
+        ("AgentState", str(agent.id), 2)
+    ]
