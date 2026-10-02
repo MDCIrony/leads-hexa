@@ -4,7 +4,7 @@ Tres comandos, cada uno demuestra algo que los otros dos no. Ninguno necesita `-
 `restart` para reflejar un cambio.
 
 ```bash
-docker compose --profile test run --rm backend-test    # suite completa     ~45 s
+docker compose --profile test run --rm backend-test    # suite completa     ~4 min
 cd backend && uv run pytest -m unit -q                 # dominio aislado    ~1 s
 ./scripts/verify-e2e.sh                                # negocio sobre HTTP ~3 s
 ```
@@ -80,8 +80,8 @@ plataforma levantada — ver [Puesta en marcha](puesta-en-marcha.md).
 El script se amplía, nunca se reescribe: cada fase de trabajo añade su propia función `verify_fN` y
 la llama desde `main`, de modo que las comprobaciones anteriores siguen corriendo y probando que lo
 que ya funcionaba sigue funcionando. Las fases del [desacople en microservicios](../microservices/06-plan-de-desacople.md)
-usan `verify_ms_f0`, `verify_ms_f1` y `verify_ms_f2`, porque los nombres `verify_fN` ya eran de
-planes anteriores.
+usan una `verify_ms_fN` por fase (`verify_ms_f0` es la primera), porque los nombres `verify_fN` ya eran
+de planes anteriores.
 
 ### El gateway: `verify_ms_f0`
 

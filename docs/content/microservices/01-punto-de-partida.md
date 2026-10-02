@@ -69,8 +69,9 @@ solo contexto.
 - Los routers protegidos reciben del gateway un bearer interno (JWT Ed25519 de 60 s). Todos dependen de
   `get_request_context`, que lo verifica y construye el `Principal`, y de sus tres guardas
   (`require_platform_admin`, `require_organization_manager`, `require_organization_member`).
-  Cambiar el origen de la identidad es un cambio en un único punto por servicio. Sólo `/auth/*` lee la
-  cookie.
+  Cambiar el origen de la identidad es un cambio en un único punto por servicio. Ninguna ruta de
+  negocio (`/api/v1/*` salvo `/api/v1/auth/*`) recibe la cookie: sólo `/auth/*` y la introspección
+  interna la leen.
 - `Origin` en escrituras y CORS se resuelven en el gateway, no en `main.py`.
 
 Algunas páginas fuera de esta sección todavía describen JWT/Bearer como mecanismo de sesión

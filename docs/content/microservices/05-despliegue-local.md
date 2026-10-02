@@ -144,11 +144,14 @@ contraseñas de los brokers. Los secretos de OAuth siguen leyéndose de `.env`.
 | `./scripts/verify-e2e.sh` | El negocio de punta a punta sobre HTTP real, contra el gateway en `:8001` |
 
 `verify-e2e.sh` no cambia de destino ni se reescribe: cada fase de este desacople añade su
-`verify_ms_fN` (`verify_ms_f0`, `verify_ms_f1`, `verify_ms_f2`; los nombres `verify_fN` ya son de planes
-anteriores) y la llama desde `main`. `verify_ms_f0` va la última porque detiene y arranca el backend.
+`verify_ms_fN` (una por fase; los nombres `verify_fN` ya son de planes anteriores) y la llama desde
+`main`. `verify_ms_f0` va la última porque detiene y arranca el backend.
+
 Con `--reset` recrea el volumen y espera a que `/api/v1/auth/me` responda 401: el gateway contesta
-`/health` antes de que el backend haya migrado, así que `/health` no vale como señal de «listo». Cada servicio lleva sus cuatro tests de guardián, y el de lead-core sigue siendo el del
-backend actual.
+`/health` antes de que el backend haya migrado, así que `/health` no vale como señal de «listo».
+
+Cada servicio lleva sus cuatro tests de guardián, y el de lead-core sigue siendo el del backend
+actual.
 
 ## Estados intermedios
 

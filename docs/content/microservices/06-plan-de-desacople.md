@@ -28,7 +28,7 @@ flowchart LR
 1. La suite de cada servicio tocado pasa: `docker compose --profile test run --rm <svc>-test`.
 2. `pytest -m unit` de cada servicio tocado pasa **sin base y sin variables de entorno**.
 3. Los cuatro tests de guardián pasan en cada servicio.
-4. `./scripts/verify-e2e.sh` pasa entero, incluida la `verify_fN` nueva de la fase.
+4. `./scripts/verify-e2e.sh` pasa entero, incluida la `verify_ms_fN` nueva de la fase.
 5. La documentación que describe el sistema actual (C4, módulos, eventos) refleja lo que cambió.
 6. El ADR de la fase pasa a reflejar su estado real.
 
@@ -95,8 +95,8 @@ interno. Sigue habiendo un único servicio.
   `GET /leads` con `X-Api-Key`, y duración de un job de 1.000 registros.
 
 **`verify_ms_f0`** (corre la última: detiene el backend; los nombres `verify_f0_identity`,
-`verify_f2a`… ya pertenecen a planes anteriores, así que las fases de este desacople son
-`verify_ms_f0`, `verify_ms_f1` y `verify_ms_f2`)
+`verify_f2a`… ya pertenecen a planes anteriores, así que las fases de este desacople
+llevan una `verify_ms_fN` cada una)
 
 - Un `Authorization: Bearer <basura>` sin cookie → 401 con el sobre y el mensaje del gateway.
 - Un JWT firmado con otra clave → 401, por el gateway y directo al servicio.
@@ -111,8 +111,9 @@ interno. Sigue habiendo un único servicio.
 - Un cuerpo de más de 10 MB → 413.
 - Con el backend parado → 503 `SERVICE_UNAVAILABLE`, y vuelve a responder al arrancarlo.
 
-**Criterio de salida.** Los checks previos de `verify-e2e.sh` pasan, más `verify_ms_f0`. El backend no
-recibe nunca la cookie fuera de `/auth/*`.
+**Criterio de salida.** Los checks previos de `verify-e2e.sh` pasan, más `verify_ms_f0`. Ninguna ruta de
+negocio (`/api/v1/*` salvo `/api/v1/auth/*`) recibe la cookie: sólo `/auth/*` y la introspección
+interna la leen.
 
 ---
 
@@ -145,7 +146,7 @@ siga vivo.
 - Procesos: `backend` deja de arrancar el relay. Nuevo servicio `backend-worker` (`worker.py`: relay +
   consumidores de notificaciones). `intake-worker` sigue igual.
 
-**`verify_f1`**
+**`verify_ms_f1`**
 
 - Con `rabbitmq` parado, una ingesta → 202 y el job queda `PENDING`; al arrancar `rabbitmq`, el job
   termina y el lead aparece.
@@ -184,7 +185,7 @@ ingesta (`intake_files`, `nack`, encolado por outbox). El *corte* espera a que F
 - `backend`: se eliminan router, casos de uso, handler y repositorio de notificaciones, y
   `notifications` sale de `PostgresUnitOfWork`.
 
-**`verify_f2`**
+**`verify_ms_f2`**
 
 - Asignar un lead genera la notificación del asesor, visible a través del gateway.
 - Un lead que queda sin asignar notifica a los managers del tenant (proyección `members`).
@@ -221,7 +222,7 @@ después del corte. `backend` no contiene ningún módulo de notificaciones.
   `AgentCreate` y `AgentUpdate` declaran `extra="forbid"`: hoy Pydantic ignora un campo sobrante, y un
   cliente que siguiera enviando `group_id` creería haber asignado un grupo que nadie guardó.
 
-**`verify_f3`**
+**`verify_ms_f3`**
 
 - Los checks existentes de login, MFA, OAuth, `/auth/me` y credencial de integración pasan sin
   modificarse.
@@ -257,7 +258,7 @@ variables de MFA u OAuth.
 - Gateway: `/sources` e `/intake` → `intake`.
 - Frontend: cambio de contrato 2.
 
-**`verify_f4`**
+**`verify_ms_f4`**
 
 - Ingesta individual → lead asignado, visible en `GET /leads` y con su registro `PROMOTED`.
 - Subida de fichero con filas válidas, inválidas y descalificadas → los recuentos de siempre.
@@ -286,7 +287,7 @@ prueba; ningún servicio salvo intake tiene credenciales sobre `intake_db`.
 - Documentación del sistema actual: C4 de contenedores y componentes, modelo de datos, módulos,
   eventos y `CLAUDE.md` (comandos de validación por servicio).
 
-**`verify_f5`.** El recorrido completo de `verify-e2e.sh`, sin checks nuevos: la fase no cambia
+**`verify_ms_f5`.** El recorrido completo de `verify-e2e.sh`, sin checks nuevos: la fase no cambia
 comportamiento.
 
 **Criterio de salida.** Cinco servicios con su guardián 4/4; cada base accesible sólo por su rol; la

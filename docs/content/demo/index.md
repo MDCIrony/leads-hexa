@@ -81,16 +81,16 @@ del fichero, no una opción de la pantalla.
 
 ```bash
 # Lo mismo por API, si prefieres verlo en crudo
-TOKEN=$(curl -s -X POST localhost:8001/api/v1/auth/login \
-  -d 'username=gestor@nordwindsolar.test&password=Demo1234' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -s -c /tmp/nordwind.cookies -X POST localhost:8001/api/v1/auth/login \
+  -d 'username=gestor@nordwindsolar.test&password=Demo1234'
 curl -s -X POST localhost:8001/api/v1/intake/leads/batch-upload \
-  -H "Authorization: Bearer $TOKEN" -F "file=@demo/leads-lote-1.csv"
+  -b /tmp/nordwind.cookies -F "file=@demo/leads-lote-1.csv"
 ```
 
 ## Acto 2 · Las reglas deciden, y lo dicen
 
 ```bash
-curl -s localhost:8001/api/v1/leads/stats -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+curl -s localhost:8001/api/v1/leads/stats -b /tmp/nordwind.cookies | python3 -m json.tool
 ```
 
 Con los dos ficheros cargados: **40 leads, 36 asignados y 4 descartados**.
@@ -119,10 +119,10 @@ Sal de la sesión y entra como `lucia.ferrer@nordwindsolar.test` / `Demo1234`.
 403** — un 403 confirmaría que existe.
 
 ```bash
-LUCIA=$(curl -s -X POST localhost:8001/api/v1/auth/login \
-  -d 'username=lucia.ferrer@nordwindsolar.test&password=Demo1234' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -s -c /tmp/lucia.cookies -X POST localhost:8001/api/v1/auth/login \
+  -d 'username=lucia.ferrer@nordwindsolar.test&password=Demo1234'
 # El identificador de un lead que no es suyo, sacado de la lista de la gestora:
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8001/api/v1/leads/<id-ajeno> -H "Authorization: Bearer $LUCIA"
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8001/api/v1/leads/<id-ajeno> -b /tmp/lucia.cookies
 ```
 
 ## Acto 4 · El cliente recibe los leads ya asignados
@@ -186,9 +186,9 @@ entrada**: corregir una fila rechazada se hace hoy por API. Está en la
 ```bash
 JOB=<el job de la carga>
 curl -s "localhost:8001/api/v1/intake/records?status=REJECTED&job_id=$JOB" \
-  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+  -b /tmp/nordwind.cookies | python3 -m json.tool
 curl -s -X POST "localhost:8001/api/v1/intake/records/<id>/promote" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -b /tmp/nordwind.cookies -H 'Content-Type: application/json' \
   -d '{"payload":{"first_name":"Teresa","last_name":"Puigcerver","email":"teresa.puigcerver@puig.test","company":"Puig Agrícola","industry":"Agroalimentario","budget":34000}}'
 ```
 
@@ -199,7 +199,7 @@ Se convierte en lead sin volver a subir el fichero. Promocionar dos veces la mis
 
 ```bash
 docker compose stop kafka rabbitmq
-curl -s -X POST localhost:8001/api/v1/intake/leads/ingest -H "Authorization: Bearer $TOKEN" \
+curl -s -X POST localhost:8001/api/v1/intake/leads/ingest -b /tmp/nordwind.cookies \
   -H 'Content-Type: application/json' \
   -d '{"first_name":"Sin","last_name":"Broker","email":"sinbroker@x.test","company":"Prueba","industry":"Industrial","budget":90000}'
 ```

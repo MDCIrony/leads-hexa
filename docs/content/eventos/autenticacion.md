@@ -90,7 +90,7 @@ cabecera llegue — no una cabecera que mezcla dos formatos, sino dos caminos vi
 flowchart TB
     Req["GET /leads"] --> Check{"¿Trae X-Api-Key?"}
     Check -->|"Sí"| Api["resolve_integration_context<br/>agent_id.secret → agents"]
-    Check -->|"No"| Jwt["JWT Bearer<br/>resolve_current_agent"]
+    Check -->|"No"| Jwt["Sesión humana<br/>cookie introspeccionada en el gateway"]
     Api --> Ctx["RequestContext"]
     Jwt --> Manager{"¿rol MANAGER?"}
     Manager -->|"Sí"| Ctx
@@ -104,7 +104,7 @@ rotación son la misma llamada, así que no hay dos rutas que puedan divergir. L
 
 ```json
 POST /api/v1/agents/integration-credential
-Authorization: Bearer <jwt-del-manager>
+Cookie: leads_session=<sesión-del-manager>
 ```
 ```json
 {
@@ -129,7 +129,7 @@ teatro que este trabajo cierra. Verificado que ese fallo tarda hasta 10 s en con
 
 ## Por qué el rol de máquina no es un asesor
 
-`AgentRole.INTEGRATION` está excluido de `POST /auth/login` (no puede obtener un JWT de sesión) y de
+`AgentRole.INTEGRATION` está excluido de `POST /auth/login` (no puede obtener una sesión) y de
 `POST /agents` (no se crea por la vía genérica, sólo por `POST /agents/integration-credential`, que
 genera su propio secreto en vez de aceptar uno en el cuerpo). Pero vivir en la tabla `agents` traía
 un hueco que el primer borrador de este trabajo no cerraba: `GET /agents` y el pool de candidatos del

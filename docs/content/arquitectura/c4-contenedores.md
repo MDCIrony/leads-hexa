@@ -13,7 +13,7 @@ El segundo nivel del modelo C4: las piezas desplegables que forman Lead Router, 
 | `db` | PostgreSQL 16 (`postgres:16-alpine`) | 5433:5432 | Protocolo de PostgreSQL, vía `psycopg` | Único almacén de estado del sistema |
 | `docs` | MkDocs Material | 8002:8000 | HTTP | Este sitio, servido desde `docs/content` |
 
-Un quinto servicio, `backend-test`, existe sólo bajo el perfil `test`: construye la misma imagen
+Otro servicio, `backend-test`, existe sólo bajo el perfil `test`: construye la misma imagen
 con destino `test` y ejecuta la suite contra una base de datos efímera. No es un contenedor de
 producto; ver [Validación](../desarrollo/validacion.md).
 

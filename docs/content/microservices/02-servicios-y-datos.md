@@ -203,7 +203,7 @@ copiara, bastaría que una copia divergiera para abrir un agujero.
 | `chassis.outbox` | Relay genérico y despachadores (Kafka, RabbitMQ, webhook) filtrados por `channel` |
 | `chassis.consumer` | Bucle de consumo Kafka con `processed_events`, reintentos y DLQ; `ensure_topics()` |
 | `chassis.web` | Middleware de `X-Request-Id` y logging correlacionado |
-| `chassis.testing` | Helper del guardián AST, parametrizado por la raíz `src/` del servicio |
+| `chassis.testing` | Helper del guardián AST, parametrizado por la raíz `src/` del servicio. Entra en F2, cuando un segundo servicio lo necesita |
 
 Criterio de entrada: un módulo entra en `chassis` cuando lo necesitan dos servicios **y** no
 contiene ninguna regla de negocio. Lo que sólo usa uno se queda en ese servicio.

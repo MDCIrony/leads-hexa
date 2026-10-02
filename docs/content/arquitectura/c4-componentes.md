@@ -64,7 +64,7 @@ una regla de negocio por su cuenta.
 | `notification_router.py` | `/api/v1/notifications` | Notificaciones del usuario autenticado |
 
 Tres ficheros más, compartidos por todos los routers anteriores: `dependencies.py` construye el
-`RequestContext` a partir del JWT verificado y define las tres guardas de autorización
+`RequestContext` a partir del bearer interno verificado (el JWT de 60 s que el gateway obtiene por introspección, [ADR-0032](../decisiones/0032-gateway-y-phantom-token.md)) y define las tres guardas de autorización
 (`require_platform_admin`, `require_organization_manager`, `require_organization_member`), además
 de una función `get_..._use_case` por caso de uso que lo instancia con sus dependencias resueltas.
 `exception_handlers.py` traduce cada excepción de dominio a su código HTTP. `schemas.py` contiene
@@ -126,7 +126,6 @@ composition root.
 | `WebhookRepositoryPort` | `RawSqlWebhookRepository` | `persistence/raw_sql_webhook_repository.py` |
 | `UnitOfWorkPort` | `PostgresUnitOfWork` | `persistence/postgres_unit_of_work.py` |
 | `PasswordHasherPort` | `BcryptPasswordHasher` | `security/bcrypt_password_hasher.py` |
-| `TokenServicePort` | `JwtTokenService` | `security/jwt_token_service.py` |
 | `ClockPort` | `SystemClock` | `system_clock.py` |
 | `IdGeneratorPort` | `UuidGenerator` | `uuid_generator.py` |
 | `DomainEventPublisherPort` | `InMemoryEventPublisher` | `events/in_memory_event_publisher.py` |
@@ -142,7 +141,7 @@ sustituirlas: `persistence/connection.py` (`RawSqlDatabase`, el pool de conexion
 
 `infrastructure/di/container.py` define `Container`: construye las implementaciones sin estado
 propio como instancias únicas para todo el proceso (`database`, `password_hasher`,
-`token_service`, `clock`, `id_generator`, `file_parser`, `event_publisher`, `assignment_engine`),
+`token_verifier`, `clock`, `id_generator`, `file_parser`, `event_publisher`, `assignment_engine`),
 y expone `unit_of_work()` como una fábrica — cada petición recibe la suya, porque una unidad de
 trabajo abre su propia transacción y no puede compartirse entre peticiones concurrentes. Es aquí
 donde se resolvió el defecto original del round-robin: el cursor ya no vive en una instancia que

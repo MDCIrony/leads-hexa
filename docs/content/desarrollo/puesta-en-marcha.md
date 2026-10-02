@@ -27,7 +27,7 @@ Puertos reales en el host:
 | API (`gateway`) | `8001` | `8000` es un puerto común y suele estar ocupado |
 | Base de datos | `5433` | `5432` es el puerto por defecto de un PostgreSQL local |
 | Interfaz web | `80` | — |
-| Documentación | `8002` | `8000` y `8001` ya están tomados por la API |
+| Documentación | `8002` | `8001` es el gateway, y `8000` es un puerto común que suele estar ocupado |
 
 Dentro de la red de `compose` cada servicio sigue escuchando en su puerto estándar (el gateway en
 `8080`, `backend` en `8000`, la base en `5432`); el remapeo sólo afecta a cómo se les llega desde el

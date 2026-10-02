@@ -1,4 +1,4 @@
-"""TestClient that behaves like the gateway in front of the API (ADR-0031).
+"""TestClient that behaves like the gateway in front of the API (ADR-0032).
 
 Mirrors gateway/nginx.conf: it authenticates through the internal
 introspection endpoint and forwards only the resulting bearer, so e2e tests

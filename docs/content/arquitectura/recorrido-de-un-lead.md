@@ -19,7 +19,7 @@ sequenceDiagram
     participant Fondo as Tarea de fondo
 
     Gestor->>Router: POST /api/v1/intake/leads/ingest
-    Router->>Router: valida el JWT y deriva tenant_id del token
+    Router->>Router: verifica el bearer interno del gateway y deriva tenant_id de sus claims
     Router->>Caso: execute(ReceiveIntakeCommand)
     Caso->>BD: crear IntakeJob (PENDING)
     Caso->>BD: crear IntakeRecord (PENDING, payload sin transformar)

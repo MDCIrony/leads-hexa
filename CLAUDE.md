@@ -31,7 +31,7 @@ volúmenes, y la API recarga en caliente lo que cambie en `src/`. Sólo se recon
 `pyproject.toml`, `uv.lock` o el `Dockerfile`.
 
 ```bash
-docker compose --profile test run --rm backend-test    # suite completa     ~45 s
+docker compose --profile test run --rm backend-test    # suite completa     ~4 min
 cd backend && uv run pytest -m unit -q                 # dominio aislado    ~1 s
 ./scripts/verify-e2e.sh                                # negocio sobre HTTP ~3 s
 ```
