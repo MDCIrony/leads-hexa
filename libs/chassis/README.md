@@ -11,6 +11,9 @@ token interno (Ed25519, ADR-0032) y correlación de peticiones por `X-Request-ID
   `internal.dlq.<grupo>`), `ensure_topics`, `TopicSpec`. El consumidor se crea con
   `enable.auto.commit=false` y `auto.offset.reset=earliest`.
 - `chassis.rabbit`: `RabbitJobDispatcher` (publica con *confirms*, `mandatory` y persistente).
+- `chassis.testing`: `assert_structure` y `assert_domain_tests_isolated`, los guardianes de estructura
+  (ADR-0037) que cada servicio llama desde `tests/architecture/`. `python -m chassis.testing src` imprime
+  la lista base de un árbol.
 
 ## Extras
 

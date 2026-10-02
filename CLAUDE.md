@@ -47,6 +47,13 @@ Cada uno demuestra algo que los otros no:
 Dentro de la suite viajan cuatro tests que analizan el AST y fallan si el dominio importa algo de
 fuera o la aplicación importa infraestructura. **Deben estar siempre 4/4.**
 
+A su lado, `tests/architecture/test_structure.py` aplica la regla de estructura (ADR-0037) con los
+helpers de `chassis.testing`: ficheros fuente de 150 líneas como mucho, 12 ficheros por carpeta y
+tests de dominio que sólo importan dominio. Lo heredado vive en `structure_baseline.py`, que **sólo
+encoge**: si adelgazas un fichero de la lista, baja o quita su entrada en el mismo commit
+(`cd backend && uv run python -m chassis.testing src` imprime los valores). `libs/chassis` se valida
+a sí mismo, sin lista base: `cd libs/chassis && uv run pytest -q -W error`.
+
 `verify-e2e.sh` se **amplía, nunca se reescribe**: cada fase añade su función `verify_fN` y la llama
 desde `main`. No necesita base limpia salvo que una migración lo exija, y entonces se pasa `--reset`.
 
@@ -91,6 +98,7 @@ Romper cualquiera es un defecto, no una preferencia de estilo.
 | | |
 |---|---|
 | **Guardián 4/4** | El dominio no importa nada fuera de la biblioteca estándar; la aplicación no importa infraestructura ni frameworks web |
+| **Estructura** | Fichero `.py` fuente ≤ 150 líneas, carpeta ≤ 12 ficheros `.py`, `servicio → capa → contexto`; un test de `tests/unit/domain/` sólo importa dominio, stdlib y `pytest`. Lo nuevo cumple ya; la lista base sólo encoge |
 | **La organización sale del token** | Nunca de la URL ni del cuerpo de la petición |
 | **404, no 403** | Al leer una entidad de otra organización. Un 403 confirma que existe |
 | **SQL crudo, sin ORM** | Marcadores `%s` de psycopg, sin f-strings en consultas |

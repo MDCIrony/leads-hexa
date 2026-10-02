@@ -13,7 +13,7 @@ partida que las fases F2 a F5 van cortando. `backend` no publica puerto en el ho
 | Contenedor | Qué hace | Comparte |
 |---|---|---|
 | `backend` | API completa, migraciones y casos de uso. Sólo **escribe** en el outbox: no entrega nada | Imagen, código y base con los workers |
-| `backend-worker` | Un relay del outbox por canal (`product`, `internal`, `job`) y los consumidores de notificaciones (`worker.py`) | Imagen, código y base con `backend` |
+| `backend-worker` | Un relay del outbox por canal (`product`, `internal`, `job`) y los consumidores de notificaciones (`infrastructure/worker/`) | Imagen, código y base con `backend` |
 | `intake-worker` | Consume `intake.jobs` y ejecuta el procesamiento del trabajo | Reutiliza el cableado de `dependencies.py` |
 | `db` | Un único `leads_db` con las tablas de todos los contextos | — |
 | `rabbitmq` | `intake.jobs` (cuórum, `x-delivery-limit: 3`) y `intake.jobs.dlq` | — |

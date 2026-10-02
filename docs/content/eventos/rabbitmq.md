@@ -126,7 +126,7 @@ Un `NackError` o un mensaje no enrutable no se reintentan por reconexión: la fi
 | El mensaje y su procesamiento | `infrastructure/workers/job_messages.py` |
 | El trabajador | `infrastructure/workers/intake_worker.py` |
 | La topología de la cola | `infrastructure/adapters/output/queue/intake_queue_topology.py` |
-| El despachador que publica | `libs/chassis/src/chassis/rabbit.py` (`RabbitJobDispatcher`), cableado en `infrastructure/worker.py` |
+| El despachador que publica | `libs/chassis/src/chassis/rabbit.py` (`RabbitJobDispatcher`), cableado en `infrastructure/worker/` |
 | El fichero guardado | `infrastructure/adapters/output/persistence/raw_sql_intake_file_repository.py` |
 | Los servicios | `docker-compose.yml`, `backend-worker` e `intake-worker` |
 

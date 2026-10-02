@@ -150,8 +150,8 @@ cliente y lo que se queda dentro son criterios distintos, y por eso son canales 
 | La tabla | `backend/migrations/009_outbox.sql`, `015_durability.sql` (canal y correlación) |
 | El puerto | `application/ports/output/outbox_repository_port.py` |
 | El adaptador SQL | `infrastructure/adapters/output/persistence/raw_sql_outbox_repository.py` |
-| El relay y los despachadores genéricos | `libs/chassis/src/chassis/outbox.py` (`OutboxRelay`, `run_relay`, `KafkaEventDispatcher`), `chassis/rabbit.py` (`RabbitJobDispatcher`) |
+| El relay y los despachadores genéricos | `libs/chassis/src/chassis/outbox/` (`OutboxRelay`, `run_relay`, `KafkaEventDispatcher`), `chassis/rabbit.py` (`RabbitJobDispatcher`) |
 | El almacén que lee el relay | `infrastructure/adapters/output/persistence/outbox_store.py` |
 | Los despachadores del producto | `infrastructure/adapters/output/events/*_outbound_dispatcher.py` |
 | Qué topic recibe cada evento interno | `infrastructure/adapters/output/events/internal_topics.py` |
-| El proceso que lo ejecuta | `infrastructure/worker.py`, servicio `backend-worker` |
+| El proceso que lo ejecuta | `infrastructure/worker/`, servicio `backend-worker` |

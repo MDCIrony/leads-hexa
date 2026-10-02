@@ -174,20 +174,20 @@ services/<svc>/
 │       ├── config/settings.py
 │       ├── di/container.py
 │       ├── main.py                     # proceso api
-│       └── worker.py                   # proceso worker: relay + consumidores
+│       └── worker/                     # proceso worker: relay + consumidores
 └── tests/
-    ├── architecture/test_dependency_rule.py   # llama al helper de chassis
+    ├── architecture/                          # capas y estructura, con los helpers de chassis.testing
     ├── unit/  integration/  e2e/
     └── conftest.py
 ```
 
 | Pieza | Regla |
 |---|---|
-| Procesos | Siempre dos, desde la misma imagen: `api` (`main.py`) y `worker` (`worker.py`). Un servicio sin consumidores tiene igualmente worker: el relay de su outbox vive ahí |
+| Procesos | Siempre dos, desde la misma imagen: `api` (`main.py`) y `worker` (paquete `worker/`, `python -m infrastructure.worker`). Un servicio sin consumidores tiene igualmente worker: el relay de su outbox vive ahí |
 | `RequestContext` | `RequestContext(principal, tenant_id)` en `application/dtos/context.py`. `Principal` es un dataclass del propio servicio: `agent_id`, `tenant_id`, `role`, `principal_type`. Sustituye a la entidad `Agent` que hoy viaja en el contexto |
 | `AuthorizationPolicy` | Misma lógica que hoy, sobre `Principal`. Vive en `domain/policies` de cada servicio que la necesita |
 | Errores | Mismo sobre `{error, error_code, message}` y misma tabla `STATUS_BY_ERROR_CODE` por servicio |
-| Guardián | Los cuatro tests AST de hoy, por servicio. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
+| Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que el servicio nuevo pasa sin lista base. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
 | Configuración | `Settings.from_environment()` falla al arrancar si falta un valor obligatorio, como hoy |
 
 ### `libs/chassis`

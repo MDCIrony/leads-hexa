@@ -151,6 +151,7 @@ nav:
       - "ADR-0034 · Encolado por outbox": decisiones/0034-encolado-por-outbox-y-fichero-durable.md
       - "ADR-0035 · Admisión síncrona idempotente": decisiones/0035-admision-sincrona-idempotente.md
       - "ADR-0036 · Cambios de contrato público": decisiones/0036-cambios-de-contrato-publico.md
+      - "ADR-0037 · Estructura y tamaño del código": decisiones/0037-estructura-y-tamano-del-codigo.md
 
   - Módulos:
       - modulos/index.md

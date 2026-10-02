@@ -15,6 +15,71 @@ Cuatro tests analizan esto por AST en cada corrida de la suite completa; ver
 [Validación](validacion.md). El razonamiento completo está en
 [ADR-0001](../decisiones/0001-arquitectura-hexagonal.md).
 
+## Estructura y tamaño del código
+
+El árbol de ficheros tiene que dejar ver la arquitectura hexagonal sin abrir ninguno. Cuatro
+límites lo sostienen:
+
+| Regla | Límite |
+|---|---|
+| Líneas por fichero `.py` fuente | 150, contando líneas en blanco y comentarios. Los tests no tienen límite |
+| Ficheros `.py` por carpeta | 12, sin contar `__init__.py` ni las subcarpetas |
+| Anidamiento | `servicio → capa → contexto o responsabilidad`; los tests siguen el mismo árbol |
+| Tests de dominio | `tests/unit/domain/**` sólo importa el dominio, la stdlib, `pytest` y sus propios helpers |
+
+Se agrupa por concepto en subcarpetas: ni una carpeta con decenas de ficheros de conceptos mezclados,
+ni una carpeta por fichero salvo que el concepto lo pida. Al partir un módulo en un paquete, su
+`__init__.py` reexporta los nombres públicos, para que nadie cambie sus imports.
+
+Árbol modelo de un servicio:
+
+```text
+<servicio>/
+├── src/
+│   ├── domain/
+│   │   └── <contexto>/                 # entidades, value objects, eventos y políticas de un concepto
+│   ├── application/
+│   │   ├── ports/{input,output}/<contexto>/
+│   │   └── use_cases/<contexto>/
+│   └── infrastructure/
+│       ├── adapters/input/api/<contexto>/
+│       ├── adapters/output/persistence/<contexto>/
+│       ├── main.py                     # proceso api
+│       └── worker/                     # proceso worker: config, relays, lanes, main, __main__
+└── tests/
+    ├── architecture/                   # guardián de capas, de estructura y su lista base
+    └── unit/{domain,application,infrastructure}/<contexto>/
+```
+
+Un ejemplo que ya cumple es `libs/chassis/src/chassis/`:
+
+```text
+chassis/
+├── auth/        claims.py  jwks.py  signing.py  verifier.py
+├── consumer/    envelope.py  kafka.py  loop.py  topics.py
+├── outbox/      envelope.py  kafka.py  relay.py
+├── testing/     isolation.py  structure.py      # los guardianes de esta sección
+├── rabbit.py
+└── web.py
+```
+
+**Cómo se comprueba.** `chassis.testing` ofrece `assert_structure` y `assert_domain_tests_isolated`;
+cada servicio los llama desde `tests/architecture/test_structure.py`, y `libs/chassis` se valida a sí
+mismo sin excepciones.
+
+**El backend heredado.** Lo que ya incumplía al llegar la regla está en
+`backend/tests/architecture/structure_baseline.py`, con lo que medía cada fichero y cada carpeta. La
+lista sólo encoge: falla si una entrada crece, si queda por encima de lo que mide el árbol y si ya
+cumple el límite. Quien adelgaza un fichero heredado actualiza la lista en el mismo commit; los
+valores se imprimen con:
+
+```bash
+cd backend && uv run python -m chassis.testing src
+```
+
+El código nuevo cumple sin entrar en la lista. El porqué y las alternativas están en
+[ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md).
+
 ## SQL crudo, sin ORM
 
 Toda consulta usa marcadores `%s` de psycopg — nunca f-strings ni `.format()` sobre el texto SQL,

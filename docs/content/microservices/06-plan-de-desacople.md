@@ -147,7 +147,7 @@ siga vivo.
       `ingest`, `batch-upload` y `reprocess`.
     - `batch-upload` guarda el fichero en `intake_files`; el worker lo parsea.
     - Un job interrumpido hace `nack`.
-- Procesos: `backend` deja de arrancar el relay. Nuevo servicio `backend-worker` (`worker.py`: relay +
+- Procesos: `backend` deja de arrancar el relay. Nuevo servicio `backend-worker` (`infrastructure/worker/`: relay +
   consumidores de notificaciones). `intake-worker` sigue igual.
 
 **Desviaciones respecto a lo anterior**
@@ -274,7 +274,7 @@ variables de MFA u OAuth.
 - `services/intake/`: recepción, jobs, registros, errores, fuentes, ficheros, parser (`pandas` y
   `openpyxl` salen de lead-core), cola, consumidor `intake.tenants`, `LeadAdmissionPort` con adaptador
   HTTP, `GET /intake/stats`, borrado de fuente contando registros. El `intake-worker` pasa a ser su
-  `worker.py`, con el relay de su outbox (`job` e `internal`).
+  worker (`infrastructure/worker/`), con el relay de su outbox (`job` e `internal`).
 - `intake_db`. `scripts/migrate/f4_intake.sh` copia `lead_sources`, `intake_jobs`, `intake_records`,
   `intake_errors`, `intake_files` y `provisioned_tenants`. Antes de congelar, se drenan el outbox `job`
   y `intake.jobs`.

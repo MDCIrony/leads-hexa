@@ -93,3 +93,4 @@ hecho, no una decisión.
 | [0034](0034-encolado-por-outbox-y-fichero-durable.md) | Encolado por outbox y fichero crudo durable | Aceptada · implantada en F1 |
 | [0035](0035-admision-sincrona-idempotente.md) | Admisión síncrona e idempotente entre Intake y Lead Core | Aceptada · F4 |
 | [0036](0036-cambios-de-contrato-publico.md) | Dos cambios en el contrato público | Aceptada · F3 y F4 |
+| [0037](0037-estructura-y-tamano-del-codigo.md) | Estructura y tamaño del código | Aceptada · F1; el backend heredado, en F3–F5 |

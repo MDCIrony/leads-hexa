@@ -101,5 +101,5 @@ gestor sobre un lead ya existente.
 - `backend/src/application/handlers/notification_handler.py`
 - `backend/src/infrastructure/adapters/input/events/notification_consumer.py`
 - `backend/src/infrastructure/adapters/output/events/internal_topics.py`
-- `backend/src/infrastructure/worker.py`
+- `backend/src/infrastructure/worker/`
 - `backend/src/infrastructure/adapters/input/api/notification_router.py`
