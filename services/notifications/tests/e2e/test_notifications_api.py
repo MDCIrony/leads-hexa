@@ -1,5 +1,11 @@
 from uuid import uuid4
 
+import pytest
+from fastapi.testclient import TestClient
+from starlette.requests import Request
+
+from infrastructure.adapters.input.api.dependencies import get_principal
+from infrastructure.main import app
 from tests.e2e.tokens import FOREIGN_SIGNER, bearer, mint_token
 
 URL = "/api/v1/notifications"
@@ -99,6 +105,29 @@ def test_non_uuid_subject_is_401(client, tenant_id):
     assert client.get(URL, headers=bearer(token)).status_code == 401
 
 
+def test_non_bearer_scheme_is_401(client, auth):
+    assert client.get(URL, headers={"Authorization": "Basic x"}).status_code == 401
+
+
+def test_non_uuid_tenant_is_401(client):
+    token = mint_token(tenant_id="not-a-uuid")
+
+    assert client.get(URL, headers=bearer(token)).status_code == 401
+
+
+def test_each_rejection_raises_a_fresh_exception():
+    # A shared instance would chain every request's traceback (and its frames)
+    # onto itself: an unbounded leak that any anonymous caller could trigger.
+    def rejection() -> Exception:
+        with pytest.raises(Exception) as caught:
+            get_principal(Request({"type": "http", "headers": []}), container=None)
+        return caught.value
+
+    first, second = rejection(), rejection()
+
+    assert first is not second
+
+
 def test_unreachable_jwks_is_503(client_without_keys, tenant_id):
     response = client_without_keys.get(URL, headers=bearer(mint_token(tenant_id=tenant_id)))
 
@@ -123,9 +152,5 @@ def test_request_id_is_returned_and_echoed(client, auth):
 
 
 def test_health_runs_the_lifespan_against_the_test_database(test_db):
-    from fastapi.testclient import TestClient
-
-    from infrastructure.main import app
-
     with TestClient(app) as client:
         assert client.get("/health").json() == {"status": "ok"}

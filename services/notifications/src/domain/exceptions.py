@@ -15,3 +15,10 @@ class ForbiddenException(DomainException):
 
     def __init__(self, message: str = "You do not have permission to perform this action"):
         super().__init__(message, error_code="FORBIDDEN")
+
+
+class UnauthorizedException(DomainException):
+    """Raised when the caller's identity cannot be established."""
+
+    def __init__(self, message: str = "Authentication required"):
+        super().__init__(message, error_code="UNAUTHORIZED")

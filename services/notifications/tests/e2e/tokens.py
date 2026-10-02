@@ -16,7 +16,7 @@ def jwks() -> dict:
 
 def mint_token(
     agent_id: UUID | str | None = None,
-    tenant_id: UUID | None = None,
+    tenant_id: UUID | str | None = None,
     role: str = "AGENT",
     ptype: str = "human",
     signer: Ed25519Signer = SIGNER,

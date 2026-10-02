@@ -14,11 +14,9 @@ from application.use_cases.notifications.mark_read import (
     MarkAllNotificationsReadUseCase,
     MarkNotificationReadUseCase,
 )
-from domain.exceptions import DomainException
+from domain.exceptions import DomainException, UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
 from infrastructure.di.container import Container
-
-_UNAUTHORIZED = DomainException("Authentication required", error_code="UNAUTHORIZED")
 
 
 def get_container(request: Request) -> Container:
@@ -28,7 +26,7 @@ def get_container(request: Request) -> Container:
 def _bearer_token(request: Request) -> str:
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
-        raise _UNAUTHORIZED
+        raise UnauthorizedException()
     return token.strip()
 
 
@@ -49,13 +47,13 @@ def get_principal(request: Request, container: Container = Depends(get_container
     except KeysUnavailable as error:
         raise DomainException("Signing keys unavailable", error_code="SERVICE_UNAVAILABLE") from error
     except (TokenError, ValueError) as error:
-        raise _UNAUTHORIZED from error
+        raise UnauthorizedException() from error
 
 
 def get_request_context(principal: Principal = Depends(get_principal)) -> RequestContext:
     """A machine credential never stands in for a person."""
     if principal.principal_type == "integration":
-        raise _UNAUTHORIZED
+        raise UnauthorizedException()
     # The organization comes from the verified identity, never from the path or body.
     return RequestContext(principal=principal, tenant_id=principal.tenant_id)
 
