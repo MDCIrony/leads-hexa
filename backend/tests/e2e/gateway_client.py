@@ -8,7 +8,8 @@ import httpx
 from fastapi.testclient import TestClient
 
 _INTROSPECT = "/internal/v1/auth/introspect"
-_PUBLIC_PREFIXES = ("/api/v1/auth/", "/health", "/openapi.json", "/docs")
+_PUBLIC_PREFIX = "/api/v1/auth/"
+_PUBLIC_EXACT = ("/health", "/openapi.json", "/docs")
 _OPTIONAL_PATHS = ("/api/v1/agents", "/api/v1/agents/")
 _UNAUTHORIZED = {"error": True, "error_code": "UNAUTHORIZED", "message": "Authentication required"}
 _NOT_FOUND = {"error": True, "error_code": "NOT_FOUND", "message": "Not Found"}
@@ -20,12 +21,14 @@ class GatewayClient(TestClient):
         path = merged.path
         headers = httpx.Headers(kwargs.pop("headers", None))
 
-        if path.startswith("/internal/"):
+        is_public = path.startswith(_PUBLIC_PREFIX) or path in _PUBLIC_EXACT
+        if not is_public and not path.startswith("/api/v1/"):
             return httpx.Response(404, json=_NOT_FOUND, request=httpx.Request(method, merged))
 
-        if path.startswith(_PUBLIC_PREFIXES) or not path.startswith("/api/v1/"):
-            # Public routes see everything but a client-supplied bearer.
-            headers.pop("authorization", None)
+        if is_public:
+            # Public routes see everything but a client-supplied bearer or key.
+            for name in ("authorization", "x-api-key"):
+                headers.pop(name, None)
             return super().request(method, url, headers=headers, **kwargs)
 
         introspection_headers = {

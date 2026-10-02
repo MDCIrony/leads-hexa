@@ -17,7 +17,7 @@ from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
     get_container, get_create_agent_use_case, get_deactivate_agent_use_case, get_get_agents_use_case,
     get_get_agent_use_case, get_issue_integration_credential_use_case, get_update_agent_use_case,
-    build_request_context, get_optional_principal, get_uow,
+    build_request_context, get_optional_human_principal, get_uow,
     require_organization_manager,
 )
 from infrastructure.adapters.input.api.schemas import (
@@ -46,7 +46,7 @@ def create_agent(
     request: AgentCreate,
     use_case: CreateAgentInputPort = Depends(get_create_agent_use_case),
     uow: UnitOfWorkPort = Depends(get_uow),
-    principal: Optional[Principal] = Depends(get_optional_principal),
+    principal: Optional[Principal] = Depends(get_optional_human_principal),
 ):
     with uow:
         is_bootstrap = uow.agents.count() == 0

@@ -358,15 +358,6 @@ def get_current_agent(
     return resolve_current_agent(token=token, uow=uow)
 
 
-def principal_from_agent(agent: Agent) -> Principal:
-    return Principal(
-        id=agent.id.value,
-        tenant_id=agent.tenant_id.value if agent.tenant_id else None,
-        role=agent.role,
-        principal_type="integration" if agent.role == AgentRole.INTEGRATION else "human",
-    )
-
-
 def build_request_context(principal: Principal) -> RequestContext:
     """The organization always comes from the verified identity, never from the
     request path or body."""
@@ -386,10 +377,16 @@ def _bearer_token(request: Request) -> Optional[str]:
 def _principal_from_token(token: str, container: Container) -> Principal:
     try:
         claims = container.token_verifier.verify(token)
+        role = AgentRole(claims.role)
+        # Identity always issues a coherent pair; anything else is not ours.
+        if claims.ptype not in ("human", "integration") or (
+            (role == AgentRole.INTEGRATION) != (claims.ptype == "integration")
+        ):
+            raise ValueError("incoherent role and principal type")
         return Principal(
             id=UUID(claims.sub),
             tenant_id=UUID(claims.tid) if claims.tid else None,
-            role=AgentRole(claims.role),
+            role=role,
             principal_type=claims.ptype,
         )
     except (TokenError, ValueError) as error:
@@ -410,6 +407,16 @@ def get_optional_principal(
     """None only when no bearer arrives; a bearer that fails verification is 401."""
     token = _bearer_token(request)
     return None if token is None else _principal_from_token(token, container)
+
+
+def get_optional_human_principal(
+    principal: Optional[Principal] = Depends(get_optional_principal),
+) -> Optional[Principal]:
+    """Same barrier as get_request_context for routes that also accept anonymous
+    callers: a machine credential never stands in for a person."""
+    if principal is not None and principal.principal_type == "integration":
+        raise UnauthorizedException("Authentication required")
+    return principal
 
 
 def get_request_context(principal: Principal = Depends(get_principal)) -> RequestContext:

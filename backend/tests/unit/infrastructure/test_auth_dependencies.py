@@ -12,11 +12,10 @@ from domain.entities.auth_session import AuthSession
 from domain.exceptions import ForbiddenException, UnauthorizedException
 from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
-    build_request_context,
+    get_optional_human_principal,
     get_optional_principal,
     get_principal,
     get_request_context,
-    principal_from_agent,
     require_manager_or_integration,
     resolve_current_agent,
     resolve_integration_agent,
@@ -141,39 +140,18 @@ def test_well_formed_but_unknown_token_is_unauthorized():
         resolve_current_agent(token="never-issued-session-value", uow=_uow_with(agent))
 
 
-def test_context_carries_the_agent_own_tenant():
-    agent = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
-    context = build_request_context(principal_from_agent(agent))
-    assert context.principal.id == agent.id.value
-    assert context.principal.principal_type == "human"
-    assert str(context.tenant_id) == str(_TENANT_A)
-
-
-def test_principal_type_follows_the_role():
-    integration = _integration_agent()
-    manager = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
-    assert principal_from_agent(integration).principal_type == "integration"
-    assert principal_from_agent(manager).principal_type == "human"
-
-
-def test_platform_admin_context_has_no_tenant():
-    admin = Agent.create("A", "a@test.com", role=AgentRole.ADMIN, tenant_id=None)
-    assert build_request_context(principal_from_agent(admin)).tenant_id is None
-
-
 def test_sales_agent_is_refused_organization_management():
     from infrastructure.adapters.input.api.dependencies import require_organization_manager
 
-    sales = Agent.create("S", "s@test.com", role=AgentRole.AGENT, tenant_id=_TENANT_A)
+    context = get_request_context(_principal(_bearer(role="AGENT")))
     with pytest.raises(ForbiddenException):
-        require_organization_manager(context=build_request_context(principal_from_agent(sales)))
+        require_organization_manager(context=context)
 
 
 def test_manager_is_allowed_organization_management():
     from infrastructure.adapters.input.api.dependencies import require_organization_manager
 
-    manager = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
-    context = build_request_context(principal_from_agent(manager))
+    context = get_request_context(_principal(_bearer()))
     assert require_organization_manager(context=context) is context
 
 
@@ -309,3 +287,27 @@ def test_manager_or_integration_refuses_a_sales_agent():
 def test_manager_or_integration_without_a_bearer_is_unauthorized():
     with pytest.raises(UnauthorizedException):
         require_manager_or_integration(get_principal(_request(), _StubContainer()))
+
+
+@pytest.mark.parametrize("role,ptype", [
+    ("MANAGER", "machine"),
+    ("MANAGER", ""),
+    ("INTEGRATION", "human"),
+    ("MANAGER", "integration"),
+    ("ADMIN", "integration"),
+])
+def test_an_incoherent_role_and_principal_type_is_unauthorized(role, ptype):
+    with pytest.raises(UnauthorizedException):
+        _principal(_bearer(role=role, ptype=ptype))
+
+
+def test_optional_human_principal_refuses_a_machine_principal():
+    token = _bearer(role="INTEGRATION", ptype="integration")
+    with pytest.raises(UnauthorizedException):
+        get_optional_human_principal(get_optional_principal(_request(token), _StubContainer()))
+
+
+def test_optional_human_principal_passes_none_and_humans_through():
+    assert get_optional_human_principal(None) is None
+    human = _principal(_bearer())
+    assert get_optional_human_principal(human) is human
