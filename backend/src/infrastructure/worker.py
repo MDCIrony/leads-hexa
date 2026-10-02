@@ -7,6 +7,7 @@ restart without interrupting delivery. Run with `python -m infrastructure.worker
 import logging
 import signal
 import threading
+import time
 from typing import Callable, Sequence
 
 from chassis.consumer import ConsumerLoop, TopicSpec, dlq_topic, ensure_topics
@@ -39,7 +40,7 @@ _LOGGER = logging.getLogger(__name__)
 # the monolith writes, so this process publishes on its behalf.
 _PRODUCER_NAME = "lead-core"
 _JOIN_TIMEOUT_SECONDS = 15.0
-_ENSURE_MAX_BACKOFF_SECONDS = 30.0
+_MAX_BACKOFF_SECONDS = 30.0
 
 
 class _PooledWebhookRepository(WebhookRepositoryPort):
@@ -56,15 +57,22 @@ class _PooledWebhookRepository(WebhookRepositoryPort):
             return RawSqlWebhookRepository(connection).get_by_tenant_and_event(tenant_id, event_type)
 
 
-def producer_config(bootstrap_servers: str) -> dict:
-    return {
+def producer_config(bootstrap_servers: str, auto_create_topics: bool = True) -> dict:
+    config = {
         "bootstrap.servers": bootstrap_servers,
         "acks": "all",
         "enable.idempotence": True,
-        # Matches the dispatchers' flush timeout: a message the producer is
-        # still retrying must not be delivered after its row was marked failed.
-        "message.timeout.ms": 10_000,
+        # Strictly below the dispatchers' 10 s flush: a message the producer is
+        # still retrying when flush gives up must not be delivered after its
+        # row was marked failed.
+        "message.timeout.ms": 9_000,
     }
+    if not auto_create_topics:
+        # Internal topics are created by ensure_topics with their retention and
+        # compaction; a topic lost later must fail loudly, not come back
+        # uncompacted through broker auto-creation.
+        config["allow.auto.create.topics"] = False
+    return config
 
 
 def build_dispatchers(product: Sequence[Dispatcher]) -> dict[str, list[Dispatcher]]:
@@ -75,6 +83,18 @@ def build_dispatchers(product: Sequence[Dispatcher]) -> dict[str, list[Dispatche
     Kafka would auto-create without compaction. `job` stays empty until the job
     channel is wired (task 4b)."""
     return {"product": list(product), "internal": [], "job": []}
+
+
+def build_relays(
+    store: Callable, dispatchers: dict[str, list[Dispatcher]],
+) -> dict[str, OutboxRelay]:
+    """One relay per channel, each on its own thread.
+
+    Delivery is sequential inside a relay, so a shared one would let an
+    unreachable Kafka on `internal` hold up the `product` webhooks behind it.
+    Each gets the channel's own list, which keeps the late activation of
+    `internal` visible to its relay."""
+    return {channel: OutboxRelay(store, {channel: lanes}) for channel, lanes in dispatchers.items()}
 
 
 def ensure_topics_until_ready(
@@ -91,11 +111,12 @@ def ensure_topics_until_ready(
     while not stop.is_set():
         try:
             ensure_topics(admin, specs)
-        except Exception:
-            _LOGGER.warning("Kafka topics not ready, retrying in %.0fs", delay, exc_info=True)
+        except Exception as exc:
+            _LOGGER.warning("Kafka topics not ready (%s), retrying in %.0fs", exc, delay)
+            _LOGGER.debug("Kafka topics not ready", exc_info=True)
             if stop.wait(delay):
                 return False
-            delay = min(delay * 2, _ENSURE_MAX_BACKOFF_SECONDS)
+            delay = min(delay * 2, _MAX_BACKOFF_SECONDS)
         else:
             _LOGGER.info("Kafka topics ensured: %s", ", ".join(spec.name for spec in specs))
             on_ready()
@@ -103,44 +124,52 @@ def ensure_topics_until_ready(
     return False
 
 
-def _run_consumer(
-    container: Container, bootstrap_servers: str, group: str, topic: str,
+def run_consumer_lane(
+    name: str, build_loop: Callable[[], ConsumerLoop],
     ready: threading.Event, stop: threading.Event,
 ) -> None:
+    """Builds a consumer and runs it; on any failure builds a new one after a capped backoff.
+
+    A fatal Kafka error or a failed subscribe ends one consumer, not the lane:
+    nothing restarts a dead thread, and under the dev file watcher a crashed
+    process stays up doing nothing. Only `stop` ends this."""
     # Subscribing earlier would let a group join and read a topic that Kafka
     # auto-created with the wrong configuration.
     while not ready.wait(0.5):
         if stop.is_set():
             return
+    delay = 1.0
+    while not stop.is_set():
+        started = time.monotonic()
+        try:
+            build_loop().run(stop)
+        except Exception as exc:
+            _LOGGER.warning("Consumer lane %s failed (%s), retrying in %.0fs", name, exc, delay)
+            _LOGGER.debug("Consumer lane %s failed", name, exc_info=True)
+            # A consumer that ran for a while before failing is a new incident,
+            # not a continuation of the last one.
+            if time.monotonic() - started > _MAX_BACKOFF_SECONDS:
+                delay = 1.0
+            if stop.wait(delay):
+                return
+            delay = min(delay * 2, _MAX_BACKOFF_SECONDS)
+
+
+def _consumer_loop(container: Container, bootstrap_servers: str, group: str, topic: str) -> ConsumerLoop:
     consumer = Consumer({
         "bootstrap.servers": bootstrap_servers,
         "group.id": group,
         "enable.auto.commit": False,
         "auto.offset.reset": "earliest",
     })
-    loop = ConsumerLoop(
+    _LOGGER.info("Consumer group %s subscribing to %s (dead letters: %s)", group, topic, dlq_topic(group))
+    return ConsumerLoop(
         consumer,
-        Producer(producer_config(bootstrap_servers)),
+        Producer(producer_config(bootstrap_servers, auto_create_topics=False)),
         group,
         [topic],
         NotificationConsumer(container.unit_of_work, group),
     )
-    _LOGGER.info("Consumer group %s subscribing to %s (dead letters: %s)", group, topic, dlq_topic(group))
-    loop.run(stop)
-
-
-def _guarded(name: str, target: Callable[[], None], stop: threading.Event, failed: threading.Event) -> threading.Thread:
-    def run() -> None:
-        try:
-            target()
-        except Exception:
-            # Nothing restarts a dead thread: take the process down so the
-            # supervisor does, instead of running on with a lane silently gone.
-            _LOGGER.error("Worker thread %s died", name, exc_info=True)
-            failed.set()
-            stop.set()
-
-    return threading.Thread(target=run, name=name, daemon=True)
 
 
 def main() -> int:
@@ -148,7 +177,7 @@ def main() -> int:
     settings = Settings.from_environment()
     container = Container(settings)
     bootstrap = settings.kafka_bootstrap_servers
-    stop, failed, ready = threading.Event(), threading.Event(), threading.Event()
+    stop, ready = threading.Event(), threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
@@ -161,38 +190,44 @@ def main() -> int:
     ]
     dispatchers = build_dispatchers(product_dispatchers)
     internal_dispatcher = KafkaEventDispatcher(
-        Producer(producer_config(bootstrap)), _PRODUCER_NAME, topic_for,
+        Producer(producer_config(bootstrap, auto_create_topics=False)), _PRODUCER_NAME, topic_for,
     )
 
     def activate_internal() -> None:
         dispatchers["internal"].append(internal_dispatcher)
         ready.set()
 
-    relay = OutboxRelay(lambda: open_outbox_store(container.database), dispatchers)
-    specs = [*INTERNAL_TOPIC_SPECS]
+    relays = build_relays(lambda: open_outbox_store(container.database), dispatchers)
+    admin = AdminClient({"bootstrap.servers": bootstrap})
     threads = [
-        _guarded(
-            "outbox-relay",
-            lambda: run_relay(relay, stop, settings.outbox_relay_interval_seconds),
-            stop, failed,
+        *(
+            threading.Thread(
+                target=run_relay, args=(relay, stop, settings.outbox_relay_interval_seconds),
+                name=f"relay-{channel}", daemon=True,
+            )
+            for channel, relay in relays.items()
         ),
-        _guarded(
-            "ensure-topics",
-            lambda: ensure_topics_until_ready(AdminClient({"bootstrap.servers": bootstrap}), specs, stop, activate_internal),
-            stop, failed,
+        threading.Thread(
+            target=ensure_topics_until_ready,
+            args=(admin, [*INTERNAL_TOPIC_SPECS], stop, activate_internal),
+            name="ensure-topics", daemon=True,
         ),
         *(
-            _guarded(
-                f"consumer-{group}",
-                lambda group=group, topic=topic: _run_consumer(container, bootstrap, group, topic, ready, stop),
-                stop, failed,
+            threading.Thread(
+                target=run_consumer_lane,
+                args=(
+                    group,
+                    lambda group=group, topic=topic: _consumer_loop(container, bootstrap, group, topic),
+                    ready, stop,
+                ),
+                name=f"consumer-{group}", daemon=True,
             )
             for group, topic in NOTIFICATION_GROUPS.items()
         ),
     ]
     for thread in threads:
         thread.start()
-    _LOGGER.info("Outbox relay running (channels: %s)", ", ".join(dispatchers))
+        _LOGGER.info("Lane %s started", thread.name)
 
     while not stop.wait(1.0):
         pass
@@ -200,7 +235,7 @@ def main() -> int:
     for thread in threads:
         thread.join(timeout=_JOIN_TIMEOUT_SECONDS)
     container.database.close()
-    return 1 if failed.is_set() else 0
+    return 0
 
 
 if __name__ == "__main__":

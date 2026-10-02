@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from chassis.consumer import TopicSpec
-from chassis.outbox import OutboxRelay, OutboxRow
+from chassis.outbox import OutboxRow
 
-from infrastructure.worker import build_dispatchers, ensure_topics_until_ready
+from infrastructure.worker import (
+    build_dispatchers, build_relays, ensure_topics_until_ready, producer_config, run_consumer_lane,
+)
 
 
 def _row(channel: str) -> OutboxRow:
@@ -66,7 +68,7 @@ class _FlakyAdmin:
 def test_the_job_channel_has_no_dispatcher_so_its_rows_stay_untouched():
     job = _row("job")
     store = _Store([job])
-    relay = OutboxRelay(store.open, build_dispatchers([_Recorder()]))
+    relay = build_relays(store.open, build_dispatchers([_Recorder()]))["job"]
 
     assert relay.drain("job") == 0
 
@@ -77,7 +79,7 @@ def test_the_internal_channel_waits_for_its_dispatcher():
     internal = _row("internal")
     store = _Store([internal])
     dispatchers = build_dispatchers([_Recorder()])
-    relay = OutboxRelay(store.open, dispatchers)
+    relay = build_relays(store.open, dispatchers)["internal"]
 
     assert relay.drain("internal") == 0
     assert store.failed == []
@@ -103,11 +105,12 @@ def test_topics_are_retried_until_kafka_answers_and_only_then_activated():
 
 def test_a_stop_during_the_retries_never_activates_the_channel():
     stop = _NoWaitEvent()
-    admin = _FlakyAdmin(failures=100, topics=set())
     activated = []
+    attempts = []
 
     class _StopsAfterFirstFailure(_FlakyAdmin):
         def list_topics(self, timeout):
+            attempts.append(1)
             stop.set()
             raise RuntimeError("broker unavailable")
 
@@ -117,4 +120,106 @@ def test_a_stop_during_the_retries_never_activates_the_channel():
 
     assert ready is False
     assert activated == []
-    assert admin.failures == 100
+    # Stopped on the first backoff, not retried until the broker answered.
+    assert len(attempts) == 1
+
+
+def test_each_channel_has_its_own_relay_that_drains_only_that_channel():
+    product, internal = _row("product"), _row("internal")
+    store = _Store([product, internal])
+    product_dispatcher = _Recorder()
+    dispatchers = build_dispatchers([product_dispatcher])
+    relays = build_relays(store.open, dispatchers)
+
+    assert set(relays) == {"product", "internal", "job"}
+    assert relays["product"].drain_all() == {"product": 1}
+    assert product_dispatcher.rows == [product]
+    # `internal` is not active yet and its relay never touches `product`.
+    assert relays["internal"].drain_all() == {"internal": 0}
+
+
+def test_the_internal_producer_never_auto_creates_topics_and_the_timeout_is_below_the_flush():
+    internal = producer_config("kafka:9092", auto_create_topics=False)
+    product = producer_config("kafka:9092")
+
+    assert internal["allow.auto.create.topics"] is False
+    assert "allow.auto.create.topics" not in product
+    # The dispatchers flush for 10 s.
+    assert internal["message.timeout.ms"] < 10_000
+
+
+class _Loop:
+    def __init__(self, runs):
+        self._runs = runs
+
+    def run(self, stop):
+        self._runs.append(1)
+
+
+def test_a_consumer_lane_builds_a_new_consumer_after_each_failure_until_one_runs():
+    ready, stop = threading.Event(), _NoWaitEvent()
+    ready.set()
+    runs, builds = [], []
+
+    def build():
+        builds.append(1)
+        if len(builds) <= 2:
+            raise RuntimeError("cannot subscribe")
+        stop.set()
+        return _Loop(runs)
+
+    run_consumer_lane("g", build, ready, stop)
+
+    assert len(builds) == 3
+    assert runs == [1]
+
+
+def test_a_consumer_lane_survives_a_loop_that_dies_while_running():
+    ready, stop = threading.Event(), _NoWaitEvent()
+    ready.set()
+    builds = []
+
+    class _FatalThenFine:
+        def __init__(self, fail):
+            self._fail = fail
+
+        def run(self, stop):
+            if self._fail:
+                raise RuntimeError("fatal kafka error")
+            stop.set()
+
+    def build():
+        builds.append(1)
+        return _FatalThenFine(fail=len(builds) == 1)
+
+    run_consumer_lane("g", build, ready, stop)
+
+    assert len(builds) == 2
+
+
+def test_a_stop_during_the_backoff_ends_the_lane_promptly():
+    ready, stop = threading.Event(), threading.Event()
+    ready.set()
+    started = threading.Event()
+
+    def build():
+        started.set()
+        raise RuntimeError("broker down")
+
+    lane = threading.Thread(target=run_consumer_lane, args=("g", build, ready, stop))
+    lane.start()
+    assert started.wait(2)
+    stop.set()
+    lane.join(timeout=2)
+
+    assert not lane.is_alive()
+
+
+def test_a_stop_before_the_topics_are_ready_ends_the_lane_without_building():
+    ready, stop = threading.Event(), threading.Event()
+    stop.set()
+    builds = []
+
+    run_consumer_lane("g", lambda: builds.append(1), ready, stop)
+
+    assert builds == []

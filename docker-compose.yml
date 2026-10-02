@@ -60,9 +60,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # No condition on kafka (ADR-0026) or rabbitmq (ADR-0027): both relays
-      # retry on their own schedule, so the API must come up and keep
-      # serving leads whether or not either broker is reachable yet.
+      # No condition on kafka (ADR-0026) or rabbitmq (ADR-0027): the API only
+      # records to the outbox and enqueues on request, and delivery retries in
+      # backend-worker, so it must come up and keep serving leads whether or
+      # not either broker is reachable yet.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
