@@ -15,7 +15,7 @@ BASELINE = {
     "domain/value_objects/": 13,
     "domain/value_objects/criterion.py": 163,
     "infrastructure/adapters/input/api/dependencies.py": 282,
-    "infrastructure/adapters/input/api/intake_router.py": 242,
+    "infrastructure/adapters/input/api/intake_router.py": 219,
     "infrastructure/adapters/input/api/lead_router.py": 228,
     "infrastructure/adapters/input/api/rule_router.py": 285,
     "infrastructure/adapters/input/api/schemas.py": 347,
