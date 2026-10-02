@@ -9,10 +9,16 @@ from application.ports.output.admissions import AdmissionUnavailable
 
 _LOGGER = logging.getLogger(__name__)
 
+# Tighter than the shared client's timeout: the token lock is held across this call,
+# so a hung identity must not stall every admission for the admission timeout.
+_TOKEN_TIMEOUT_SECONDS = 2.0
+
 
 def correlated_post(post: Callable[..., httpx.Response]) -> Callable[..., httpx.Response]:
     """The token request carries the caller's request id, like the call it precedes."""
-    return lambda url, **kwargs: post(url, headers=correlation_header(), **kwargs)
+    return lambda url, **kwargs: post(
+        url, headers=correlation_header(), timeout=_TOKEN_TIMEOUT_SECONDS, **kwargs,
+    )
 
 
 def correlation_header() -> dict[str, str]:

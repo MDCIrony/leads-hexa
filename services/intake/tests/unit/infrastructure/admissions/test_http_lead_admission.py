@@ -147,6 +147,16 @@ def test_the_call_carries_the_callers_request_id_and_none_outside_a_request():
     assert lead_core.token_requests[0].headers["X-Request-Id"] == "req-123"
 
 
+def test_the_token_request_has_its_own_short_timeout_so_a_hung_identity_cannot_hold_the_lock():
+    lead_core = LeadCore(respond(body=_ADMITTED))
+
+    _admit(lead_core)
+
+    assert lead_core.token_requests[0].extensions["timeout"]["read"] == 2.0
+    # The admission call keeps the shared client's longer timeout.
+    assert lead_core.calls[0].extensions["timeout"]["read"] == 5.0
+
+
 def test_the_failure_never_carries_the_secret_or_the_token():
     lead_core = LeadCore(respond(500, {"detail": "boom"}))
 

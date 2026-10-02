@@ -34,3 +34,12 @@ def test_every_caller_gets_its_own_unit_of_work_over_the_shared_pool():
 
     assert isinstance(first, PostgresUnitOfWork) and first is not second
     container.close()
+
+
+def test_only_the_api_verifies_tokens():
+    api, worker = Container(_API), Container(_WORKER)
+
+    assert api.token_verifier is not None
+    assert worker.token_verifier is None
+    api.close()
+    worker.close()

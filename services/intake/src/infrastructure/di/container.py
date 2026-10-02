@@ -1,5 +1,7 @@
+from collections.abc import Callable
+
 import httpx
-from chassis.auth import ServiceTokenClient
+from chassis.auth import AUDIENCE, ISSUER, JwksCache, ServiceTokenClient, TokenVerifier, http_jwks
 from chassis.persistence import RawSqlDatabase
 
 from infrastructure.adapters.output.admissions.http_admission_lookup import HttpAdmissionLookup
@@ -22,7 +24,9 @@ class Container:
     transaction, so each caller gets a fresh one. Serves both processes: each
     passes its own settings, and they share every field this reads."""
 
-    def __init__(self, settings: ApiSettings | WorkerSettings) -> None:
+    def __init__(
+        self, settings: ApiSettings | WorkerSettings, jwks_fetch: Callable[[], dict] | None = None,
+    ) -> None:
         self.settings = settings
         # The pool opens on first use, not here.
         self.database = RawSqlDatabase(settings.database_url)
@@ -36,6 +40,11 @@ class Container:
         lead_core = LeadCoreClient(settings.lead_core_url, tokens, self._http)
         self.lead_admission = HttpLeadAdmission(lead_core)
         self.admission_lookup = HttpAdmissionLookup(lead_core)
+        # Only the API verifies tokens; the worker has no JWKS_URL and no bearer to check.
+        fetch = jwks_fetch or (http_jwks(settings.jwks_url) if isinstance(settings, ApiSettings) else None)
+        self.token_verifier = (
+            TokenVerifier(JwksCache(fetch), issuer=ISSUER, audience=AUDIENCE) if fetch else None
+        )
 
     def unit_of_work(self) -> PostgresUnitOfWork:
         return PostgresUnitOfWork(self.database)
