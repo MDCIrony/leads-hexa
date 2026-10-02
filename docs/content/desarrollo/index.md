@@ -23,7 +23,7 @@ de ficheros.
 ## Orden de lectura
 
 1. [Puesta en marcha](puesta-en-marcha.md) — de cero a un lead ingerido, con comandos reales.
-2. [Validación](validacion.md) — los cuatro comandos que demuestran que un cambio no rompió nada.
+2. [Validación](validacion.md) — los cinco comandos que demuestran que un cambio no rompió nada.
 3. [Convenciones](convenciones.md) — cómo se escribe código aquí.
 4. [Cómo contribuir](contribuir.md) — ramas, revisión y cuándo hace falta un ADR.
 5. [API · Referencia](api-referencia.md) y [API · Errores](api-errores.md) — el contrato HTTP

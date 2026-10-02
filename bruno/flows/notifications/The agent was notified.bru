@@ -23,7 +23,7 @@ script:post-response {
 
   // Distintas versiones del cliente devuelven el cuerpo en `data` o en `body`.
   const unwrap = (r) => (r && r.data !== undefined ? r.data : r && r.body);
-  const findAssigned = (inbox) => inbox.items.find(
+  const findAssigned = (inbox) => (inbox?.items || []).find(
     (item) => item.kind === "LEAD_ASSIGNED" && item.lead_id && item.is_read === false
   );
 

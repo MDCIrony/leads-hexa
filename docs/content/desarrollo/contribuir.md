@@ -10,13 +10,14 @@ entienda sin abrir el diff.
 
 ## Antes de abrir una propuesta de cambio
 
-Los cuatro comandos de [Validación](validacion.md) sobre el cambio completo:
+Los cinco comandos de [Validación](validacion.md) sobre el cambio completo:
 
 ```bash
 docker compose --profile test run --rm backend-test
 cd backend && uv run pytest -m unit -q
 ./scripts/verify-e2e.sh
 ./scripts/verify-structure.sh
+cd bruno && bru run flows --env local -r
 ```
 
 Los cuatro tests de arquitectura deben seguir en 4/4, y los guardianes de estructura
@@ -93,5 +94,5 @@ Es la misma comprobación que conviene tener en integración continua.
 ## Para quien llega de fuera
 
 El flujo es el habitual de un proyecto abierto: bifurcar el repositorio, trabajar en una rama
-propia y abrir una propuesta de cambio contra `main` cuando los cuatro comandos de validación pasan.
+propia y abrir una propuesta de cambio contra `main` cuando los cinco comandos de validación pasan.
 La revisión sigue los mismos criterios que para el equipo interno.

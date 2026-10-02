@@ -1,6 +1,6 @@
 # Validación
 
-Cuatro comandos, cada uno demuestra algo que los otros no. Ninguno necesita `--build` ni
+Cinco comandos, cada uno demuestra algo que los otros no. Ninguno necesita `--build` ni
 `restart` para reflejar un cambio.
 
 ```bash
@@ -8,6 +8,7 @@ docker compose --profile test run --rm backend-test    # suite completa     ~4 m
 cd backend && uv run pytest -m unit -q                 # dominio aislado    ~1 s
 ./scripts/verify-e2e.sh                                # negocio sobre HTTP ~3 s
 ./scripts/verify-structure.sh                          # estructura, todo el repo ~1 s
+cd bruno && bru run flows --env local -r               # contrato como cliente ~10 s
 ```
 
 Cada servicio extraído trae su propia suite, con los mismos dos primeros comandos sobre su carpeta
@@ -318,7 +319,7 @@ Incluye `test_structure.py`: chassis cumple la regla de estructura sin lista bas
 ## La colección de Bruno
 
 `bruno/` vuelve a ser una validación fiable. Necesita el stack levantado y la CLI de Bruno en la
-máquina (`npm install -g @usebruno/cli`, la 3.1), y se corre desde su carpeta:
+máquina (`npm install -g @usebruno/cli@3.1`: el manejo de cookies que asume está comprobado en esa versión), y se corre desde su carpeta:
 
 ```bash
 cd bruno && bru run flows --env local -r                 # los seis flujos     ~10 s
