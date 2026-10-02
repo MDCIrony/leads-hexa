@@ -1,7 +1,10 @@
 import uuid
 
+import pytest
+
 from application.use_cases.intake.provision_tenant_sources import ProvisionTenantSourcesUseCase
 from domain.entities.lead_source import LeadSource
+from domain.exceptions import InvalidUUIDException
 from domain.value_objects.enums import LeadSourceKind
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
@@ -62,3 +65,28 @@ def test_a_tenant_the_monolith_already_provisioned_is_only_marked():
 
     assert _sources(uow, tenant_id) == [("Formulario manual", LeadSourceKind.MANUAL_FORM)]
     assert tenant_id in uow.provisioned_tenants.tenant_ids
+
+
+@pytest.mark.parametrize("changes", [
+    {"tenant_id": None}, {"tenant_id": 42}, {"is_active": None}, {"is_active": "true"},
+])
+def test_a_malformed_state_is_rejected_before_any_write(changes):
+    uow, payload = InMemoryUnitOfWork(), {**_payload(uuid.uuid4()), **changes}
+
+    with pytest.raises(ValueError):
+        ProvisionTenantSourcesUseCase().apply(payload, uow)
+
+    assert uow.provisioned_tenants.tenant_ids == set()
+
+
+def test_a_state_without_tenant_id_is_rejected():
+    uow, payload = InMemoryUnitOfWork(), _payload(uuid.uuid4())
+    del payload["tenant_id"]
+
+    with pytest.raises(ValueError):
+        ProvisionTenantSourcesUseCase().apply(payload, uow)
+
+
+def test_a_tenant_id_that_is_not_a_uuid_is_rejected():
+    with pytest.raises(InvalidUUIDException):
+        ProvisionTenantSourcesUseCase().apply({**_payload(uuid.uuid4()), "tenant_id": "acme"}, InMemoryUnitOfWork())

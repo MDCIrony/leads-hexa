@@ -11,12 +11,17 @@ class ProvisionTenantSourcesUseCase(ProvisionTenantSourcesInputPort):
     tenants topic must not recreate a source a manager deleted afterwards."""
 
     def apply(self, payload: dict, uow: UnitOfWorkPort) -> bool:
-        tenant_id = TenantId(payload["tenant_id"])
+        tenant_id, is_active = payload.get("tenant_id"), payload.get("is_active")
+        # Checked before TenantId, which would mint a random id from None:
+        # a malformed state must reach the DLQ, not fabricate an organization.
+        if not isinstance(tenant_id, str) or not isinstance(is_active, bool):
+            raise ValueError("TenantState needs a string tenant_id and a boolean is_active")
+        tenant_id = TenantId(tenant_id)
         if not uow.provisioned_tenants.mark(tenant_id.value):
             return False
         # Marked anyway: a later reactivation is not a birth, and the topic
         # replay must stay a no-op for this tenant either way.
-        if not payload["is_active"]:
+        if not is_active:
             return False
         # Until the cut, CreateTenantUseCase still creates these sources for a
         # tenant born in the monolith, and only the migration seeded the marks.
