@@ -6,22 +6,16 @@ from it with the test signer and forwards nothing else of the caller's, as nginx
 No principal means no bearer, so the app answers 401.
 
 After every forwarded request it drains the `job` outbox channel in process: what the
-relay, RabbitMQ and the worker do, minus the broker. The wiring is the container's own;
-only the admission adapter is replaced, by the fake the container carries."""
+relay and RabbitMQ do, then hands each message to the worker's real handler. The wiring is
+the container's own; only the admission adapter is replaced, by the fake the container carries."""
 import json
-from typing import Literal
-from uuid import UUID
 
 import httpx
 from fastapi.testclient import TestClient
 
-from application.use_cases.jobs.manage_jobs import GetIntakeJobUseCase
-from application.use_cases.jobs.process_intake_job import ProcessIntakeJobUseCase
-from application.use_cases.reception.process_batch import ProcessBatchUseCase
-from application.use_cases.records.ingest_lead import IngestLeadUseCase
-from domain.exceptions import DomainException
-from domain.value_objects.enums import IntakeJobKind
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
+from infrastructure.adapters.output.queue.job_message import job_message
+from infrastructure.worker.jobs import process_job_message
 from tests.tokens import mint_token
 
 _PRINCIPAL = "x-test-principal"
@@ -34,23 +28,6 @@ _MAX_JOB_DELIVERIES = 3
 def as_principal(agent_id, tenant_id, role: str = "MANAGER", ptype: str = "human") -> dict:
     """Headers that make the next request arrive as this principal."""
     return {_PRINCIPAL: json.dumps([str(agent_id), str(tenant_id) if tenant_id else None, role, ptype])}
-
-
-def process_job(container, tenant_id: UUID, job_id: UUID) -> Literal["ack", "nack"]:
-    """What the worker does with one `intake.jobs` message."""
-    uow = container.unit_of_work()
-    try:
-        job = GetIntakeJobUseCase(uow=uow).execute(tenant_id, job_id)
-        if job.kind == IntakeJobKind.BATCH:
-            ProcessBatchUseCase(uow=uow, file_parser=container.file_parser).execute(tenant_id, job_id)
-        ingest = IngestLeadUseCase(uow=uow, admission=container.lead_admission)
-        interrupted = ProcessIntakeJobUseCase(uow=uow, ingest=ingest).execute(tenant_id, job_id)
-    except DomainException:
-        # A missing or finished job: redelivering cannot change it.
-        return "ack"
-    except Exception:
-        return "nack"
-    return "nack" if interrupted else "ack"
 
 
 class GatewayClient(TestClient):
@@ -82,9 +59,10 @@ class GatewayClient(TestClient):
             if not rows:
                 return
             for row in rows:
-                tenant_id, job_id = UUID(row.payload["tenant_id"]), UUID(row.payload["job_id"])
+                # The worker's own message and handler: this client only stands in for the broker.
+                message = job_message(row)
                 for _ in range(_MAX_JOB_DELIVERIES):
-                    if process_job(self._container, tenant_id, job_id) == "ack":
+                    if process_job_message(self._container, message) == "ack":
                         break
                 with open_outbox_store(self._container.database) as store:
                     store.mark_published(row.id)

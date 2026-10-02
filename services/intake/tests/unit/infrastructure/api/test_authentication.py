@@ -32,21 +32,26 @@ _ROUTES = [
 _TENANT = "00000000-0000-4000-8000-0000000000aa"
 
 
-def _client(jwks_fetch=jwks):
-    container = Container(_SETTINGS, jwks_fetch=jwks_fetch)
-    app.dependency_overrides[get_container] = lambda: container
-    return TestClient(app)
+@pytest.fixture
+def make_client():
+    """Builds clients over containers that are closed, and the override removed, afterwards."""
+    containers = []
 
+    def _make(jwks_fetch=jwks) -> TestClient:
+        container = Container(_SETTINGS, jwks_fetch=jwks_fetch)
+        containers.append(container)
+        app.dependency_overrides[get_container] = lambda: container
+        return TestClient(app)
 
-@pytest.fixture(autouse=True)
-def _clean_overrides():
-    yield
+    yield _make
     app.dependency_overrides.clear()
+    for container in containers:
+        container.close()
 
 
 @pytest.mark.parametrize(("method", "path"), _ROUTES)
-def test_no_bearer_is_401(method, path):
-    response = _client().request(method, path)
+def test_no_bearer_is_401(method, path, make_client):
+    response = make_client().request(method, path)
 
     assert response.status_code == 401
     assert response.json()["error_code"] == "UNAUTHORIZED"
@@ -54,25 +59,25 @@ def test_no_bearer_is_401(method, path):
 
 @pytest.mark.parametrize(("method", "path"), _ROUTES)
 @pytest.mark.parametrize("role", ["AGENT", "ADMIN"])
-def test_a_role_that_does_not_manage_an_organization_is_403(method, path, role):
+def test_a_role_that_does_not_manage_an_organization_is_403(method, path, role, make_client):
     token = mint_token(tenant_id=None if role == "ADMIN" else _TENANT, role=role)
 
-    response = _client().request(method, path, headers=bearer(token))
+    response = make_client().request(method, path, headers=bearer(token))
 
     assert response.status_code == 403
     assert response.json()["error_code"] == "FORBIDDEN"
 
 
-def test_a_manager_without_an_organization_is_403():
-    response = _client().get("/api/v1/sources", headers=bearer(mint_token(role="MANAGER")))
+def test_a_manager_without_an_organization_is_403(make_client):
+    response = make_client().get("/api/v1/sources", headers=bearer(mint_token(role="MANAGER")))
 
     assert response.status_code == 403
 
 
-def test_an_integration_credential_is_401():
+def test_an_integration_credential_is_401(make_client):
     token = mint_token(tenant_id=_TENANT, role="INTEGRATION", ptype="integration")
 
-    assert _client().get("/api/v1/intake/records", headers=bearer(token)).status_code == 401
+    assert make_client().get("/api/v1/intake/records", headers=bearer(token)).status_code == 401
 
 
 @pytest.mark.parametrize("headers", [
@@ -81,15 +86,15 @@ def test_an_integration_credential_is_401():
     {"Authorization": "Bearer not-a-jwt"},
     bearer(mint_token(tenant_id=_TENANT, signer=FOREIGN_SIGNER)),
 ])
-def test_an_unusable_bearer_is_401(headers):
-    assert _client().get("/api/v1/sources", headers=headers).status_code == 401
+def test_an_unusable_bearer_is_401(headers, make_client):
+    assert make_client().get("/api/v1/sources", headers=headers).status_code == 401
 
 
-def test_unreachable_signing_keys_are_503_not_401():
+def test_unreachable_signing_keys_are_503_not_401(make_client):
     def unreachable() -> dict:
         raise ConnectionError("jwks endpoint is down")
 
-    response = _client(unreachable).get("/api/v1/sources", headers=bearer(mint_token(tenant_id=_TENANT)))
+    response = make_client(unreachable).get("/api/v1/sources", headers=bearer(mint_token(tenant_id=_TENANT)))
 
     assert response.status_code == 503
     assert response.json()["error_code"] == "SERVICE_UNAVAILABLE"

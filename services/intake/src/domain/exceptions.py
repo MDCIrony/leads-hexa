@@ -20,7 +20,7 @@ class InvalidUUIDException(DomainException):
 class UnauthorizedException(DomainException):
     """Raised when a request carries no valid identity."""
 
-    def __init__(self, message: str = "Authentication required or token invalid"):
+    def __init__(self, message: str = "Authentication required"):
         super().__init__(message, error_code="UNAUTHORIZED")
 
 
