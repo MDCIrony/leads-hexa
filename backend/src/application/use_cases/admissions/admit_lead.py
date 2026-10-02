@@ -29,10 +29,8 @@ _FIELD_BY_ERROR_CODE = {
 # NOT NULL in leads: a null here must be a deterministic REJECTED, not a
 # database error the caller would retry forever.
 _REQUIRED_TEXT = ("first_name", "last_name", "company", "industry")
-# leads.budget is NUMERIC(14, 2). Money accepts larger figures, and the overflow
-# at the insert is as deterministic as any validation: REJECTED, never a retry.
-# Compared unquantized: rounding a 28+ digit amount raises InvalidOperation, and
-# that 500 would poison the whole job. Anything from .995 rounds up past the column.
+# leads.budget is NUMERIC(14, 2): a bigger figure is REJECTED, never a retried 500. Compared
+# unquantized (rounding 28+ digits raises InvalidOperation); from .995 it rounds past the column.
 _BUDGET_CEILING = Decimal("999999999999.995")
 
 
