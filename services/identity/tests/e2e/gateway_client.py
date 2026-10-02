@@ -5,7 +5,7 @@ cookies and without any client bearer or key; every other /api/v1/ route is
 authenticated through identity's own introspection and reaches the service
 with the resulting bearer only. Tests that talk to the app without a gateway
 (the internal routes, a hand-minted bearer) use a plain TestClient."""
-import httpx
+import httpx2
 from fastapi.testclient import TestClient
 
 _INTROSPECT = "/internal/v1/auth/introspect"
@@ -20,11 +20,11 @@ class GatewayClient(TestClient):
     def request(self, method, url, **kwargs):
         merged = self._merge_url(url)
         path = merged.path
-        headers = httpx.Headers(kwargs.pop("headers", None))
+        headers = httpx2.Headers(kwargs.pop("headers", None))
 
         is_public = path.startswith(_PUBLIC_PREFIX) or path in _PUBLIC_EXACT
         if not is_public and not path.startswith("/api/v1/"):
-            return httpx.Response(404, json=_NOT_FOUND, request=httpx.Request(method, merged))
+            return httpx2.Response(404, json=_NOT_FOUND, request=httpx2.Request(method, merged))
 
         introspection_headers = {name: headers[name] for name in ("cookie", "x-api-key") if name in headers}
         # Neither a client bearer nor a key ever reaches the service: nginx overwrites them.
@@ -39,13 +39,13 @@ class GatewayClient(TestClient):
             headers=introspection_headers, cookies=kwargs.get("cookies"),
         )
         if introspection.status_code == 401:
-            return httpx.Response(401, json=_UNAUTHORIZED, request=httpx.Request(method, merged))
+            return httpx2.Response(401, json=_UNAUTHORIZED, request=httpx2.Request(method, merged))
         if introspection.status_code not in (200, 204):
             return introspection
 
         if introspection.status_code == 200:
             headers["Authorization"] = f"Bearer {introspection.headers['X-Internal-Token']}"
-        # An empty Cookie header stops httpx from adding the client's jar: the
+        # An empty Cookie header stops httpx2 from adding the client's jar: the
         # service must never see the session cookie on a bearer route.
         headers["Cookie"] = ""
         kwargs.pop("cookies", None)
