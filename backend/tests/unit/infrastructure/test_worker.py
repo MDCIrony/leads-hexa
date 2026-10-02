@@ -2,6 +2,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+import pytest
 from chassis.outbox import OutboxRow
 
 from infrastructure.worker.relays import build_dispatchers, build_relays
@@ -70,3 +71,19 @@ def test_each_channel_has_its_own_relay_that_drains_only_that_channel():
     assert product_dispatcher.rows == [product]
     # `internal` is not active yet and its relay never touches `product`.
     assert relays["internal"].drain_all() == {"internal": 0}
+
+
+def test_there_is_no_job_lane_any_more():
+    # The queue and its dispatcher belong to intake now.
+    assert "job" not in build_dispatchers([_Recorder()])
+
+
+def test_the_internal_topic_of_intake_is_not_this_services_to_publish_on():
+    from infrastructure.adapters.output.events.internal_topics import INTERNAL_TOPIC_SPECS, topic_for
+
+    with pytest.raises(ValueError, match="IntakeRejected"):
+        topic_for(OutboxRow(
+            id=uuid.uuid4(), channel="internal", tenant_id=None, partition_key="k",
+            event_type="IntakeRejected", payload={}, occurred_on=datetime.now(timezone.utc),
+            correlation_id=None))
+    assert [spec.name for spec in INTERNAL_TOPIC_SPECS] == ["internal.lead-core.events"]

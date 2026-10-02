@@ -12,7 +12,7 @@ def _bootstrap_admin(client: GatewayClient) -> dict:
 
 
 def _create_org(client: GatewayClient, admin: dict) -> tuple[dict, str]:
-    """Tenant, manager session, and a baseline scoring rule so a lead ingested
+    """Tenant, manager session, and a baseline scoring rule so a lead admitted
     with industry="tech" always reaches an assignable status (QUALIFIED, then
     UNASSIGNED once the engine finds no routing rule) instead of NEW."""
     manager_token = seed_org_manager()
@@ -36,7 +36,7 @@ def _create_agent(client: GatewayClient, manager_token: dict) -> tuple[dict, str
     return agent_of(manager_token, "Sales Agent")
 
 
-def _ingest_qualified_lead(client: GatewayClient, manager_token: dict, tenant_id: str) -> str:
+def _admit_qualified_lead(client: GatewayClient, manager_token: dict, tenant_id: str) -> str:
     headers = manager_token
     record = admit_lead(
         client,
@@ -58,8 +58,8 @@ def _ingest_qualified_lead(client: GatewayClient, manager_token: dict, tenant_id
     return lead_id
 
 
-def _ingest_and_assign(client: GatewayClient, manager_token: dict, tenant_id: str, agent_id: str) -> str:
-    lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
+def _admit_and_assign(client: GatewayClient, manager_token: dict, tenant_id: str, agent_id: str) -> str:
+    lead_id = _admit_qualified_lead(client, manager_token, tenant_id)
     assigned = client.post(
         f"/api/v1/leads/{lead_id}/assign",
         json={"agent_id": agent_id},
@@ -75,8 +75,8 @@ def test_an_agent_sees_only_their_own_leads_on_mine(test_db):
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
         agent_token, agent_id = _create_agent(client, manager_token)
-        mine_id = _ingest_and_assign(client, manager_token, tenant_id, agent_id)
-        _ingest_and_assign(client, manager_token, tenant_id, _create_agent(client, manager_token)[1])
+        mine_id = _admit_and_assign(client, manager_token, tenant_id, agent_id)
+        _admit_and_assign(client, manager_token, tenant_id, _create_agent(client, manager_token)[1])
 
         mine = client.get("/api/v1/leads/mine", headers=agent_token)
 
@@ -102,7 +102,7 @@ def test_a_manager_can_also_call_mine_and_gets_their_own(test_db):
         manager_token, tenant_id = _create_org(client, admin_token)
         manager_headers = manager_token
         manager_id = subject_of(manager_headers)
-        mine_id = _ingest_and_assign(client, manager_token, tenant_id, manager_id)
+        mine_id = _admit_and_assign(client, manager_token, tenant_id, manager_id)
 
         mine = client.get("/api/v1/leads/mine", headers=manager_headers)
 
@@ -117,7 +117,7 @@ def test_an_agent_cannot_read_a_colleagues_lead_detail(test_db):
         manager_token, tenant_id = _create_org(client, admin_token)
         agent_a_token, _ = _create_agent(client, manager_token)
         _, agent_b_id = _create_agent(client, manager_token)
-        colleagues_lead_id = _ingest_and_assign(client, manager_token, tenant_id, agent_b_id)
+        colleagues_lead_id = _admit_and_assign(client, manager_token, tenant_id, agent_b_id)
 
         response = client.get(
             f"/api/v1/leads/{colleagues_lead_id}",
@@ -132,7 +132,7 @@ def test_a_manager_assigns_a_lead_by_hand(test_db):
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
         _, agent_id = _create_agent(client, manager_token)
-        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
+        lead_id = _admit_qualified_lead(client, manager_token, tenant_id)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
@@ -154,7 +154,7 @@ def test_assigning_an_agent_of_another_organization_fails(test_db):
         manager_a, tenant_a = _create_org(client, admin_token)
         manager_b, _ = _create_org(client, admin_token)
         _, foreign_agent_id = _create_agent(client, manager_b)
-        lead_id = _ingest_qualified_lead(client, manager_a, tenant_a)
+        lead_id = _admit_qualified_lead(client, manager_a, tenant_a)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
@@ -171,7 +171,7 @@ def test_an_agent_cannot_assign(test_db):
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
         agent_token, agent_id = _create_agent(client, manager_token)
-        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
+        lead_id = _admit_qualified_lead(client, manager_token, tenant_id)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
@@ -186,7 +186,7 @@ def test_a_manager_discards_with_a_reason(test_db):
     with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
-        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
+        lead_id = _admit_qualified_lead(client, manager_token, tenant_id)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/discard",
@@ -203,7 +203,7 @@ def test_discarding_without_a_reason_is_refused(test_db):
     with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
-        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
+        lead_id = _admit_qualified_lead(client, manager_token, tenant_id)
 
         response = client.post(
             f"/api/v1/leads/{lead_id}/discard",
@@ -219,7 +219,7 @@ def test_the_lead_detail_carries_the_applied_rule_breakdown(test_db):
     with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
-        lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
+        lead_id = _admit_qualified_lead(client, manager_token, tenant_id)
 
         detail = client.get(
             f"/api/v1/leads/{lead_id}", headers=manager_token

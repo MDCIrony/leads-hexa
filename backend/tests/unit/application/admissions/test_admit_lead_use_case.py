@@ -8,7 +8,9 @@ from application.dtos.admissions import AdmissionCandidate, AdmissionRequest
 from application.ports.output.lead_repository_port import DuplicateAdmission
 from application.use_cases.admissions.admit_lead import AdmitLeadUseCase
 from domain.entities import AssignmentRule
+from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.lead import Lead
+from domain.value_objects.enums import Operator
 from tests.unit.mocks.in_memory_advisor_repo import make_advisor
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
@@ -50,6 +52,21 @@ def test_a_lead_nobody_can_take_is_left_unassigned_with_its_notice_in_the_outbox
 
     assert (result.outcome, result.status, result.assigned_agent_id) == ("ADMITTED", "UNASSIGNED", None)
     assert _events(uow, "internal") == ["LeadLeftUnassigned"]
+
+
+def test_a_disqualified_candidate_publishes_only_its_disqualification_on_the_product_lane():
+    uow = InMemoryUnitOfWork()
+    tenant_id = uuid.uuid4()
+    uow.disqualification_rules.save(DisqualificationRule.create(
+        tenant_id=tenant_id, name="No way to contact",
+        conditions=[{"field": "phone", "operator": Operator.IS_EMPTY.value}]))
+
+    result = AdmitLeadUseCase(uow).execute(_request(tenant_id))
+
+    assert (result.outcome, result.status, result.assigned_agent_id) == ("ADMITTED", "DISQUALIFIED", None)
+    assert _events(uow, "product") == ["LeadDisqualified"]
+    assert uow.outbox.list_unpublished("product", 10)[0].payload["reason"] == "No way to contact"
+    assert _events(uow, "internal") == []
 
 
 def test_a_record_already_admitted_returns_its_lead_as_it_is_now_and_publishes_nothing():
