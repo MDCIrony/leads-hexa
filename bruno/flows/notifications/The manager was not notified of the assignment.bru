@@ -10,7 +10,11 @@ meta {
 get {
   url: {{apiBase}}/notifications
   body: none
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 tests {
@@ -30,7 +34,7 @@ docs {
   sobre una asignación automática es quien la recibe, y el gestor no necesita enterarse de cada una.
   Un sistema que avisara a todos de todo equivaldría a no avisar a nadie.
 
-  Esta petición usa `auth: inherit`, así que hereda el `{{managerToken}}` de la carpeta. Busca, entre
+  Esta petición manda `{{managerSession}}`, la sesión del gestor. Busca, entre
   las notificaciones del gestor, una que combine el `lead_id` capturado en el paso anterior con
   `kind: LEAD_ASSIGNED` — y comprueba que no existe.
 }

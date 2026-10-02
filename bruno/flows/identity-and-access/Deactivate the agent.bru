@@ -10,11 +10,15 @@ meta {
 delete {
   url: {{apiBase}}/agents/:agentId
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:path {
   agentId: {{agentId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -30,7 +34,7 @@ docs {
   agente completo y `is_active: false`. No hay manera de eliminar un agente por la API: lo que queda
   es su registro, marcado como inactivo, con su historial intacto.
 
-  `{{agentToken}}` sigue guardado, sin tocar, tal como lo dejó el login del paso 6. El paso siguiente
-  lo reutiliza tal cual para comprobar qué le pasa a un token que sigue siendo criptográficamente
-  válido cuando quien lo tiene ya no puede operar.
+  `{{agentSession}}` sigue guardada, sin tocar, tal como la dejó el login del paso 6. El paso
+  siguiente la reutiliza tal cual para comprobar qué le pasa a una sesión que nadie ha cerrado ni ha
+  caducado cuando quien la abrió ya no puede operar.
 }

@@ -10,13 +10,17 @@ meta {
 get {
   url: {{apiBase}}/intake/jobs?limit=100&offset=0
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
   limit: 100
   offset: 0
   ~status: COMPLETED
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -67,7 +71,7 @@ docs {
 
   ## Qué toca
 
-  Nada. Es una lectura acotada a la organización del token.
+  Nada. Es una lectura acotada a la organización de la sesión.
 
   ## Qué esperar después
 
@@ -88,5 +92,5 @@ docs {
   |---|---|
   | `400 INVALID_JOB_STATUS` | `status` no es uno de los cuatro valores conocidos |
   | `403` | Quien llama es un asesor, no un gestor |
-  | `401` | Token ausente, inválido o agente desactivado |
+  | `401` | Sin sesión, con la sesión caducada o revocada, o con el agente desactivado |
 }

@@ -10,12 +10,16 @@ meta {
 get {
   url: {{apiBase}}/sources
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
   limit: 100
   offset: 0
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -29,7 +33,7 @@ assert {
 docs {
   # `GET /sources`
 
-  Lista los orígenes de la organización del token, paginados. Exige rol `MANAGER`.
+  Lista los orígenes de la organización de la sesión, paginados. Exige rol `MANAGER`.
 
   ## Los parámetros
 
@@ -63,7 +67,7 @@ docs {
 
   ## Qué toca
 
-  Nada. Sólo lee los orígenes de la organización del token — nunca los de otra, sin importar lo que
+  Nada. Sólo lee los orígenes de la organización de la sesión — nunca los de otra, sin importar lo que
   se pida en `limit`/`offset`.
 
   ## Qué esperar después

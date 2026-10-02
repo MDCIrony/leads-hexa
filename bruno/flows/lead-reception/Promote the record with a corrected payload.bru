@@ -10,11 +10,15 @@ meta {
 post {
   url: {{apiBase}}/intake/records/:recordId/promote
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   recordId: {{recordId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {

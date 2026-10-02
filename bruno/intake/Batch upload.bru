@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/intake/leads/batch-upload
   body: multipartForm
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:multipart-form {
@@ -71,6 +75,6 @@ docs {
   |---|---|
   | `404 SOURCE_NOT_FOUND` | La organización no tiene un origen `FILE_UPLOAD` activo |
   | `403` | Quien llama es un asesor, no un gestor |
-  | `401` | Token ausente, inválido o agente desactivado |
+  | `401` | Sin sesión, con la sesión caducada o revocada, o con el agente desactivado |
   | `422` | La petición no trae el fichero |
 }

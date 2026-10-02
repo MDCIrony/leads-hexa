@@ -10,15 +10,15 @@ meta {
 get {
   url: {{apiBase}}/leads/:leadId
   body: none
-  auth: bearer
+  auth: none
 }
 
 params:path {
   leadId: {{leadId}}
 }
 
-auth:bearer {
-  token: {{managerTokenB}}
+headers {
+  Cookie: leads_session={{managerSessionB}}
 }
 
 tests {
@@ -31,7 +31,7 @@ tests {
 docs {
   # El corazón del aislamiento: ni el identificador basta
 
-  El gestor de Beta tiene un token válido, de gestor, con permiso de sobra para leer leads — sólo
+  El gestor de Beta tiene una sesión válida, de gestor, con permiso de sobra para leer leads — sólo
   que no los de Alpha. La API responde `404 LEAD_NOT_FOUND`, exactamente el mismo código y el
   mismo `error_code` que si `{{leadId}}` no existiera en absoluto.
 

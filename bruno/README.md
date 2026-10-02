@@ -32,7 +32,27 @@ bru run . -r --env local --tags flow          # sólo lo ejecutable, sin la refe
 ```
 
 Códigos de salida: `0` todo pasa, `1` falló alguna aserción, `3` un sondeo entró en bucle, `4` se
-invocó fuera de la raíz de la colección. Para un informe navegable, `--reporter-html informe.html`.
+invocó fuera de la raíz de la colección. Para un informe navegable, `--reporter-html informe.html
+--reporter-skip-all-headers`: sin la segunda opción, el informe guarda las cookies de sesión de cada
+petición.
+
+`bru run flows --env local -r` es uno de los comandos de validación del repositorio: los seis flujos
+en verde demuestran que el contrato HTTP —sesión por cookie, roles, aislamiento, ingesta asíncrona
+y avisos— sigue siendo el que documenta `docs/content/desarrollo/api-referencia.md`, hablando con el
+gateway como lo haría cualquier cliente.
+
+## Cómo se autentica
+
+Cada login guarda la cookie `leads_session` de su respuesta en la variable de su rol
+(`adminSession`, `managerSession`, `agentSession`, `otherAgentSession`, `managerSessionB`), y cada
+petición la manda con `auth: none` y la cabecera `Cookie: leads_session={{managerSession}}`. No hay
+token en `Authorization`: la API usa sesiones opacas (ADR-0029) y el gateway descarta ese
+encabezado (ADR-0032).
+
+Bruno guarda las cookies en un tarro por dominio y lo mezcla **por encima** de la cabecera `Cookie`
+de la petición, así que con el tarro activo la última sesión que entró hablaría por todos los roles.
+El `script:post-response` de `collection.bru` lo vacía tras cada respuesta; `--disable-cookies` haría
+lo mismo desde fuera, pero no hace falta pasarlo.
 
 ## Qué hay dentro
 
@@ -57,8 +77,8 @@ que es lo que permite filtrar con `--tags`.
 
 #### Cómo se les da lo que necesitan
 
-Las variables que escriben los flujos —los tokens, los identificadores— **viven en la ejecución, no
-en el disco**. Eso cambia lo que hay que hacer según desde dónde se lance:
+Las variables que escriben los flujos —las sesiones, los identificadores— **viven en la ejecución,
+no en el disco**. Eso cambia lo que hay que hacer según desde dónde se lance:
 
 **En la aplicación de escritorio**, basta con ejecutar antes el flujo que produzca lo que la carpeta
 pide; las variables quedan cargadas en la sesión y las peticiones ya responden.
@@ -74,16 +94,17 @@ bru run flows/notifications           notifications                 --env local 
 
 | Carpeta | Qué la alimenta | Qué le deja |
 |---|---|---|
-| `tenants`, `agents`, `groups`, `sources` | `flows/organization-onboarding` | `adminToken`, `managerToken`, `tenantId`, `agentId` |
+| `tenants`, `agents`, `groups`, `sources` | `flows/organization-onboarding` | `adminSession`, `managerSession`, `tenantId`, `agentId` |
 | `leads`, `intake` | `flows/lead-processing` | además `leadId`, `jobId`, `recordId` |
-| `notifications` | `flows/notifications` | además `agentToken` y un aviso sin leer |
-| `auth`, `health` | nada | son autónomas |
+| `notifications` | `flows/notifications` | además `agentSession` y un aviso sin leer |
+| `auth` | `flows/organization-onboarding` | `managerEmail` y `managerSession` |
+| `health` | nada | es autónoma |
 
 Un `bru run . --tags reference` sobre un entorno recién levantado falla casi entero, y es lo
 esperado: son peticiones de exploración, no un harness.
 
 Y hay cinco fallos que **no** son de configuración. Encadenando `flows/lead-processing leads intake`
-pasan 25 de 30 peticiones; las cinco que responden `400` son las que **mutan** una entidad que el
+pasan 29 de 34 peticiones; las cinco que responden `400` son las que **mutan** una entidad que el
 flujo ya llevó a su estado final:
 
 | Petición | Por qué `400` |
@@ -129,8 +150,9 @@ día que la máquina va cargada, se queda corto.
 ## Cómo se extiende
 
 **Un endpoint nuevo** es un `.bru` en la carpeta de su recurso, con su `seq` en el bloque `meta`, la
-etiqueta `reference`, `auth: inherit` para heredar el token de la carpeta, y un bloque `docs` que se
-sostenga solo.
+etiqueta `reference`, `auth: none` con la cabecera `Cookie: leads_session={{managerSession}}` —o la
+sesión del rol que toque—, y un bloque `docs` que se sostenga solo. Un script que llame a
+`bru.sendRequest` manda la misma cabecera.
 
 **Un flujo nuevo** es una carpeta bajo `flows/` con su `folder.bru` —nombre, `seq` y unos `docs` que
 digan qué demuestra— y sus peticiones. El patrón a copiar es `lead-processing`: es el más completo,
@@ -138,9 +160,10 @@ encadena con `vars:post-response`, sondea un trabajo asíncrono y comprueba resu
 
 ### Dos cosas del formato que cuesta descubrir solo
 
-**La herencia de autenticación necesita dos bloques.** En un `folder.bru`, `auth:bearer` por sí solo
-no basta: sin `auth { mode: bearer }` delante, el modo efectivo sigue siendo `none` y todas las
-peticiones de la carpeta responden `401`.
+**La cookie no se hereda de la carpeta.** Una cabecera en `folder.bru` llegaría a todas sus
+peticiones, también a las que no deben llevar ninguna: el arranque de `POST /agents`, donde el
+gateway exige que una credencial presente sea válida, y `Reject a request with no session`. Por eso
+cada petición nombra la suya.
 
 **El contenido de un bloque de texto va indentado.** Una línea que sea exactamente `}` sin sangrar
 cierra el bloque antes de tiempo. Importa al escribir ejemplos JSON dentro de `docs`.
@@ -154,6 +177,7 @@ parseo del ejecutor**, así que aquí no se usan: la documentación vive en los 
 Los flujos calcan los diagramas de secuencia de `docs/content/`, y cada `folder.bru` dice cuál.
 Cuando un flujo y su diagrama discrepen, uno de los dos está mal y merece mirarse.
 
-Esta colección **no está integrada** en `docker-compose.yml` ni en los comandos de validación del
-repositorio: se ejecuta a mano, con el `bru` instalado en la máquina. `scripts/verify-e2e.sh` sigue
-siendo el harness rápido de regresión.
+Esta colección **no está integrada** en `docker-compose.yml`: se ejecuta con el `bru` instalado en la
+máquina. `bru run flows --env local -r` figura entre los comandos de validación de `CLAUDE.md` y de
+`docs/content/desarrollo/validacion.md`, junto a `scripts/verify-e2e.sh`, que sigue siendo el
+harness de regresión más amplio.

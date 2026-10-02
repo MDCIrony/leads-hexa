@@ -10,11 +10,15 @@ meta {
 delete {
   url: {{apiBase}}/rules/scoring/:scoringRuleId
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:path {
   scoringRuleId: {{scoringRuleId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -24,7 +28,7 @@ assert {
 docs {
   # `DELETE /rules/scoring/{{scoringRuleId}}`
 
-  Borra una regla de puntuación de la organización del token. Exige rol `MANAGER`. A diferencia de
+  Borra una regla de puntuación de la organización de la sesión. Exige rol `MANAGER`. A diferencia de
   las otras dos familias de reglas, ésta se borra de verdad: no queda un `is_active: false` implícito
   que reactivar, porque `is_active` ya cumple ese papel.
 

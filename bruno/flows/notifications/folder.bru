@@ -4,11 +4,7 @@ meta {
 }
 
 auth {
-  mode: bearer
-}
-
-auth:bearer {
-  token: {{managerToken}}
+  mode: none
 }
 
 docs {
@@ -23,7 +19,7 @@ docs {
   | Capturar la línea base | Los avisos se miden contra lo que ya había, nunca contra cero |
   | `LEAD_ASSIGNED` al asesor | El aviso llega a quien tiene que actuar |
   | Silencio para el gestor | Y sólo a esa persona — nadie más se entera de la misma asignación |
-  | Marcar como leído | El destinatario sale del token; otro no puede tocar lo que no ve |
+  | Marcar como leído | El destinatario sale de la sesión; otro no puede tocar lo que no ve |
   | `LEAD_LEFT_UNASSIGNED` al gestor | Quedarse sin asesor no es un error, es algo que alguien resuelve a mano |
   | Marcado masivo | `read-all` vacía el contador de un aviso a la vez |
 

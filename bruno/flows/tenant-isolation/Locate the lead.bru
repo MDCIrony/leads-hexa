@@ -10,11 +10,15 @@ meta {
 get {
   url: {{apiBase}}/intake/records?job_id={{jobId}}
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
   job_id: {{jobId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 vars:post-response {

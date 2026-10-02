@@ -6,6 +6,13 @@ auth {
   mode: none
 }
 
+script:post-response {
+  // Bruno keeps one cookie jar per domain and merges it over the request's own
+  // Cookie header, so the last login would silently speak for every role. Each
+  // login keeps its session in a variable of its own; the jar must stay empty.
+  await bru.cookies.jar().clear();
+}
+
 docs {
   # Lead Router · API
 
@@ -40,8 +47,8 @@ docs {
   `flows/` hace ese arranque por su cuenta, así que correr uno cualquiera deja el entorno usable.
 
   Para trabajar a mano, el camino más corto es correr `flows/organization-onboarding`: deja
-  `adminToken`, `managerToken`, `agentToken`, `tenantId` y `agentId` cargados, y con eso las carpetas
-  de recurso ya responden.
+  `adminSession`, `managerSession`, `tenantId` y `agentId` cargados, y con eso las carpetas de
+  recurso ya responden.
 
   Eso vale **en la aplicación de escritorio**, donde las variables sobreviven a la ejecución. Desde
   la línea de comandos cada `bru run` es un proceso nuevo y empieza sin nada, así que el flujo y la
@@ -61,9 +68,9 @@ docs {
 
   | Variable | La escribe | Se usa en |
   |---|---|---|
-  | `adminToken` | Login del administrador de plataforma | `tenants` |
-  | `managerToken` | Login del gestor de la organización | Casi todo lo demás |
-  | `agentToken` | Login del asesor | `leads/mine`, `notifications` |
+  | `adminSession` | Login del administrador de plataforma | `tenants` |
+  | `managerSession` | Login del gestor de la organización | Casi todo lo demás |
+  | `agentSession` | Login del asesor | `leads/mine`, `notifications` |
   | `tenantId`, `agentId`, `groupId`, `sourceId` | Las altas de cada recurso | Rutas y cuerpos |
   | `leadId`, `jobId`, `recordId` | La ingesta y su procesamiento | Consultas de resultado |
   | `runId` | El primer paso de cada flujo | Sufijo de todo nombre creado |
@@ -72,9 +79,28 @@ docs {
   los de la ejecución anterior, así que **no hace falta una base de datos limpia** para volver a
   correrlos.
 
+  ## Cómo se autentica
+
+  Con la sesión opaca de una persona, nunca con un token en `Authorization` (ADR-0029). El login no
+  devuelve credencial en el cuerpo: fija la cookie `leads_session`, y cada login de la colección la
+  guarda en la variable de su rol (`adminSession`, `managerSession`, `agentSession`…). Cada petición
+  la manda a mano, con `auth: none` y la cabecera `Cookie: leads_session={{managerSession}}`, y así
+  se lee en el propio fichero con qué identidad actúa.
+
+  Hay que hacerlo así porque Bruno —comprobado en el ejecutor 3.1— guarda las cookies en **un tarro
+  por dominio** y lo mezcla por encima de la cabecera `Cookie` de la petición. Con el tarro activo, la
+  última sesión que entró hablaría por todos los roles, y un `401` esperado se volvería un `200`. Por
+  eso el `script:post-response` de esta colección vacía el tarro tras cada respuesta: ninguna sesión
+  pisa a otra y ningún paso hereda una cookie que no nombra. `--disable-cookies` en `bru run` hace lo
+  mismo desde fuera, pero no hace falta.
+
+  El gateway valida la cookie en cada petición y la cambia por un JWT interno de 60 segundos que no
+  sale de la red (ADR-0032); un `Authorization` que mande el cliente se descarta. Las integraciones
+  de máquina no tienen sesión: usan `X-Api-Key`, que sólo acepta `GET /leads`.
+
   ## Tres invariantes que explican casi todas las respuestas
 
-  **La organización sale del token.** Nunca de la URL ni del cuerpo. Un `tenant_id` enviado en el
+  **La organización sale de la sesión.** Nunca de la URL ni del cuerpo. Un `tenant_id` enviado en el
   cuerpo se ignora en silencio.
 
   **404, nunca 403, al leer algo de otra organización.** Un `403` confirmaría que ese identificador

@@ -4,11 +4,7 @@ meta {
 }
 
 auth {
-  mode: bearer
-}
-
-auth:bearer {
-  token: {{managerToken}}
+  mode: none
 }
 
 docs {
@@ -27,7 +23,7 @@ docs {
   | Un asesor de A pide el lead de un compañero | `404` — pertenece a su organización, pero no es suyo |
   | El administrador de plataforma pide el mismo lead | `403` — identidad válida, capacidad que no le toca |
 
-  ## La organización sale del token, y no hay dónde mentir
+  ## La organización sale de la sesión, y no hay dónde mentir
 
   Ninguna petición de este flujo nombra una organización: ni en la URL, ni en una cabecera, ni en
   el cuerpo. El aislamiento no depende de que quien llama diga la verdad, porque no existe ningún

@@ -317,10 +317,29 @@ Incluye `test_structure.py`: chassis cumple la regla de estructura sin lista bas
 
 ## La colección de Bruno
 
-La colección `bruno/` (y el login de `test-consumer`) siguen esperando un `access_token` en la respuesta
-de `POST /auth/login`. Está desactualizada desde las sesiones opacas (commit `346b0cb`): el login
-devuelve `{"status": "AUTHENTICATED"}` y fija la cookie. No es una validación fiable hasta que se
-actualice; `verify-e2e.sh` sí lo es.
+`bruno/` vuelve a ser una validación fiable. Necesita el stack levantado y la CLI de Bruno en la
+máquina (`npm install -g @usebruno/cli`, la 3.1), y se corre desde su carpeta:
+
+```bash
+cd bruno && bru run flows --env local -r                 # los seis flujos     ~10 s
+```
+
+Los seis flujos recorren el contrato tal como lo ve un cliente, siempre a través del gateway: la
+sesión por cookie y su revocación al desactivar a alguien, los dos planos de rol, el `404` en vez de
+`403` entre organizaciones, la ingesta que responde `202` y se sondea hasta un estado terminal, y los
+avisos que llegan, por Kafka, a quien deben. Es más estrecho que `verify-e2e.sh`, pero cada paso está
+documentado en su bloque `docs` y sirve de guion legible del producto. Cada flujo crea sus datos con
+su propio sello, así que no necesita una base limpia ni rompe lo que `verify-e2e.sh` comprueba.
+
+La colección se autentica como un navegador: cada login guarda su cookie `leads_session` en la
+variable de su rol y cada petición la manda en la cabecera `Cookie`. Bruno mezcla su tarro de cookies
+por dominio por encima de esa cabecera, y una sesión pisaría a las demás; el `script:post-response`
+de `bruno/collection.bru` vacía el tarro tras cada respuesta para que eso no pase.
+
+Las carpetas de referencia (`auth`, `tenants`, `leads`…) no forman parte de la validación: dependen de
+variables que siembran los flujos y algunas mutan entidades que el flujo ya dejó en su estado final.
+`bru run --env local -r` sobre la colección entera, por eso, no sale en verde; cómo encadenar cada
+carpeta con su flujo está en `bruno/README.md`.
 
 ## La limpieza entre pruebas
 

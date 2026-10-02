@@ -10,11 +10,15 @@ meta {
 patch {
   url: {{apiBase}}/agents/:agentId
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   agentId: {{agentId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -34,7 +38,7 @@ assert {
 docs {
   # `PATCH /agents/{{agentId}}`
 
-  Edita un agente de la organización del token. Exige rol `MANAGER`.
+  Edita un agente de la organización de la sesión. Exige rol `MANAGER`.
 
   ## El cuerpo
 
@@ -76,8 +80,8 @@ docs {
 
   | Código | Cuándo |
   |---|---|
-  | `401 UNAUTHORIZED` | Sin token |
-  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `401 UNAUTHORIZED` | Sin sesión |
+  | `403 FORBIDDEN` | La sesión no es de `MANAGER` |
   | `404 AGENT_NOT_FOUND` | El agente del path no existe, o es de otra organización |
   | `404 GROUP_NOT_FOUND` | El `group_id` del cuerpo no existe, o es de otra organización |
   | `422 VALIDATION_ERROR` | Tipo de dato incorrecto en algún campo |

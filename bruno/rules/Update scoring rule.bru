@@ -10,11 +10,15 @@ meta {
 patch {
   url: {{apiBase}}/rules/scoring/:scoringRuleId
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   scoringRuleId: {{scoringRuleId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -34,7 +38,7 @@ assert {
 docs {
   # `PATCH /rules/scoring/{{scoringRuleId}}`
 
-  Actualiza una regla de puntuación de la organización del token. Exige rol `MANAGER`. Todos los
+  Actualiza una regla de puntuación de la organización de la sesión. Exige rol `MANAGER`. Todos los
   campos del cuerpo son opcionales — el ejemplo de este request sólo toca `priority` e `is_active`,
   pero admite también `name`, `conditions` y `score_delta`.
 

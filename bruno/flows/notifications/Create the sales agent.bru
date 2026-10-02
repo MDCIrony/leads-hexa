@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/agents
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -36,8 +40,8 @@ assert {
 docs {
   # El asesor que recibirá el aviso
 
-  Lo crea el gestor con su propio token, así que no lleva `tenant_id` en el cuerpo: la organización
-  sale del token de quien llama.
+  Lo crea el gestor con su propia sesión, así que no lleva `tenant_id` en el cuerpo: la organización
+  sale de la sesión de quien llama.
 
   Guarda `agentEmail` además de `agentId`, algo que este flujo necesita y `lead-processing` no: aquí
   el asesor tiene que entrar con su propia sesión para leer su propia bandeja de avisos, no sólo

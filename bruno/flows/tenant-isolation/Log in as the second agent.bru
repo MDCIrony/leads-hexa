@@ -19,18 +19,19 @@ body:form-urlencoded {
 }
 
 vars:post-response {
-  otherAgentToken: res.body.access_token
+  otherAgentSession: res.headers['set-cookie']?.join(';').match(/leads_session=([^;]+)/)?.[1]
 }
 
 assert {
   res.status: eq 200
-  res.body.access_token: isString
+  res.body.status: eq AUTHENTICATED
+  otherAgentSession: isString
 }
 
 docs {
-  # El token de quien no es dueño del lead, aunque comparta organización
+  # La sesión de quien no es dueño del lead, aunque comparta organización
 
-  `otherAgentToken` es de un `AGENT`, no de un `MANAGER`, y de la misma organización que el lead:
+  `otherAgentSession` es de un `AGENT`, no de un `MANAGER`, y de la misma organización que el lead:
   la variable menos favorable para demostrar que el aislamiento fino dentro de una organización
   también existe.
 }

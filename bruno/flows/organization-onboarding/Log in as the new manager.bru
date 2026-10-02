@@ -19,12 +19,13 @@ body:form-urlencoded {
 }
 
 vars:post-response {
-  managerToken: res.body.access_token
+  managerSession: res.headers['set-cookie']?.join(';').match(/leads_session=([^;]+)/)?.[1]
 }
 
 assert {
   res.status: eq 200
-  res.body.access_token: isString
+  res.body.status: eq AUTHENTICATED
+  managerSession: isString
 }
 
 docs {
@@ -34,8 +35,8 @@ docs {
   hash. Que este login funcione demuestra que el gestor se creó de verdad, con su credencial usable,
   y no como una fila a medias.
 
-  El token que devuelve lleva dentro la organización, así que a partir de aquí **no hay que volver a
-  nombrarla**: ni en una URL ni en el cuerpo de ninguna petición. Es la diferencia entre un sistema
+  La sesión que abre resuelve, en cada petición, a este gestor y a su organización, así que a partir
+  de aquí **no hay que volver a nombrarla**: ni en una URL ni en el cuerpo de ninguna petición. Es la diferencia entre un sistema
   donde el aislamiento entre organizaciones depende de que quien llama diga la verdad, y uno donde
   no se puede ni expresar la mentira.
 }

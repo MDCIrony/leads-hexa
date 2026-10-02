@@ -26,7 +26,7 @@ secciones de arriba; lo que era instrucción de ejecución se retiró a propósi
 
 ## Validación
 
-Cuatro comandos. **Ninguno necesita `--build` ni `restart`**: el código y los tests van montados como
+Cinco comandos. **Ninguno necesita `--build` ni `restart`**: el código y los tests van montados como
 volúmenes, y la API recarga en caliente lo que cambie en `src/`. Sólo se reconstruye si cambian
 `pyproject.toml`, `uv.lock` o el `Dockerfile`.
 
@@ -35,6 +35,7 @@ docker compose --profile test run --rm backend-test    # suite completa     ~4 m
 cd backend && uv run pytest -m unit -q                 # dominio aislado    ~1 s
 ./scripts/verify-e2e.sh                                # negocio sobre HTTP ~3 s
 ./scripts/verify-structure.sh                          # estructura, todo el repo ~1 s
+cd bruno && bru run flows --env local -r               # contrato como cliente ~10 s
 ```
 
 Cada uno demuestra algo que los otros no:
@@ -48,6 +49,9 @@ Cada uno demuestra algo que los otros no:
   repositorio, sin Docker: `backend/src`, `backend/tests`, `libs/chassis/src`, `libs/chassis/tests`,
   `services/notifications/src`, `services/notifications/tests`, `test-consumer/`, `demo/` y
   `tools/`. Una raíz Python nueva se declara ahí.
+- **`bru run flows`** recorre los seis flujos de `bruno/` contra el gateway, con una sesión por cookie
+  por rol: demuestra que el contrato documentado en `api-referencia.md` es el que ve un cliente. Las
+  carpetas de referencia no entran; dependen de variables que siembran los flujos.
 
 Cada servicio extraído (hoy `services/notifications`) tiene la suya, con las mismas dos formas:
 `docker compose --profile test run --rm notifications-test` y

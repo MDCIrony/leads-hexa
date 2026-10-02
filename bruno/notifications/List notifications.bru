@@ -10,13 +10,17 @@ meta {
 get {
   url: {{apiBase}}/notifications?unread_only=false&limit=100&offset=0
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
   unread_only: false
   limit: 100
   offset: 0
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 vars:post-response {
@@ -36,11 +40,11 @@ assert {
 docs {
   # `GET /notifications`
 
-  Lista los avisos de quien llama. **El destinatario sale siempre del token**, nunca de la URL ni de
+  Lista los avisos de quien llama. **El destinatario sale siempre de la sesión**, nunca de la URL ni de
   un parámetro: no hay forma de expresar «los avisos de otra persona». Exige `MANAGER` o `AGENT`.
 
-  Esta carpeta usa `{{managerToken}}` por defecto. Para ver la bandeja de un asesor, cambia el token
-  de la carpeta a `{{agentToken}}`.
+  Esta petición manda `{{managerSession}}` por defecto. Para ver la bandeja de un asesor, cambia la
+  cabecera `Cookie` a `leads_session={{agentSession}}`.
 
   ## Los parámetros
 

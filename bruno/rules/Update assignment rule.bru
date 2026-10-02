@@ -10,11 +10,15 @@ meta {
 patch {
   url: {{apiBase}}/rules/assignment/:assignmentRuleId
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   assignmentRuleId: {{assignmentRuleId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -34,7 +38,7 @@ assert {
 docs {
   # `PATCH /rules/assignment/{{assignmentRuleId}}`
 
-  Actualiza una regla de asignación de la organización del token. Exige rol `MANAGER`. Todos los
+  Actualiza una regla de asignación de la organización de la sesión. Exige rol `MANAGER`. Todos los
   campos del cuerpo son opcionales — el ejemplo de este request sólo toca `priority` e `is_active`,
   pero admite cualquiera de los campos de la creación (`name`, `min_score`, `max_score`,
   `target_group_id`, `target_agent_ids`, `agent_match_mode`, `strategy`, `conditions`).

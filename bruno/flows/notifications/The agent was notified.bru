@@ -10,33 +10,51 @@ meta {
 get {
   url: {{apiBase}}/notifications
   body: none
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{agentToken}}
+headers {
+  Cookie: leads_session={{agentSession}}
 }
 
 script:post-response {
-  const assigned = res.body.items.find(
+  const MAX_ATTEMPTS = 50;
+  const WAIT_MS = 200;
+
+  // Distintas versiones del cliente devuelven el cuerpo en `data` o en `body`.
+  const unwrap = (r) => (r && r.data !== undefined ? r.data : r && r.body);
+  const findAssigned = (inbox) => inbox.items.find(
     (item) => item.kind === "LEAD_ASSIGNED" && item.lead_id && item.is_read === false
   );
+
+  const url = `${bru.getEnvVar("apiBase")}/notifications`;
+  const headers = { Cookie: `leads_session=${bru.getVar("agentSession")}` };
+
+  // El aviso lo escribe notifications-worker cuando Kafka le entrega el evento:
+  // un salto después de que el trabajo termine, así que se sondea hasta verlo.
+  let inbox = res.body;
+  let attempts = 0;
+  while (!findAssigned(inbox) && attempts < MAX_ATTEMPTS) {
+    attempts += 1;
+    await bru.sleep(WAIT_MS);
+    inbox = unwrap(await bru.sendRequest({ method: "GET", url, headers }));
+  }
+
+  const assigned = findAssigned(inbox);
+  bru.setVar("agentUnread", inbox.unread_count);
+  bru.setVar("noticeAttempts", attempts);
   bru.setVar("notificationId", assigned ? assigned.id : null);
   bru.setVar("assignedLeadId", assigned ? assigned.lead_id : null);
 }
 
 tests {
-  test("el contador subió exactamente en uno respecto a la línea base", function() {
-    expect(res.body.unread_count).to.equal(bru.getVar("agentBaseline") + 1);
+  test("hay un aviso de asignación sin leer, con el lead que lo originó", function() {
+    expect(bru.getVar("notificationId"), `no apareció ningún LEAD_ASSIGNED sin leer tras ${bru.getVar("noticeAttempts")} intentos`).to.be.a("string");
+    expect(bru.getVar("assignedLeadId")).to.be.a("string");
   });
 
-  test("hay un aviso de asignación sin leer, con el lead que lo originó", function() {
-    const assigned = res.body.items.find(
-      (item) => item.kind === "LEAD_ASSIGNED" && item.lead_id && item.is_read === false
-    );
-    expect(assigned, "no apareció ningún LEAD_ASSIGNED sin leer").to.exist;
-    expect(assigned.lead_id).to.be.a("string");
-    expect(assigned.is_read).to.equal(false);
+  test("el contador subió exactamente en uno respecto a la línea base", function() {
+    expect(bru.getVar("agentUnread")).to.equal(bru.getVar("agentBaseline") + 1);
   });
 }
 
@@ -52,6 +70,12 @@ docs {
   `is_read` en falso. Encontrarlo confirma que el evento `LeadAssigned` que publicó el caso de uso de
   asignación llegó de verdad hasta `NotificationHandler` y se tradujo en un aviso persistido, no sólo
   en una línea de log.
+
+  El aviso no existe todavía en el instante en que el trabajo de ingesta termina. El caso de uso
+  deja el evento en el outbox, `backend-worker` lo publica en Kafka y `notifications-worker` lo
+  convierte en aviso: es **eventualmente consistente** (`modulos/notificaciones.md`). Por eso este
+  paso sondea la bandeja, como `Await processing` sondea el trabajo, hasta que aparece o se agotan
+  los intentos, y las comprobaciones corren una sola vez sobre lo último que leyó.
 
   Guarda su `id` en `notificationId`, que los pasos de marcado usan más abajo, y su `lead_id` en
   `assignedLeadId`, que el paso siguiente usa para comprobar que el gestor no recibió el mismo aviso.

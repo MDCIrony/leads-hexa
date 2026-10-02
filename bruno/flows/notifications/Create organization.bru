@@ -10,11 +10,11 @@ meta {
 post {
   url: {{apiBase}}/tenants
   body: json
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{adminToken}}
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 body:json {
@@ -46,6 +46,6 @@ docs {
   contaminen la línea base que se captura más abajo.
 
   El alta crea en la misma transacción la organización y su gestor, que es quien recibirá el aviso
-  cuando ningún asesor pueda tomar un lead. Este es el único paso del flujo que usa `{{adminToken}}`;
-  todo lo demás va con el token del gestor o el del asesor.
+  cuando ningún asesor pueda tomar un lead. Este es el único paso del flujo que usa `{{adminSession}}`;
+  todo lo demás va con la sesión del gestor o la del asesor.
 }

@@ -10,15 +10,15 @@ meta {
 get {
   url: {{apiBase}}/auth/me
   body: none
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{managerToken}}
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 tests {
-  test("la identidad que devuelve el token es la del gestor creado", function() {
+  test("la identidad que resuelve la sesión es la del gestor creado", function() {
     expect(res.status).to.equal(200);
     expect(res.body.email).to.equal(bru.getVar("managerEmail"));
     expect(res.body.role).to.equal("MANAGER");
@@ -31,7 +31,7 @@ tests {
 }
 
 docs {
-  # Quién soy, según el token
+  # Quién soy, según la sesión
 
   Cierra el círculo del alta: la organización conoce a su gestor —lo devolvió al crearse— y aquí el
   gestor conoce su organización. Las dos mitades del vínculo son ciertas.
@@ -45,7 +45,7 @@ docs {
 
   ## Qué toca
 
-  Nada. Es una lectura. Pero no una lectura del token: la API **vuelve a leer el agente en la base
+  Nada. Es una lectura. Pero no una lectura de lo que dice la cookie: la API **vuelve a leer el agente en la base
   de datos** en cada petición y exige que siga activo. Por eso desactivar a alguien —o desactivar su
   organización entera— le corta el acceso en el acto, sin esperar a que caduque lo que ya tiene en
   la mano.

@@ -10,11 +10,15 @@ meta {
 get {
   url: {{apiBase}}/intake/jobs/:jobId
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:path {
   jobId: {{jobId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -61,7 +65,7 @@ docs {
 
   ## Qué toca
 
-  Nada. Es una lectura acotada a la organización del token.
+  Nada. Es una lectura acotada a la organización de la sesión.
 
   ## Qué esperar después, y cómo consultarlo bien
 
@@ -86,6 +90,6 @@ docs {
   |---|---|
   | `404 INTAKE_JOB_NOT_FOUND` | El trabajo no existe **o es de otra organización** — nunca `403`, para no confirmar su existencia |
   | `403` | Quien llama es un asesor, no un gestor |
-  | `401` | Token ausente, inválido o agente desactivado |
+  | `401` | Sin sesión, con la sesión caducada o revocada, o con el agente desactivado |
   | `422 VALIDATION_ERROR` | El identificador no es un UUID bien formado |
 }

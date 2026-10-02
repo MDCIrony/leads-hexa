@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/intake/leads/ingest
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {

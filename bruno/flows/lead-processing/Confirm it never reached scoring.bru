@@ -10,7 +10,11 @@ meta {
 get {
   url: {{apiBase}}/leads/{{leadId}}
   body: none
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 tests {

@@ -10,12 +10,16 @@ meta {
 get {
   url: {{apiBase}}/rules/scoring
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
   limit: 100
   offset: 0
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -27,7 +31,7 @@ assert {
 docs {
   # `GET /rules/scoring`
 
-  Lista las reglas de puntuación de la organización del token. Exige rol `MANAGER`.
+  Lista las reglas de puntuación de la organización de la sesión. Exige rol `MANAGER`.
 
   ## Los parámetros
 

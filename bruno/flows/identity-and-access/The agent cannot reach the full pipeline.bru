@@ -10,11 +10,11 @@ meta {
 get {
   url: {{apiBase}}/leads
   body: none
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{agentToken}}
+headers {
+  Cookie: leads_session={{agentSession}}
 }
 
 assert {

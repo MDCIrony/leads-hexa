@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/agents
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -35,7 +39,7 @@ assert {
 docs {
   # El asesor que recibirá el lead de Alpha
 
-  Lo crea el gestor de A con su propio token — `auth: inherit`, heredado del `folder.bru` —, así
+  Lo crea el gestor de A con su propia sesión — `{{managerSession}}` en la cabecera `Cookie` —, así
   que nace dentro de Alpha sin que nadie lo diga explícitamente. Es el asesor al que la regla de
   asignación de más abajo apunta, y el mismo al que un compañero de A intentará ver el lead ajeno
   más adelante en el flujo.

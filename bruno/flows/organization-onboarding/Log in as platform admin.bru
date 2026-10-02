@@ -19,12 +19,13 @@ body:form-urlencoded {
 }
 
 vars:post-response {
-  adminToken: res.body.access_token
+  adminSession: res.headers['set-cookie']?.join(';').match(/leads_session=([^;]+)/)?.[1]
 }
 
 assert {
   res.status: eq 200
-  res.body.token_type: eq bearer
+  res.body.status: eq AUTHENTICATED
+  adminSession: isString
 }
 
 docs {
@@ -33,8 +34,9 @@ docs {
   El cuerpo va como **formulario**, no como JSON: es el esquema `OAuth2PasswordRequestForm`, y el
   correo viaja en el campo `username`. Mandar JSON aquí responde `422`.
 
-  Guarda el token en `adminToken`, que es el que hereda toda esta carpeta y el que exigen los tres
-  endpoints de organizaciones.
+  Guarda la cookie `leads_session` que fija la respuesta en `adminSession`: es la sesión que exigen
+  los tres endpoints de organizaciones, y sólo la mandan, en la cabecera `Cookie`, los pasos que
+  actúan como administrador.
 
   Un administrador de plataforma **sólo** alcanza el plano de organizaciones. En cualquier endpoint
   operativo —leads, reglas, ingesta, avisos— recibe `403`. No es una limitación pendiente de

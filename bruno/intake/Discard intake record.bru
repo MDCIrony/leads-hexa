@@ -10,11 +10,15 @@ meta {
 post {
   url: {{apiBase}}/intake/records/:recordId/discard
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:path {
   recordId: {{recordId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -48,6 +52,6 @@ docs {
   |---|---|
   | `404 INTAKE_RECORD_NOT_FOUND` | El registro no existe o es de otra organización |
   | `403` | Quien llama es un asesor, no un gestor |
-  | `401` | Token ausente, inválido o agente desactivado |
+  | `401` | Sin sesión, con la sesión caducada o revocada, o con el agente desactivado |
   | `400 INVALID_INTAKE_TRANSITION` | El registro ya está `PROMOTED` o `DISCARDED` |
 }

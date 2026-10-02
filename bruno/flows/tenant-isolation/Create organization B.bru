@@ -10,11 +10,11 @@ meta {
 post {
   url: {{apiBase}}/tenants
   body: json
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{adminToken}}
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 body:json {
@@ -41,7 +41,7 @@ assert {
 docs {
   # La segunda organización: la que no debería ver nada de Alpha
 
-  Beta nace igual que Alpha, con `{{adminToken}}`, y sirve exactamente para un propósito: ser el
+  Beta nace igual que Alpha, con `{{adminSession}}`, y sirve exactamente para un propósito: ser el
   punto de vista de fuera. Todo lo que ocurre a partir de aquí con el gestor y los asesores de Beta
   intenta alcanzar el lead de Alpha, y todo debería fallar.
 }

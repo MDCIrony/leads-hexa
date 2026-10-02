@@ -10,11 +10,15 @@ meta {
 post {
   url: {{apiBase}}/intake/jobs/:jobId/reprocess
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:path {
   jobId: {{jobId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -71,5 +75,5 @@ docs {
   | `404 INTAKE_JOB_NOT_FOUND` | El trabajo no existe o es de otra organización |
   | `400 INVALID_JOB_TRANSITION` | El trabajo ya está `COMPLETED` o `FAILED` — un trabajo cerrado no se retoma |
   | `403` | Quien llama es un asesor, no un gestor |
-  | `401` | Token ausente, inválido o agente desactivado |
+  | `401` | Sin sesión, con la sesión caducada o revocada, o con el agente desactivado |
 }

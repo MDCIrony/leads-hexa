@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/rules/disqualification
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -44,7 +48,7 @@ assert {
 docs {
   # `POST /rules/disqualification`
 
-  Crea una regla de descalificación en la organización del token. Exige rol `MANAGER`.
+  Crea una regla de descalificación en la organización de la sesión. Exige rol `MANAGER`.
 
   ## El cuerpo
 
@@ -105,7 +109,7 @@ docs {
 
   ## Qué toca
 
-  Inserta la regla en la organización del token. No reevalúa a ningún lead ya procesado: sólo entra
+  Inserta la regla en la organización de la sesión. No reevalúa a ningún lead ya procesado: sólo entra
   en juego en la siguiente ingesta.
 
   ## Qué esperar después

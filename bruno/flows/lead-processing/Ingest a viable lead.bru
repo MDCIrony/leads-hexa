@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/intake/leads/ingest
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -64,8 +68,8 @@ docs {
   ## No se nombra ningún origen
 
   El cuerpo no lleva `source_id`, y no hay dónde ponerlo. La ingesta resuelve sola el origen activo
-  de tipo `MANUAL_FORM` de la organización del token — el que nació con ella. Tampoco lleva
-  `tenant_id`: sale del token, y uno enviado en el cuerpo se ignoraría.
+  de tipo `MANUAL_FORM` de la organización de la sesión — el que nació con ella. Tampoco lleva
+  `tenant_id`: sale de la sesión, y uno enviado en el cuerpo se ignoraría.
 
   ## Qué esperar después
 

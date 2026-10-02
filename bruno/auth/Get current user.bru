@@ -10,7 +10,11 @@ meta {
 get {
   url: {{apiBase}}/auth/me
   body: none
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -44,7 +48,7 @@ docs {
 
   ## Qué toca
 
-  Nada. Lee el agente autenticado a partir del token y lo devuelve tal cual está en ese instante en
+  Nada. Lee el agente autenticado a partir de la sesión y lo devuelve tal cual está en ese instante en
   la base de datos.
 
   ## Qué esperar después
@@ -58,5 +62,5 @@ docs {
 
   | Código | Cuándo |
   |---|---|
-  | `401 UNAUTHORIZED` | Sin token, token caducado, o el agente o su organización quedaron desactivados desde que se emitió |
+  | `401 UNAUTHORIZED` | Sin cookie, sesión caducada o revocada por un logout, o el agente o su organización quedaron desactivados desde que entró |
 }

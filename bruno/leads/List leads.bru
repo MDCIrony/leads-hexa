@@ -10,7 +10,7 @@ meta {
 get {
   url: {{apiBase}}/leads?limit=100&offset=0
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
@@ -21,6 +21,10 @@ params:query {
   ~q: acme
   limit: 100
   offset: 0
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -70,7 +74,7 @@ docs {
 
   ## Qué toca
 
-  Sólo lee: los leads de la organización que identifica el token, sin filtrar por asesor asignado.
+  Sólo lee: los leads de la organización que identifica la sesión, sin filtrar por asesor asignado.
 
   ## Qué esperar después
 

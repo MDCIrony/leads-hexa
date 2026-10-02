@@ -10,11 +10,15 @@ meta {
 patch {
   url: {{apiBase}}/sources/:sourceId
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   sourceId: {{sourceId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -34,7 +38,7 @@ assert {
 docs {
   # `PATCH /sources/{{sourceId}}`
 
-  Actualiza un origen de la organización del token. Exige rol `MANAGER`.
+  Actualiza un origen de la organización de la sesión. Exige rol `MANAGER`.
 
   ## El cuerpo
 

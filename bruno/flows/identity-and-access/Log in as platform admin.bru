@@ -19,12 +19,13 @@ body:form-urlencoded {
 }
 
 vars:post-response {
-  adminToken: res.body.access_token
+  adminSession: res.headers['set-cookie']?.join(';').match(/leads_session=([^;]+)/)?.[1]
 }
 
 assert {
   res.status: eq 200
-  res.body.token_type: eq bearer
+  res.body.status: eq AUTHENTICATED
+  adminSession: isString
 }
 
 docs {
@@ -33,7 +34,8 @@ docs {
   El cuerpo va como **formulario**, no como JSON: es el esquema `OAuth2PasswordRequestForm`, y el
   correo viaja en el campo `username`. Mandar JSON aquí responde `422`.
 
-  Guarda el token en `adminToken`. Este flujo lo usa dos veces: para dar de alta la organización más
-  abajo, y para demostrar, hacia el final, que un administrador no alcanza dato operativo aunque su
-  token sea perfectamente válido.
+  La respuesta no trae ningún token: fija la cookie `leads_session`, que este paso guarda en
+  `adminSession`. Este flujo la usa dos veces: para dar de alta la organización más abajo, y para
+  demostrar, hacia el final, que un administrador no alcanza dato operativo aunque su sesión sea
+  perfectamente válida.
 }

@@ -10,11 +10,11 @@ meta {
 get {
   url: {{apiBase}}/auth/me
   body: none
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{agentToken}}
+headers {
+  Cookie: leads_session={{agentSession}}
 }
 
 assert {
@@ -24,14 +24,13 @@ assert {
 docs {
   # El punto entero del flujo
 
-  `{{agentToken}}` es el mismo token que en el paso 8 respondía `200` con `role: AGENT`. No ha
-  caducado — el JWT dura 60 minutos y esto ocurre segundos después de emitirlo — y su firma sigue
-  siendo válida. Lo único que cambió es una fila en la base de datos: `is_active` pasó a `false` en
-  el paso anterior.
+  `{{agentSession}}` es la misma sesión que en el paso 8 respondía `200` con `role: AGENT`. No ha
+  caducado —dura 8 horas y esto ocurre segundos después de abrirla— y nadie hizo logout con ella. Lo
+  único que cambió es una fila en la base de datos: `is_active` pasó a `false` en el paso anterior.
 
-  Y aun así responde `401`. Cada petición vuelve a recargar el agente desde base de datos por su
-  identificador, en vez de confiar en lo que el token dice sobre sí mismo, y exige que siga activo.
-  Es la diferencia entre revocar el acceso al instante y tener que esperar a que caduquen los tokens
-  ya emitidos — que en un sistema que sólo confiara en la firma del JWT sería el único remedio
-  disponible.
+  Y aun así responde `401`. En cada petición el gateway pide a identity que resuelva la cookie, e
+  identity recarga el agente desde base de datos y exige que siga activo antes de emitir el JWT
+  interno de 60 segundos (ADR-0029, ADR-0032). Es la diferencia entre revocar el acceso al instante
+  y tener que esperar a que caduquen las credenciales ya emitidas, que es el único remedio en un
+  sistema que confía en un token firmado en manos del cliente.
 }

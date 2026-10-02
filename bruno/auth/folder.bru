@@ -4,19 +4,21 @@ meta {
 }
 
 auth {
-  mode: bearer
-}
-
-auth:bearer {
-  token: {{managerToken}}
+  mode: none
 }
 
 docs {
   Cómo se entra y cómo se sabe quién eres.
 
-  `POST /auth/login` es público y es la única puerta: devuelve un JWT firmado con `HS256` que caduca
-  a los 60 minutos y lleva dentro el identificador del agente, su rol y su organización. Todo lo
-  demás en esta colección va con ese token en `Authorization: Bearer`.
+  `POST /auth/login` es público y es la única puerta para una persona. No devuelve ningún token:
+  fija la cookie `leads_session`, HttpOnly, opaca —un valor aleatorio del que la base sólo guarda el
+  hash— y de duración absoluta (8 horas por defecto). `POST /auth/logout` la revoca. Todo lo demás en
+  esta colección manda esa cookie en la cabecera `Cookie` (ADR-0029).
+
+  Entre la colección y la API está el gateway: valida la cookie en cada petición, la sustituye por
+  un JWT interno de 60 segundos que nunca sale de la red, y descarta cualquier `Authorization` que
+  traiga el cliente (ADR-0032). Las máquinas no usan sesión: `X-Api-Key` es su credencial, y sólo
+  `GET /leads` la acepta.
 
   El cuerpo del login viaja como **formulario**, no como JSON: es el esquema estándar
   `OAuth2PasswordRequestForm`, y el correo va en el campo `username`.
@@ -24,8 +26,8 @@ docs {
   `GET /auth/me` acepta cualquier rol y es la única vía que tiene un asesor para conocer su propio
   rol y su organización.
 
-  Un detalle que se paga caro si se ignora: el token no basta por sí solo. Cada petición vuelve a
-  leer el agente en la base de datos y exige que siga activo, así que desactivar a alguien —o
-  desactivar su organización entera— le corta el acceso de inmediato, sin esperar a que su token
-  caduque.
+  Un detalle que se paga caro si se ignora: tener la cookie no basta. Cada petición vuelve a buscar
+  la sesión, comprueba que no esté caducada ni revocada, y recarga el agente para exigir que siga
+  activo, así que desactivar a alguien —o desactivar su organización entera— le corta el acceso de
+  inmediato, sin esperar a que su sesión caduque.
 }

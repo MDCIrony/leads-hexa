@@ -10,11 +10,11 @@ meta {
 get {
   url: {{apiBase}}/leads
   body: none
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{adminToken}}
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 assert {
@@ -24,7 +24,7 @@ assert {
 docs {
   # Un `ADMIN` no es un superusuario
 
-  `{{adminToken}}` es perfectamente válido: es el mismo token que abrió la organización de este
+  `{{adminSession}}` es perfectamente válida: es la misma sesión que abrió la organización de este
   flujo. Pero un administrador de plataforma sólo alcanza el plano de organizaciones —`POST
   /tenants` y poco más—, y `GET /leads` es dato operativo, del plano de abajo.
 

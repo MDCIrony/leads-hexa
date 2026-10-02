@@ -19,13 +19,13 @@ body:form-urlencoded {
 }
 
 vars:post-response {
-  managerToken: res.body.access_token
+  managerSession: res.headers['set-cookie']?.join(';').match(/leads_session=([^;]+)/)?.[1]
 }
 
 assert {
   res.status: eq 200
-  res.body.token_type: eq bearer
-  res.body.access_token: isString
+  res.body.status: eq AUTHENTICATED
+  managerSession: isString
 }
 
 docs {
@@ -46,22 +46,34 @@ docs {
   ## Qué devuelve
 
   ```json
-  {"access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…", "token_type": "bearer"}
+  {"status": "AUTHENTICATED"}
   ```
 
-  El token es un JWT firmado con `HS256` que caduca a los **60 minutos** y lleva dentro el
-  identificador del agente, su rol y su organización. Se manda en `Authorization: Bearer <token>`.
+  Ningún token en el cuerpo. La credencial viaja en la cabecera de respuesta `Set-Cookie`: una cookie
+  `leads_session` HttpOnly, SameSite=Lax, `Path=/` y de duración absoluta (8 horas por defecto). Su
+  valor es aleatorio y opaco; la base sólo guarda su SHA-256 (ADR-0029). Se manda de vuelta en la
+  cabecera `Cookie: leads_session=<valor>`.
+
+  Si la cuenta tiene MFA activo, la respuesta es `{"status": "MFA_REQUIRED"}` y lo que se fija es la
+  cookie temporal `leads_mfa_challenge`, no la sesión: falta `POST /auth/mfa/verify` con el segundo
+  factor (ADR-0030). La colección no tiene ninguna cuenta con MFA.
 
   ## Qué toca
 
-  Nada. Lee el agente por correo y comprueba la contraseña contra su hash `bcrypt`. No escribe: no
-  hay sesión que guardar ni marca de último acceso.
+  Lee el agente por correo y comprueba la contraseña contra su hash `bcrypt`. Si es correcta, escribe
+  una fila en `auth_sessions` con el hash de la cookie y su caducidad. `POST /auth/logout` revoca esa
+  fila y borra la cookie.
 
   ## Qué esperar después
 
-  Este request guarda el token en la variable **`managerToken`**, que es la que usan por defecto casi
-  todas las carpetas de la colección. Cambia el nombre en `vars:post-response` si estás entrando
+  Este request guarda la cookie en la variable **`managerSession`**, que es la que mandan por defecto
+  casi todas las carpetas de la colección. Cambia el nombre en `vars:post-response` si estás entrando
   como otro rol, o usa los requests que ya lo hacen dentro de `flows/`.
+
+  La variable es necesaria porque Bruno guarda las cookies en un tarro por dominio y lo mezcla
+  **por encima** de la cabecera `Cookie` de cada petición: con el tarro activo, la última sesión que
+  entró hablaría por todos los roles. El script de `collection.bru` vacía el tarro tras cada
+  respuesta, y cada petición nombra la sesión con la que actúa.
 
   Con qué credenciales entrar, según lo que quieras probar:
 
@@ -77,8 +89,11 @@ docs {
   |---|---|
   | `401 INVALID_CREDENTIALS` | Contraseña incorrecta, correo inexistente, agente desactivado u organización desactivada — **el mismo error para los cuatro casos**, para no revelar cuál de ellos ocurrió |
   | `422 VALIDATION_ERROR` | Falta `username` o `password`, o el cuerpo se mandó como JSON |
+  | `403 FORBIDDEN` | La petición trae un `Origin` que el gateway no admite |
+  | `429 TOO_MANY_REQUESTS` | Más de 20 peticiones por segundo desde una IP en `/api/v1/auth/`; lo limita el gateway |
 
-  Un detalle que importa: el token no basta por sí solo para seguir dentro. Cada petición posterior
-  vuelve a leer el agente en la base de datos y exige que siga activo. Desactivar a alguien le corta
-  el acceso en el acto, sin esperar a que caduque lo que ya tiene en la mano.
+  Un detalle que importa: la cookie no basta por sí sola para seguir dentro. En cada petición
+  posterior el gateway resuelve la sesión, que no debe estar caducada ni revocada, y se vuelve a leer
+  el agente en la base de datos para exigir que siga activo. Desactivar a alguien le corta el acceso
+  en el acto, sin esperar a que caduque lo que ya tiene en la mano.
 }

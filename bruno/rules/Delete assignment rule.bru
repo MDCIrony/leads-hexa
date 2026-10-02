@@ -10,11 +10,15 @@ meta {
 delete {
   url: {{apiBase}}/rules/assignment/:assignmentRuleId
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:path {
   assignmentRuleId: {{assignmentRuleId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -24,7 +28,7 @@ assert {
 docs {
   # `DELETE /rules/assignment/{{assignmentRuleId}}`
 
-  Borra una regla de asignación de la organización del token. Exige rol `MANAGER`.
+  Borra una regla de asignación de la organización de la sesión. Exige rol `MANAGER`.
 
   ## Qué devuelve
 

@@ -10,11 +10,11 @@ meta {
 post {
   url: {{apiBase}}/agents
   body: json
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{managerTokenB}}
+headers {
+  Cookie: leads_session={{managerSessionB}}
 }
 
 body:json {

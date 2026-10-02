@@ -10,7 +10,7 @@ meta {
 get {
   url: {{apiBase}}/leads/mine?limit=100&offset=0
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
@@ -18,6 +18,10 @@ params:query {
   ~q: acme
   limit: 100
   offset: 0
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -35,8 +39,8 @@ docs {
   Devuelve los leads asignados a quien llama, sea gestor o asesor. Exige `MANAGER` o `AGENT`.
 
   Es **la única vía que tiene un asesor** hacia sus propios leads: `GET /leads` le responde `403`
-  porque expondría los de sus compañeros. Para probarlo como asesor, cambia el token de la carpeta
-  a `{{agentToken}}`.
+  porque expondría los de sus compañeros. Para probarlo como asesor, cambia la cabecera `Cookie`
+  a `leads_session={{agentSession}}`.
 
   ## Los parámetros
 

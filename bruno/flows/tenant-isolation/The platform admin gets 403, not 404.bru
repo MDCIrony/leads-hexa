@@ -10,15 +10,15 @@ meta {
 get {
   url: {{apiBase}}/leads/:leadId
   body: none
-  auth: bearer
+  auth: none
 }
 
 params:path {
   leadId: {{leadId}}
 }
 
-auth:bearer {
-  token: {{adminToken}}
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 tests {
@@ -34,7 +34,7 @@ docs {
   El mismo `{{leadId}}` que en los pasos 12 y 18 devolvió `404` aquí devuelve `403 FORBIDDEN`, y es
   la respuesta correcta, no una inconsistencia.
 
-  Un administrador de plataforma no pertenece a ninguna organización — su token no lleva una que
+  Un administrador de plataforma no pertenece a ninguna organización — su sesión no resuelve ninguna que
   comparar contra la del lead. No hay nada que ocultarle sobre la existencia del recurso: cualquier
   lead, de cualquier organización, le resulta igual de inalcanzable, porque su problema no es de
   pertenencia sino de plano. `GET /leads/{{leadId}}` es dato operativo, y el plano de plataforma no

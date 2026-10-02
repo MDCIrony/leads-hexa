@@ -10,7 +10,7 @@ meta {
 get {
   url: {{apiBase}}/leads?limit=100&offset=0
   body: none
-  auth: bearer
+  auth: none
 }
 
 params:query {
@@ -18,8 +18,8 @@ params:query {
   offset: 0
 }
 
-auth:bearer {
-  token: {{managerTokenB}}
+headers {
+  Cookie: leads_session={{managerSessionB}}
 }
 
 tests {
@@ -38,6 +38,6 @@ docs {
   comprueba es que el `id` del lead de Alpha no aparece entre los elementos del listado de Beta,
   sin importar cuántos leads propios tenga.
 
-  `GET /leads` filtra siempre por la organización del token que llama; no hay parámetro que amplíe
+  `GET /leads` filtra siempre por la organización de la sesión que llama; no hay parámetro que amplíe
   ese alcance.
 }

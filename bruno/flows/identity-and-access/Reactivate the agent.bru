@@ -10,11 +10,15 @@ meta {
 patch {
   url: {{apiBase}}/agents/:agentId
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   agentId: {{agentId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {

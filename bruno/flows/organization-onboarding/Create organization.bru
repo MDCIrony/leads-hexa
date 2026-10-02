@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/tenants
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 body:json {
@@ -81,7 +85,7 @@ docs {
 
   ## Qué esperar después
 
-  El gestor ya puede entrar con su correo y su contraseña, y ese login devuelve el token con el que
+  El gestor ya puede entrar con su correo y su contraseña, y ese login abre la sesión con la que
   se opera todo lo demás de la organización. El `ADMIN` que la creó, en cambio, no alcanza nada de
   lo que hay dentro.
 }

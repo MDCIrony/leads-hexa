@@ -10,11 +10,11 @@ meta {
 post {
   url: {{apiBase}}/tenants
   body: json
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{adminToken}}
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 body:json {
@@ -44,6 +44,6 @@ docs {
   Cada ejecución trabaja sobre su propia organización, sufijada con `runId`. El alta crea en la
   misma transacción la organización y su gestor: no hay manera de que exista una sin la otra.
 
-  Este es el único paso del flujo que usa `{{adminToken}}` para escribir. Todo lo demás va con el
-  token del gestor o del asesor, que son quienes operan dentro de la organización.
+  Este es el único paso del flujo que usa `{{adminSession}}` para escribir. Todo lo demás va con la
+  sesión del gestor o la del asesor, que son quienes operan dentro de la organización.
 }

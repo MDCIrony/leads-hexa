@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/rules/scoring
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -50,7 +54,7 @@ docs {
 
   ## Qué toca
 
-  Escribe la regla en la organización del token. No recalcula nada de lo ya procesado: las reglas se
+  Escribe la regla en la organización de la sesión. No recalcula nada de lo ya procesado: las reglas se
   aplican a los leads que entran **a partir de ahora**. Un lead puntuado ayer conserva su puntuación
   y su desglose aunque hoy cambien las reglas.
 }

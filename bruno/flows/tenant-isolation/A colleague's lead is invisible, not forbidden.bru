@@ -10,15 +10,15 @@ meta {
 get {
   url: {{apiBase}}/leads/:leadId
   body: none
-  auth: bearer
+  auth: none
 }
 
 params:path {
   leadId: {{leadId}}
 }
 
-auth:bearer {
-  token: {{otherAgentToken}}
+headers {
+  Cookie: leads_session={{otherAgentSession}}
 }
 
 tests {

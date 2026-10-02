@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/intake/leads/ingest
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -49,6 +53,6 @@ docs {
   forma concreta: lo único que este flujo necesita de él es que exista, `PROMOTED`, dentro de
   Alpha, para intentar alcanzarlo después desde Beta y desde fuera del asesor al que se asigne.
 
-  Va con `auth: inherit`, así que entra bajo el token del gestor de Alpha y queda ligado a esa
+  Va con `{{managerSession}}`, así que entra bajo la sesión del gestor de Alpha y queda ligado a esa
   organización sin que el cuerpo lo diga en ningún sitio.
 }

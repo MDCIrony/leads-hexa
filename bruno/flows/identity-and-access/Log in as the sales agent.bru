@@ -19,19 +19,20 @@ body:form-urlencoded {
 }
 
 vars:post-response {
-  agentToken: res.body.access_token
+  agentSession: res.headers['set-cookie']?.join(';').match(/leads_session=([^;]+)/)?.[1]
 }
 
 assert {
   res.status: eq 200
-  res.body.access_token: isString
+  res.body.status: eq AUTHENTICATED
+  agentSession: isString
 }
 
 docs {
   # El asesor entra con lo que acaba de crear su gestor
 
-  Mismo endpoint público que los dos logins anteriores, con una identidad distinta. `agentToken`
+  Mismo endpoint público que los dos logins anteriores, con una identidad distinta. `agentSession`
   queda guardado para el resto del flujo: lo usan tanto los pasos que comprueban qué alcanza un
-  `AGENT` como el último paso, que reutiliza este mismo token —sin volver a pedirlo— para demostrar
+  `AGENT` como el último paso, que reutiliza esta misma sesión —sin volver a entrar— para demostrar
   que deja de servir en cuanto se desactiva a quien lo tiene.
 }

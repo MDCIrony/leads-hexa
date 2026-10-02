@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/tenants
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 body:json {

@@ -10,11 +10,15 @@ meta {
 patch {
   url: {{apiBase}}/tenants/:tenantId
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   tenantId: {{tenantId}}
+}
+
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 body:json {
@@ -56,7 +60,7 @@ docs {
   ## Qué toca
 
   Escribe la organización. Si `is_active` pasa a `false`, la desactivación **se propaga en
-  cascada a todos sus agentes**: pierden el acceso de inmediato aunque su token siga sin caducar,
+  cascada a todos sus agentes**: pierden el acceso de inmediato aunque su sesión siga sin caducar,
   porque cada petición vuelve a comprobar el estado en la base de datos en el momento de recibirla.
 
   Renombrar la organización **no** toca su `slug`: se fijó al crearla, a partir del nombre
@@ -65,7 +69,7 @@ docs {
   ## Qué esperar después
 
   Tras desactivar una organización, cualquier agente suyo que intente usar un endpoint operativo
-  recibe `401` en la siguiente petición, aunque su JWT siga vigente por tiempo. Reactivarla
+  recibe `401` en la siguiente petición, aunque su sesión siga vigente por tiempo. Reactivarla
   (`is_active: true`) revierte esa condición de inmediato, sin que los agentes necesiten volver a
   autenticarse.
 

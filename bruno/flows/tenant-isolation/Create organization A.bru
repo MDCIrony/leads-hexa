@@ -10,11 +10,11 @@ meta {
 post {
   url: {{apiBase}}/tenants
   body: json
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{adminToken}}
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 body:json {
@@ -45,7 +45,7 @@ docs {
   crea igual que en `lead-processing`: sufijada con `runId`, con su gestor y sus dos orígenes de
   leads en la misma transacción.
 
-  El token que arma este paso es `{{adminToken}}`, el único punto del flujo donde se usa: crear una
+  La sesión que manda este paso es `{{adminSession}}`, el único punto del flujo donde se usa: crear una
   organización es una operación de plataforma, y todo lo que ocurre después dentro de Alpha va con
-  el token de su gestor.
+  la sesión de su gestor.
 }

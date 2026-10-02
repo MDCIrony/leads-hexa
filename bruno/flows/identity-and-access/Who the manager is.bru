@@ -10,7 +10,11 @@ meta {
 get {
   url: {{apiBase}}/auth/me
   body: none
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -27,5 +31,5 @@ docs {
   cosas: el rol que le dio el alta de la organización, y que su `tenant_id` es el mismo que devolvió
   `Create organization`.
 
-  El paso siguiente hace la misma pregunta con el token del asesor, para comparar.
+  El paso siguiente hace la misma pregunta con la sesión del asesor, para comparar.
 }

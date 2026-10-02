@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/groups
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -39,7 +43,7 @@ assert {
 docs {
   # `POST /groups`
 
-  Da de alta un grupo en la organización del token: la unidad que reúne asesores bajo una política
+  Da de alta un grupo en la organización de la sesión: la unidad que reúne asesores bajo una política
   de reparto compartida. Exige rol `MANAGER`.
 
   ## El cuerpo
@@ -93,8 +97,8 @@ docs {
 
   | Código | Cuándo |
   |---|---|
-  | `401 UNAUTHORIZED` | Sin token |
-  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `401 UNAUTHORIZED` | Sin sesión |
+  | `403 FORBIDDEN` | La sesión no es de `MANAGER` |
   | `400 GROUP_ALREADY_EXISTS` | Ya existe un grupo con ese nombre en la organización. Es un conflicto, pero responde `400`: en esta API no existe ningún `409` |
   | `400 INVALID_GROUP_NAME` | Nombre vacío o inválido |
   | `400 INVALID_GROUP_CAPACITY` | `capacity_per_agent` menor o igual que cero |

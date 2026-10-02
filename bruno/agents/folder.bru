@@ -4,18 +4,14 @@ meta {
 }
 
 auth {
-  mode: bearer
-}
-
-auth:bearer {
-  token: {{managerToken}}
+  mode: none
 }
 
 docs {
   Las personas de una organización: gestores y asesores comerciales.
 
   Los cinco endpoints exigen `MANAGER` y operan siempre dentro de su propia organización — la que
-  sale del token. No hay `tenant_id` en ningún cuerpo.
+  sale de la sesión. No hay `tenant_id` en ningún cuerpo.
 
   **`POST /agents` es el único endpoint de la API con autenticación condicional.** Mientras la tabla
   de agentes esté vacía no pide credencial y crea siempre un `ADMIN` de plataforma, ignorando el

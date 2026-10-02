@@ -10,12 +10,16 @@ meta {
 get {
   url: {{apiBase}}/leads/stats
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
   ~from: 2026-01-01
   ~to: 2026-12-31
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -73,7 +77,7 @@ docs {
 
   ## Qué toca
 
-  Sólo lee: los leads y registros de entrada de la organización del token, sin traerse ninguna
+  Sólo lee: los leads y registros de entrada de la organización de la sesión, sin traerse ninguna
   entidad completa al navegador.
 
   Está declarada **antes** de `/{{lead_id}}` en el router, igual que `/mine`: si fuera después,

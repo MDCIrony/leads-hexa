@@ -10,7 +10,7 @@ meta {
 get {
   url: {{apiBase}}/agents
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
@@ -18,6 +18,10 @@ params:query {
   ~is_active: false
   limit: 100
   offset: 0
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -32,7 +36,7 @@ assert {
 docs {
   # `GET /agents`
 
-  Lista los agentes de la organización del token, paginados. Exige rol `MANAGER`.
+  Lista los agentes de la organización de la sesión, paginados. Exige rol `MANAGER`.
 
   ## Los parámetros
 
@@ -69,7 +73,7 @@ docs {
 
   ## Qué toca
 
-  Nada. Sólo lee, y sólo dentro de la organización del token.
+  Nada. Sólo lee, y sólo dentro de la organización de la sesión.
 
   ## Qué esperar después
 
@@ -80,6 +84,6 @@ docs {
 
   | Código | Cuándo |
   |---|---|
-  | `401 UNAUTHORIZED` | Sin token |
-  | `403 FORBIDDEN` | El token no es de `MANAGER` |
+  | `401 UNAUTHORIZED` | Sin sesión |
+  | `403 FORBIDDEN` | La sesión no es de `MANAGER` |
 }

@@ -10,11 +10,15 @@ meta {
 post {
   url: {{apiBase}}/notifications/:notificationId/read
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:path {
   notificationId: {{notificationId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {

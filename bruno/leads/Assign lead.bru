@@ -10,11 +10,15 @@ meta {
 post {
   url: {{apiBase}}/leads/:leadId/assign
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   leadId: {{leadId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -56,7 +60,7 @@ docs {
 
   Efecto que no se ve en la respuesta: genera un aviso al asesor destino — `LEAD_ASSIGNED` si el
   lead no tenía asesor, `LEAD_REASSIGNED` si ya estaba asignado a otro. Se comprueba pidiendo
-  `GET /notifications` con el token de ese asesor.
+  `GET /notifications` con la sesión de ese asesor.
 
   ## Qué esperar después
 

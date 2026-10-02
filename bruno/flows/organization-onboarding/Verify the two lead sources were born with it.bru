@@ -10,11 +10,11 @@ meta {
 get {
   url: {{apiBase}}/sources
   body: none
-  auth: bearer
+  auth: none
 }
 
-auth:bearer {
-  token: {{managerToken}}
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 vars:post-response {
@@ -42,7 +42,7 @@ docs {
 
   `MANUAL_FORM` es el que usa el alta individual de leads; `FILE_UPLOAD`, el que usa la carga de
   ficheros. La ingesta **no recibe un identificador de origen**: lo resuelve sola, buscando el
-  origen activo del tipo que le corresponde dentro de la organización del token.
+  origen activo del tipo que le corresponde dentro de la organización de la sesión.
 
   Ese detalle tiene una consecuencia práctica que conviene conocer antes de tropezar con ella:
   desactivar el origen `MANUAL_FORM` de una organización no «desactiva un origen», **rompe su alta

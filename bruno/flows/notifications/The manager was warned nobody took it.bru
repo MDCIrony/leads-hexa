@@ -10,16 +10,41 @@ meta {
 get {
   url: {{apiBase}}/notifications
   body: none
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
+}
+
+script:post-response {
+  const MAX_ATTEMPTS = 50;
+  const WAIT_MS = 200;
+
+  const unwrap = (r) => (r && r.data !== undefined ? r.data : r && r.body);
+  const findOrphaned = (inbox) => inbox.items.find(
+    (item) => item.kind === "LEAD_LEFT_UNASSIGNED" && item.is_read === false
+  );
+
+  const url = `${bru.getEnvVar("apiBase")}/notifications`;
+  const headers = { Cookie: `leads_session=${bru.getVar("managerSession")}` };
+
+  let inbox = res.body;
+  let attempts = 0;
+  while (!findOrphaned(inbox) && attempts < MAX_ATTEMPTS) {
+    attempts += 1;
+    await bru.sleep(WAIT_MS);
+    inbox = unwrap(await bru.sendRequest({ method: "GET", url, headers }));
+  }
+
+  const orphaned = findOrphaned(inbox);
+  bru.setVar("orphanedLeadId", orphaned ? orphaned.lead_id : null);
+  bru.setVar("noticeAttempts", attempts);
 }
 
 tests {
   test("existe un LEAD_LEFT_UNASSIGNED sin leer, creado por esta ejecución", function() {
-    const orphaned = res.body.items.find(
-      (item) => item.kind === "LEAD_LEFT_UNASSIGNED" && item.is_read === false
-    );
-    expect(orphaned, "no apareció ningún LEAD_LEFT_UNASSIGNED sin leer").to.exist;
-    expect(orphaned.lead_id).to.be.a("string");
+    expect(bru.getVar("orphanedLeadId"), `no apareció ningún LEAD_LEFT_UNASSIGNED sin leer tras ${bru.getVar("noticeAttempts")} intentos`).to.be.a("string");
   });
 }
 
@@ -29,6 +54,9 @@ docs {
   Sin ninguna regla de asignación capaz de cubrirlo, el lead ingerido en el paso anterior quedó
   `UNASSIGNED`, y `NotificationHandler` avisó a los gestores activos de la organización — no a ningún
   asesor, porque ninguno es responsable de un lead que el motor no le asignó.
+
+  Como en `The agent was notified`, el aviso llega un salto después de que el trabajo termine, por
+  Kafka, así que este paso sondea la bandeja del gestor hasta verlo, con tope de intentos.
 
   El paso anterior de marcado masivo del flujo previo, si lo hubo, deja leídos los avisos de pasadas
   anteriores; filtrar por `is_read === false` es lo que aísla el aviso que provocó **esta** ejecución

@@ -10,11 +10,15 @@ meta {
 post {
   url: {{apiBase}}/leads/:leadId/discard
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   leadId: {{leadId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {

@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/sources
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -35,7 +39,7 @@ assert {
 docs {
   # `POST /sources`
 
-  Da de alta un origen en la organización del token. Exige rol `MANAGER`.
+  Da de alta un origen en la organización de la sesión. Exige rol `MANAGER`.
 
   ## El cuerpo
 
@@ -70,7 +74,7 @@ docs {
 
   ## Qué toca
 
-  Inserta el origen en la organización del token, activo desde el alta. No reingresa ni reprocesa
+  Inserta el origen en la organización de la sesión, activo desde el alta. No reingresa ni reprocesa
   ningún lead existente: crear un origen es una operación de catálogo, sin efecto retroactivo.
 
   ## Qué esperar después

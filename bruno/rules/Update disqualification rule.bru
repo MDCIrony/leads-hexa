@@ -10,11 +10,15 @@ meta {
 patch {
   url: {{apiBase}}/rules/disqualification/:disqualificationRuleId
   body: json
-  auth: inherit
+  auth: none
 }
 
 params:path {
   disqualificationRuleId: {{disqualificationRuleId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -34,7 +38,7 @@ assert {
 docs {
   # `PATCH /rules/disqualification/{{disqualificationRuleId}}`
 
-  Actualiza una regla de descalificación de la organización del token. Exige rol `MANAGER`. Todos
+  Actualiza una regla de descalificación de la organización de la sesión. Exige rol `MANAGER`. Todos
   los campos del cuerpo son opcionales — el ejemplo de este request sólo toca `priority` e
   `is_active`, pero admite también `name` y `conditions`.
 

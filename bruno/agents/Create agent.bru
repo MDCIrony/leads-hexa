@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/agents
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -41,7 +45,7 @@ assert {
 docs {
   # `POST /agents`
 
-  Da de alta un agente — gestor o asesor — dentro de la organización del token. Exige rol
+  Da de alta un agente — gestor o asesor — dentro de la organización de la sesión. Exige rol
   `MANAGER`, con una única excepción de arranque descrita abajo.
 
   ## El cuerpo
@@ -101,8 +105,8 @@ docs {
 
   | Código | Cuándo |
   |---|---|
-  | `401 UNAUTHORIZED` | Fuera del arranque, sin token |
-  | `403 FORBIDDEN` | El token no es de `MANAGER`, o el cuerpo pide `role: ADMIN` |
+  | `401 UNAUTHORIZED` | Fuera del arranque, sin sesión |
+  | `403 FORBIDDEN` | La sesión no es de `MANAGER`, o el cuerpo pide `role: ADMIN` |
   | `422 VALIDATION_ERROR` | Email inválido o falta algún campo obligatorio |
   | `500 INTERNAL_ERROR` | El correo ya existe en la organización. Hay un índice único, pero no se captura antes de insertar: llega como error interno, no como conflicto |
 }

@@ -10,12 +10,16 @@ meta {
 get {
   url: {{apiBase}}/tenants?limit=100&offset=0
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
   limit: 100
   offset: 0
+}
+
+headers {
+  Cookie: leads_session={{adminSession}}
 }
 
 assert {

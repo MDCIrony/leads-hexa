@@ -19,18 +19,19 @@ body:form-urlencoded {
 }
 
 vars:post-response {
-  managerTokenB: res.body.access_token
+  managerSessionB: res.headers['set-cookie']?.join(';').match(/leads_session=([^;]+)/)?.[1]
 }
 
 assert {
   res.status: eq 200
-  res.body.access_token: isString
+  res.body.status: eq AUTHENTICATED
+  managerSessionB: isString
 }
 
 docs {
-  # El gestor de Beta entra con su propio token
+  # El gestor de Beta entra con su propia sesión
 
-  `managerTokenB` lleva dentro la organización Beta, y es distinto de `managerToken` — el de Alpha,
+  `managerSessionB` lleva dentro la organización Beta, y es distinto de `managerSession` — el de Alpha,
   que se guardó en el paso 4 y sigue vivo en variables de ejecución. Los pasos siguientes usan uno
   u otro a propósito, según de qué lado de la frontera quieren preguntar.
 }

@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/rules/assignment
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -41,7 +45,7 @@ assert {
 docs {
   # `POST /rules/assignment`
 
-  Crea una regla de asignación en la organización del token. Exige rol `MANAGER`.
+  Crea una regla de asignación en la organización de la sesión. Exige rol `MANAGER`.
 
   ## El cuerpo
 
@@ -86,7 +90,7 @@ docs {
 
   ## Qué toca
 
-  Inserta la regla en la organización del token. No reasigna a ningún lead ya asignado: sólo entra
+  Inserta la regla en la organización de la sesión. No reasigna a ningún lead ya asignado: sólo entra
   en juego en la siguiente pasada del motor.
 
   ## Qué esperar después

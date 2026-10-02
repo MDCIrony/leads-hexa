@@ -10,11 +10,15 @@ meta {
 delete {
   url: {{apiBase}}/rules/disqualification/:disqualificationRuleId
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:path {
   disqualificationRuleId: {{disqualificationRuleId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 assert {
@@ -24,7 +28,7 @@ assert {
 docs {
   # `DELETE /rules/disqualification/{{disqualificationRuleId}}`
 
-  Borra una regla de descalificación de la organización del token. Exige rol `MANAGER`.
+  Borra una regla de descalificación de la organización de la sesión. Exige rol `MANAGER`.
 
   ## Qué devuelve
 

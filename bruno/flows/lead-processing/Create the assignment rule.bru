@@ -10,7 +10,11 @@ meta {
 post {
   url: {{apiBase}}/rules/assignment
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
 }
 
 body:json {
@@ -36,7 +40,7 @@ script:post-response {
   // against an absolute number the organization could already have from a
   // previous run.
   const url = `${bru.getEnvVar("apiBase")}/leads/stats`;
-  const headers = { Authorization: `Bearer ${bru.getVar("managerToken")}` };
+  const headers = { Cookie: `leads_session=${bru.getVar("managerSession")}` };
   const stats = await bru.sendRequest({ method: "GET", url, headers });
   const body = stats.data || stats.body;
   bru.setVar("assignedBaseline", body.by_status.ASSIGNED);

@@ -10,16 +10,20 @@ meta {
 get {
   url: {{apiBase}}/leads?status=ASSIGNED
   body: none
-  auth: inherit
+  auth: none
 }
 
 params:query {
   status: ASSIGNED
 }
 
+headers {
+  Cookie: leads_session={{managerSession}}
+}
+
 script:post-response {
   const url = `${bru.getEnvVar("apiBase")}/leads?status=DISCARDED`;
-  const headers = { Authorization: `Bearer ${bru.getVar("managerToken")}` };
+  const headers = { Cookie: `leads_session=${bru.getVar("managerSession")}` };
   const discarded = await bru.sendRequest({ method: "GET", url, headers });
   const discardedIds = (discarded.data || discarded.body).items.map(item => item.id);
   bru.setVar("leadNotAmongDiscarded", !discardedIds.includes(bru.getVar("leadId")));

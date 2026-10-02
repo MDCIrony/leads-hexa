@@ -10,15 +10,15 @@ meta {
 post {
   url: {{apiBase}}/notifications/:notificationId/read
   body: none
-  auth: bearer
-}
-
-auth:bearer {
-  token: {{agentToken}}
+  auth: none
 }
 
 params:path {
   notificationId: {{notificationId}}
+}
+
+headers {
+  Cookie: leads_session={{agentSession}}
 }
 
 assert {
@@ -28,7 +28,7 @@ assert {
 docs {
   # Sólo el destinatario puede marcarlo
 
-  Lo marca el asesor, con su propio token: es su bandeja, y el aviso es suyo. Responde `204` sin
+  Lo marca el asesor, con su propia sesión: es su bandeja, y el aviso es suyo. Responde `204` sin
   cuerpo, y no toca nada más de la bandeja — el resto de sus avisos sigue como estaba.
 
   El paso siguiente comprueba que `unread_count` volvió a la línea base capturada al principio del

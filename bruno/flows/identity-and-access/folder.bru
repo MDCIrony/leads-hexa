@@ -4,11 +4,7 @@ meta {
 }
 
 auth {
-  mode: bearer
-}
-
-auth:bearer {
-  token: {{managerToken}}
+  mode: none
 }
 
 docs {
@@ -23,7 +19,7 @@ docs {
   | Identidad | `GET /auth/me` responde distinto según quién pregunta, dentro de la misma organización |
   | Rechazos de login | Contraseña incorrecta y correo inexistente responden **el mismo** error |
   | Los dos planos | Un `ADMIN` de plataforma no alcanza dato operativo, igual que un `AGENT` no alcanza el listado completo |
-  | Revocación | Desactivar a un asesor le corta el acceso al instante, sin esperar a que caduque su token |
+  | Revocación | Desactivar a un asesor le corta el acceso al instante, sin esperar a que caduque su sesión |
 
   ## Por qué importa el orden
 
@@ -31,7 +27,7 @@ docs {
   gestor y un asesor dentro de ella. Todo lo que viene después son comprobaciones negativas o de
   aislamiento sobre ese mismo escenario, y por eso ninguna crea nada nuevo.
 
-  El último paso reutiliza el token del asesor que se guardó varios pasos antes, precisamente para
-  demostrar que ese token —todavía válido, todavía sin caducar— deja de servir en el instante en que
-  se desactiva a quien lo tiene.
+  El último bloque reutiliza la sesión del asesor que se guardó varios pasos antes, precisamente para
+  demostrar que esa sesión —todavía abierta, todavía sin caducar— deja de servir en el instante en
+  que se desactiva a quien la abrió.
 }
