@@ -1,53 +1,60 @@
 """Standalone consumer for `intake.jobs` (ADR-0027): its own compose service,
-not a thread inside the API process, so a container restart mid-file no
-longer strands the job the way BackgroundTasks did.
+not a thread inside the API process, so a container restart mid-file does not
+strand the job.
 
-Redelivery is what makes this safe to kill at any point: nothing here is
-acked until ProcessIntakeJobUseCase.execute returns, and reprocessing only
-ever reads PENDING records back (0.2, 0.3) — the pieces this worker relies on
-rather than reimplements."""
+Redelivery is what makes this safe to kill at any point: nothing is acked
+until the job's run returns, and a run only ever reads PENDING records back."""
 
 import json
 import logging
-from uuid import UUID
+import time
 
 import pika
+from pika.exceptions import AMQPConnectionError, ChannelClosedByBroker
 
-from domain.exceptions import DomainException
-from infrastructure.adapters.input.api.dependencies import (
-    get_ingest_lead_use_case,
-    get_process_intake_job_use_case,
-)
-from infrastructure.adapters.output.queue.rabbitmq_job_queue import QUEUE_NAME, declare_intake_topology
+from infrastructure.adapters.output.queue.intake_queue_topology import QUEUE_NAME, declare_intake_topology
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
 from infrastructure.logging_config import configure_logging
+from infrastructure.workers.job_messages import process_job_message
 
 _LOGGER = logging.getLogger(__name__)
+_MAX_BACKOFF_SECONDS = 30.0
 
 
 def _handle_message(container: Container, channel, method, body: bytes) -> None:
-    message = json.loads(body)
-    job_id = UUID(message["job_id"])
-
-    # A fresh unit of work per message, same reasoning as one per HTTP
-    # request (dependencies.get_uow): it owns a transaction that must not
-    # bleed into the next job. Reuses the API's own wiring instead of
-    # rebuilding it, so the two call sites cannot drift apart.
-    uow = container.unit_of_work()
-    ingest = get_ingest_lead_use_case(uow=uow, container=container)
-    process_job = get_process_intake_job_use_case(uow=uow, ingest=ingest)
-
     try:
-        process_job.execute(UUID(message["tenant_id"]), job_id)
-    except DomainException:
-        # Retrying a job that does not exist will never make it exist.
-        pass
-    except Exception:
-        _LOGGER.error("Failed processing intake job %s, requeueing", job_id, exc_info=True)
-        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+        outcome = process_job_message(container, json.loads(body))
+    except (ValueError, KeyError, TypeError):
+        # Only a body that is not a job message gets here: no redelivery will
+        # fix it, so it goes straight to the dead-letter queue.
+        _LOGGER.error("Malformed intake job message, dead-lettering", exc_info=True)
+        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         return
-    channel.basic_ack(delivery_tag=method.delivery_tag)
+    if outcome == "nack":
+        channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+    else:
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+
+
+def _consume(container: Container, url: str) -> None:
+    connection = pika.BlockingConnection(pika.URLParameters(url))
+    try:
+        channel = connection.channel()
+        declare_intake_topology(channel)
+        # One job at a time per worker: jobs are long (up to 10k records), and a
+        # deep prefetch would let one worker hoard several while others sit idle.
+        channel.basic_qos(prefetch_count=1)
+        channel.basic_consume(
+            queue=QUEUE_NAME,
+            on_message_callback=lambda ch, method, properties, body: _handle_message(container, ch, method, body),
+            auto_ack=False,
+        )
+        _LOGGER.info("Intake worker consuming from %s", QUEUE_NAME)
+        channel.start_consuming()
+    finally:
+        if connection.is_open:
+            connection.close()
 
 
 def main() -> None:
@@ -55,23 +62,22 @@ def main() -> None:
     settings = Settings.from_environment()
     container = Container(settings)
 
-    # ponytail: one connection attempt, no reconnect loop — compose's
-    # `restart: on-failure` recovers a dropped broker the same way it
-    # recovers a crash. Add backoff-and-retry here if that proves too coarse.
-    connection = pika.BlockingConnection(pika.URLParameters(settings.rabbitmq_url))
-    channel = connection.channel()
-    declare_intake_topology(channel)
-    # One job at a time per worker: jobs are long (up to 10k records), and a
-    # deep prefetch would let one worker hoard several while others sit idle.
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(
-        queue=QUEUE_NAME,
-        on_message_callback=lambda ch, method, properties, body: _handle_message(container, ch, method, body),
-        auto_ack=False,
-    )
-
-    _LOGGER.info("Intake worker consuming from %s", QUEUE_NAME)
-    channel.start_consuming()
+    # Reconnects in process instead of exiting: under the dev file watcher an
+    # exited worker stays down until a file changes, and the jobs the relay
+    # keeps publishing would wait for nobody.
+    delay = 1.0
+    while True:
+        started = time.monotonic()
+        try:
+            _consume(container, settings.rabbitmq_url)
+        # OSError too: a broker host that does not resolve surfaces as
+        # socket.gaierror, which pika re-raises unwrapped.
+        except (AMQPConnectionError, ChannelClosedByBroker, OSError) as exc:
+            if time.monotonic() - started > _MAX_BACKOFF_SECONDS:
+                delay = 1.0
+            _LOGGER.warning("RabbitMQ unavailable (%r), reconnecting in %.0fs", exc, delay)
+            time.sleep(delay)
+            delay = min(delay * 2, _MAX_BACKOFF_SECONDS)
 
 
 if __name__ == "__main__":

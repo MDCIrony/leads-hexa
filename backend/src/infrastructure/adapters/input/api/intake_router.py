@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 from application.dtos.commands import PromoteIntakeRecordCommand, ReceiveIntakeCommand
 from application.dtos.context import RequestContext
@@ -11,17 +11,12 @@ from application.ports.input.intake_job_use_case_ports import (
     GetIntakeJobsInputPort,
     ReprocessIntakeJobInputPort,
 )
-from application.ports.input.intake_phase_use_case_ports import (
-    ProcessIntakeJobInputPort,
-    ReceiveIntakeInputPort,
-)
+from application.ports.input.intake_phase_use_case_ports import ReceiveIntakeInputPort
 from application.ports.input.intake_record_use_case_ports import (
     DiscardIntakeRecordInputPort,
     GetIntakeRecordsInputPort,
     PromoteIntakeRecordInputPort,
 )
-from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
-from application.ports.output.job_queue_port import JobQueuePort
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.enums import IntakeJobKind, IntakeRecordStatus
@@ -30,9 +25,6 @@ from infrastructure.adapters.input.api.dependencies import (
     get_get_intake_job_use_case,
     get_get_intake_jobs_use_case,
     get_get_intake_records_use_case,
-    get_job_queue,
-    get_process_batch_use_case,
-    get_process_intake_job_use_case,
     get_promote_intake_record_use_case,
     get_receive_intake_use_case,
     get_reprocess_intake_job_use_case,
@@ -52,6 +44,10 @@ from infrastructure.adapters.input.api.schemas import (
 )
 
 router = APIRouter()
+
+# The gateway's limit too, repeated here because the backend must hold it on
+# its own when called without the gateway in front.
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def _to_record_response(record: IntakeRecord) -> IntakeRecordResponse:
@@ -90,24 +86,16 @@ def _to_job_response(job: IntakeJob) -> IntakeJobResponse:
 @router.post("/leads/ingest", response_model=IntakeAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
 def ingest_lead(
     request: IngestLeadRequest,
-    background: BackgroundTasks,
     context: RequestContext = Depends(require_organization_manager),
     receive: ReceiveIntakeInputPort = Depends(get_receive_intake_use_case),
-    process: ProcessIntakeJobInputPort = Depends(get_process_intake_job_use_case),
-    job_queue: JobQueuePort = Depends(get_job_queue),
 ):
+    # Reception records the job in the outbox in the same transaction as the
+    # record; the relay hands it to RabbitMQ, so a broker outage only delays it.
     received = receive.execute(ReceiveIntakeCommand(
         tenant_id=context.tenant_id,
         kind=IntakeJobKind.SINGLE.value,
         payloads=[request.model_dump()],
     ))
-    job_id = UUID(received.job_id)
-    # Queued after reception has confirmed: if the process dies here, the
-    # record is already durable and the job stays visible to reprocess.
-    # A broker outage (ADR-0027) falls back to the same in-process path this
-    # replaced, rather than rejecting a lead over our queue being down.
-    if not job_queue.enqueue_intake_job(context.tenant_id, job_id):
-        background.add_task(process.execute, context.tenant_id, job_id)
     return IntakeAcceptedResponse(
         job_id=received.job_id,
         record_ids=received.record_ids,
@@ -116,24 +104,26 @@ def ingest_lead(
 
 @router.post("/leads/batch-upload", response_model=IntakeAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
 async def batch_upload(
-    background: BackgroundTasks,
     file: UploadFile = File(...),
     context: RequestContext = Depends(require_organization_manager),
     receive: ReceiveIntakeInputPort = Depends(get_receive_intake_use_case),
-    process_batch: ProcessBatchInputPort = Depends(get_process_batch_use_case),
 ):
-    # Read here, not inside the background task: the uploaded file closes
-    # when the request ends, and the task has not run yet by then.
-    content = await file.read()
+    # One byte past the limit is enough to know, without reading the rest.
+    content = await file.read(_MAX_UPLOAD_BYTES + 1)
+    if len(content) > _MAX_UPLOAD_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={"error": True, "error_code": "PAYLOAD_TOO_LARGE", "message": "Request body too large"},
+        )
+    # Stored with the job, not handed to a background task: the file must
+    # outlive this process for the worker that parses it.
     received = receive.execute(ReceiveIntakeCommand(
         tenant_id=context.tenant_id,
         kind=IntakeJobKind.BATCH.value,
         payloads=[],
+        filename=file.filename,
+        content=content,
     ))
-    background.add_task(
-        process_batch.execute,
-        context.tenant_id, UUID(received.job_id), content, file.filename or "leads.csv",
-    )
     return IntakeAcceptedResponse(
         job_id=received.job_id,
         record_ids=[],
@@ -246,12 +236,7 @@ def reprocess_intake_job(
     reprocess: ReprocessIntakeJobInputPort = Depends(get_reprocess_intake_job_use_case),
     get_job: GetIntakeJobInputPort = Depends(get_get_intake_job_use_case),
 ):
-    # Not backgrounded, unlike ingest: Starlette has already started sending
-    # the response by the time a background task runs, so a DomainException
-    # raised in there (unowned job, already-terminal job) cannot become a
-    # clean 404/400 anymore — it surfaces as a bare RuntimeError instead.
-    # Running synchronously keeps the ownership/transition checks inside the
-    # normal exception-handling path, and the work itself stays bounded by
-    # the same _MAX_ITEMS_PER_RUN cap regular processing uses.
+    # The checks run here so an unowned or finished job is a clean 404/400;
+    # the run itself is queued, and the job comes back as it now stands.
     reprocess.execute(context.tenant_id, job_id)
     return _to_job_response(get_job.execute(context.tenant_id, job_id))

@@ -6,6 +6,8 @@ import pytest
 from application.dtos.commands import IngestLeadCommand, LeadProcessedResult, ReceiveIntakeCommand
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
+from application.use_cases.intake_job_use_cases import ReprocessIntakeJobUseCase
+from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
 from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from domain.entities.intake_record import IntakeRecord
@@ -301,3 +303,137 @@ def test_reprocessing_a_job_left_in_progress_does_not_duplicate_leads():
     process.execute(tenant_id=tenant_id, job_id=UUID(received.job_id))
 
     assert len(uow.leads.list_by_tenant(tenant_id)) == 1
+
+
+# --- background work goes through the outbox (F1) ---
+
+
+def _job_rows(uow: InMemoryUnitOfWork):
+    return uow.outbox.list_unpublished("job", 100)
+
+
+class _FailingRecords:
+    def save(self, record):
+        raise RuntimeError("database gone")
+
+
+class _StubParser:
+    def __init__(self, rows=None, error: Optional[Exception] = None) -> None:
+        self.rows, self.error, self.calls = rows or [], error, 0
+
+    def parse_leads_file(self, file_content, filename, tenant_id, source_id):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return [
+            IngestLeadCommand(tenant_id=tenant_id, source_id=source_id, **row) for row in self.rows
+        ]
+
+
+def _receive_batch(uow: InMemoryUnitOfWork, tenant_id: UUID) -> UUID:
+    received = ReceiveIntakeUseCase(uow=uow).execute(ReceiveIntakeCommand(
+        tenant_id=tenant_id, kind=IntakeJobKind.BATCH.value, payloads=[],
+        filename="leads.csv", content=b"first_name\nMaria\n",
+    ))
+    return UUID(received.job_id)
+
+
+def test_receiving_a_single_lead_records_its_job_in_the_outbox():
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+
+    received = ReceiveIntakeUseCase(uow=uow).execute(
+        ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_VALID_PAYLOAD])
+    )
+
+    [row] = _job_rows(uow)
+    assert row.payload == {"tenant_id": str(tenant_id), "job_id": received.job_id}
+    assert row.partition_key == received.job_id
+    assert row.event_type == "IntakeJobRequested"
+
+
+def test_a_reception_that_rolls_back_leaves_no_job_in_the_outbox():
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+    uow.intake_records = _FailingRecords()
+
+    with pytest.raises(RuntimeError):
+        ReceiveIntakeUseCase(uow=uow).execute(
+            ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_VALID_PAYLOAD])
+        )
+
+    assert _job_rows(uow) == []
+
+
+def test_receiving_a_batch_stores_the_file_and_records_its_job():
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+
+    job_id = _receive_batch(uow, tenant_id)
+
+    stored = uow.intake_files.get(job_id, tenant_id)
+    assert (stored.filename, stored.content, stored.parsed_at) == ("leads.csv", b"first_name\nMaria\n", None)
+    assert [row.payload["job_id"] for row in _job_rows(uow)] == [str(job_id)]
+
+
+def test_parsing_the_stored_file_twice_does_not_duplicate_records():
+    """A redelivered job message parses again; parsed_at is what stops it."""
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+    job_id = _receive_batch(uow, tenant_id)
+    parser = _StubParser(rows=[{
+        "first_name": "Maria", "last_name": "Gomez", "company": "TechCorp",
+        "budget": 5000.0, "industry": "Tech", "email": "mgomez@techcorp.com",
+    }])
+    parse = ProcessBatchUseCase(uow=uow, file_parser=parser)
+
+    parse.execute(tenant_id, job_id)
+    parse.execute(tenant_id, job_id)
+
+    assert parser.calls == 1
+    assert uow.intake_records.count_by_tenant(tenant_id, job_id=job_id) == 1
+    job = uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
+    assert (job.status, job.total_items) == (IntakeJobStatus.PENDING, 1)
+    assert uow.intake_files.get(job_id, tenant_id).parsed_at is not None
+
+
+def test_an_unreadable_stored_file_fails_the_job_without_records():
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+    job_id = _receive_batch(uow, tenant_id)
+
+    ProcessBatchUseCase(uow=uow, file_parser=_StubParser(error=ValueError("not a csv"))).execute(tenant_id, job_id)
+
+    assert uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id).status == IntakeJobStatus.FAILED
+    assert uow.intake_records.count_by_tenant(tenant_id, job_id=job_id) == 0
+
+
+def test_processing_reports_whether_the_run_was_interrupted():
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+    received = ReceiveIntakeUseCase(uow=uow).execute(
+        ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_VALID_PAYLOAD])
+    )
+    exploding = _ExplodingIngest(IngestLeadUseCase(uow=uow), explode_on_email=_VALID_PAYLOAD["email"])
+
+    assert ProcessIntakeJobUseCase(uow=uow, ingest=exploding).execute(tenant_id, UUID(received.job_id)) is True
+    assert ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow)).execute(
+        tenant_id, UUID(received.job_id)
+    ) is False
+
+
+def test_reprocessing_records_a_job_and_does_not_process_in_line():
+    tenant_id = uuid4()
+    uow = _seeded_uow(tenant_id)
+    received = ReceiveIntakeUseCase(uow=uow).execute(
+        ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_VALID_PAYLOAD])
+    )
+    job_id = UUID(received.job_id)
+    uow.outbox.mark_published(_job_rows(uow)[0].id)
+
+    ReprocessIntakeJobUseCase(uow=uow).execute(tenant_id, job_id)
+
+    assert [row.payload["job_id"] for row in _job_rows(uow)] == [str(job_id)]
+    assert uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id).status == IntakeJobStatus.PENDING
+    record = uow.intake_records.get_by_id_and_tenant(UUID(received.record_ids[0]), tenant_id)
+    assert record.status == IntakeRecordStatus.PENDING

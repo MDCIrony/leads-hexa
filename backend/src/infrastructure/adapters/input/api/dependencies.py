@@ -6,7 +6,6 @@ from fastapi import Request, Depends
 from chassis.auth import TokenError
 from application.dtos.context import Principal, RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
@@ -106,9 +105,6 @@ def get_container(request: Request) -> Container:
 def get_uow(container: Container = Depends(get_container)) -> UnitOfWorkPort:
     return container.unit_of_work()
 
-def get_job_queue(container: Container = Depends(get_container)) -> JobQueuePort:
-    return container.job_queue
-
 def get_ingest_lead_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),
     container: Container = Depends(get_container),
@@ -130,19 +126,11 @@ def get_process_intake_job_use_case(
 ) -> ProcessIntakeJobInputPort:
     return ProcessIntakeJobUseCase(uow=uow, ingest=ingest)
 
-# Defined after get_process_intake_job_use_case, not before: its own default
-# argument references that name, and Python resolves defaults at def-time.
 def get_process_batch_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),
     container: Container = Depends(get_container),
-    process_job: ProcessIntakeJobInputPort = Depends(get_process_intake_job_use_case),
 ) -> ProcessBatchInputPort:
-    return ProcessBatchUseCase(
-        uow=uow,
-        file_parser=container.file_parser,
-        process_job=process_job,
-        job_queue=container.job_queue,
-    )
+    return ProcessBatchUseCase(uow=uow, file_parser=container.file_parser)
 
 def get_promote_intake_record_use_case(
     uow: UnitOfWorkPort = Depends(get_uow),
@@ -159,13 +147,8 @@ def get_get_intake_jobs_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetI
 def get_get_intake_job_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeJobInputPort:
     return GetIntakeJobUseCase(uow=uow)
 
-# Depends on get_process_intake_job_use_case, defined above: same def-time
-# default-argument resolution as get_process_batch_use_case below.
-def get_reprocess_intake_job_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    process: ProcessIntakeJobInputPort = Depends(get_process_intake_job_use_case),
-) -> ReprocessIntakeJobInputPort:
-    return ReprocessIntakeJobUseCase(uow=uow, process=process)
+def get_reprocess_intake_job_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> ReprocessIntakeJobInputPort:
+    return ReprocessIntakeJobUseCase(uow=uow)
 
 def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsInputPort:
     return GetLeadsUseCase(uow=uow)

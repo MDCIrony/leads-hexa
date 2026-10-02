@@ -17,7 +17,7 @@ class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
         self.uow = uow
         self.ingest = ingest
 
-    def execute(self, tenant_id: UUID, job_id: UUID) -> None:
+    def execute(self, tenant_id: UUID, job_id: UUID) -> bool:
         with self.uow:
             job = self.uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
             if job is None:
@@ -60,3 +60,4 @@ class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
             if not interrupted:
                 job.complete()
             self.uow.intake_jobs.save(job)
+        return interrupted

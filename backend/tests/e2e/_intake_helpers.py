@@ -1,8 +1,8 @@
 def ingest_and_resolve(client, headers: dict, payload: dict) -> dict:
     """Ingests one lead and returns its intake record, already processed.
 
-    TestClient runs background tasks before handing control back, so no polling
-    is needed here — the work is done by the time the POST returns.
+    GatewayClient runs the queued job before handing control back, so no
+    polling is needed here — the work is done by the time the POST returns.
     """
     accepted = client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
     assert accepted.status_code == 202, accepted.text

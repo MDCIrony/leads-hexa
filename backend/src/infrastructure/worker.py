@@ -1,4 +1,4 @@
-"""Delivery process: relays the outbox to Kafka and webhooks, and runs the notification consumers.
+"""Delivery process: relays the outbox to Kafka, webhooks and RabbitMQ, and runs the notification consumers.
 
 Its own compose service, not threads inside the API, so a slow broker or a
 webhook that times out can never take request capacity with it, and the API can
@@ -12,6 +12,7 @@ from typing import Callable, Sequence
 
 from chassis.consumer import ConsumerLoop, TopicSpec, dlq_topic, ensure_topics
 from chassis.outbox import Dispatcher, KafkaEventDispatcher, OutboxRelay, run_relay
+from chassis.rabbit import RabbitJobDispatcher
 from confluent_kafka import Consumer, Producer
 from confluent_kafka.admin import AdminClient
 
@@ -30,9 +31,11 @@ from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWe
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import RawSqlWebhookRepository
+from infrastructure.adapters.output.queue.intake_queue_topology import QUEUE_NAME, declare_intake_topology
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
 from infrastructure.logging_config import configure_logging
+from infrastructure.workers.job_messages import job_message
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -75,14 +78,15 @@ def producer_config(bootstrap_servers: str, auto_create_topics: bool = True) -> 
     return config
 
 
-def build_dispatchers(product: Sequence[Dispatcher]) -> dict[str, list[Dispatcher]]:
+def build_dispatchers(
+    product: Sequence[Dispatcher], job: Sequence[Dispatcher] = (),
+) -> dict[str, list[Dispatcher]]:
     """Dispatchers by outbox channel.
 
     `internal` starts empty and is filled once its topics exist: the relay skips
     a channel with no dispatcher, so rows wait instead of reaching a topic that
-    Kafka would auto-create without compaction. `job` stays empty until the job
-    channel is wired (task 4b)."""
-    return {"product": list(product), "internal": [], "job": []}
+    Kafka would auto-create without compaction."""
+    return {"product": list(product), "internal": [], "job": list(job)}
 
 
 def build_relays(
@@ -188,7 +192,10 @@ def main() -> int:
         ),
         KafkaOutboundDispatcher(producer=Producer(producer_config(bootstrap))),
     ]
-    dispatchers = build_dispatchers(product_dispatchers)
+    dispatchers = build_dispatchers(
+        product_dispatchers,
+        [RabbitJobDispatcher(settings.rabbitmq_url, QUEUE_NAME, declare_intake_topology, job_message)],
+    )
     internal_dispatcher = KafkaEventDispatcher(
         Producer(producer_config(bootstrap, auto_create_topics=False)), _PRODUCER_NAME, topic_for,
     )

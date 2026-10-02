@@ -7,9 +7,9 @@ from application.ports.input.intake_job_use_case_ports import (
     GetIntakeJobsInputPort,
     ReprocessIntakeJobInputPort,
 )
-from application.ports.input.intake_phase_use_case_ports import ProcessIntakeJobInputPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.intake_job import IntakeJob
+from domain.events.intake_events import IntakeJobRequested
 from domain.exceptions import DomainException
 from domain.value_objects.enums import IntakeJobStatus
 
@@ -55,9 +55,8 @@ class GetIntakeJobUseCase(GetIntakeJobInputPort):
 
 
 class ReprocessIntakeJobUseCase(ReprocessIntakeJobInputPort):
-    def __init__(self, uow: UnitOfWorkPort, process: ProcessIntakeJobInputPort) -> None:
+    def __init__(self, uow: UnitOfWorkPort) -> None:
         self.uow = uow
-        self.process = process
 
     def execute(self, tenant_id: UUID, job_id: UUID) -> None:
         with self.uow:
@@ -71,4 +70,8 @@ class ReprocessIntakeJobUseCase(ReprocessIntakeJobInputPort):
             # summing them twice would produce impossible totals.
             job.reset_counters()
             self.uow.intake_jobs.save(job)
-        self.process.execute(tenant_id, job_id)
+            # Handed to a worker like any received job, never run in the
+            # request: a 10k-record run must not hold an HTTP worker hostage.
+            self.uow.outbox.record(
+                IntakeJobRequested(tenant_id=str(tenant_id), job_id=str(job_id)), channel="job",
+            )

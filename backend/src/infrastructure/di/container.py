@@ -2,7 +2,6 @@ from chassis.auth import JwksCache, TokenVerifier, load_signers
 from application.ports.output.clock_port import ClockPort
 from application.ports.output.file_parser_port import FileParserPort
 from application.ports.output.id_generator_port import IdGeneratorPort
-from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
 from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.output.oauth_identity_provider_port import OAuthIdentityProviderPort
@@ -12,7 +11,6 @@ from infrastructure.adapters.output.events.kafka_credential_provisioner import K
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
 from infrastructure.adapters.output.persistence.connection import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.queue.rabbitmq_job_queue import RabbitMQJobQueue
 from infrastructure.adapters.output.security.bcrypt_password_hasher import BcryptPasswordHasher
 from infrastructure.adapters.output.security.totp_mfa_crypto import TotpMfaCrypto
 from infrastructure.adapters.output.http.oauth_identity_providers import (
@@ -45,9 +43,6 @@ class Container:
         # reason not to.
         self._assignment_engine = AssignmentEngine()
         self._file_parser = PandasFileParser()
-        # Safe to build eagerly: connecting happens per enqueue call, not at
-        # construction (ADR-0027), so a RabbitMQ outage never blocks startup.
-        self._job_queue = RabbitMQJobQueue(settings.rabbitmq_url)
         # The internal, unauthenticated listener (ADR-0028): the same one
         # KafkaOutboundDispatcher uses, where User:ANONYMOUS is a super.user,
         # not the SASL one the host reaches — this adapter is the thing
@@ -114,10 +109,6 @@ class Container:
     @property
     def file_parser(self) -> FileParserPort:
         return self._file_parser
-
-    @property
-    def job_queue(self) -> JobQueuePort:
-        return self._job_queue
 
     @property
     def messaging_credential_provisioner(self) -> MessagingCredentialProvisionerPort:

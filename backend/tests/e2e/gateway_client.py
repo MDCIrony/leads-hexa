@@ -5,8 +5,9 @@ introspection endpoint and forwards only the resulting bearer, so e2e tests
 exercise the same trust boundary the stack runs with. Tests that deliberately
 talk to the app without a gateway (test_internal_auth) keep a plain TestClient.
 
-It also stands in for the outbox worker (F1): after every forwarded request it
-drains the internal channel into the notification consumers, in process."""
+It also stands in for the outbox worker and the intake worker (F1): after every
+forwarded request it drains the internal channel into the notification
+consumers and the job channel through process_job_message, in process."""
 import dataclasses
 import json
 
@@ -17,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from infrastructure.adapters.input.events.notification_consumer import NotificationConsumer
 from infrastructure.adapters.output.events.internal_topics import NOTIFICATION_GROUPS, topic_for
+from infrastructure.workers.job_messages import job_message, process_job_message
 
 _INTROSPECT = "/internal/v1/auth/introspect"
 _PUBLIC_PREFIX = "/api/v1/auth/"
@@ -24,6 +26,8 @@ _PUBLIC_EXACT = ("/health", "/openapi.json", "/docs")
 _OPTIONAL_PATHS = ("/api/v1/agents", "/api/v1/agents/")
 _UNAUTHORIZED = {"error": True, "error_code": "UNAUTHORIZED", "message": "Authentication required"}
 _NOT_FOUND = {"error": True, "error_code": "NOT_FOUND", "message": "Not Found"}
+# RabbitMQ's delivery limit on intake.jobs; past it the real message goes to the DLQ.
+_MAX_JOB_DELIVERIES = 3
 
 
 class GatewayClient(TestClient):
@@ -68,7 +72,33 @@ class GatewayClient(TestClient):
     def _forward(self, method, url, **kwargs):
         response = super().request(method, url, **kwargs)
         self._drain_internal()
+        # Processing a job writes internal events of its own, hence the second pass.
+        if self._drain_jobs():
+            self._drain_internal()
         return response
+
+    def _drain_jobs(self) -> bool:
+        """What the relay plus RabbitMQ plus the intake worker will do, minus the broker.
+
+        A nack is redelivered up to the queue's limit and then dropped, as the
+        dead-letter queue would. Returns whether any job ran."""
+        container = getattr(self.app.state, "container", None)
+        if container is None:
+            return False
+        ran = False
+        while True:
+            with container.unit_of_work() as uow:
+                entries = uow.outbox.list_unpublished("job", 100)
+            if not entries:
+                return ran
+            for entry in entries:
+                message = json.loads(json.dumps(job_message(OutboxRow(**dataclasses.asdict(entry)))))
+                for _ in range(_MAX_JOB_DELIVERIES):
+                    if process_job_message(container, message) == "ack":
+                        break
+                with container.unit_of_work() as uow:
+                    uow.outbox.mark_published(entry.id)
+                ran = True
 
     def _drain_internal(self) -> None:
         """What the relay plus the Kafka consumers will do, minus the broker.

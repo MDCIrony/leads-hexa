@@ -12,5 +12,5 @@ class ReceiveIntakeInputPort(ABC):
 
 class ProcessIntakeJobInputPort(ABC):
     @abstractmethod
-    def execute(self, tenant_id: UUID, job_id: UUID) -> None:
-        pass
+    def execute(self, tenant_id: UUID, job_id: UUID) -> bool:
+        """True if a record raised and stayed PENDING, so the job needs another run."""

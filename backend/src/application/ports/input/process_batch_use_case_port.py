@@ -3,5 +3,5 @@ from uuid import UUID
 
 class ProcessBatchInputPort(ABC):
     @abstractmethod
-    def execute(self, tenant_id: UUID, job_id: UUID, file_content: bytes, filename: str) -> None:
+    def execute(self, tenant_id: UUID, job_id: UUID) -> None:
         pass

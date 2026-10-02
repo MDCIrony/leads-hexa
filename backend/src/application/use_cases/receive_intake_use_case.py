@@ -3,6 +3,7 @@ from application.ports.input.intake_phase_use_case_ports import ReceiveIntakeInp
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
+from domain.events.intake_events import IntakeJobRequested
 from domain.exceptions import DomainException
 from domain.value_objects.enums import IntakeJobKind, LeadSourceKind
 
@@ -38,6 +39,16 @@ class ReceiveIntakeUseCase(ReceiveIntakeInputPort):
                 ))
                 for payload in command.payloads
             ]
+            if command.content is not None:
+                self.uow.intake_files.save(
+                    job.id.value, command.tenant_id, command.filename or "leads.csv", command.content,
+                )
+            # Same transaction as the job: a broker that is down delays the
+            # work instead of losing it, and a rolled-back reception never
+            # reaches a worker.
+            self.uow.outbox.record(
+                IntakeJobRequested(tenant_id=str(command.tenant_id), job_id=str(job.id)), channel="job",
+            )
         return ReceiveIntakeResult(
             job_id=str(job.id),
             record_ids=[str(r.id) for r in records],

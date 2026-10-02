@@ -336,6 +336,9 @@ class ReceiveIntakeCommand:
     # A list, not a dict: unit intake sends one payload and bulk intake sends
     # none yet, because the file is parsed in phase 2.
     payloads: List[Dict[str, Any]]
+    # The uploaded file of a batch, kept as received; parsing is the worker's.
+    filename: Optional[str] = None
+    content: Optional[bytes] = None
 
 
 @dataclass(frozen=True)

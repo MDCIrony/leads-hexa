@@ -113,58 +113,23 @@ def test_payload_without_email_still_promotes_the_lead():
     assert record.status == IntakeRecordStatus.PROMOTED
 
 
-def _batch_use_case(uow: InMemoryUnitOfWork, commands: List[IngestLeadCommand]) -> ProcessBatchUseCase:
-    # F2d: the batch pipeline no longer resolves its own source or returns a
-    # result — it materialises IntakeRecords and delegates phase 2 to
-    # ProcessIntakeJobUseCase, the same one the single-lead path uses.
-    process_job = ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow))
-    return ProcessBatchUseCase(uow=uow, file_parser=_StubFileParser(commands), process_job=process_job)
+class _BatchRun:
+    """What the intake worker does with a stored batch: parse it, then process
+    the records it produced with the same use case the single-lead path uses."""
+
+    def __init__(self, uow: InMemoryUnitOfWork, commands: List[IngestLeadCommand]) -> None:
+        self._uow = uow
+        self._parse = ProcessBatchUseCase(uow=uow, file_parser=_StubFileParser(commands))
+        self._process = ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow))
+
+    def execute(self, tenant_id, job_id, file_content: bytes, filename: str) -> None:
+        self._uow.intake_files.save(job_id, tenant_id, filename, file_content)
+        self._parse.execute(tenant_id, job_id)
+        self._process.execute(tenant_id, job_id)
 
 
-class _StubQueue:
-    def __init__(self, reachable: bool) -> None:
-        self.reachable = reachable
-        self.enqueued = []
-
-    def enqueue_intake_job(self, tenant_id, job_id) -> bool:
-        self.enqueued.append((tenant_id, job_id))
-        return self.reachable
-
-
-def test_a_batch_hands_the_long_half_to_a_worker():
-    """Parsing needs the file's bytes and stays here; scoring and routing every
-    row is what dies with the process, and by then each row is a durable
-    record a worker can pick up from the job id alone."""
-    tenant_id, source_id = uuid.uuid4(), uuid.uuid4()
-    uow = _new_uow()
-    job = uow.intake_jobs.save(IntakeJob.create(tenant_id=tenant_id, source_id=source_id, kind=IntakeJobKind.BATCH))
-    queue = _StubQueue(reachable=True)
-
-    use_case = _batch_use_case(uow, [_command(tenant_id=tenant_id, source_id=source_id, email="v@example.com")])
-    use_case.job_queue = queue
-    use_case.execute(tenant_id=tenant_id, job_id=job.id.value, file_content=b"x", filename="leads.csv")
-
-    assert queue.enqueued == [(tenant_id, job.id.value)]
-    # Handed over, not done here: the records are waiting for the worker.
-    records = uow.intake_records.list_by_tenant(tenant_id, job_id=job.id.value)
-    assert [r.status for r in records] == [IntakeRecordStatus.PENDING]
-
-
-def test_a_broker_that_is_down_does_not_cost_the_customer_their_file():
-    """The fallback is what has to be proven, not the happy path: our queue
-    being down must not turn into a batch nobody ever processes."""
-    tenant_id, source_id = uuid.uuid4(), uuid.uuid4()
-    uow = _new_uow()
-    job = uow.intake_jobs.save(IntakeJob.create(tenant_id=tenant_id, source_id=source_id, kind=IntakeJobKind.BATCH))
-    queue = _StubQueue(reachable=False)
-
-    use_case = _batch_use_case(uow, [_command(tenant_id=tenant_id, source_id=source_id, email="v@example.com")])
-    use_case.job_queue = queue
-    use_case.execute(tenant_id=tenant_id, job_id=job.id.value, file_content=b"x", filename="leads.csv")
-
-    records = uow.intake_records.list_by_tenant(tenant_id, job_id=job.id.value)
-    assert [r.status for r in records] == [IntakeRecordStatus.PROMOTED]
-    assert uow.intake_jobs.get_by_id_and_tenant(job.id.value, tenant_id).status == IntakeJobStatus.COMPLETED
+def _batch_use_case(uow: InMemoryUnitOfWork, commands: List[IngestLeadCommand]) -> _BatchRun:
+    return _BatchRun(uow, commands)
 
 
 def test_batch_upload_promotes_the_valid_row_and_rejects_the_invalid_one():

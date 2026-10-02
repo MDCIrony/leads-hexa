@@ -186,7 +186,9 @@ def test_reprocessing_a_stalled_job_resolves_its_pending_records_without_duplica
 
         first = client.post(f"/api/v1/intake/jobs/{job_id}/reprocess", headers=headers)
         assert first.status_code == 202, first.text
-        data = first.json()
+        # Queued, not run in the request: the job comes back as it stands.
+        assert first.json()["status"] == "PENDING"
+        data = client.get(f"/api/v1/intake/jobs/{job_id}", headers=headers).json()
         assert data["status"] == "COMPLETED"
         assert data["total_items"] == 2
         assert data["succeeded"] == 1
