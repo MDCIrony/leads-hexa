@@ -1134,6 +1134,97 @@ except urllib.error.HTTPError as e:
 }
 
 
+# ------------------------------------------------ microservicios · F1 ---
+# Durable delivery (ADR-0033, ADR-0034): the outbox hands jobs to RabbitMQ and
+# events to Kafka, and a broker outage delays work without losing it. Runs
+# before verify_ms_f0, which stops the backend.
+verify_ms_f1() {
+  local r job lead rid i st notices logs csv sum_offsets queues topic
+  local kafka_bin=/opt/kafka/bin
+  rid="f1-$STAMP"
+  section "Microservicios F1 · entrega duradera"
+
+  # rabbitmq must come back even if this function is interrupted.
+  trap 'docker compose start rabbitmq >/dev/null 2>&1; exit 130' INT TERM
+  docker compose stop rabbitmq >/dev/null 2>&1
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -H "X-Request-Id: $rid" \
+    -d "{\"first_name\":\"Durable\",\"last_name\":\"Lead\",\"email\":\"durable-$STAMP@lead.test\",\"company\":\"Acme\",\"industry\":\"Tech\",\"budget\":9000}")
+  check "RabbitMQ caído: la ingesta responde 202" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  sleep 3
+  r=$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")
+  check "el trabajo sigue PENDING sin broker" PENDING "$(body "$r" | f 'd.get("status")')"
+
+  docker compose start rabbitmq >/dev/null 2>&1
+  trap - INT TERM
+  st=TIMEOUT
+  for i in $(seq 1 60); do
+    r=$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")
+    case "$(body "$r" | f 'd.get("status")')" in COMPLETED) st=COMPLETED; break ;; esac
+    sleep 1
+  done
+  check "al volver RabbitMQ el trabajo termina solo (<=60 s)" COMPLETED "$st"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  check "y el lead existe" 200 "$(code "$(req "$API/leads/$lead" -H "Authorization: Bearer $MGR_A")")"
+
+  section "Microservicios F1 · notificación por Kafka, sin duplicados"
+  r=$(req -X POST "$API/leads/$lead/assign" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' -d "{\"agent_id\":\"$AGENT_1\"}")
+  check "asignación manual a AGENT_1" "$AGENT_1" "$(body "$r" | f 'd.get("assigned_agent_id")')"
+  notices="sum(1 for n in d['items'] if n['kind'] == 'LEAD_ASSIGNED' and n['lead_id'] == '$lead')"
+  for i in $(seq 1 75); do
+    [ "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | f "$notices")" -ge 1 ] 2>/dev/null && break
+    sleep 0.2
+  done
+  check "llega LEAD_ASSIGNED al asesor (<=15 s)" 1 "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | f "$notices")"
+  docker compose restart backend-worker >/dev/null 2>&1
+  sleep 5
+  check "tras reiniciar backend-worker sigue habiendo una" 1 "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | f "$notices")"
+
+  section "Microservicios F1 · subida de fichero por el camino nuevo"
+  csv=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.csv")
+  printf 'first_name,last_name,email,company,industry,budget\nBuena,Fila,ok-f1-%s@x.test,Acme,Tech,5000\nMala,Fila,mala@@x.test,Acme,Tech,5000\n' "$STAMP" > "$csv"
+  r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" -F "file=@$csv")
+  rm -f "$csv"
+  check "la carga se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  st=TIMEOUT
+  for i in $(seq 1 60); do
+    case "$(body "$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")" | f 'd.get("status")')" in
+      COMPLETED|FAILED) st=$(body "$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")" | f 'd.get("status")'); break ;;
+    esac
+    sleep 1
+  done
+  check "el trabajo termina" COMPLETED "$st"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  check "la fila buena entra" 1 "$(body "$r" | f 'sum(1 for i in d.get("items") or [] if i.get("status") == "PROMOTED")')"
+  check "la fila mala no se pierde" 1 "$(body "$r" | f 'sum(1 for i in d.get("items") or [] if i.get("status") == "REJECTED")')"
+
+  section "Microservicios F1 · topics y colas de error"
+  for topic in internal.identity.agents internal.identity.tenants; do
+    check "$topic está compactado" "cleanup.policy=compact" \
+      "$(docker compose exec -T kafka "$kafka_bin/kafka-configs.sh" --bootstrap-server localhost:9092 --describe \
+        --entity-type topics --entity-name "$topic" 2>/dev/null | grep -o 'cleanup.policy=[a-z]*' | head -1)"
+  done
+  for topic in internal.dlq.notifications.lead-events internal.dlq.notifications.intake-events; do
+    # One "topic:partition:end-offset" line per partition; an absent topic prints none.
+    sum_offsets=$(docker compose exec -T kafka "$kafka_bin/kafka-get-offsets.sh" --bootstrap-server localhost:9092 \
+      --topic "$topic" 2>/dev/null | awk -F: 'NF==3 {n++; s+=$3} END {if (n) print s; else print "missing"}')
+    check "$topic existe y está vacía" 0 "$sum_offsets"
+  done
+  queues=$(docker compose exec -T rabbitmq rabbitmqctl list_queues name messages 2>/dev/null)
+  check "intake.jobs.dlq está vacía" 0 "$(printf '%s\n' "$queues" | awk '$1=="intake.jobs.dlq" {print $2}')"
+
+  section "Microservicios F1 · correlación"
+  logs=$(docker compose logs backend-worker intake-worker 2>&1)
+  check "el X-Request-Id de la ingesta aparece en backend-worker" True \
+    "$(printf '%s' "$logs" | grep 'backend-worker' | grep -q "\[$rid\]" && printf True || printf False)"
+  check "y en intake-worker" True \
+    "$(printf '%s' "$logs" | grep 'intake-worker' | grep -q "\[$rid\]" && printf True || printf False)"
+}
+
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -1160,6 +1251,7 @@ verify_f31
 verify_f41
 verify_f5
 verify_social_oauth
+verify_ms_f1
 verify_ms_f0
 
 printf '\n'
