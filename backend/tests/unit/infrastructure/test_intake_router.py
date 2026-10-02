@@ -47,7 +47,7 @@ def _request() -> IngestLeadRequest:
 
 
 def _context() -> RequestContext:
-    return RequestContext(actor=None, tenant_id=_TENANT)
+    return RequestContext(principal=None, tenant_id=_TENANT)
 
 
 def test_falls_back_to_background_tasks_when_the_queue_is_unreachable():

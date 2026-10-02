@@ -10,6 +10,7 @@ from domain.exceptions import ForbiddenException, UnauthorizedException
 from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
     build_request_context,
+    principal_from_agent,
     resolve_current_agent,
     resolve_integration_context,
 )
@@ -116,14 +117,22 @@ def test_well_formed_but_unknown_token_is_unauthorized():
 
 def test_context_carries_the_agent_own_tenant():
     agent = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
-    context = build_request_context(current_agent=agent)
-    assert context.actor is agent
+    context = build_request_context(principal_from_agent(agent))
+    assert context.principal.id == agent.id.value
+    assert context.principal.principal_type == "human"
     assert str(context.tenant_id) == str(_TENANT_A)
+
+
+def test_principal_type_follows_the_role():
+    integration = _integration_agent()
+    manager = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
+    assert principal_from_agent(integration).principal_type == "integration"
+    assert principal_from_agent(manager).principal_type == "human"
 
 
 def test_platform_admin_context_has_no_tenant():
     admin = Agent.create("A", "a@test.com", role=AgentRole.ADMIN, tenant_id=None)
-    assert build_request_context(current_agent=admin).tenant_id is None
+    assert build_request_context(principal_from_agent(admin)).tenant_id is None
 
 
 def test_sales_agent_is_refused_organization_management():
@@ -131,14 +140,14 @@ def test_sales_agent_is_refused_organization_management():
 
     sales = Agent.create("S", "s@test.com", role=AgentRole.AGENT, tenant_id=_TENANT_A)
     with pytest.raises(ForbiddenException):
-        require_organization_manager(context=build_request_context(current_agent=sales))
+        require_organization_manager(context=build_request_context(principal_from_agent(sales)))
 
 
 def test_manager_is_allowed_organization_management():
     from infrastructure.adapters.input.api.dependencies import require_organization_manager
 
     manager = Agent.create("M", "m@test.com", role=AgentRole.MANAGER, tenant_id=_TENANT_A)
-    context = build_request_context(current_agent=manager)
+    context = build_request_context(principal_from_agent(manager))
     assert require_organization_manager(context=context) is context
 
 
@@ -148,7 +157,7 @@ def test_resolve_integration_context_with_a_well_formed_key_resolves_the_agent()
 
     context = resolve_integration_context(api_key, uow=_uow_with(agent), password_hasher=_HASHER)
 
-    assert str(context.actor.id) == str(agent.id)
+    assert str(context.principal.id) == str(agent.id)
     assert str(context.tenant_id) == str(_TENANT_A)
 
 
@@ -204,7 +213,7 @@ def test_require_manager_or_integration_uses_the_api_key_path_without_checking_t
         api_key=api_key, current_agent=None, uow=_uow_with(agent), container=_StubContainer(_HASHER)
     )
 
-    assert str(context.actor.id) == str(agent.id)
+    assert str(context.principal.id) == str(agent.id)
 
 
 def test_require_manager_or_integration_falls_back_to_the_manager_jwt_path_without_a_key():
@@ -216,7 +225,7 @@ def test_require_manager_or_integration_falls_back_to_the_manager_jwt_path_witho
         api_key=None, current_agent=manager, uow=_uow_with(manager), container=_StubContainer(_HASHER)
     )
 
-    assert context.actor is manager
+    assert context.principal.id == manager.id.value
 
 
 def test_require_manager_or_integration_rejects_neither_credential():

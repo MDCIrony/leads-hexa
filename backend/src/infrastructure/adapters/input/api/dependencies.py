@@ -4,7 +4,7 @@ from hashlib import sha256
 from uuid import UUID
 from fastapi import Request, Depends
 from fastapi.security import APIKeyHeader
-from application.dtos.context import RequestContext
+from application.dtos.context import Principal, RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.ports.output.job_queue_port import JobQueuePort
 from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
@@ -377,28 +377,36 @@ def get_optional_current_agent(
         return None
 
 
-def build_request_context(current_agent: Agent) -> RequestContext:
+def principal_from_agent(agent: Agent) -> Principal:
+    return Principal(
+        id=agent.id.value,
+        tenant_id=agent.tenant_id.value if agent.tenant_id else None,
+        role=agent.role,
+        principal_type="integration" if agent.role == AgentRole.INTEGRATION else "human",
+    )
+
+
+def build_request_context(principal: Principal) -> RequestContext:
     """The organization always comes from the verified identity, never from the
     request path or body."""
-    tenant_id = UUID(str(current_agent.tenant_id)) if current_agent.tenant_id else None
-    return RequestContext(actor=current_agent, tenant_id=tenant_id)
+    return RequestContext(principal=principal, tenant_id=principal.tenant_id)
 
 
 def get_request_context(current_agent: Agent = Depends(get_current_agent)) -> RequestContext:
-    return build_request_context(current_agent=current_agent)
+    return build_request_context(principal_from_agent(current_agent))
 
 
 def require_organization_manager(
     context: RequestContext = Depends(get_request_context),
 ) -> RequestContext:
-    AuthorizationPolicy.ensure_can_manage_organization(context.actor)
+    AuthorizationPolicy.ensure_can_manage_organization(context.principal)
     return context
 
 
 def require_platform_admin(
     context: RequestContext = Depends(get_request_context),
 ) -> RequestContext:
-    AuthorizationPolicy.ensure_can_manage_platform(context.actor)
+    AuthorizationPolicy.ensure_can_manage_platform(context.principal)
     return context
 
 
@@ -409,7 +417,7 @@ def require_organization_member(
 
     The platform admin has no tenant, so it is excluded by construction —
     which is the point: it must not reach operational data."""
-    AuthorizationPolicy.ensure_can_access_tenant(context.actor, context.tenant_id)
+    AuthorizationPolicy.ensure_can_access_tenant(context.principal, context.tenant_id)
     return context
 
 
@@ -435,7 +443,7 @@ def resolve_integration_context(
         or not password_hasher.verify(secret, agent.hashed_password)
     ):
         raise UnauthorizedException("Invalid API key")
-    return build_request_context(agent)
+    return build_request_context(principal_from_agent(agent))
 
 
 def require_manager_or_integration(
@@ -451,8 +459,8 @@ def require_manager_or_integration(
     if api_key:
         return resolve_integration_context(api_key, uow, container.password_hasher)
     if current_agent is not None:
-        context = build_request_context(current_agent)
-        AuthorizationPolicy.ensure_can_manage_organization(context.actor)
+        context = build_request_context(principal_from_agent(current_agent))
+        AuthorizationPolicy.ensure_can_manage_organization(context.principal)
         return context
     raise UnauthorizedException("Authentication required")
 

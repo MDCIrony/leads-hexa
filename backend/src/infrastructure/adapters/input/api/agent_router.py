@@ -17,7 +17,8 @@ from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
     get_container, get_create_agent_use_case, get_deactivate_agent_use_case, get_get_agents_use_case,
     get_get_agent_use_case, get_issue_integration_credential_use_case, get_update_agent_use_case,
-    build_request_context, get_optional_current_agent, get_uow, require_organization_manager,
+    build_request_context, get_optional_current_agent, get_uow, principal_from_agent,
+    require_organization_manager,
 )
 from infrastructure.adapters.input.api.schemas import (
     AgentCreate, AgentResponse, AgentUpdate, IntegrationCredentialResponse, PaginatedAgentsResponse,
@@ -56,10 +57,11 @@ def create_agent(
     else:
         if current_agent is None:
             raise UnauthorizedException("Authentication required to create an agent")
-        AuthorizationPolicy.ensure_can_create_agent_with_role(current_agent, request.role)
+        principal = principal_from_agent(current_agent)
+        AuthorizationPolicy.ensure_can_create_agent_with_role(principal, request.role)
         # The organization is always the caller's own: there is no tenant_id
         # left in the request for a Manager to target another one with.
-        tenant_id = build_request_context(current_agent).tenant_id
+        tenant_id = build_request_context(principal).tenant_id
         forced_role = request.role
 
     command = CreateAgentCommand(

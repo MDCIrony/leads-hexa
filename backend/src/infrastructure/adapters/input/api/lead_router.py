@@ -153,7 +153,7 @@ def list_my_leads(
 ) -> PaginatedLeadsResponse:
     query = GetMyLeadsQuery(
         tenant_id=context.tenant_id,
-        agent_id=context.actor.id.value,
+        agent_id=context.principal.id,
         status=status,
         search=q,
         limit=limit,
@@ -197,7 +197,7 @@ def get_lead(
 ) -> LeadDetailResponse:
     lead = use_case.execute(GetLeadQuery(tenant_id=context.tenant_id, lead_id=lead_id))
     assigned_agent_id = lead.assigned_agent_id.value if lead.assigned_agent_id else None
-    if not AuthorizationPolicy.can_view_lead(context.actor, lead.tenant_id.value, assigned_agent_id):
+    if not AuthorizationPolicy.can_view_lead(context.principal, lead.tenant_id.value, assigned_agent_id):
         # Same anti-enumeration rule as get_by_id_and_tenant: a colleague's
         # lead must read back as missing, not merely forbidden, or a 403
         # would confirm to the agent that the lead exists in their org.

@@ -40,7 +40,7 @@ def list_notifications(
     context: RequestContext = Depends(require_organization_member),
 ):
     query = GetNotificationsQuery(
-        recipient_id=context.actor.id.value, unread_only=unread_only, limit=limit, offset=offset
+        recipient_id=context.principal.id, unread_only=unread_only, limit=limit, offset=offset
     )
     page = use_case.execute(query)
     items = [_to_response(notification) for notification in page.items]
@@ -62,7 +62,7 @@ def mark_all_notifications_read(
     use_case: MarkAllNotificationsReadInputPort = Depends(get_mark_all_notifications_read_use_case),
     context: RequestContext = Depends(require_organization_member),
 ):
-    use_case.execute(context.actor.id.value)
+    use_case.execute(context.principal.id)
 
 
 @router.post("/{notification_id}/read", status_code=status.HTTP_204_NO_CONTENT)
@@ -72,6 +72,6 @@ def mark_notification_read(
     context: RequestContext = Depends(require_organization_member),
 ):
     command = MarkNotificationReadCommand(
-        recipient_id=context.actor.id.value, notification_id=notification_id
+        recipient_id=context.principal.id, notification_id=notification_id
     )
     use_case.execute(command)
