@@ -142,6 +142,28 @@ await_quiet() {
   done
 }
 
+# await_advisor <session> <agent_id> — waits until lead-core's advisors
+# projection has the agent (F3). Agents are written by identity and reach
+# lead-core through Kafka, so routing right after creating one would race it.
+await_advisor() {
+  local i
+  for i in $(seq 1 75); do
+    [ "$(body "$(req "$API/advisors?limit=200" -H "Authorization: Bearer $1")" | \
+      f "any(a.get('agent_id') == '$2' for a in d.get('items') or [])")" = True ] && return 0
+    sleep 0.2
+  done
+}
+
+# await_sources <session> — waits until a new organization has its default
+# sources (F3): identity publishes the tenant and intake creates them on seeing it.
+await_sources() {
+  local i
+  for i in $(seq 1 75); do
+    [ "$(body "$(req "$API/sources" -H "Authorization: Bearer $1")" | f 'len(d.get("items") or [])')" -ge 2 ] 2>/dev/null && return 0
+    sleep 0.2
+  done
+}
+
 # ------------------------------------------------------------- scaffolding ---
 
 # Platform admin, two organizations, three agents. Everything later builds on
@@ -183,6 +205,9 @@ bootstrap() {
   TOKEN_1=$(login " uNo-$STAMP@X.Test " "$ADMIN_PASS")
   check "asesor entra con correo normalizado" True "$(test -n "$TOKEN_1" && printf True || printf False)"
   TOKEN_2=$(login "dos-$STAMP@x.test" "$ADMIN_PASS")
+  await_sources "$MGR_A"
+  await_advisor "$MGR_A" "$AGENT_1"
+  await_advisor "$MGR_A" "$AGENT_2"
 
   # Second organization: the control that proves isolation.
   r=$(req -X POST "$API/tenants" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
@@ -194,6 +219,8 @@ bootstrap() {
     -d "{\"name\":\"Beto\",\"email\":\"beto-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
   AGENT_B=$(body "$r" | f 'd["id"]')
   check "asesor de la organización B" 201 "$(code "$r")"
+  await_sources "$MGR_B"
+  await_advisor "$MGR_B" "$AGENT_B"
 }
 
 # -------------------------------------------------------------- sessions ---
@@ -946,7 +973,7 @@ verify_social_oauth() {
   port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
   container="leads-oauth-e2e-$STAMP"
   docker compose run --no-deps -d --name "$container" -p "127.0.0.1:$port:8000" \
-    -e APP_ENV=test -e OAUTH_TEST_MODE=true backend \
+    -e APP_ENV=test -e OAUTH_TEST_MODE=true identity \
     uvicorn infrastructure.main:app --host 0.0.0.0 --port 8000 --app-dir src --no-access-log >/dev/null 2>&1
 
   health=
@@ -1142,16 +1169,16 @@ except urllib.error.HTTPError as e:
   r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" -F "file=@$headers.big;filename=big.csv")
   check "cuerpo mayor de 10 MB → 413" 413 "$(code "$r")"
 
-  docker compose stop backend >/dev/null 2>&1
+  docker compose stop identity >/dev/null 2>&1
   r=$(req "$API/leads" -H "Authorization: Bearer $MGR_A")
   check "identity caída → 503 (siempre cerrado)" 503 "$(code "$r")"
   check "503 con sobre" SERVICE_UNAVAILABLE "$(body "$r" | f 'd.get("error_code")')"
-  docker compose start backend >/dev/null 2>&1
+  docker compose start identity >/dev/null 2>&1
   for i in $(seq 1 60); do
     [ "$(code "$(req "$API/auth/me")")" = 401 ] && break
     sleep 1
   done
-  check "el backend vuelve tras el corte" 200 "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")"
+  check "identity vuelve tras el corte" 200 "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")"
   rm -f "$headers" "$headers.big"
 }
 
@@ -1320,6 +1347,7 @@ verify_ms_f2() {
   check "organización C creada" 201 "$(code "$r")"
   mgr_c_id=$(body "$r" | f 'd["manager"]["id"]')
   mgr_c=$(login "mgr-c-$STAMP@x.test" "$ADMIN_PASS")
+  await_sources "$mgr_c"
   # Without its row in the projection the unassigned notice has no recipient.
   for i in $(seq 1 75); do
     [ "$(docker compose exec -T db psql -U postgres -d notifications_db -tAc \
@@ -1381,6 +1409,121 @@ except urllib.error.HTTPError as e:
 }
 
 
+# ------------------------------------------------ microservicios · F3 ---
+# Identity in its own service (ADR-0031): the gateway routes /auth, /tenants
+# and /agents to it, lead-core keeps its own copy of the advisors, and the
+# group of an advisor moves to /advisors (ADR-0036). Runs before verify_ms_f0,
+# which stops identity.
+dlq_size() {
+  local end begin kafka_bin=/opt/kafka/bin
+  end=$(docker compose exec -T kafka "$kafka_bin/kafka-get-offsets.sh" --bootstrap-server localhost:9092 \
+    --topic "$1" --time -1 2>/dev/null | awk -F: 'NF==3 {n++; s+=$3} END {if (n) print s; else print "missing"}')
+  begin=$(docker compose exec -T kafka "$kafka_bin/kafka-get-offsets.sh" --bootstrap-server localhost:9092 \
+    --topic "$1" --time -2 2>/dev/null | awk -F: 'NF==3 {n++; s+=$3} END {if (n) print s; else print "missing"}')
+  if [ "$end" = missing ] || [ "$begin" = missing ]; then printf missing; else printf '%s' $((end - begin)); fi
+}
+
+verify_ms_f3() {
+  local r rid ip group agent agent_jar tenant_d mgr_d mgr_d_id job lead i lag env_backend
+  rid="f3-$STAMP"
+  section "Microservicios F3 · identity en su propio servicio"
+
+  r=$(req "$API/auth/me" -H "Authorization: Bearer $MGR_A" -H "X-Request-Id: $rid")
+  check "GET /auth/me por el gateway" 200 "$(code "$r")"
+  ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q identity)")
+  check "el gateway la envía al servicio identity" True \
+    "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -qF "upstream=$ip:8000" && printf True || printf False)"
+  check "el id de la petición llega al log de identity" True \
+    "$(docker compose logs --since 2m identity | grep -qF "[$rid]" && printf True || printf False)"
+  check "el backend ya no sirve /api/v1/auth/me (404)" 404 "$(docker compose exec -T backend python -c \
+    "import urllib.request, urllib.error
+try:
+    print(urllib.request.urlopen('http://localhost:8000/api/v1/auth/me').status)
+except urllib.error.HTTPError as e:
+    print(e.code)")"
+  env_backend=$(docker compose exec -T backend env)
+  check "el backend no tiene la clave de firma ni MFA ni OAuth" "" \
+    "$(printf '%s\n' "$env_backend" | grep -oE '^(SIGNING_KEYS|MFA_ENCRYPTION_KEY|GOOGLE_[A-Z_]+|GITHUB_[A-Z_]+)=' | tr '\n' ' ')"
+  check "identity_svc no puede entrar en leads_db" False \
+    "$(docker compose exec -T -e PGPASSWORD=identitypassword db psql -h localhost -U identity_svc -d leads_db -c 'SELECT 1' >/dev/null 2>&1 && printf True || printf False)"
+  # --include: stale .pyc of removed modules would otherwise match.
+  check "backend/src no tiene MFA, OAuth ni sesiones" "" \
+    "$(grep -rliE --include='*.py' 'mfa|oauth|auth_session' "$(dirname "$0")/../backend/src")"
+
+  section "Microservicios F3 · el grupo del asesor en lead-core"
+  r=$(req -X POST "$API/groups" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"F3 grupo $STAMP\"}")
+  check "grupo creado" 201 "$(code "$r")"
+  group=$(body "$r" | f 'd["id"]')
+  r=$(req -X POST "$API/agents/" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"F3 Nuevo\",\"email\":\"f3-new-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
+  check "asesor creado en identity" 201 "$(code "$r")"
+  agent=$(body "$r" | f 'd["id"]')
+  check "la respuesta de /agents ya no lleva group_id" False "$(body "$r" | f '"group_id" in d')"
+  # Immediately: the projection may not have it yet, and hydration must cover that.
+  r=$(req -X PATCH "$API/advisors/$agent" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"group_id\":\"$group\"}")
+  check "asignarle grupo al instante → 200 (hidratación)" 200 "$(code "$r")"
+  check "y el grupo queda puesto" "$group" "$(body "$r" | f 'd.get("group_id")')"
+  r=$(req "$API/advisors?group_id=$group" -H "Authorization: Bearer $MGR_A")
+  check "GET /advisors filtra por grupo" "[\"$agent\"]" "$(body "$r" | f 'json.dumps([a["agent_id"] for a in d["items"]])')"
+  r=$(req -X PATCH "$API/agents/$agent" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"group_id\":\"$group\"}")
+  check "PATCH /agents con group_id → 422" 422 "$(code "$r")"
+  r=$(req -X PATCH "$API/advisors/$AGENT_B" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"group_id\":\"$group\"}")
+  check "el asesor de otra organización no existe (404)" 404 "$(code "$r")"
+
+  section "Microservicios F3 · revocación en la petición siguiente"
+  agent_jar=$(login "f3-new-$STAMP@x.test" "$ADMIN_PASS")
+  check "el asesor nuevo entra" 200 "$(code "$(req "$API/leads/mine" -H "Authorization: Bearer $agent_jar")")"
+  check "desactivarlo" 200 "$(code "$(req -X DELETE "$API/agents/$agent" -H "Authorization: Bearer $MGR_A")")"
+  check "su siguiente petición es 401" 401 "$(code "$(req "$API/leads/mine" -H "Authorization: Bearer $agent_jar")")"
+  for i in $(seq 1 75); do
+    [ "$(body "$(req "$API/advisors?is_active=false&limit=200" -H "Authorization: Bearer $MGR_A")" | \
+      f "any(a['agent_id'] == '$agent' for a in d['items'])")" = True ] && break
+    sleep 0.2
+  done
+  check "lead-core lo deja de enrutar (inactivo en advisors)" True "$(body "$(req "$API/advisors?is_active=false&limit=200" -H "Authorization: Bearer $MGR_A")" | \
+    f "any(a['agent_id'] == '$agent' for a in d['items'])")"
+
+  section "Microservicios F3 · alta y suspensión de una organización"
+  r=$(req -X POST "$API/tenants" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"OrgD-$STAMP\",\"manager\":{\"name\":\"MgrD\",\"email\":\"mgr-d-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\"}}")
+  check "organización D creada" 201 "$(code "$r")"
+  tenant_d=$(body "$r" | f 'd["id"]')
+  mgr_d_id=$(body "$r" | f 'd["manager"]["id"]')
+  mgr_d=$(login "mgr-d-$STAMP@x.test" "$ADMIN_PASS")
+  await_sources "$mgr_d"
+  check "en pocos segundos tiene sus dos fuentes" 2 "$(body "$(req "$API/sources" -H "Authorization: Bearer $mgr_d")" | f 'len(d.get("items") or [])')"
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $mgr_d" -H 'Content-Type: application/json' \
+    -d "{\"first_name\":\"F3\",\"last_name\":\"Alta\",\"email\":\"f3-new-org-$STAMP@lead.test\",\"company\":\"Acme\",\"industry\":\"Tech\",\"budget\":5000}")
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "y acepta una ingesta" COMPLETED "$(await_job "$mgr_d" "$job")"
+  r=$(req -X PATCH "$API/tenants/$tenant_d" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+    -d '{"is_active":false}')
+  check "suspender la organización" 200 "$(code "$r")"
+  check "su gestor recibe 401" 401 "$(code "$(req "$API/auth/me" -H "Authorization: Bearer $mgr_d")")"
+  check "también en lead-core" 401 "$(code "$(req "$API/leads" -H "Authorization: Bearer $mgr_d")")"
+
+  section "Microservicios F3 · grupos y colas de error"
+  for group in lead-core.advisors intake.tenants notifications.members; do
+    for i in $(seq 1 30); do
+      lag=$(group_lag "$group")
+      [ "$lag" = 0 ] && break
+      sleep 1
+    done
+    check "$group sin lag (<=30 s)" 0 "$lag"
+  done
+  for group in lead-core.advisors intake.tenants; do
+    check "internal.dlq.$group existe y está vacía" 0 "$(dlq_size "internal.dlq.$group")"
+  done
+  check "el gestor de OrgD llega a members de notifications" 1 "$(docker compose exec -T db psql -U postgres -d notifications_db -tAc \
+    "SELECT count(*) FROM members WHERE agent_id = '$mgr_d_id'")"
+  rm -f "$agent_jar" "$mgr_d"
+}
+
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -1408,6 +1551,7 @@ verify_f41
 verify_f5
 verify_social_oauth
 verify_ms_f2
+verify_ms_f3
 verify_ms_f1
 verify_ms_f0
 
