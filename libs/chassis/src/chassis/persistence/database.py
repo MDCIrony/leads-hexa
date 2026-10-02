@@ -44,7 +44,14 @@ class RawSqlDatabase:
                 # does not wait for it; without this, a borrow made immediately
                 # after construction can race that worker and open a second
                 # connection instead of reusing the one being established.
-                pool.wait()
+                try:
+                    pool.wait()
+                except Exception:
+                    # A consumer holding a message retries first use while the
+                    # database is down; each failed pool would otherwise keep
+                    # its connection threads alive.
+                    pool.close()
+                    raise
                 self._pool = pool
         return self._pool
 

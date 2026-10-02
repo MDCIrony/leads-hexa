@@ -99,3 +99,29 @@ def test_concurrent_first_use_builds_exactly_one_pool(monkeypatch):
         thread.join()
     assert len(built) == 1
     assert all(pool is built[0] for pool in seen)
+
+
+def test_a_pool_that_cannot_connect_is_closed_and_not_kept(monkeypatch):
+    from chassis.persistence import database as module
+
+    closed = []
+
+    class UnreachablePool:
+        def __init__(self, **kwargs):
+            pass
+
+        def wait(self):
+            raise TimeoutError("database down")
+
+        def close(self):
+            closed.append(self)
+
+    monkeypatch.setattr(module, "ConnectionPool", UnreachablePool)
+    db = RawSqlDatabase("postgresql://unused")
+    for _ in range(2):
+        try:
+            db._get_pool()
+        except TimeoutError:
+            pass
+    assert len(closed) == 2
+    assert db._pool is None
