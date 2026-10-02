@@ -366,6 +366,7 @@ dependencies = [
     { name = "confluent-kafka" },
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg-pool" },
     { name = "pydantic" },
@@ -376,7 +377,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "chassis", extra = ["contracts"] },
-    { name = "httpx" },
     { name = "pytest" },
 ]
 
@@ -387,6 +387,7 @@ requires-dist = [
     { name = "confluent-kafka", specifier = ">=2.5.0" },
     { name = "cryptography", specifier = ">=50.0.1" },
     { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
     { name = "psycopg-pool", specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.8.0" },
@@ -397,7 +398,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "chassis", extras = ["contracts"], editable = "../../libs/chassis" },
-    { name = "httpx", specifier = ">=0.27.0" },
     { name = "pytest", specifier = ">=8.2.0" },
 ]
 

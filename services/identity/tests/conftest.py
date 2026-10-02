@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from tests import environment
+
 _MARKER_BY_DIRECTORY = {
     "unit": "unit",
     "integration": "integration",
@@ -22,6 +24,9 @@ _MIGRATIONS_TABLE = "schema_migrations"
 # test module, so a module that imports the app already finds them in place.
 _TEST_DSN = os.getenv("TEST_DATABASE_URL", _DEFAULT_TEST_DSN)
 os.environ.setdefault("DATABASE_URL", _TEST_DSN)
+os.environ.setdefault("SIGNING_KEYS", environment.SIGNING_KEYS)
+os.environ.setdefault("MFA_ENCRYPTION_KEY", environment.MFA_ENCRYPTION_KEY)
+os.environ.setdefault("SERVICE_CLIENTS", environment.SERVICE_CLIENTS)
 
 
 def pytest_collection_modifyitems(items):
@@ -70,3 +75,9 @@ def clean_tables(request):
                 )
             )
 
+
+@pytest.fixture
+def uow_factory(test_db):
+    from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
+
+    return lambda: PostgresUnitOfWork(test_db)

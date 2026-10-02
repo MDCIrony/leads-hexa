@@ -109,3 +109,13 @@ def test_the_platform_admin_has_no_tenant_to_check(world):
     now = datetime.now(timezone.utc)
     uow.sessions.save(AuthSession(sha256(b"admin").hexdigest(), admin.id.value, now, now + timedelta(hours=1)))
     assert use_case.execute(None, "admin").agent is admin
+
+
+def test_an_agent_whose_tenant_row_is_missing_is_still_accepted(world):
+    """Legacy data: agents copied before their tenant row exists, as the backend allowed.
+    sync_tenants backfills the row; refusing here would lock those agents out until then."""
+    uow, use_case, *_ = world
+    orphan = uow.agents.save(Agent.create("Olga", "olga@gone.test", role=AgentRole.AGENT, tenant_id=uuid4()))
+    now = datetime.now(timezone.utc)
+    uow.sessions.save(AuthSession(sha256(b"orphan").hexdigest(), orphan.id.value, now, now + timedelta(hours=1)))
+    assert use_case.execute(None, "orphan").agent is orphan
