@@ -43,11 +43,12 @@ regeneran desde el OpenAPI de cada servicio.
 **Fácil:** cada respuesta tiene un solo dueño y el gateway sigue siendo declarativo. La dirección de
 dependencia es única: identity → lead-core.
 
-**Difícil:** el panel hace dos lecturas (cambio 2). La asignación de grupo inmediatamente después de
-crear un agente depende de la hidratación de `AdvisorDirectory`, y responde `503` si identity no
-contesta mientras hidrata. El cambio 1 no tuvo coste en el frontend: el MVP nunca tuvo interfaz de
-grupo ([Frontend](../roadmap/frontend.md), fila «Asesores»), así que sólo quitó `group_id` de su
-contrato de `/agents` y no llama a `/advisors`.
+**Difícil:** el formulario de agente hace dos llamadas (crear en `/agents`, asignar grupo en
+`/advisors`) y el listado combina dos respuestas por `agent_id`; el panel hace dos lecturas. La
+asignación de grupo inmediatamente después de crear un agente depende de la hidratación de
+`AdvisorDirectory`, y responde `503` si identity no contesta mientras hidrata: el agente queda creado
+sin grupo y la interfaz lo dice. Un agente recién creado puede faltar un instante en `/advisors`; el
+listado lo muestra sin grupo en vez de fallar.
 
 ## Ver también
 

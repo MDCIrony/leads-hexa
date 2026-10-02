@@ -137,7 +137,7 @@ que tratarlo como «no existe», sin insinuar que existe en otro sitio. Ver
 ## El recorte del MVP
 
 Las dieciocho vistas de la sección siguiente son el alcance completo. **La primera entrega no las
-construye todas**: construye las nueve que hacen falta para recorrer el producto de punta a punta una
+construye todas**: construye las diez que hacen falta para recorrer el producto de punta a punta una
 vez, que es lo que hay que poder enseñar funcionando.
 
 El recorrido que define el recorte:
@@ -146,7 +146,7 @@ El recorrido que define el recorte:
 flowchart LR
     A[Arranque:<br/>primer admin] --> B[Login]
     B --> C[ADMIN crea<br/>organización + gestor]
-    C --> D[Gestor crea<br/>un asesor]
+    C --> D[Gestor crea un grupo<br/>y sus asesores]
     D --> E[Gestor crea y edita<br/>reglas]
     E --> F[Gestor inserta un lead<br/>suelto o por CSV]
     F --> G[Asesor entra y ve<br/>sus leads asignados]
@@ -159,11 +159,12 @@ flowchart LR
 | 2 | Login | — | Puerta única de los tres roles |
 | 3 | Organizaciones | `ADMIN` | Crea la organización **y su gestor** en un solo paso |
 | 4 | Asesores | `MANAGER` | Doble motivo: es quien recibirá el lead y quien iniciará sesión al final del recorrido |
-| 5 | Reglas de puntuación | `MANAGER` | Da al lead una puntuación; sin ella la regla de asignación no tiene por dónde cortar |
-| 6 | Reglas de asignación | `MANAGER` | Es lo que reparte el lead. Crear **y modificar**, que es lo que se quiere demostrar |
-| 7 | Alta de lead | `MANAGER` | Entrada individual |
-| 8 | Carga masiva | `MANAGER` | Entrada por CSV |
-| 9 | Mis leads + detalle | `AGENT` | Cierra el recorrido: el lead llegó a una persona concreta |
+| 5 | Grupos | `MANAGER` | El equipo al que una regla puede repartir; sin él, el grupo existe en la API y nadie puede usarlo |
+| 6 | Reglas de puntuación | `MANAGER` | Da al lead una puntuación; sin ella la regla de asignación no tiene por dónde cortar |
+| 7 | Reglas de asignación | `MANAGER` | Es lo que reparte el lead. Crear **y modificar**, que es lo que se quiere demostrar |
+| 8 | Alta de lead | `MANAGER` | Entrada individual |
+| 9 | Carga masiva | `MANAGER` | Entrada por CSV |
+| 10 | Mis leads + detalle | `AGENT` | Cierra el recorrido: el lead llegó a una persona concreta |
 
 ### Qué queda fuera, y por qué se puede
 
@@ -172,7 +173,6 @@ flowchart LR
 | Panel del gestor | `GET /leads/stats` ya está construido y probado; sólo queda sin consumir |
 | Leads del gestor | El recorrido se verifica desde el lado del asesor, que es lo que demuestra el reparto |
 | Bandeja de entrada y trabajos | Sólo hacen falta cuando algo se rechaza; el recorrido feliz no pasa por ahí |
-| Grupos | Se evita apuntando la regla de asignación a **asesores concretos** en vez de a un grupo |
 | Orígenes | Dar de alta una organización ya crea sus dos orígenes, «Formulario manual» y «Carga de fichero» |
 | Reglas de descalificación | Misma forma que las otras dos familias; no añade nada al recorrido |
 | Notificaciones | El asesor ve su lead en su lista; el aviso es comodidad, no camino |
@@ -185,8 +185,8 @@ el administrador de plataforma; en cuanto existe cualquier agente, ese mismo end
 decirlo cuando ya no lo está.
 
 **La regla de asignación necesita un destino.** Sin `target_group_id` ni `target_agent_ids` responde
-`400 RULE_WITHOUT_TARGET`. Como no hay vista de grupos en el recorte, el formulario apunta a asesores
-concretos, elegidos de `GET /agents`.
+`400 RULE_WITHOUT_TARGET`. El formulario ofrece un grupo, asesores concretos elegidos de
+`GET /agents`, o ambos, y no envía una regla sin ninguno de los dos.
 
 **La ingesta es asíncrona y hay que cerrar el círculo.** Responde `202` y el lead no existe todavía.
 Las vistas de alta y de carga masiva tienen que sondear el trabajo hasta estado terminal y **mostrar
@@ -197,7 +197,7 @@ sin decir dónde.
 ## Vistas y funcionalidad mínima
 
 Lo que sigue acota **qué tiene que hacer cada vista para considerarse terminada**. No dice cómo.
-Marcadas con **·MVP·** las nueve del recorte de arriba.
+Marcadas con **·MVP·** las diez del recorte de arriba.
 
 ### Panel del administrador de plataforma
 
@@ -219,8 +219,8 @@ sin `curl`.
 | Alta de lead **·MVP·** | Formulario individual que **valida en cliente lo que el esquema exige**, y espera al procesamiento antes de dar el alta por buena |
 | Carga masiva **·MVP·** | Subida real de fichero, seguimiento del trabajo hasta estado terminal, y resumen del resultado fila a fila |
 | Trabajos de entrada | Listado de cargas con su estado y contadores; reprocesar una que quedó a medias |
-| Asesores **·MVP·** | Alta, edición, **desactivar y reactivar**, y ver los desactivados con `?is_active=false`. Sin asignación a grupo: no hay vista de grupos que llene el selector |
-| Grupos | Alta, edición y borrado; estrategia por defecto, capacidad por asesor; ver sus miembros |
+| Asesores **·MVP·** | Alta, edición, **desactivar y reactivar**, y ver los desactivados con `?is_active=false`. Grupo de cada asesor al darlo de alta y en su fila, con `PATCH /advisors`, y su carga activa |
+| Grupos **·MVP·** | Alta, edición, activación y borrado; estrategia por defecto, capacidad por asesor; ver sus miembros |
 | Orígenes | Alta, edición y borrado; mapeo de columnas del fichero a los campos de la plataforma |
 | Reglas de puntuación **·MVP·** | Alta, edición, activación y borrado; constructor de condiciones con campo, operador y valor; puntos y prioridad |
 | Reglas de asignación **·MVP·** | Alta, edición, activación y borrado; rango de puntuación, destino por grupo o por asesores, modo de coincidencia, estrategia y prioridad |
