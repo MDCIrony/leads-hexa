@@ -1559,6 +1559,183 @@ print(r.status_code)' "$AGENT_1" 2>/dev/null)"
 }
 
 
+# ------------------------------------------------ microservicios · F4 ---
+# Reception in its own service (ADR-0031, ADR-0035): the gateway routes /sources
+# and /intake to intake, and lead-core decides each lead behind its internal
+# admission API, idempotent per record. Runs before verify_ms_f1, which expects
+# intake.jobs.dlq empty, and verify_ms_f0, which stops lead-core again.
+intake_jobs_dlq() {
+  docker compose exec -T rabbitmq rabbitmqctl list_queues -q name messages 2>/dev/null | \
+    awk '$1 == "intake.jobs.dlq" {print $2}'
+}
+
+verify_ms_f4() {
+  local r rid ip base job lead email csv st i lag group dq_rule assign_rule dlq_before out rc pending rejected
+  rid="f4-$STAMP"
+  base=${API%/api/v1}
+  section "Microservicios F4 · intake en su propio servicio"
+
+  r=$(req "$API/sources" -H "Authorization: Bearer $MGR_A" -H "X-Request-Id: $rid")
+  check "GET /sources por el gateway" 200 "$(code "$r")"
+  ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q intake)")
+  check "el gateway la envía al servicio intake" True \
+    "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -qF "upstream=$ip:8000" && printf True || printf False)"
+  check "el backend ya no sirve /api/v1/sources (404)" 404 "$(docker compose exec -T backend python -c \
+    "import urllib.request, urllib.error
+try:
+    print(urllib.request.urlopen('http://localhost:8000/api/v1/sources').status)
+except urllib.error.HTTPError as e:
+    print(e.code)")"
+  r=$(req "$base/openapi/intake.json")
+  check "/openapi/intake.json por el gateway" 200 "$(code "$r")"
+  check "  con las rutas de /api/v1/intake" True "$(body "$r" | f 'any(p.startswith("/api/v1/intake/") for p in d.get("paths") or {})')"
+  # The positive control first: without it a wrong password would pass the two denials.
+  check "intake_svc entra en intake_db" True \
+    "$(docker compose exec -T -e PGPASSWORD=intakepassword db psql -h localhost -U intake_svc -d intake_db -c 'SELECT 1' >/dev/null 2>&1 && printf True || printf False)"
+  check "intake_svc no puede entrar en leads_db" False \
+    "$(docker compose exec -T -e PGPASSWORD=intakepassword db psql -h localhost -U intake_svc -d leads_db -c 'SELECT 1' >/dev/null 2>&1 && printf True || printf False)"
+  check "  ni en identity_db" False \
+    "$(docker compose exec -T -e PGPASSWORD=intakepassword db psql -h localhost -U intake_svc -d identity_db -c 'SELECT 1' >/dev/null 2>&1 && printf True || printf False)"
+
+  section "Microservicios F4 · ingesta individual admitida por lead-core"
+  # Its own rule, so the assignment is deterministic whatever earlier phases left behind.
+  r=$(req -X POST "$API/rules/assignment" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"F4 directo $STAMP\",\"target_agent_ids\":[\"$AGENT_1\"],\"conditions\":[{\"field\":\"custom_attributes.f4\",\"operator\":\"EQUALS\",\"value\":\"direct\"}]}")
+  check "regla F4 hacia el asesor uno" 201 "$(code "$r")"
+  assign_rule=$(body "$r" | f 'd.get("id") or ""')
+  email="f4-one-$STAMP@lead.test"
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"first_name\":\"F4\",\"last_name\":\"Uno\",\"email\":\"$email\",\"company\":\"Acme\",\"industry\":\"Tech\",\"budget\":5000,\"custom_attributes\":{\"f4\":\"direct\"}}")
+  check "la ingesta se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  check "su registro queda PROMOTED" PROMOTED "$(body "$r" | f '(d.get("items") or [{}])[0].get("status") or ""')"
+  lead=$(body "$r" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req "$API/leads/${lead:-missing}" -H "Authorization: Bearer $MGR_A")
+  check "el lead queda asignado" ASSIGNED "$(body "$r" | f 'd.get("status")')"
+  check "  al asesor de la regla" "$AGENT_1" "$(body "$r" | f 'd.get("assigned_agent_id")')"
+  r=$(req "$API/leads?q=$email&limit=5" -H "Authorization: Bearer $MGR_A")
+  check "visible en GET /leads, una sola vez" "[\"${lead:-missing}\"]" "$(body "$r" | f 'json.dumps([i["id"] for i in d.get("items") or []])')"
+  check "borrar la regla F4" 204 "$(code "$(req -X DELETE "$API/rules/assignment/$assign_rule" -H "Authorization: Bearer $MGR_A")")"
+
+  section "Microservicios F4 · fichero con filas válidas, inválidas y descalificadas"
+  r=$(req -X POST "$API/rules/disqualification" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"F4 descarte\",\"conditions\":[{\"field\":\"company\",\"operator\":\"EQUALS\",\"value\":\"Descarte$STAMP\"}]}")
+  check "regla de descalificación F4" 201 "$(code "$r")"
+  dq_rule=$(body "$r" | f 'd.get("id") or ""')
+  csv=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.csv")
+  {
+    printf 'first_name,last_name,email,company,industry,budget\n'
+    printf 'Buena,F4,ok-f4-%s@x.test,Acme,Tech,5000\n' "$STAMP"
+    printf 'Mala,F4,mala-f4@@x.test,Acme,Tech,5000\n'
+    printf 'Fuera,F4,dq-f4-%s@x.test,Descarte%s,Tech,5000\n' "$STAMP" "$STAMP"
+  } > "$csv"
+  r=$(req -X POST "$API/intake/leads/batch-upload" -H "Authorization: Bearer $MGR_A" -F "file=@$csv")
+  rm -f "$csv"
+  check "la carga se acepta" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el trabajo termina" COMPLETED "$(await_job "$MGR_A" "$job")"
+  r=$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")
+  # A disqualified lead is still an admitted record: it counts as succeeded.
+  check "total, succeeded y failed" "3/2/1" "$(body "$r" | f '"/".join(str(d.get(k)) for k in ("total_items", "succeeded", "failed"))')"
+  r=$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")
+  check "dos registros PROMOTED" 2 "$(body "$r" | f 'sum(1 for i in d.get("items") or [] if i.get("status") == "PROMOTED")')"
+  check "uno REJECTED por el correo" True "$(body "$r" | f 'any(i.get("status") == "REJECTED" and (i.get("errors") or [{}])[0].get("field") == "email" for i in d.get("items") or [])')"
+  r=$(req "$API/leads?q=dq-f4-$STAMP&limit=5" -H "Authorization: Bearer $MGR_A")
+  check "la fila descalificada es un lead DISQUALIFIED" DISQUALIFIED "$(body "$r" | f '(d.get("items") or [{}])[0].get("status")')"
+  check "borrar la regla de descalificación F4" 204 "$(code "$(req -X DELETE "$API/rules/disqualification/$dq_rule" -H "Authorization: Bearer $MGR_A")")"
+
+  r=$(req -X POST "$API/intake/jobs/$job/reprocess" -H "Authorization: Bearer $MGR_A")
+  check "reprocesar el trabajo terminado se rechaza" INVALID_JOB_TRANSITION "$(body "$r" | f 'd.get("error_code")')"
+  sleep 1
+  check "  y no crea leads nuevos" 1 "$(body "$(req "$API/leads?q=ok-f4-$STAMP&limit=5" -H "Authorization: Bearer $MGR_A")" | f 'd.get("total")')"
+
+  section "Microservicios F4 · lead-core caído: la ingesta espera en su trabajo"
+  email="f4-outage-$STAMP@lead.test"
+  dlq_before=$(intake_jobs_dlq)
+  # lead-core must come back even if this function is interrupted.
+  trap 'docker compose start backend >/dev/null 2>&1; exit 130' INT TERM
+  docker compose stop backend >/dev/null 2>&1
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"first_name\":\"F4\",\"last_name\":\"Caida\",\"email\":\"$email\",\"company\":\"Acme\",\"industry\":\"Tech\",\"budget\":5000}")
+  check "lead-core caído: la ingesta responde 202" 202 "$(code "$r")"
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  for i in $(seq 1 50); do
+    [ "$(body "$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")" | f 'd.get("status")')" = PROCESSING ] && break
+    sleep 0.2
+  done
+  # Time for the admission attempts to fail, as verify_ms_f1 gives the broker outage.
+  sleep 3
+  st=$(body "$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")" | f 'd.get("status")')
+  check "el trabajo no termina sin lead-core" True "$(test -n "$st" && test "$st" != COMPLETED && printf True || printf False)"
+  check "  y su registro sigue PENDING" PENDING \
+    "$(body "$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")" | f '(d.get("items") or [{}])[0].get("status") or ""')"
+
+  docker compose start backend >/dev/null 2>&1
+  trap - INT TERM
+  # Through the gateway, as verify_ms_f0 does: its upstream re-resolves the
+  # container's address within resolver valid=10s.
+  for i in $(seq 1 60); do
+    [ "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")" = 200 ] && break
+    sleep 1
+  done
+  check "lead-core vuelve" 200 "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")"
+  # Either a redelivery still in flight finishes it, or the message already went
+  # to intake.jobs.dlq after three deliveries and the reprocess is the recovery (04 §El worker).
+  st=TIMEOUT
+  for i in $(seq 1 20); do
+    st=$(body "$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")" | f 'd.get("status")')
+    [ "$st" = COMPLETED ] && break
+    sleep 1
+  done
+  if [ "$st" != COMPLETED ]; then
+    printf '      · sin redelivery pendiente: se reprocesa el trabajo\n'
+    check "reprocesar el trabajo interrumpido" 202 "$(code "$(req -X POST "$API/intake/jobs/$job/reprocess" -H "Authorization: Bearer $MGR_A")")"
+    for i in $(seq 1 30); do
+      st=$(body "$(req "$API/intake/jobs/$job" -H "Authorization: Bearer $MGR_A")" | f 'd.get("status")')
+      [ "$st" = COMPLETED ] && break
+      sleep 1
+    done
+  fi
+  check "al volver lead-core el trabajo termina" COMPLETED "$st"
+  check "  con su registro PROMOTED" PROMOTED \
+    "$(body "$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")" | f '(d.get("items") or [{}])[0].get("status") or ""')"
+  check "  y un único lead para ese correo" 1 "$(body "$(req "$API/leads?q=$email&limit=5" -H "Authorization: Bearer $MGR_A")" | f 'd.get("total")')"
+  # The dead copy belongs to the job that just completed; verify_ms_f1 expects
+  # the DLQ empty, so it is purged only if this outage is all it can hold.
+  if [ "$st" = COMPLETED ] && [ "$dlq_before" = 0 ] && [ "$(intake_jobs_dlq)" != 0 ]; then
+    docker compose exec -T rabbitmq rabbitmqctl -q purge_queue intake.jobs.dlq >/dev/null 2>&1
+    printf '      · intake.jobs.dlq vaciada: sólo tenía el trabajo ya recuperado\n'
+  fi
+
+  section "Microservicios F4 · estadísticas repartidas"
+  r=$(req "$API/leads/stats" -H "Authorization: Bearer $MGR_A")
+  check "GET /leads/stats" 200 "$(code "$r")"
+  check "  ya no lleva pending_intake" False "$(body "$r" | f '"pending_intake" in d')"
+  r=$(req "$API/intake/stats" -H "Authorization: Bearer $MGR_A")
+  check "GET /intake/stats" 200 "$(code "$r")"
+  check "  pending_intake = pending + rejected" True "$(body "$r" | f 'd["pending_intake"] == d["pending"] + d["rejected"]')"
+  pending=$(body "$(req "$API/intake/records?status=PENDING&limit=1" -H "Authorization: Bearer $MGR_A")" | f 'd.get("total")')
+  rejected=$(body "$(req "$API/intake/records?status=REJECTED&limit=1" -H "Authorization: Bearer $MGR_A")" | f 'd.get("total")')
+  check "  y cuadra con la bandeja (pending/rejected)" "$pending/$rejected" "$(body "$r" | f 'str(d["pending"]) + "/" + str(d["rejected"])')"
+
+  section "Microservicios F4 · reconciliación y consumidores"
+  out=$(docker compose exec -T intake-worker python -m infrastructure.cli.reconcile 2>&1)
+  rc=$?
+  check "la reconciliación sale sin diferencias" 0 "$rc"
+  [ "$rc" = 0 ] || printf '%s\n' "$out" | tail -5 | sed 's/^/      /'
+  group=intake.tenants
+  for i in $(seq 1 30); do
+    lag=$(group_lag "$group")
+    [ "$lag" = 0 ] && break
+    sleep 1
+  done
+  check "$group sin lag (<=30 s)" 0 "$lag"
+  check "internal.dlq.$group existe y está vacía" 0 "$(dlq_size "internal.dlq.$group")"
+}
+
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -1592,6 +1769,7 @@ verify_f5
 verify_social_oauth
 verify_ms_f2
 verify_ms_f3
+verify_ms_f4
 verify_ms_f1
 verify_ms_f0
 
