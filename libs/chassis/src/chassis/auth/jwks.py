@@ -31,6 +31,7 @@ class JwksCache:
         # one refresh paired with the load time of another.
         self._loaded: Optional[tuple[dict[str, Ed25519PublicKey], float]] = None
         self._attempted_at: Optional[float] = None
+        self._last_failed = False
         self._lock = threading.Lock()
 
     def key(self, kid: str) -> Ed25519PublicKey:
@@ -42,14 +43,22 @@ class JwksCache:
             if found is not None:
                 return found
             if not self._may_refresh():
-                return self._known_or_raise(kid)
+                return self._known_or_unavailable(kid)
             self._attempted_at = self._clock()
             try:
                 self._loaded = (self._load(), self._clock())
+                self._last_failed = False
             except Exception as error:
+                self._last_failed = True
                 logger.warning("JWKS refresh failed: %s", error)
-                return self._known_or_raise(kid, refresh_failed=True)
-        return self._known_or_raise(kid)
+                return self._known_or_unavailable(kid)
+        keys = self._loaded[0]
+        if kid in keys:
+            return keys[kid]
+        if not keys:
+            raise KeysUnavailable("signing keys unavailable")
+        # Only a document fetched in this very call proves the kid is not published.
+        raise TokenError("unknown signing key")
 
     def _fresh(self, kid: str) -> Optional[Ed25519PublicKey]:
         loaded = self._loaded
@@ -57,22 +66,22 @@ class JwksCache:
             return None
         return loaded[0].get(kid)
 
-    def _known_or_raise(self, kid: str, refresh_failed: bool = False) -> Ed25519PublicKey:
+    def _known_or_unavailable(self, kid: str) -> Ed25519PublicKey:
         keys = self._loaded[0] if self._loaded else {}
         if kid in keys:
             return keys[kid]
-        # After a failed refresh the kid may be perfectly valid, so that is
-        # our outage (503), not the caller's bad token (401).
-        if not keys or refresh_failed:
-            raise KeysUnavailable("signing keys unavailable")
-        raise TokenError("unknown signing key")
+        # Not checked against a fresh document: during a rotation the kid may be
+        # valid, and a 401 would end the session. Ours to answer, as 503.
+        raise KeysUnavailable("signing key cannot be checked yet")
 
     def _may_refresh(self) -> bool:
         # Rate-limited: a flood of tokens with invented kids must not turn
-        # into a flood of requests against the JWKS endpoint.
+        # into a flood of requests against the JWKS endpoint. After a failure
+        # the short interval applies, so a recovered endpoint is seen quickly.
         if self._attempted_at is None:
             return True
-        interval = self._min_refresh if self._loaded and self._loaded[0] else self._cold_retry
+        healthy = not self._last_failed and self._loaded and self._loaded[0]
+        interval = self._min_refresh if healthy else self._cold_retry
         return self._clock() - self._attempted_at >= interval
 
     def _load(self) -> dict[str, Ed25519PublicKey]:

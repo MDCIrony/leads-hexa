@@ -41,16 +41,67 @@ def test_unknown_kid_fetches_once_and_returns_the_key():
     assert fetch.calls == 2
 
 
-def test_unknown_kid_inside_min_refresh_is_a_token_error_without_fetch():
+def test_unknown_kid_absent_from_a_document_fetched_in_the_call_is_a_token_error():
     fetch, clock = FakeJwks(signer("old")), FakeClock()
     cache = _cache(fetch, clock)
-    with pytest.raises(TokenError) as first:
+    with pytest.raises(TokenError, match="unknown signing key") as raised:
         cache.key("ghost")
-    assert not isinstance(first.value, KeysUnavailable)
-    with pytest.raises(TokenError) as second:
-        cache.key("ghost")
-    assert not isinstance(second.value, KeysUnavailable)
+    assert not isinstance(raised.value, KeysUnavailable)
     assert fetch.calls == 1
+
+
+def test_unknown_kid_inside_min_refresh_is_keys_unavailable_without_fetch():
+    fetch, clock = FakeJwks(signer("old")), FakeClock()
+    cache = _cache(fetch, clock)
+    cache.key("old")
+    clock.now += 5
+    with pytest.raises(KeysUnavailable):
+        cache.key("ghost")
+    assert fetch.calls == 1
+
+
+def test_a_flood_of_invented_kids_fetches_at_most_once_per_min_refresh():
+    fetch, clock = FakeJwks(signer("old")), FakeClock()
+    cache = _cache(fetch, clock)
+    cache.key("old")
+    for second in range(9):
+        clock.now += 1
+        with pytest.raises(KeysUnavailable):
+            cache.key(f"ghost-{second}")
+    assert fetch.calls == 1
+
+
+def test_rotation_after_a_failed_refresh_is_503_then_retried_after_cold_retry():
+    old, new = signer("old"), signer("new")
+    fetch, clock = FakeJwks(old), FakeClock()
+    cache = _cache(fetch, clock)
+    cache.key("old")
+    fetch.error = OSError("down")
+    clock.now += 60
+    assert cache.key("old") is not None
+    clock.now += 3
+    with pytest.raises(KeysUnavailable):
+        cache.key("new")
+    fetch.error, fetch.document = None, FakeJwks(old, new).document
+    clock.now += 1.1
+    assert cache.key("new") is not None
+    assert fetch.calls == 4
+
+
+def test_rotation_right_after_a_successful_refresh_is_503_never_401():
+    old, new = signer("old"), signer("new")
+    fetch, clock = FakeJwks(old), FakeClock()
+    cache = _cache(fetch, clock)
+    cache.key("old")
+    clock.now += 60
+    cache.key("old")
+    fetch.document = FakeJwks(old, new).document
+    clock.now += 4
+    with pytest.raises(KeysUnavailable):
+        cache.key("new")
+    assert fetch.calls == 2
+    clock.now += 6
+    assert cache.key("new") is not None
 
 
 def test_failed_cold_fetch_is_retried_after_cold_retry():
