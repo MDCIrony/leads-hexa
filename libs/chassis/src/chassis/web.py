@@ -35,10 +35,11 @@ class RequestIdMiddleware:
                 message = {**message, "headers": headers}
             await send(message)
 
-        try:
-            await self.app(scope, receive, send_with_id)
-        finally:
-            request_id_var.reset(token)
+        await self.app(scope, receive, send_with_id)
+        # Not in a `finally`: on an unhandled error the outer ServerErrorMiddleware
+        # logs the 500 after this frame unwinds and still needs the id. Nothing
+        # leaks, since the server runs each request in its own copied context.
+        request_id_var.reset(token)
 
 
 class RequestIdLogFilter(logging.Filter):

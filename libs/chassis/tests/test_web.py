@@ -68,6 +68,28 @@ def test_context_is_reset_after_the_request():
     assert asyncio.run(scenario()) == "-"
 
 
+def test_request_id_survives_an_unhandled_error():
+    # ServerErrorMiddleware sits outside user middlewares and logs the 500 after
+    # this one has unwound, so the id must still be readable by the outer handler.
+    async def scenario():
+        async def app(scope, receive, send):
+            raise RuntimeError("boom")
+
+        async def receive():
+            return {"type": "http.request"}
+
+        async def send(message):
+            pass
+
+        scope = {"type": "http", "headers": [(b"x-request-id", b"abc")]}
+        try:
+            await RequestIdMiddleware(app)(scope, receive, send)
+        except RuntimeError:
+            return request_id_var.get()
+
+    assert asyncio.run(scenario()) == "abc"
+
+
 def test_log_filter_injects_current_id():
     record = logging.LogRecord("t", logging.INFO, __file__, 1, "msg", None, None)
     token = request_id_var.set("rid-1")

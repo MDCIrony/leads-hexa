@@ -20,6 +20,8 @@ _THIRD_PARTY_FORBIDDEN_IN_DOMAIN = {
     "passlib",
     "bcrypt",
     "jwt",
+    "cryptography",
+    "chassis",
     "httpx",
     "pandas",
     "numpy",
@@ -31,7 +33,8 @@ _THIRD_PARTY_FORBIDDEN_IN_DOMAIN = {
 }
 
 # Not just web frameworks: every concrete piece of infrastructure the
-# application layer must reach through a port instead of importing.
+# application layer must reach through a port instead of importing. `chassis`
+# is the shared service library and belongs to infrastructure only.
 _INFRASTRUCTURE_FORBIDDEN_IN_APPLICATION = {
     "fastapi",
     "starlette",
@@ -39,6 +42,9 @@ _INFRASTRUCTURE_FORBIDDEN_IN_APPLICATION = {
     "psycopg",
     "httpx",
     "pandas",
+    "jwt",
+    "cryptography",
+    "chassis",
     "confluent_kafka",
     "kafka",
     "pika",
