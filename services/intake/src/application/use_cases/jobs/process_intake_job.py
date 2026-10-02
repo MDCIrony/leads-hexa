@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from application.ports.input.reception import IngestLeadInputPort, ProcessIntakeJobInputPort
+from application.ports.output.admissions import AdmissionUnavailable
 from application.ports.output.unit_of_work import UnitOfWorkPort
 from application.use_cases.reception.payloads import command_from_record
 from domain.exceptions import DomainException
@@ -31,15 +32,21 @@ class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
         for record in pending:
             try:
                 self.ingest.execute(command_from_record(record), existing_record=record)
+            except AdmissionUnavailable:
+                # Stops at the first outage instead of asking again for every
+                # record left: with lead-core hung, each call waits out its
+                # timeout, and thousands of them outlast the broker's consumer
+                # timeout. The records not reached stay PENDING for the redelivery.
+                interrupted = True
+                break
             except Exception as error:
                 # A record closed by someone else mid-batch (a manager discarded it) is
                 # skipped: redelivering cannot change that, so it must not hold the job open.
                 if isinstance(error, DomainException) and error.error_code == "INVALID_INTAKE_TRANSITION":
                     continue
-                # Includes AdmissionUnavailable. The record stays PENDING on
-                # purpose: it is the only state reprocessing reads, so the
-                # failure is recoverable. It is not counted as failed either,
-                # because it has not failed, it is still pending.
+                # The record stays PENDING on purpose: it is the only state
+                # reprocessing reads, so the failure is recoverable. It is not
+                # counted as failed either, because it has not failed, it is still pending.
                 interrupted = True
                 continue
 

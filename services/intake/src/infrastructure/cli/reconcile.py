@@ -4,7 +4,8 @@
 
 Report-only: it never writes. A difference is repaired by admitting the record
 again, which lead-core makes idempotent, not by touching another service's data.
-Exits 1 if it found any difference, 2 if lead-core could not answer, 0 otherwise."""
+Exits 1 if it found any difference, 2 if it could not get an answer (missing
+configuration, intake_db or lead-core unreachable), 0 otherwise."""
 import argparse
 import logging
 import sys
@@ -12,26 +13,32 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from typing import TextIO
 
+import psycopg
+
 from application.ports.output.admissions import AdmissionLookupPort, AdmissionUnavailable
 from infrastructure.cli.promoted_records import PromotedRecord, promoted_since
-from infrastructure.config.settings import WorkerSettings
+from infrastructure.config.settings import ReconcileSettings
 from infrastructure.di.container import Container
 
 # lead-core answers 422 above this many ids per lookup.
 _BATCH_SIZE = 200
 _DEFAULT_WINDOW = timedelta(hours=24)
+_NO_ANSWER = 2
 
 
 def _differences(batch: list[PromotedRecord], lookup: AdmissionLookupPort) -> list[str]:
-    known = {item.intake_record_id: item.lead_id for item in lookup.lookup([r.record_id for r in batch])}
+    known = {item.intake_record_id: item for item in lookup.lookup([r.record_id for r in batch])}
     lines = []
     for record in batch:
-        lead_core_lead = known.get(str(record.record_id))
-        if lead_core_lead is None:
-            lines.append(f"MISSING record={record.record_id} tenant={record.tenant_id} lead={record.lead_id}")
-        elif lead_core_lead != str(record.lead_id):
-            lines.append(f"LEAD_MISMATCH record={record.record_id} tenant={record.tenant_id} "
-                         f"intake_lead={record.lead_id} lead_core_lead={lead_core_lead}")
+        where = f"record={record.record_id} tenant={record.tenant_id}"
+        item = known.get(str(record.record_id))
+        if item is None:
+            lines.append(f"MISSING {where} lead={record.lead_id}")
+            continue
+        if item.tenant_id != str(record.tenant_id):
+            lines.append(f"TENANT_MISMATCH {where} lead_core_tenant={item.tenant_id}")
+        if item.lead_id != str(record.lead_id):
+            lines.append(f"LEAD_MISMATCH {where} intake_lead={record.lead_id} lead_core_lead={item.lead_id}")
     return lines
 
 
@@ -44,10 +51,13 @@ def reconcile(batches: Iterable[list[PromotedRecord]], lookup: AdmissionLookupPo
             for line in _differences(batch, lookup):
                 differences += 1
                 print(line, file=out)
+    # No answer is not "no differences": a silent 0 would pass the exit criterion.
     except AdmissionUnavailable as exc:
-        # No answer is not "no differences": a silent 0 would pass the exit criterion.
         print(f"lead-core unavailable after {checked} records: {exc}", file=sys.stderr)
-        return 2
+        return _NO_ANSWER
+    except psycopg.Error as exc:
+        print(f"intake_db unavailable after {checked} records: {exc!r}", file=sys.stderr)
+        return _NO_ANSWER
     print(f"Reconciled {checked} PROMOTED records since {since.isoformat()}: {differences} differences", file=out)
     return 1 if differences else 0
 
@@ -71,7 +81,12 @@ def main(argv: list[str] | None = None) -> int:
     since = args.since or datetime.now(timezone.utc) - _DEFAULT_WINDOW
     # Logs to stderr, so stdout holds only the report.
     logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
-    container = Container(WorkerSettings.from_environment())
+    try:
+        settings = ReconcileSettings.from_environment()
+    except ValueError as exc:
+        print(f"configuration incomplete: {exc}", file=sys.stderr)
+        return _NO_ANSWER
+    container = Container(settings)
     try:
         return reconcile(promoted_since(container.database, since, _BATCH_SIZE), container.admission_lookup,
                          since, sys.stdout)

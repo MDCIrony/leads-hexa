@@ -9,7 +9,7 @@ from infrastructure.adapters.output.admissions.http_lead_admission import HttpLe
 from infrastructure.adapters.output.admissions.lead_core_client import LeadCoreClient, correlated_post
 from infrastructure.adapters.output.parsing.pandas_file_parser import PandasFileParser
 from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
-from infrastructure.config.settings import ApiSettings, WorkerSettings
+from infrastructure.config.settings import ApiSettings, ReconcileSettings, WorkerSettings
 
 # The `aud` of the service token lead-core's internal routes accept.
 LEAD_CORE_AUDIENCE = "lead-core"
@@ -21,11 +21,11 @@ class Container:
     """Single place where the process's concrete implementations are chosen.
 
     Stateless adapters are built once and shared; the unit of work holds a
-    transaction, so each caller gets a fresh one. Serves both processes: each
+    transaction, so each caller gets a fresh one. Serves every process: each
     passes its own settings, and they share every field this reads."""
 
     def __init__(
-        self, settings: ApiSettings | WorkerSettings, jwks_fetch: Callable[[], dict] | None = None,
+        self, settings: ApiSettings | WorkerSettings | ReconcileSettings, jwks_fetch: Callable[[], dict] | None = None,
     ) -> None:
         self.settings = settings
         # The pool opens on first use, not here.
@@ -40,7 +40,7 @@ class Container:
         lead_core = LeadCoreClient(settings.lead_core_url, tokens, self._http)
         self.lead_admission = HttpLeadAdmission(lead_core)
         self.admission_lookup = HttpAdmissionLookup(lead_core)
-        # Only the API verifies tokens; the worker has no JWKS_URL and no bearer to check.
+        # Only the API verifies tokens; the worker and the CLI have no JWKS_URL and no bearer to check.
         fetch = jwks_fetch or (http_jwks(settings.jwks_url) if isinstance(settings, ApiSettings) else None)
         self.token_verifier = (
             TokenVerifier(JwksCache(fetch), issuer=ISSUER, audience=AUDIENCE) if fetch else None

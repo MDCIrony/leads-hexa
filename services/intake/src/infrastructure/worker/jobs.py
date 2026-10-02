@@ -6,11 +6,9 @@ from uuid import UUID
 from chassis.web import request_id_var
 
 from application.use_cases.jobs.manage_jobs import GetIntakeJobUseCase
-from application.use_cases.jobs.process_intake_job import ProcessIntakeJobUseCase
-from application.use_cases.reception.process_batch import ProcessBatchUseCase
-from application.use_cases.records.ingest_lead import IngestLeadUseCase
 from domain.exceptions import DomainException
 from domain.value_objects.enums import IntakeJobKind
+from infrastructure.di import use_cases
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,9 +34,8 @@ def _process(container, tenant_id: UUID, job_id: UUID) -> Literal["ack", "nack"]
     uow = container.unit_of_work()
     try:
         if GetIntakeJobUseCase(uow).execute(tenant_id, job_id).kind == IntakeJobKind.BATCH:
-            ProcessBatchUseCase(uow, container.file_parser).execute(tenant_id, job_id)
-        ingest = IngestLeadUseCase(uow, container.lead_admission)
-        interrupted = ProcessIntakeJobUseCase(uow, ingest).execute(tenant_id, job_id)
+            use_cases.process_batch(uow, container).execute(tenant_id, job_id)
+        interrupted = use_cases.process_intake_job(uow, container).execute(tenant_id, job_id)
     except DomainException as exc:
         # A missing job, or a finished one (completed, or failed on an
         # unreadable file): redelivering cannot change either.

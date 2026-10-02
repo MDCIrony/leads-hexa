@@ -1,6 +1,6 @@
 import pytest
 
-from infrastructure.config.settings import ApiSettings, WorkerSettings
+from infrastructure.config.settings import ApiSettings, ReconcileSettings, WorkerSettings
 
 _API = {
     "DATABASE_URL": "postgresql://u:p@host:5432/db",
@@ -77,3 +77,13 @@ def test_secrets_stay_out_of_repr(environment):
     assert "guest" not in repr(WorkerSettings.from_environment())
     _set(environment, {"JWKS_URL": _API["JWKS_URL"]})
     assert "s3cret" not in repr(ApiSettings.from_environment())
+
+
+def test_reconciliation_needs_neither_jwks_nor_a_broker(environment):
+    _set(environment, {k: _API[k] for k in ("DATABASE_URL", "LEAD_CORE_URL", "SERVICE_CLIENT_SECRET")})
+
+    settings = ReconcileSettings.from_environment()
+
+    assert (settings.database_url, settings.lead_core_url, settings.identity_url, settings.service_client_id) == (
+        _API["DATABASE_URL"], _API["LEAD_CORE_URL"], "http://identity:8000", "intake")
+    assert "s3cret" not in repr(settings)

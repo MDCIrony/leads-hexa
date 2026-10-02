@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from pika.exceptions import AMQPError, ConnectionWrongStateError
+from pika.exceptions import AMQPError, ConnectionWrongStateError, StreamLostError
 
 from infrastructure.worker import job_consumer
 from infrastructure.worker.job_consumer import JobRunner, consume
@@ -204,3 +204,42 @@ def test_the_lane_reconnects_with_backoff_on_any_amqp_error_and_on_os_errors():
     run_job_consumer("amqp://broker", lambda m: "ack", stop, connect=connect, clock=lambda: 0.0)
 
     assert stop.waits == [1.0, 2.0, 4.0]
+
+
+class _DroppingConnection(_Connection):
+    """Delivers on the first pump; the second one finds the stream gone, and so does the job thread."""
+
+    def __init__(self) -> None:
+        super().__init__(_BODY, threading.Event())
+        self.dropped = threading.Event()
+
+    def process_data_events(self, time_limit):
+        self.pumps += 1
+        if self.pumps == 1:
+            self._channel.callback(self._channel, SimpleNamespace(delivery_tag=7), None, self._body)
+            return
+        self.dropped.set()
+        raise StreamLostError("connection reset by peer")
+
+    def add_callback_threadsafe(self, callback):
+        raise ConnectionWrongStateError("connection is closed")
+
+
+def test_a_connection_dropped_mid_job_propagates_only_after_the_job_ends_and_acks_nothing():
+    connection, events = _DroppingConnection(), []
+
+    def process(message):
+        assert connection.dropped.wait(5)
+        # Still running after the drop: consume must not return before this ends.
+        threading.Event().wait(0.05)
+        events.append("job finished")
+        return "ack"
+
+    with pytest.raises(StreamLostError):
+        try:
+            consume(connection, process, threading.Event())
+        finally:
+            events.append("consume returned")
+
+    assert events == ["job finished", "consume returned"]
+    assert connection._channel.settled == []

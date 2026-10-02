@@ -71,6 +71,18 @@ def test_lead_core_down_leaves_every_record_pending_and_the_job_interrupted():
     assert uow.events("IntakeRejected") == []
 
 
+def test_the_first_outage_stops_the_run_without_asking_about_the_rest():
+    uow, tenant_id, job_id, records = _received([dict(_VALID, email=f"{n}@techcorp.com") for n in range(3)])
+    admission = FakeLeadAdmission(uow, unavailable)
+
+    interrupted = _process(uow, admission, tenant_id, job_id)
+
+    assert interrupted is True
+    assert len(admission.requests) == 1
+    assert [_status(uow, tenant_id, r) for r in records] == [IntakeRecordStatus.PENDING] * 3
+    assert uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id).status == IntakeJobStatus.PROCESSING
+
+
 def test_an_unforeseen_failure_on_one_record_does_not_stop_the_rest():
     uow, tenant_id, job_id, records = _received([dict(_VALID, email="boom@x.co"), _VALID])
     real = IngestLeadUseCase(uow, FakeLeadAdmission(uow))

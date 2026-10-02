@@ -8,7 +8,7 @@ from application.use_cases.reception.receive_intake import ReceiveIntakeUseCase
 from application.use_cases.records.ingest_lead import IngestLeadUseCase
 from domain.sources.lead_source import LeadSource
 from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus, IntakeRecordStatus, LeadSourceKind
-from infrastructure.worker import jobs
+from infrastructure.di import use_cases
 from infrastructure.worker.jobs import process_job_message
 from tests.unit.application.doubles.admissions import FakeLeadAdmission, unavailable
 from tests.unit.application.doubles.uow import InMemoryUnitOfWork
@@ -64,7 +64,7 @@ def _received(kind: IntakeJobKind):
 
 def test_a_record_that_raises_nacks_and_leaves_the_job_unfinished(monkeypatch):
     uow, tenant_id, job_id, message = _received(IntakeJobKind.SINGLE)
-    monkeypatch.setattr(jobs, "IngestLeadUseCase", lambda uow, admission: _FailingIngest())
+    monkeypatch.setattr(use_cases, "ingest_lead", lambda uow, container: _FailingIngest())
 
     assert process_job_message(_Container(uow), message) == "nack"
 
@@ -118,7 +118,7 @@ def test_a_redelivered_message_for_a_finished_job_is_acked():
 def test_the_work_runs_under_the_correlation_id_of_the_request(monkeypatch):
     uow, _, _, message = _received(IntakeJobKind.SINGLE)
     spy = _SpyIngest(IngestLeadUseCase(uow, FakeLeadAdmission(uow)))
-    monkeypatch.setattr(jobs, "IngestLeadUseCase", lambda uow, admission: spy)
+    monkeypatch.setattr(use_cases, "ingest_lead", lambda uow, container: spy)
 
     process_job_message(_Container(uow), message)
 

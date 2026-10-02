@@ -23,7 +23,6 @@ from application.use_cases.jobs.manage_jobs import (
     ReprocessIntakeJobUseCase,
 )
 from application.use_cases.reception.receive_intake import ReceiveIntakeUseCase
-from application.use_cases.records.ingest_lead import IngestLeadUseCase
 from application.use_cases.records.intake_stats import GetIntakeStatsUseCase
 from application.use_cases.records.manage_records import (
     DiscardIntakeRecordUseCase,
@@ -37,6 +36,7 @@ from application.use_cases.sources.lead_sources import (
     UpdateLeadSourceUseCase,
 )
 from infrastructure.adapters.input.api.dependencies import get_container
+from infrastructure.di import use_cases
 from infrastructure.di.container import Container
 
 
@@ -67,7 +67,7 @@ def get_receive_intake_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> Recei
 def get_ingest_lead_use_case(
     uow: UnitOfWorkPort = Depends(get_uow), container: Container = Depends(get_container),
 ) -> IngestLeadInputPort:
-    return IngestLeadUseCase(uow=uow, admission=container.lead_admission)
+    return use_cases.ingest_lead(uow, container)
 
 
 def get_get_intake_records_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeRecordsInputPort:
