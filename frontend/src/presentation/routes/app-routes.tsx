@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router';
 import { AgentsPage } from '../pages/AgentsPage';
+import { GroupsPage } from '../pages/GroupsPage';
 import { AssignmentRulesPage } from '../pages/AssignmentRulesPage';
 import { BootstrapPage } from '../pages/BootstrapPage';
 import { BulkUploadPage } from '../pages/BulkUploadPage';
@@ -38,6 +39,7 @@ export function AppRoutes() {
 
       <Route element={<RoleRoute allow={['MANAGER']} />}>
         <Route path="/asesores" element={<AgentsPage />} />
+        <Route path="/grupos" element={<GroupsPage />} />
         <Route path="/reglas/puntuacion" element={<ScoringRulesPage />} />
         <Route path="/reglas/asignacion" element={<AssignmentRulesPage />} />
         <Route path="/leads/nuevo" element={<NewLeadPage />} />

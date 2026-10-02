@@ -1,38 +1,56 @@
 import { useState, type FormEvent } from 'react';
 import { UserPlus } from 'lucide-react';
 import type { AgentCreate } from '../../application/services/agents.service';
+import type { Group } from '../../application/services/groups.service';
+import { GroupNotAssignedError } from '../../application/services/agent-roster.service';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from './ui/Button';
 import { Field } from './ui/Field';
 import { Input } from './ui/Input';
+import { GroupSelect } from './GroupSelect';
 
 interface AgentFormProps {
-  onCreate: (body: AgentCreate) => Promise<void>;
+  groups: Group[];
+  onCreate: (body: AgentCreate, groupId: string | null) => Promise<void>;
 }
+
+type FormError = { field: 'email' | 'group'; message: string };
 
 /**
  * Registers a new advisor — the API rejects a duplicate email with EMAIL_ALREADY_EXISTS.
  * A manager only ever mints advisors here, so the role is fixed instead of picked.
- * No group either: there is no groups view in this MVP to fill one.
  */
-export function AgentForm({ onCreate }: AgentFormProps) {
+export function AgentForm({ groups, onCreate }: AgentFormProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [error, setError] = useState<FormError | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function reset() {
+    setName('');
+    setEmail('');
+    setPassword('');
+    setGroupId(null);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      await onCreate({ name, email, password, role: 'AGENT', is_active: true });
-      setName('');
-      setEmail('');
-      setPassword('');
+      await onCreate({ name, email, password, role: 'AGENT', is_active: true }, groupId);
+      reset();
     } catch (err) {
-      setError(readApiError(err)?.message ?? 'No se pudo registrar al asesor.');
+      if (err instanceof GroupNotAssignedError) {
+        // The account exists: keeping the fields would only invite a resubmit that hits EMAIL_ALREADY_EXISTS.
+        reset();
+        const reason = readApiError(err.cause)?.message ?? 'inténtalo desde su fila.';
+        setError({ field: 'group', message: `${err.agent.name} se registró sin grupo: ${reason}` });
+      } else {
+        setError({ field: 'email', message: readApiError(err)?.message ?? 'No se pudo registrar al asesor.' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -49,7 +67,7 @@ export function AgentForm({ onCreate }: AgentFormProps) {
         <Field label="Nombre completo">
           <Input value={name} onChange={(e) => setName(e.target.value)} required />
         </Field>
-        <Field label="Correo" error={error ?? undefined}>
+        <Field label="Correo" error={error?.field === 'email' ? error.message : undefined}>
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Field>
         <Field label="Contraseña">
@@ -60,6 +78,9 @@ export function AgentForm({ onCreate }: AgentFormProps) {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+        </Field>
+        <Field label="Grupo" error={error?.field === 'group' ? error.message : undefined}>
+          <GroupSelect groups={groups} value={groupId} onChange={setGroupId} />
         </Field>
       </div>
 

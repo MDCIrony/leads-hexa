@@ -1,19 +1,18 @@
 import { useState } from 'react';
 import type { AssignmentRuleModel } from '../../domain/rule.model';
 import type { AgentModel } from '../../domain/agent.model';
+import type { Group } from '../../application/services/groups.service';
 import type { AssignmentRuleUpdate } from '../../application/services/rules.service';
 import { Button } from './ui/Button';
 import { Field } from './ui/Field';
 import { Input } from './ui/Input';
 import { ConditionsBuilder } from './ConditionsBuilder';
-import { TargetAgentsPicker } from './TargetAgentsPicker';
+import { RuleTargetPicker } from './RuleTargetPicker';
 
 interface AssignmentRuleEditFormProps {
   rule: AssignmentRuleModel;
   agents: AgentModel[];
-  /** Set when the rule routes to a sales team. This screen cannot change it —
-   *  there is no groups view — but hiding it made the rule look targetless. */
-  groupName?: string;
+  groups: Group[];
   error: string | null;
   submitting: boolean;
   onSave: (body: AssignmentRuleUpdate) => void;
@@ -21,11 +20,12 @@ interface AssignmentRuleEditFormProps {
 }
 
 /** The inline edit for one assignment rule, preloaded with its current values. */
-export function AssignmentRuleEditForm({ rule, agents, groupName, error, submitting, onSave, onCancel }: AssignmentRuleEditFormProps) {
+export function AssignmentRuleEditForm({ rule, agents, groups, error, submitting, onSave, onCancel }: AssignmentRuleEditFormProps) {
   const [name, setName] = useState(rule.name);
   const [minScore, setMinScore] = useState(rule.minScore);
   const [noMaxScore, setNoMaxScore] = useState(rule.maxScore === null);
   const [maxScore, setMaxScore] = useState(rule.maxScore ?? 0);
+  const [targetGroupId, setTargetGroupId] = useState(rule.targetGroupId);
   const [targetAgentIds, setTargetAgentIds] = useState(rule.targetAgentIds);
   const [priority, setPriority] = useState(rule.priority);
   const [conditions, setConditions] = useState(rule.conditions);
@@ -35,6 +35,7 @@ export function AssignmentRuleEditForm({ rule, agents, groupName, error, submitt
       name,
       min_score: minScore,
       max_score: noMaxScore ? null : maxScore,
+      target_group_id: targetGroupId,
       target_agent_ids: targetAgentIds,
       priority,
       conditions: conditions.map((c) => ({ field: c.field, operator: c.operator, value: c.value })),
@@ -64,13 +65,15 @@ export function AssignmentRuleEditForm({ rule, agents, groupName, error, submitt
       <Field label="Prioridad">
         <Input type="number" value={priority} onChange={(e) => setPriority(Number(e.target.value))} />
       </Field>
-      {groupName && (
-        <p className="text-xs text-slate-400">
-          Reparte al equipo <span className="text-slate-200">{groupName}</span>. Los asesores que
-          elijas aquí se suman a ese equipo; el equipo se mantiene aunque no elijas ninguno.
-        </p>
-      )}
-      <TargetAgentsPicker agents={agents} selected={targetAgentIds} onChange={setTargetAgentIds} />
+      <RuleTargetPicker
+        groups={groups}
+        agents={agents}
+        groupId={targetGroupId}
+        agentIds={targetAgentIds}
+        onGroupChange={setTargetGroupId}
+        onAgentsChange={setTargetAgentIds}
+        allowNoGroup={rule.targetGroupId === null}
+      />
       <ConditionsBuilder conditions={conditions} onChange={setConditions} />
       <div className="flex justify-end gap-2">
         <Button variant="secondary" onClick={onCancel} disabled={submitting}>

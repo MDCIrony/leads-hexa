@@ -1,20 +1,26 @@
 import { useState } from 'react';
 import type { AgentModel } from '../../domain/agent.model';
+import type { AdvisorModel } from '../../domain/advisor.model';
 import type { AgentUpdate } from '../../application/services/agents.service';
+import type { Group } from '../../application/services/groups.service';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from './ui/Button';
 import { Field } from './ui/Field';
 import { Input } from './ui/Input';
+import { GroupSelect } from './GroupSelect';
 
 interface AgentRowProps {
   agent: AgentModel;
+  advisor: AdvisorModel | null;
+  groups: Group[];
   onUpdate: (id: string, body: AgentUpdate) => Promise<void>;
   onDeactivate: (id: string) => Promise<void>;
   onReactivate: (id: string) => Promise<void>;
+  onChangeGroup: (id: string, groupId: string | null) => Promise<void>;
 }
 
-/** One advisor: view mode with status-aware actions, or an inline edit for the name. */
-export function AgentRow({ agent, onUpdate, onDeactivate, onReactivate }: AgentRowProps) {
+/** One advisor: view mode with status-aware actions and its group, or an inline edit for the name. */
+export function AgentRow({ agent, advisor, groups, onUpdate, onDeactivate, onReactivate, onChangeGroup }: AgentRowProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(agent.name);
   const [error, setError] = useState<string | null>(null);
@@ -63,11 +69,21 @@ export function AgentRow({ agent, onUpdate, onDeactivate, onReactivate }: AgentR
         <h4 className="font-semibold text-slate-200 text-sm">{agent.name}</h4>
         <p className="text-xs text-slate-400 font-mono">
           {agent.email} • <span className="text-indigo-400">{agent.role}</span>
+          {advisor && ` • ${advisor.activeLoad} leads activos`}
         </p>
         {error && <p className="text-xs text-rose-400 mt-1">{error}</p>}
       </div>
 
       <div className="flex items-center gap-3">
+        {/* No advisor yet means lead-core hasn't projected the agent; "Sin grupo" is still a valid start. */}
+        <GroupSelect
+          aria-label={`Grupo de ${agent.name}`}
+          groups={groups}
+          value={advisor?.groupId ?? null}
+          onChange={(groupId) => runAction(() => onChangeGroup(agent.id, groupId))}
+          disabled={submitting}
+          className="w-auto text-sm"
+        />
         <span
           className={`px-2 py-0.5 rounded text-xs font-medium border ${
             agent.isActive

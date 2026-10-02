@@ -6,11 +6,7 @@ interface TargetAgentsPickerProps {
   onChange: (agentIds: string[]) => void;
 }
 
-/**
- * There's no groups view in the MVP, so target_agent_ids is the only reachable
- * target for an assignment rule — an empty pick here would hit 400
- * RULE_WITHOUT_TARGET on submit.
- */
+/** The named agents of a rule's target; RuleTargetPicker puts the group next to it. */
 export function TargetAgentsPicker({ agents, selected, onChange }: TargetAgentsPickerProps) {
   function toggle(agentId: string) {
     onChange(selected.includes(agentId) ? selected.filter((id) => id !== agentId) : [...selected, agentId]);

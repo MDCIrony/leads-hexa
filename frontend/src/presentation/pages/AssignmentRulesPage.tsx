@@ -10,10 +10,7 @@ import { AssignmentRuleRow } from '../components/AssignmentRuleRow';
 
 /** Rules evaluate by priority and the list already arrives sorted that way — never re-sorted here. */
 export function AssignmentRulesPage() {
-  // Agents are the only target this screen can SET — there is no groups view
-  // in this MVP. Groups are still read: a rule created through the API can
-  // point at one, and showing "sin asesores" for it made a rule that routes
-  // correctly look broken. A failed or slow fetch shouldn't block the list.
+  // A failed or slow fetch of either target list shouldn't block the rules themselves.
   const { data: agentsPage } = useAsync(() => agentsService.list(100, 0), []);
   const agents = agentsPage?.items ?? [];
   const { data: groupsPage } = useAsync(() => groupsService.list(100, 0), []);
@@ -26,12 +23,13 @@ export function AssignmentRulesPage() {
       <div>
         <h2 className="text-2xl font-bold text-slate-100">Reglas de asignación</h2>
         <p className="text-sm text-slate-400">
-          Reparten un lead puntuado a un asesor según su rango de puntuación. Se evalúan en orden de prioridad.
+          Reparten un lead puntuado a un grupo o a asesores concretos según su rango de puntuación. Se evalúan en orden de prioridad.
         </p>
       </div>
 
       <AssignmentRuleForm
         agents={agents}
+        groups={groups}
         onCreate={async (body) => {
           await rulesService.assignment.create(body);
           paginated.refetch();

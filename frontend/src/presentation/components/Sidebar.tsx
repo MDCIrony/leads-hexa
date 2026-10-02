@@ -1,4 +1,4 @@
-import { Building2, LayoutDashboard, Sliders, UploadCloud, UserPlus, Users } from 'lucide-react';
+import { Building2, LayoutDashboard, Layers, Sliders, UploadCloud, UserPlus, Users } from 'lucide-react';
 import { NavLink } from 'react-router';
 import { useSession } from '../../application/session/use-session';
 
@@ -13,6 +13,7 @@ const MENU_BY_ROLE: Record<string, MenuItem[]> = {
   ADMIN: [{ to: '/admin/organizaciones', label: 'Organizaciones', icon: Building2 }],
   MANAGER: [
     { to: '/asesores', label: 'Asesores', icon: Users },
+    { to: '/grupos', label: 'Grupos', icon: Layers },
     { to: '/reglas/puntuacion', label: 'Reglas de puntuación', icon: Sliders },
     { to: '/reglas/asignacion', label: 'Reglas de asignación', icon: LayoutDashboard },
     { to: '/leads/nuevo', label: 'Alta de lead', icon: UserPlus },

@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "agent_id": "2b2985b9-8ad9-4fbe-981e-8ca9f2916898",
+      "name": "Fixture Agent",
+      "group_id": "debb6244-33dc-4d42-91d6-af56bf258a20",
+      "is_active": true,
+      "active_load": 1
+    },
+    {
+      "agent_id": "05891528-e388-4a1c-9f43-02bc52259f99",
+      "name": "Fixture Manager",
+      "group_id": null,
+      "is_active": true,
+      "active_load": 0
+    }
+  ],
+  "total": 2,
+  "limit": 1000,
+  "offset": 0,
+  "has_more": false
+}

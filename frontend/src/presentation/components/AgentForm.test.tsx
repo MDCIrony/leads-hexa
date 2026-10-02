@@ -5,14 +5,14 @@ import { AgentForm } from './AgentForm';
 
 describe('AgentForm', () => {
   it('declares autocomplete on the password field so the browser stops warning about it', () => {
-    render(<AgentForm onCreate={async () => {}} />);
+    render(<AgentForm groups={[]} onCreate={async () => {}} />);
 
     expect(screen.getByLabelText('Contraseña')).toHaveAttribute('autocomplete', 'new-password');
   });
 
   it('offers no role choice and always registers an advisor', async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
-    render(<AgentForm onCreate={onCreate} />);
+    render(<AgentForm groups={[]} onCreate={onCreate} />);
 
     expect(screen.queryByLabelText('Rol')).not.toBeInTheDocument();
 
@@ -21,6 +21,6 @@ describe('AgentForm', () => {
     await userEvent.type(screen.getByLabelText('Contraseña'), 'secret123');
     await userEvent.click(screen.getByRole('button', { name: 'Guardar asesor' }));
 
-    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ role: 'AGENT' }));
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ role: 'AGENT' }), null);
   });
 });

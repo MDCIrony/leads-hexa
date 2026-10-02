@@ -32,7 +32,7 @@ describe('AssignmentRulesPage', () => {
     await userEvent.type(screen.getByLabelText('Nombre'), 'Sin destino');
     await userEvent.click(screen.getByRole('button', { name: 'Crear regla' }));
 
-    expect(await screen.findByText('Elige al menos un asesor destino.')).toBeInTheDocument();
+    expect(await screen.findByText('Elige un grupo o al menos un asesor destino.')).toBeInTheDocument();
     expect(postSpy).not.toHaveBeenCalled();
   });
 
@@ -143,6 +143,57 @@ describe('AssignmentRulesPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
 
     await waitFor(() => expect(patchSpy).toHaveBeenCalled());
-    expect(screen.queryByText('Elige al menos un asesor destino.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Elige un grupo o al menos un asesor destino.')).not.toBeInTheDocument();
+  });
+
+  it('creates a rule that routes to a group, with no agent named', async () => {
+    mockAssignmentRules({ 'POST /api/v1/rules/assignment': { status: 201, data: directAgentRule } });
+    renderWithProviders(<AssignmentRulesPage />, { role: 'MANAGER' });
+
+    await screen.findByRole('option', { name: fixtureGroup.name });
+    await userEvent.type(screen.getByLabelText('Nombre'), 'Todo al equipo');
+    await userEvent.selectOptions(screen.getByLabelText('Grupo destino'), fixtureGroup.id);
+    await userEvent.click(screen.getByRole('button', { name: 'Crear regla' }));
+
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/rules/assignment',
+        expect.objectContaining({ target_group_id: fixtureGroup.id, target_agent_ids: [] })
+      )
+    );
+  });
+
+  it('moves an agent-targeted rule to a group on edit', async () => {
+    mockAssignmentRules({ [`PATCH /api/v1/rules/assignment/${directAgentRule.id}`]: { data: directAgentRule } });
+    renderWithProviders(<AssignmentRulesPage />, { role: 'MANAGER' });
+
+    await screen.findByText(directAgentRule.name);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    const [, editGroupSelect] = screen.getAllByLabelText('Grupo destino');
+    await userEvent.selectOptions(editGroupSelect, fixtureGroup.id);
+    await userEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+
+    await waitFor(() =>
+      expect(apiClient.patch).toHaveBeenCalledWith(
+        `/api/v1/rules/assignment/${directAgentRule.id}`,
+        expect.objectContaining({ target_group_id: fixtureGroup.id })
+      )
+    );
+  });
+
+  it('offers no "Sin grupo" when editing a group-targeted rule: the PATCH cannot remove it', async () => {
+    mockAssignmentRules({
+      'GET /api/v1/rules/assignment': {
+        data: { ...assignmentRulesFixture, items: [{ ...directAgentRule, target_agent_ids: [], target_group_id: fixtureGroup.id }] },
+      },
+    });
+    renderWithProviders(<AssignmentRulesPage />, { role: 'MANAGER' });
+
+    await screen.findByText(directAgentRule.name);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    const [, editGroupSelect] = screen.getAllByLabelText('Grupo destino');
+
+    expect(editGroupSelect).toHaveValue(fixtureGroup.id);
+    expect(within(editGroupSelect).queryByRole('option', { name: 'Sin grupo' })).not.toBeInTheDocument();
   });
 });

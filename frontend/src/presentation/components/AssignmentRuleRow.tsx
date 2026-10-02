@@ -37,8 +37,8 @@ export function AssignmentRuleRow({ rule, agents, groups, onUpdate, onDelete }: 
   async function handleSave(body: AssignmentRuleUpdate) {
     // A rule that routes to a team needs no named advisor: demanding one here
     // made a group-targeted rule impossible to edit at all, not even its name.
-    if (!rule.targetGroupId && body.target_agent_ids && body.target_agent_ids.length === 0) {
-      setError('Elige al menos un asesor destino.');
+    if (!body.target_group_id && body.target_agent_ids?.length === 0) {
+      setError('Elige un grupo o al menos un asesor destino.');
       return;
     }
     await runAction(() => onUpdate(rule.id, body));
@@ -57,7 +57,7 @@ export function AssignmentRuleRow({ rule, agents, groups, onUpdate, onDelete }: 
       <AssignmentRuleEditForm
         rule={rule}
         agents={agents}
-        groupName={groupName}
+        groups={groups}
         error={error}
         submitting={submitting}
         onSave={handleSave}

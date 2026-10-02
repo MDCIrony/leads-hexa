@@ -97,10 +97,11 @@ async function main() {
   });
   await save('scoring-rules-page.json', (await call('GET', '/rules/scoring', { token: managerToken })).data);
 
-  await call('POST', '/groups', {
+  const group = await call('POST', '/groups', {
     token: managerToken,
     body: { name: `Ventas Fixtures ${STAMP}`, default_strategy: 'LOWEST_LOAD' },
   });
+  await call('PATCH', `/advisors/${agent.data.id}`, { token: managerToken, body: { group_id: group.data.id } });
   await save('groups-page.json', (await call('GET', '/groups', { token: managerToken })).data);
   // A fresh organization already carries its two default sources — nothing to create first.
   await save('sources-page.json', (await call('GET', '/sources', { token: managerToken })).data);
@@ -143,6 +144,7 @@ async function main() {
   // fixture of a hundred rows buries the contract change its diff should show.
   await save('tenants-page.json', (await call('GET', '/tenants?limit=5', { token: adminToken })).data);
   await save('agents-page.json', (await call('GET', '/agents', { token: managerToken })).data);
+  await save('advisors-page.json', (await call('GET', '/advisors', { token: managerToken })).data);
   await save('lead-stats.json', (await call('GET', '/leads/stats', { token: managerToken })).data);
   // The assignment rule above targets this agent, so LEAD_ASSIGNED lands in their own inbox.
   await save('notifications-page.json', (await call('GET', '/notifications', { token: agentToken })).data);

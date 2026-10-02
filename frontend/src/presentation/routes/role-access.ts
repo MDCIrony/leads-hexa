@@ -3,7 +3,7 @@
 // without pulling in the router.
 const ROLE_PATH_PREFIXES: Record<string, readonly string[]> = {
   ADMIN: ['/admin', '/cuenta/seguridad'],
-  MANAGER: ['/asesores', '/reglas', '/leads', '/cuenta/seguridad'],
+  MANAGER: ['/asesores', '/grupos', '/reglas', '/leads', '/cuenta/seguridad'],
   AGENT: ['/mis-leads', '/cuenta/seguridad'],
 };
 

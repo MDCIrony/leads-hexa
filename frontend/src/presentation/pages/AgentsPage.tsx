@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import * as agentsService from '../../application/services/agents.service';
+import * as advisorsService from '../../application/services/advisors.service';
+import * as groupsService from '../../application/services/groups.service';
+import * as rosterService from '../../application/services/agent-roster.service';
+import { useAsync } from '../../application/data/use-async';
 import { usePaginated } from '../../application/data/use-paginated';
 import { useSession } from '../../application/session/use-session';
 import { AsyncView } from '../components/ui/AsyncView';
@@ -16,13 +20,16 @@ export function AgentsPage() {
   const { user } = useSession();
 
   const paginated = usePaginated(
-    (limit, offset) => agentsService.list(limit, offset, showInactive ? { isActive: false } : {}),
+    (limit, offset) => rosterService.listRoster(limit, offset, showInactive ? { isActive: false } : {}),
     { deps: [showInactive] }
   );
+  // A failed groups fetch only leaves "Sin grupo" to pick; it shouldn't block managing accounts.
+  const { data: groupsPage } = useAsync(() => groupsService.list(100, 0), []);
 
   // The endpoint takes no role filter, so it hands back the whole organization,
   // signed-in manager included. Nobody deactivates themselves from this screen.
-  const others = paginated.items.filter((agent) => agent.id !== user?.id);
+  const others = paginated.items.filter(({ agent }) => agent.id !== user?.id);
+  const groups = groupsPage?.items ?? [];
 
   return (
     <div className="space-y-6">
@@ -42,11 +49,16 @@ export function AgentsPage() {
         </label>
       </div>
 
-      {/* Outside AsyncView: an organization with only its manager renders the empty state, which would take the form with it. */}
+      {/* Outside AsyncView: a refetch shows the loading state, which would unmount the form and its error. */}
       <AgentForm
-        onCreate={async (body) => {
-          await agentsService.create(body);
-          paginated.refetch();
+        groups={groups}
+        onCreate={async (body, groupId) => {
+          // Refetched even when the group step fails: the agent exists and belongs in the list.
+          try {
+            await rosterService.createWithGroup(body, groupId);
+          } finally {
+            paginated.refetch();
+          }
         }}
       />
 
@@ -55,10 +67,11 @@ export function AgentsPage() {
         emptyText={showInactive ? 'No hay asesores desactivados.' : 'No hay asesores activos.'}
         isEmpty={(items) => items.length === 0}
       >
-        {(agents) => (
+        {(entries) => (
           <div className="space-y-4">
             <AgentSettings
-              agents={agents}
+              entries={entries}
+              groups={groups}
               onUpdate={async (id, body) => {
                 await agentsService.update(id, body);
                 paginated.refetch();
@@ -69,6 +82,10 @@ export function AgentsPage() {
               }}
               onReactivate={async (id) => {
                 await agentsService.update(id, { is_active: true });
+                paginated.refetch();
+              }}
+              onChangeGroup={async (id, groupId) => {
+                await advisorsService.setGroup(id, groupId);
                 paginated.refetch();
               }}
             />

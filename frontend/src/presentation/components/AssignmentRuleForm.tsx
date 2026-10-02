@@ -2,29 +2,29 @@ import { useState, type FormEvent } from 'react';
 import { Target } from 'lucide-react';
 import { AssignmentStrategy, formatAssignmentStrategyLabel, type CriterionModel } from '../../domain/rule.model';
 import type { AgentModel } from '../../domain/agent.model';
+import type { Group } from '../../application/services/groups.service';
 import type { AssignmentRuleCreate } from '../../application/services/rules.service';
 import { readApiError } from '../../infrastructure/api/api-error';
 import { Button } from './ui/Button';
 import { Field } from './ui/Field';
 import { Input } from './ui/Input';
+import { Select } from './ui/Select';
 import { ConditionsBuilder } from './ConditionsBuilder';
-import { TargetAgentsPicker } from './TargetAgentsPicker';
+import { RuleTargetPicker } from './RuleTargetPicker';
 
 interface AssignmentRuleFormProps {
   agents: AgentModel[];
+  groups: Group[];
   onCreate: (body: AssignmentRuleCreate) => Promise<void>;
 }
 
-/**
- * There's no groups view in this MVP, so the only reachable target is a set
- * of named agents — the form blocks an empty pick instead of letting the API
- * reject it with 400 RULE_WITHOUT_TARGET.
- */
-export function AssignmentRuleForm({ agents, onCreate }: AssignmentRuleFormProps) {
+/** Blocks a rule with neither group nor agents instead of letting the API reject it with 400 RULE_WITHOUT_TARGET. */
+export function AssignmentRuleForm({ agents, groups, onCreate }: AssignmentRuleFormProps) {
   const [name, setName] = useState('');
   const [minScore, setMinScore] = useState(0);
   const [noMaxScore, setNoMaxScore] = useState(true);
   const [maxScore, setMaxScore] = useState<number>(0);
+  const [targetGroupId, setTargetGroupId] = useState<string | null>(null);
   const [targetAgentIds, setTargetAgentIds] = useState<string[]>([]);
   const [strategy, setStrategy] = useState<AssignmentStrategy>(AssignmentStrategy.ROUND_ROBIN);
   const [priority, setPriority] = useState(0);
@@ -34,8 +34,8 @@ export function AssignmentRuleForm({ agents, onCreate }: AssignmentRuleFormProps
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (targetAgentIds.length === 0) {
-      setError('Elige al menos un asesor destino.');
+    if (!targetGroupId && targetAgentIds.length === 0) {
+      setError('Elige un grupo o al menos un asesor destino.');
       return;
     }
     setSubmitting(true);
@@ -45,6 +45,7 @@ export function AssignmentRuleForm({ agents, onCreate }: AssignmentRuleFormProps
         name,
         min_score: minScore,
         max_score: noMaxScore ? null : maxScore,
+        target_group_id: targetGroupId,
         target_agent_ids: targetAgentIds,
         agent_match_mode: 'ANY',
         strategy,
@@ -54,6 +55,7 @@ export function AssignmentRuleForm({ agents, onCreate }: AssignmentRuleFormProps
       setName('');
       setMinScore(0);
       setNoMaxScore(true);
+      setTargetGroupId(null);
       setTargetAgentIds([]);
       setPriority(0);
       setConditions([]);
@@ -98,22 +100,24 @@ export function AssignmentRuleForm({ agents, onCreate }: AssignmentRuleFormProps
         </Field>
       </div>
 
-      <div className="space-y-1">
-        <label className="block text-sm font-medium text-slate-200">Estrategia de reparto</label>
-        <select
-          value={strategy}
-          onChange={(e) => setStrategy(e.target.value as AssignmentStrategy)}
-          className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-        >
+      <Field label="Estrategia de reparto">
+        <Select value={strategy} onChange={(e) => setStrategy(e.target.value as AssignmentStrategy)}>
           {Object.values(AssignmentStrategy).map((s) => (
             <option key={s} value={s}>
               {formatAssignmentStrategyLabel(s)}
             </option>
           ))}
-        </select>
-      </div>
+        </Select>
+      </Field>
 
-      <TargetAgentsPicker agents={agents} selected={targetAgentIds} onChange={setTargetAgentIds} />
+      <RuleTargetPicker
+        groups={groups}
+        agents={agents}
+        groupId={targetGroupId}
+        agentIds={targetAgentIds}
+        onGroupChange={setTargetGroupId}
+        onAgentsChange={setTargetAgentIds}
+      />
 
       <ConditionsBuilder conditions={conditions} onChange={setConditions} />
 
