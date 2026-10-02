@@ -145,24 +145,31 @@ await_quiet() {
 # await_advisor <session> <agent_id> — waits until lead-core's advisors
 # projection has the agent (F3). Agents are written by identity and reach
 # lead-core through Kafka, so routing right after creating one would race it.
+# Returns non-zero on timeout. 30 s: on a cold start the first message also
+# waits for the consumer group to join.
 await_advisor() {
   local i
-  for i in $(seq 1 75); do
+  for i in $(seq 1 150); do
     [ "$(body "$(req "$API/advisors?limit=200" -H "Authorization: Bearer $1")" | \
       f "any(a.get('agent_id') == '$2' for a in d.get('items') or [])")" = True ] && return 0
     sleep 0.2
   done
+  return 1
 }
 
 # await_sources <session> — waits until a new organization has its default
 # sources (F3): identity publishes the tenant and intake creates them on seeing it.
 await_sources() {
   local i
-  for i in $(seq 1 75); do
+  for i in $(seq 1 150); do
     [ "$(body "$(req "$API/sources" -H "Authorization: Bearer $1")" | f 'len(d.get("items") or [])')" -ge 2 ] 2>/dev/null && return 0
     sleep 0.2
   done
+  return 1
 }
+
+# ok <command…> — True if the command succeeds, for checks over the await helpers.
+ok() { "$@" && printf True || printf False; }
 
 # ------------------------------------------------------------- scaffolding ---
 
@@ -205,9 +212,9 @@ bootstrap() {
   TOKEN_1=$(login " uNo-$STAMP@X.Test " "$ADMIN_PASS")
   check "asesor entra con correo normalizado" True "$(test -n "$TOKEN_1" && printf True || printf False)"
   TOKEN_2=$(login "dos-$STAMP@x.test" "$ADMIN_PASS")
-  await_sources "$MGR_A"
-  await_advisor "$MGR_A" "$AGENT_1"
-  await_advisor "$MGR_A" "$AGENT_2"
+  check "OrgA recibe sus fuentes por defecto" True "$(ok await_sources "$MGR_A")"
+  check "los asesores de OrgA llegan a lead-core" True "$(ok await_advisor "$MGR_A" "$AGENT_1")"
+  check "  y el segundo también" True "$(ok await_advisor "$MGR_A" "$AGENT_2")"
 
   # Second organization: the control that proves isolation.
   r=$(req -X POST "$API/tenants" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
@@ -219,8 +226,8 @@ bootstrap() {
     -d "{\"name\":\"Beto\",\"email\":\"beto-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\",\"role\":\"AGENT\"}")
   AGENT_B=$(body "$r" | f 'd["id"]')
   check "asesor de la organización B" 201 "$(code "$r")"
-  await_sources "$MGR_B"
-  await_advisor "$MGR_B" "$AGENT_B"
+  check "OrgB recibe sus fuentes por defecto" True "$(ok await_sources "$MGR_B")"
+  check "el asesor de OrgB llega a lead-core" True "$(ok await_advisor "$MGR_B" "$AGENT_B")"
 }
 
 # -------------------------------------------------------------- sessions ---
@@ -1347,7 +1354,7 @@ verify_ms_f2() {
   check "organización C creada" 201 "$(code "$r")"
   mgr_c_id=$(body "$r" | f 'd["manager"]["id"]')
   mgr_c=$(login "mgr-c-$STAMP@x.test" "$ADMIN_PASS")
-  await_sources "$mgr_c"
+  check "OrgC recibe sus fuentes por defecto" True "$(ok await_sources "$mgr_c")"
   # Without its row in the projection the unassigned notice has no recipient.
   for i in $(seq 1 75); do
     [ "$(docker compose exec -T db psql -U postgres -d notifications_db -tAc \
@@ -1494,8 +1501,8 @@ except urllib.error.HTTPError as e:
   tenant_d=$(body "$r" | f 'd["id"]')
   mgr_d_id=$(body "$r" | f 'd["manager"]["id"]')
   mgr_d=$(login "mgr-d-$STAMP@x.test" "$ADMIN_PASS")
-  await_sources "$mgr_d"
-  check "en pocos segundos tiene sus dos fuentes" 2 "$(body "$(req "$API/sources" -H "Authorization: Bearer $mgr_d")" | f 'len(d.get("items") or [])')"
+  check "en pocos segundos tiene sus dos fuentes" True "$(ok await_sources "$mgr_d")"
+  check "  exactamente dos" 2 "$(body "$(req "$API/sources" -H "Authorization: Bearer $mgr_d")" | f 'len(d.get("items") or [])')"
   r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $mgr_d" -H 'Content-Type: application/json' \
     -d "{\"first_name\":\"F3\",\"last_name\":\"Alta\",\"email\":\"f3-new-org-$STAMP@lead.test\",\"company\":\"Acme\",\"industry\":\"Tech\",\"budget\":5000}")
   job=$(body "$r" | f 'd.get("job_id") or ""')
@@ -1530,10 +1537,15 @@ if [ "${1:-}" = "--reset" ]; then
   printf 'Recreando el volumen…\n'
   docker compose down -v >/dev/null 2>&1
   docker compose up -d >/dev/null 2>&1
-  # The gateway answers /health before the backend has migrated; /auth/me
-  # reaches the backend and only returns 401 once it is serving.
+  # The gateway answers /health before the services have migrated; /auth/me
+  # reaches identity and only returns 401 once it is serving. Lead-core has no
+  # anonymous route, so its own healthcheck is what says it migrated.
   for _ in $(seq 1 60); do
     [ "$(curl -s -o /dev/null -w '%{http_code}' "$API/auth/me")" = 401 ] && break
+    sleep 1
+  done
+  for _ in $(seq 1 60); do
+    docker compose ps backend --format '{{.Status}}' | grep -q '(healthy)' && break
     sleep 1
   done
 fi
