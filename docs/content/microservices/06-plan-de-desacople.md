@@ -359,7 +359,13 @@ variables de MFA u OAuth.
 **Estado: implantada** (`RANGO_F4`, más el commit que registra este rango). Lo construido sigue el
 plan salvo las desviaciones de abajo. El corte copió 76 fuentes, 38 `provisioned_tenants`, 117 jobs,
 139 registros, 36 errores, 22 ficheros y 42 filas de `processed_events` (las del grupo
-`intake.tenants`), con recuentos y `md5` idénticos en origen y destino.
+`intake.tenants`), con recuentos y `md5` idénticos en origen y destino. El digest cubre ids, claves
+foráneas, estados, contadores y el `md5` del `payload`, del `field_mapping` y del fichero; el texto de
+los errores entra a partir de la revisión final de la fase.
+
+Queda una salvedad del criterio de salida, la misma que en F3: `backend` y `backend-worker` siguen
+entrando en `leads_db` como el superusuario `postgres`, que se salta el `REVOKE CONNECT` sobre
+`intake_db`. Ningún código de lead-core lee tablas de intake; el rol propio de lead-core llega en F5.
 
 **Objetivo.** La recepción y la decisión se separan; la idempotencia sustituye a la transacción.
 
