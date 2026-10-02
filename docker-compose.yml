@@ -17,6 +17,21 @@ services:
       timeout: 5s
       retries: 5
 
+  db-bootstrap:
+    # One-shot: creates the notifications role and databases the db image's
+    # single POSTGRES_DB cannot (ADR-0031). Idempotent, so it may run on every `up`.
+    image: postgres:16-alpine
+    environment:
+      - PGPASSWORD=postgrespassword
+    volumes:
+      # A directory, not a file, for the same reason as the gateway config.
+      - ./db:/bootstrap:ro
+    command: ["psql", "-h", "db", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "notifications_password=notificationspassword", "-f", "/bootstrap/bootstrap.sql"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: ./backend
@@ -349,6 +364,31 @@ services:
       - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
       # The mounts are read-only, so bytecode cannot be cached anyway; saying so
       # avoids a warning per module.
+      - PYTHONDONTWRITEBYTECODE=1
+    command: ["pytest", "-q"]
+
+  notifications-test:
+    profiles: ["test"]
+    build:
+      context: ./services/notifications
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: test
+    # The layout mirrors the repository (/srv/services/..., /srv/libs/...) because
+    # uv.lock records chassis as ../../libs/chassis.
+    volumes:
+      - ./services/notifications/src:/srv/services/notifications/src:ro
+      - ./services/notifications/tests:/srv/services/notifications/tests:ro
+      - ./services/notifications/migrations:/srv/services/notifications/migrations:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    # The role has no CREATEDB: notifications_test already exists, made by db-bootstrap.
+    environment:
+      - DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_test
+      - TEST_DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_test
       - PYTHONDONTWRITEBYTECODE=1
     command: ["pytest", "-q"]
 
