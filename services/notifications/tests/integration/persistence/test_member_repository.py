@@ -26,6 +26,17 @@ def test_saving_again_replaces_the_row(uow_factory):
         assert uow.members.get(member.agent_id) == newer
 
 
+def test_an_older_version_never_overwrites_a_newer_one(uow_factory):
+    """Calls the repository directly: the use case's own check is not in play."""
+    newer = _member(uuid4(), version=3)
+    with uow_factory() as uow:
+        uow.members.save(newer)
+        uow.members.save(Member(newer.agent_id, newer.tenant_id, "AGENT", False, 2))
+        uow.members.save(Member(newer.agent_id, newer.tenant_id, "AGENT", False, 3))
+
+        assert uow.members.get(newer.agent_id) == newer
+
+
 def test_active_manager_ids_returns_only_active_managers_of_the_tenant(uow_factory):
     """The SQL repeats Member.receives_organization_notices; this keeps the two in step."""
     tenant_id = uuid4()

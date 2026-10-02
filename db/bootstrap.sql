@@ -16,6 +16,11 @@ FROM (VALUES ('notifications_db'), ('notifications_test')) AS databases (name)
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = name)
 \gexec
 
+-- Unconditional: corrects a database that already existed under another owner.
+SELECT format('ALTER DATABASE %I OWNER TO notifications_svc', name)
+FROM (VALUES ('notifications_db'), ('notifications_test')) AS databases (name)
+\gexec
+
 SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', name)
 FROM (VALUES ('notifications_db'), ('notifications_test')) AS databases (name)
 \gexec

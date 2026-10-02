@@ -1,5 +1,6 @@
-import psycopg
 from uuid import UUID
+
+import psycopg
 
 from application.ports.output.notification_repository import NotificationRepositoryPort
 from domain.notifications.notification import Notification
@@ -68,7 +69,7 @@ class PostgresNotificationRepository(NotificationRepositoryPort):
         return " AND is_read = FALSE" if unread_only else ""
 
     @staticmethod
-    def _to_notification(row) -> Notification:
+    def _to_notification(row: dict) -> Notification:
         return Notification.create(
             notification_id=row["id"], tenant_id=row["tenant_id"], recipient_id=row["recipient_id"],
             kind=row["kind"], message=row["message"], lead_id=row["lead_id"],

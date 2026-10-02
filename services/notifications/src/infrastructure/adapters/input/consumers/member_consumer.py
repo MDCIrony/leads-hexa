@@ -10,8 +10,9 @@ from application.use_cases.members.project_member import ProjectMemberUseCase
 class MemberConsumer:
     """Keeps the member projection current from the agent state topic.
 
-    Does not use `processed_events`: the version-gated upsert is already
-    idempotent, and a redelivered or reordered event changes nothing."""
+    Does not use `processed_events`: the upsert is gated on `version` in SQL
+    (the use case's check is only the fast path), so a redelivered, reordered
+    or concurrent older event changes nothing."""
 
     def __init__(self, uow_factory: Callable[[], UnitOfWorkPort]) -> None:
         self._uow_factory = uow_factory

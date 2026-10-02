@@ -4,6 +4,8 @@ import pytest
 
 from application.use_cases.notifications.notification_handler import NotificationHandler
 from domain.members.member import Member
+from domain.notifications.kind import NotificationKind
+from domain.notifications.notification import Notification
 from infrastructure.adapters.input.consumers.notification_consumer import NotificationConsumer
 
 from .events import count, event
@@ -27,7 +29,10 @@ def test_a_failing_effect_leaves_no_processed_row_and_no_notification(test_db, u
     the retry would see the event as done and the notice would be lost for good."""
     message = event("LeadAssigned", uuid4(), {"lead_id": str(uuid4()), "agent_id": str(uuid4())})
 
-    def boom(self, *args):
+    def boom(self, event_type, tenant_id, payload, uow):
+        # Write first, then fail: the empty table below proves the rollback, not an idle handler.
+        uow.notifications.save(Notification.create(
+            tenant_id=tenant_id, recipient_id=uuid4(), kind=NotificationKind.LEAD_ASSIGNED, message="Doomed"))
         raise RuntimeError("effect failed")
 
     monkeypatch.setattr(NotificationHandler, "apply", boom)

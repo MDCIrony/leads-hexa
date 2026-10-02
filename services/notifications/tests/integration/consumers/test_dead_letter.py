@@ -3,6 +3,8 @@ from uuid import uuid4
 from chassis.consumer import ConsumerLoop, Envelope, dlq_topic
 
 from application.use_cases.notifications.notification_handler import NotificationHandler
+from domain.notifications.kind import NotificationKind
+from domain.notifications.notification import Notification
 from infrastructure.adapters.input.consumers.notification_consumer import NotificationConsumer
 
 from .events import count, event_bytes
@@ -47,8 +49,11 @@ def test_an_event_whose_effect_always_fails_is_dead_lettered_and_committed(test_
     message = _Message(event_bytes("LeadAssigned", uuid4(), {"lead_id": str(uuid4()), "agent_id": str(uuid4())}))
     attempts = []
 
-    def boom(self, *args):
-        attempts.append(args)
+    def boom(self, event_type, tenant_id, payload, uow):
+        attempts.append(payload)
+        # Write first, then fail: the empty table below proves the rollback, not an idle handler.
+        uow.notifications.save(Notification.create(
+            tenant_id=tenant_id, recipient_id=uuid4(), kind=NotificationKind.LEAD_ASSIGNED, message="Doomed"))
         raise RuntimeError("effect failed")
 
     monkeypatch.setattr(NotificationHandler, "apply", boom)
