@@ -28,3 +28,10 @@ FROM (VALUES ('notifications_db'), ('notifications_test')) AS databases (name)
 SELECT format('GRANT CONNECT ON DATABASE %I TO notifications_svc', name)
 FROM (VALUES ('notifications_db'), ('notifications_test')) AS databases (name)
 \gexec
+
+-- The monolith's databases too, so a service role reaches only its own. They
+-- are created elsewhere (POSTGRES_DB, the test suite), hence only where they exist.
+-- The backend connects as the postgres superuser, which this does not restrict.
+SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', datname)
+FROM pg_database WHERE datname IN ('leads_db', 'leads_test')
+\gexec

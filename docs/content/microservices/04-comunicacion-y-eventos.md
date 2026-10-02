@@ -145,6 +145,11 @@ flowchart TD
 - Un mensaje que agota los intentos bloquea su partición hasta que está en la DLQ; el bucle libera
   las particiones bloqueadas al perderlas o cederlas en un *rebalance*, y al parar cierra el
   consumidor y vacía el productor de la DLQ.
+- **Un error transitorio no va a la DLQ.** `ConsumerLoop` acepta `retryable`; si el último intento
+  falla con un error que lo cumple (en notifications, `psycopg.OperationalError`: la base caída), el
+  mensaje no se aparca ni se confirma: el bucle retrocede al offset, espera 1 s y lo vuelve a
+  intentar hasta que la base vuelve. Aparcar un `AgentState` dejaría la proyección `members`
+  divergida para siempre y sin aviso.
 - Cada grupo corre en un **carril** (`run_consumer_lane`): si su cliente de Kafka falla, se construye
   otro tras una espera de 1 s que se duplica hasta 30 s. Un carril no construye su
   consumidor hasta que el servicio ha declarado sus propias DLQ, para que la DLQ exista cuando un mensaje

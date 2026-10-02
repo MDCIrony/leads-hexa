@@ -85,7 +85,9 @@ en todas. Un servicio que intentara leer otra base fallaría al conectar, no al 
 Hoy crea, para notifications, el rol `notifications_svc` (con la contraseña de desarrollo que le pasa
 Compose), las bases `notifications_db` y `notifications_test` con ese rol de propietario, y aplica
 `REVOKE CONNECT … FROM PUBLIC` y `GRANT CONNECT` sólo al rol. La base de pruebas la crea él porque el
-rol no tiene `CREATEDB`. Cada fase que extrae un servicio añade el suyo al script. No sirve
+rol no tiene `CREATEDB`. También quita `CONNECT` a `PUBLIC` en `leads_db` y `leads_test`, si existen: el
+monolito entra con el superusuario `postgres`, que no lo necesita, y así `notifications_svc` no puede
+conectarse a ellas. Cada fase que extrae un servicio añade el suyo al script. No sirve
 `/docker-entrypoint-initdb.d`: sólo se ejecuta con el volumen vacío, y el volumen `pgdata` actual ya
 tiene datos. `CREATE DATABASE` no admite `IF NOT EXISTS`, así que el script usa el patrón:
 

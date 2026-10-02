@@ -129,14 +129,17 @@ agentes vacía, y un principal de máquina en esa ruta es `401` (`get_optional_h
       al rotar.
     - **`kid` desconocido:** se vuelve a pedir, como mucho una vez cada 10 s (`min_refresh`), para que una
       avalancha de tokens con `kid` inventados no se convierta en una avalancha contra la JWKS.
-    - **Reintento en frío:** si todavía no hay claves cargadas (la JWKS no respondía al arrancar), reintenta a
-      1 s en vez de 10 s.
+    - **Reintento tras un fallo:** si la última petición falló (o todavía no hay claves cargadas
+      porque la JWKS no respondía al arrancar), la siguiente sale a 1 s en vez de 10 s.
     - **Si la petición falla,** conserva las claves ya conocidas y registra un `WARNING`: se prefiere
       una clave caducada a una caída. **Límite conocido:** mientras la JWKS no responde, una clave
       retirada sigue valiendo.
-    - **Sin claves utilizables** (frío y sin respuesta, o un `kid` desconocido tras un fallo)
-      lanza `KeysUnavailable`, subclase de `TokenError`. Cada servicio la contesta `503
-      SERVICE_UNAVAILABLE`, nunca `401`: es una caída nuestra, no un token malo.
+    - **`401` sólo con prueba.** Un `kid` da `TokenError` (`401`) únicamente si en esa misma llamada se
+      ha descargado el documento y el `kid` no está. Un `kid` que todavía no se puede comprobar contra
+      un documento recién pedido (la petición está limitada por `min_refresh` o acaba de fallar), o
+      un frío sin claves, lanza `KeysUnavailable`, subclase de `TokenError`. Cada servicio la contesta
+      `503 SERVICE_UNAVAILABLE`, nunca `401`: durante una rotación ese `kid` puede ser válido, y un
+      `401` el SPA lo lee como sesión terminada.
 
   Rotar es publicar la clave nueva junto a la anterior, firmar con la nueva y retirar la vieja pasados
   60 s; los servicios la dejan de aceptar como mucho 60 s después de que se deje de publicar.

@@ -201,6 +201,10 @@ sobre `chassis.consumer`; el backend ya no consume ningún topic. Los grupos son
 - Tres intentos, con espera creciente; al tercer fallo el mensaje se aparca en
   `internal.dlq.<grupo>` con cabeceras `error`, `attempts` y `original_topic`/`partition`/`offset`, y
   el offset avanza. Un mensaje que no es un sobre válido va directo a la DLQ, sin reintentos.
+- Un error transitorio no se aparca: si el último intento falla porque la base no responde
+  (`psycopg.OperationalError`, el `retryable` que `notifications-worker` pasa a `ConsumerLoop`), el
+  mensaje no va a la DLQ ni se confirma. El consumidor retrocede al offset, espera 1 s y lo
+  reintenta, una y otra vez, hasta que la base vuelve.
 - Si la DLQ no se puede escribir, el consumidor retrocede al offset y vuelve a intentarlo; una
   partición cuyo retroceso falla queda bloqueada hasta que ese mensaje se resuelve, para no confirmar
   por encima de él.

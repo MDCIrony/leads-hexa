@@ -109,7 +109,8 @@ docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
 ```
 
 `LAG` creciente es un consumidor parado o lento; con `Attempt n/3 failed` en el log, un evento que no
-se aplica y acabará en la DLQ. Los grupos son `notifications.lead-events`,
+se aplica y acabará en la DLQ. Si además aparece `not settled, rewinding` con un `OperationalError`, la base no
+responde: el evento queda retenido y se reintenta, nunca va a la DLQ. Los grupos son `notifications.lead-events`,
 `notifications.intake-events` y `notifications.members`. Un evento ya aplicado figura en
 `processed_events` de `notifications_db` (el grupo `notifications.members` no lo usa):
 

@@ -1295,6 +1295,9 @@ verify_ms_f2() {
   ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q notifications)")
   check "el gateway la envía al servicio notifications" True \
     "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -qF "upstream=$ip:8000" && printf True || printf False)"
+  # uvicorn's access line goes through the chassis log format, so the id crossing the hop shows up there.
+  check "el id de la petición llega al log de notifications" True \
+    "$(docker compose logs --since 2m notifications | grep -F "[$rid]" | grep -qF '"GET /api/v1/notifications' && printf True || printf False)"
 
   section "Microservicios F2 · avisos escritos por notifications-worker"
   r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \

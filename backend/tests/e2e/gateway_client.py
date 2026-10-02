@@ -72,20 +72,19 @@ class GatewayClient(TestClient):
         self._drain_jobs()
         return response
 
-    def _drain_jobs(self) -> bool:
+    def _drain_jobs(self) -> None:
         """What the relay plus RabbitMQ plus the intake worker will do, minus the broker.
 
         A nack is redelivered up to the queue's limit and then dropped, as the
-        dead-letter queue would. Returns whether any job ran."""
+        dead-letter queue would."""
         container = getattr(self.app.state, "container", None)
         if container is None:
-            return False
-        ran = False
+            return
         while True:
             with container.unit_of_work() as uow:
                 entries = uow.outbox.list_unpublished("job", 100)
             if not entries:
-                return ran
+                return
             for entry in entries:
                 message = json.loads(json.dumps(job_message(OutboxRow(**dataclasses.asdict(entry)))))
                 for _ in range(_MAX_JOB_DELIVERIES):
@@ -93,4 +92,3 @@ class GatewayClient(TestClient):
                         break
                 with container.unit_of_work() as uow:
                     uow.outbox.mark_published(entry.id)
-                ran = True

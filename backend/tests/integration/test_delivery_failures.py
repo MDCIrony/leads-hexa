@@ -9,13 +9,12 @@ from chassis.outbox import OutboxRelay
 
 from application.dtos.commands import ReceiveIntakeCommand
 from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
-from domain.entities.agent import Agent
 from domain.entities.lead_source import LeadSource
 from domain.entities.tenant import Tenant
 from domain.events.lead_events import LeadAssigned
 from domain.services.assignment_engine import AssignmentEngine
 from domain.value_objects.enums import (
-    AgentRole, IntakeJobStatus, IntakeRecordStatus, LeadSourceKind,
+    IntakeJobStatus, IntakeRecordStatus, LeadSourceKind,
 )
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
@@ -32,15 +31,9 @@ def _count(test_db, sql: str, params: tuple = ()) -> int:
 
 
 def _seed_assigned_event(test_db) -> LeadAssigned:
-    """An agent and a LeadAssigned in the internal channel."""
+    """A LeadAssigned in the internal channel; the relay reads only the outbox row."""
     with PostgresUnitOfWork(test_db) as uow:
-        tenant = uow.tenants.save(Tenant.create(name=f"Org {uuid4()}"))
-        agent = uow.agents.save(
-            Agent.create("Ana", f"{uuid4()}@test.com", role=AgentRole.AGENT, tenant_id=tenant.id.value)
-        )
-        event = LeadAssigned(
-            tenant_id=str(tenant.id.value), lead_id=str(uuid4()), agent_id=str(agent.id.value),
-        )
+        event = LeadAssigned(tenant_id=str(uuid4()), lead_id=str(uuid4()), agent_id=str(uuid4()))
         uow.outbox.record(event, channel="internal")
     return event
 
