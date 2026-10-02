@@ -83,14 +83,15 @@ python consume.py --tenant <B> --sasl-username tenant-<A> --sasl-password <secre
 
 ## La credencial de máquina
 
-`GET /leads` acepta dos vías de entrada, resueltas por `require_manager_or_integration` según qué
-cabecera llegue — no una cabecera que mezcla dos formatos, sino dos caminos visiblemente separados:
+`GET /leads` acepta dos credenciales, que el gateway introspecciona y convierte en el mismo bearer
+interno. El servicio no mira cabeceras: `require_manager_or_integration` lee el `Principal` del bearer
+y distingue por `ptype`:
 
 ```mermaid
 flowchart TB
-    Req["GET /leads"] --> Check{"¿Trae X-Api-Key?"}
-    Check -->|"Sí"| Api["resolve_integration_context<br/>agent_id.secret → agents"]
-    Check -->|"No"| Jwt["Sesión humana<br/>cookie introspeccionada en el gateway"]
+    Req["GET /leads"] --> GW["Gateway: introspección<br/>X-Api-Key gana a la cookie"]
+    GW -->|"X-Api-Key"| Api["resolve_integration_agent<br/>agent_id.secret → agents<br/>bearer ptype=integration"]
+    GW -->|"cookie"| Jwt["resolve_current_agent<br/>bearer ptype=human"]
     Api --> Ctx["RequestContext"]
     Jwt --> Manager{"¿rol MANAGER?"}
     Manager -->|"Sí"| Ctx
@@ -156,5 +157,5 @@ filtrarla ahí la rompería.
 | El puerto de aprovisionamiento | `application/ports/output/messaging_credential_provisioner_port.py` |
 | El adaptador Kafka | `infrastructure/adapters/output/events/kafka_credential_provisioner.py` |
 | El caso de uso | `application/use_cases/agent_use_cases.py` (`IssueIntegrationCredentialUseCase`) |
-| La cabecera y el contexto | `infrastructure/adapters/input/api/dependencies.py` (`resolve_integration_context`, `require_manager_or_integration`) |
+| La cabecera y el contexto | `infrastructure/adapters/input/api/dependencies.py` (`resolve_integration_agent`, `require_manager_or_integration`) y `internal_router.py` (introspección) |
 | El fichero JAAS | `kafka/kafka_server_jaas.conf` |

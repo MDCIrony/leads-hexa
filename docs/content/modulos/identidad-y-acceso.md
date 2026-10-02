@@ -85,11 +85,11 @@ impide crear un segundo `ADMIN` por esa vía: el único que existirá siempre es
 un `MANAGER`. `POST /agents/integration-credential` la emite con el formato `{agent_id}.{secret}` —
 el identificador va en claro en la propia clave; sólo el secreto está protegido, con el mismo
 `BcryptPasswordHasher` que la
-contraseña de un agente humano. `resolve_integration_context` divide la clave, recarga el agente por
+contraseña de un agente humano. `resolve_integration_agent`, invocada por la introspección interna y no por el servicio, divide la clave, recarga el agente por
 `agent_id` y exige `role == INTEGRATION`, activo, y que el secreto verifique — cuatro condiciones que
-fallan todas con el mismo `401`, sin decir cuál. `require_manager_or_integration` es la única ruta
-que compone los dos caminos: si llega `X-Api-Key` la resuelve por ahí sin mirar la cookie; si no,
-exige el `MANAGER` de siempre. El resto de la API no cambia — `X-Api-Key` no abre ninguna otra
+fallan todas con el mismo `401`, sin decir cuál. La introspección da prioridad a `X-Api-Key` sobre la cookie y emite un bearer interno con
+`ptype=integration`; el resto de rutas lo rechazan (`get_request_context`) y sólo
+`require_manager_or_integration` lo acepta, con `GET /leads`; con `ptype=human` exige el `MANAGER` de siempre. El resto de la API no cambia — `X-Api-Key` no abre ninguna otra
 puerta. Detalle completo en [Autenticación de la mensajería](../eventos/autenticacion.md).
 
 ### Los dos planos
@@ -114,8 +114,8 @@ organización responde `404`, no `403` —confirmar que existe en otro sitio ya 
 | `require_organization_manager` | Exige rol `MANAGER` sobre la organización del actor |
 | `require_platform_admin` | Exige rol `ADMIN` |
 | `require_organization_member` | Exige pertenecer a una organización, con cualquier rol |
-| `resolve_integration_context` | Verifica `X-Api-Key` y recarga el agente `INTEGRATION` en BD |
-| `require_manager_or_integration` | Compone sesión de `MANAGER` y `X-Api-Key`, sólo en `GET /leads` |
+| `resolve_integration_agent` | Verifica `X-Api-Key` y recarga el agente `INTEGRATION` en BD; la usa la introspección interna |
+| `require_manager_or_integration` | Acepta `MANAGER` humano o `ptype=integration`, sólo en `GET /leads` |
 | `RequestContext` | Actor y organización, resueltos una vez por petición desde el token |
 | `LoginUseCase` | Verifica credenciales y emite sesión o challenge MFA |
 | `MfaUseCase` | Enrola, verifica y desactiva TOTP y códigos de recuperación |

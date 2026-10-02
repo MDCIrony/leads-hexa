@@ -273,8 +273,8 @@ POST /internal/v1/service-tokens
 | DSN de su base | ✓ | ✓ | ✓ | ✓ | |
 | URL de la JWKS | | ✓ | ✓ | ✓ | |
 
-Hoy `MFA_ENCRYPTION_KEY` está en `backend`, `intake-worker` y `backend-test` porque comparten
-`Settings`. Tras F3 sólo la tiene identity.
+Hoy `MFA_ENCRYPTION_KEY` y `SIGNING_KEYS` (la semilla privada de firma) están en `backend`,
+`intake-worker` y `backend-test` porque comparten `Settings`. Tras F3 sólo los tiene identity.
 
 ## Fuera de alcance, a propósito
 

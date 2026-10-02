@@ -76,7 +76,7 @@ interno. Sigue habiendo un único servicio.
       `AuthorizationPolicy` opera sobre `Principal`.
     - Router interno con `GET /internal/v1/auth/introspect` (con `?optional=true` para el bootstrap de
       `POST /agents`, que 03 no contemplaba) y `GET /internal/v1/jwks`, que reutiliza
-      `resolve_current_agent` y `resolve_integration_context`. `SIGNING_KEYS` en `Settings`, con
+      `resolve_current_agent` (cookie) y `resolve_integration_agent` (`X-Api-Key`). `SIGNING_KEYS` en `Settings`, con
       semillas Ed25519 en base64url, no PEM.
     - `get_request_context` verifica el bearer interno. Las rutas de `/auth/*` siguen leyendo la cookie.
     - Se retiran de `main.py` `CORSMiddleware` y `reject_untrusted_browser_origins`; sus casos de prueba
@@ -89,8 +89,8 @@ interno. Sigue habiendo un único servicio.
 - `docker-compose.yml`: servicio `gateway` en `:8001`; `backend` deja de publicar puerto. La imagen del
   backend recibe `libs/chassis` por un contexto de construcción con nombre (`additional_contexts`).
 - `frontend/nginx.conf`: `proxy_pass` hacia `gateway`, también con resolución en ejecución.
-- Documentación: [01](01-punto-de-partida.md) refleja la identidad por introspección. Las páginas de
-  fuera de esta sección que describen JWT/Bearer como sesión (listadas en 01) siguen pendientes.
+- Documentación: [01](01-punto-de-partida.md) refleja la identidad por introspección, y las páginas
+  de fuera de esta sección que describían JWT/Bearer como sesión se corrigieron.
 - Línea base: p50/p95 de `introspect`, `GET /leads` (directo y por el gateway), login y
   `GET /leads` con `X-Api-Key`, y duración de un job de 1.000 registros.
 

@@ -74,11 +74,6 @@ solo contexto.
   interna la leen.
 - `Origin` en escrituras y CORS se resuelven en el gateway, no en `main.py`.
 
-Algunas páginas fuera de esta sección todavía describen JWT/Bearer como mecanismo de sesión
-(`arquitectura/c4-componentes.md`, `arquitectura/recorrido-de-un-lead.md`,
-`eventos/autenticacion.md`, `demo/index.md`). Describen una versión anterior a ADR-0029 y siguen
-pendientes de corrección: F0 no las tocó.
-
 ## Mensajería: lo que ya está bien y lo que no aguanta la separación
 
 **Se conserva:**
