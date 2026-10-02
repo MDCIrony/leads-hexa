@@ -54,8 +54,10 @@ class Envelope:
                 raise ValueError("payload is not an object")
             return cls(event_id=UUID(body["event_id"]), schema_version=version,
                        payload=payload, **strings, **optional)
-        except (KeyError, TypeError, AttributeError, UnicodeDecodeError) as exc:
+        except (KeyError, TypeError, AttributeError, UnicodeDecodeError, RecursionError) as exc:
             # json.JSONDecodeError and the UUID error are already ValueErrors.
+            # RecursionError: deeply nested input such as b"[" * 100000 would
+            # otherwise escape, and a poison message would block its partition.
             raise ValueError(f"malformed envelope: {exc!r}") from exc
 
 
@@ -110,6 +112,7 @@ class ConsumerLoop:
         backoff_seconds: Sequence[float] = (0.2, 0.5, 1.0),
         sleep: Callable[[float], None] = time.sleep,
         flush_timeout_seconds: float = 10.0,
+        rewind_delay_seconds: float = 1.0,
     ) -> None:
         self._consumer = consumer
         self._dlq_producer = dlq_producer
@@ -120,6 +123,7 @@ class ConsumerLoop:
         self._backoff_seconds = backoff_seconds
         self._sleep = sleep
         self._flush_timeout_seconds = flush_timeout_seconds
+        self._rewind_delay_seconds = rewind_delay_seconds
 
     def process(self, message) -> str:
         """Returns "handled" or "dead-lettered"; the offset is committed either way.
@@ -157,8 +161,9 @@ class ConsumerLoop:
                 message = self._consumer.poll(poll_timeout)
                 if message is None:
                     continue
-                if message.error():
-                    _LOGGER.error("Consumer error: %s", message.error())
+                error = message.error()
+                if error:
+                    self._log_consumer_error(error)
                     continue
                 try:
                     self.process(message)
@@ -170,14 +175,28 @@ class ConsumerLoop:
                                   message.topic(), message.partition(), message.offset(),
                                   exc_info=True)
                     self._rewind(message)
-                    stop.wait(poll_timeout)
+                    # Longer than a poll: the dead-letter topic is down, not busy.
+                    stop.wait(self._rewind_delay_seconds)
         finally:
             self._consumer.close()
+
+    @staticmethod
+    def _log_consumer_error(error) -> None:
+        from confluent_kafka import KafkaError
+
+        # End of a partition is informational; anything else may need attention.
+        level = logging.DEBUG if error.code() == KafkaError._PARTITION_EOF else logging.WARNING
+        _LOGGER.log(level, "Consumer error: %s", error)
 
     def _rewind(self, message) -> None:
         from confluent_kafka import TopicPartition
 
-        self._consumer.seek(TopicPartition(message.topic(), message.partition(), message.offset()))
+        try:
+            self._consumer.seek(TopicPartition(message.topic(), message.partition(), message.offset()))
+        except Exception:
+            # A thread that dies here is never restarted; keep polling instead.
+            _LOGGER.error("Rewind failed for %s[%s]@%s", message.topic(), message.partition(),
+                          message.offset(), exc_info=True)
 
     def _commit(self, message) -> None:
         self._consumer.commit(message=message, asynchronous=False)
@@ -195,7 +214,10 @@ class ConsumerLoop:
             topic=topic,
             key=message.key(),
             value=message.value(),
+            # The original headers (event_type, correlation_id) travel along so a
+            # replay from the DLQ keeps its routing context.
             headers=[
+                *(message.headers() or []),
                 ("error", error.encode()),
                 ("original_topic", message.topic().encode()),
                 ("original_partition", str(message.partition()).encode()),

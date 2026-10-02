@@ -92,6 +92,43 @@ def test_a_nack_or_unroutable_message_raises_and_keeps_the_connection(error):
     assert channel.published == [] and not channel.is_closed
 
 
+def test_a_stale_reused_connection_is_replaced_and_the_publish_retried_once():
+    stale, fresh, declared = FakeChannel(), FakeChannel(), []
+    factory = Factory(stale, fresh)
+    dispatcher = _dispatcher(factory, declared)
+    dispatcher.dispatch(_row())
+    stale.error = pika.exceptions.StreamLostError("idle socket died")
+
+    dispatcher.dispatch(_row())
+
+    assert len(stale.published) == 1 and len(fresh.published) == 1
+    assert declared == [stale, fresh] and factory.connections == []
+
+
+def test_a_nack_on_a_reused_connection_is_not_retried():
+    channel, spare = FakeChannel(), FakeChannel()
+    factory = Factory(channel, spare)
+    dispatcher = _dispatcher(factory)
+    dispatcher.dispatch(_row())
+    channel.error = pika.exceptions.NackError([])
+
+    with pytest.raises(RuntimeError):
+        dispatcher.dispatch(_row())
+
+    assert len(factory.connections) == 1 and spare.published == []
+
+
+def test_a_retry_that_fails_too_raises_and_drops_the_connection():
+    stale, also_bad = FakeChannel(), FakeChannel(error=ConnectionResetError("down"))
+    dispatcher = _dispatcher(Factory(stale, also_bad, FakeChannel()))
+    dispatcher.dispatch(_row())
+    stale.error = pika.exceptions.StreamLostError("idle")
+
+    with pytest.raises(ConnectionResetError):
+        dispatcher.dispatch(_row())
+    dispatcher.dispatch(_row())  # next call opens a third connection
+
+
 def test_a_broken_connection_is_dropped_and_reopened_on_the_next_dispatch():
     broken, healthy, declared = FakeChannel(error=ConnectionResetError("gone")), FakeChannel(), []
     factory = Factory(broken, healthy)

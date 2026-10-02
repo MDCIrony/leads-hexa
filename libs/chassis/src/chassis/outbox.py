@@ -92,7 +92,15 @@ class OutboxRelay:
         return sum(1 for _, error in outcomes if error is None)
 
     def drain_all(self, batch_size: int = 100) -> dict[str, int]:
-        return {channel: self.drain(channel, batch_size) for channel in self._dispatchers}
+        counts = {}
+        for channel in self._dispatchers:
+            try:
+                counts[channel] = self.drain(channel, batch_size)
+            except Exception:
+                # A broken channel must not starve the others of their pass.
+                _LOGGER.error("Draining outbox channel %s failed", channel, exc_info=True)
+                counts[channel] = 0
+        return counts
 
     @staticmethod
     def _deliver(row: OutboxRow, dispatchers: Sequence[Dispatcher]) -> Optional[str]:
@@ -144,7 +152,12 @@ def envelope(row: OutboxRow, producer: str, schema_version: int = 1) -> dict:
 class KafkaEventDispatcher:
     """Internal events: envelope as value, partition_key as key, event_type and
     correlation_id as headers. Delivery confirmed through the callback + flush,
-    same as the product dispatcher today."""
+    same as the product dispatcher today.
+
+    The producer must be created with `acks=all` and `enable.idempotence=true`
+    (no loss on a leader change, no duplicates from internal retries), and with
+    `message.timeout.ms` close to `flush_timeout_seconds`, so a message the
+    producer is still retrying is not delivered after the row was marked failed."""
 
     def __init__(
         self,

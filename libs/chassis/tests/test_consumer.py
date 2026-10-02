@@ -27,16 +27,19 @@ def _raw(**overrides):
 
 class FakeMessage:
     def __init__(self, value, key=b"lead-9", topic="internal.lead-core.events",
-                 partition=2, offset=41):
+                 partition=2, offset=41, error=None,
+                 headers=(("event_type", b"LeadAssigned"), ("correlation_id", b"corr-1"))):
         self._value, self._key, self._topic = value, key, topic
         self._partition, self._offset = partition, offset
+        self._error, self._headers = error, list(headers)
 
     def value(self): return self._value
     def key(self): return self._key
     def topic(self): return self._topic
     def partition(self): return self._partition
     def offset(self): return self._offset
-    def error(self): return None
+    def error(self): return self._error
+    def headers(self): return self._headers
 
 
 class FakeConsumer:
@@ -70,7 +73,8 @@ class FakeProducer:
 def _loop(handle, consumer=None, producer=None, sleeps=None):
     sleeps = [] if sleeps is None else sleeps
     return ConsumerLoop(consumer or FakeConsumer(), producer or FakeProducer(), GROUP,
-                        ["internal.lead-core.events"], handle, sleep=sleeps.append)
+                        ["internal.lead-core.events"], handle, sleep=sleeps.append,
+                        rewind_delay_seconds=0)
 
 
 # Envelope
@@ -147,6 +151,7 @@ def test_exhausted_attempts_dead_letter_the_original_message_and_commit():
     assert sent["topic"] == "internal.dlq." + GROUP == dlq_topic(GROUP)
     assert (sent["value"], sent["key"]) == (raw, b"lead-9")
     assert dict(sent["headers"]) == {
+        "event_type": b"LeadAssigned", "correlation_id": b"corr-1",
         "error": b"boom", "original_topic": b"internal.lead-core.events",
         "original_partition": b"2", "original_offset": b"41", "attempts": b"3",
     }
@@ -162,6 +167,24 @@ def test_garbage_goes_straight_to_the_dlq_without_calling_handle():
     assert producer.produced[0]["value"] == b"garbage"
     assert dict(producer.produced[0]["headers"])["attempts"] == b"0"
     assert len(consumer.commits) == 1
+
+
+def test_deeply_nested_garbage_is_dead_lettered_not_fatal():
+    consumer, producer, calls = FakeConsumer(), FakeProducer(), []
+    message = FakeMessage(b"[" * 100000)
+
+    assert _loop(calls.append, consumer, producer).process(message) == "dead-lettered"
+
+    assert calls == []
+    assert consumer.commits == [{"message": message, "asynchronous": False}]
+
+
+def test_garbage_without_original_headers_still_dead_letters():
+    producer = FakeProducer()
+
+    _loop(lambda e: None, producer=producer).process(FakeMessage(b"garbage", headers=()))
+
+    assert [k for k, _ in producer.produced[0]["headers"]][0] == "error"
 
 
 @pytest.mark.parametrize("producer", [FakeProducer(delivery_error="no"), FakeProducer(pending=1)])
@@ -206,7 +229,7 @@ def test_run_rewinds_to_the_failed_message_when_the_dlq_is_down(caplog):
         raise RuntimeError("boom")
 
     loop = ConsumerLoop(consumer, FakeProducer(pending=1), GROUP, ["t"], broken,
-                        sleep=lambda seconds: None)
+                        sleep=lambda seconds: None, rewind_delay_seconds=0)
     with caplog.at_level(logging.CRITICAL):
         loop.run(stop, poll_timeout=0)
 
@@ -214,6 +237,56 @@ def test_run_rewinds_to_the_failed_message_when_the_dlq_is_down(caplog):
     (partition,) = consumer.seeks
     assert (partition.topic, partition.partition, partition.offset) == ("internal.lead-core.events", 1, 7)
     assert consumer.closed
+
+
+def test_run_skips_messages_carrying_an_error_without_committing(caplog):
+    stop, handled = threading.Event(), []
+    eof = FakeMessage(None, error=KafkaError(KafkaError._PARTITION_EOF))
+    broken = FakeMessage(None, error=KafkaError(KafkaError._TRANSPORT))
+    consumer = FakeConsumer([eof, broken, FakeMessage(_raw())], stop)
+
+    with caplog.at_level(logging.DEBUG, logger="chassis.consumer"):
+        _loop(handled.append, consumer).run(stop, poll_timeout=0)
+
+    assert len(handled) == 1 and len(consumer.commits) == 1
+    levels = {r.levelno for r in caplog.records}
+    assert levels == {logging.DEBUG, logging.WARNING}
+
+
+def test_run_keeps_polling_when_the_rewind_itself_fails(caplog):
+    stop, handled = threading.Event(), []
+    consumer = FakeConsumer([FakeMessage(_raw()), FakeMessage(_raw())], stop)
+    consumer.seek = lambda partition: (_ for _ in ()).throw(KafkaException(KafkaError(KafkaError._STATE)))
+    attempts = []
+
+    def flaky(envelope):
+        attempts.append(envelope)
+        raise RuntimeError("boom")
+
+    loop = ConsumerLoop(consumer, FakeProducer(pending=1), GROUP, ["t"], flaky,
+                        max_attempts=1, rewind_delay_seconds=0)
+    with caplog.at_level(logging.CRITICAL):
+        loop.run(stop, poll_timeout=0)
+
+    assert len(attempts) == 2 and consumer.closed
+
+
+def test_run_waits_the_dedicated_delay_after_a_rewind():
+    waits = []
+
+    class RecordingStop(threading.Event):
+        def wait(self, timeout=None):
+            waits.append(timeout)
+            return super().wait(0)
+
+    stop = RecordingStop()
+    consumer = FakeConsumer([FakeMessage(_raw())], stop)
+    loop = ConsumerLoop(consumer, FakeProducer(pending=1), GROUP, ["t"], lambda e: 1 / 0,
+                        max_attempts=1, sleep=lambda s: None, rewind_delay_seconds=2.5)
+
+    loop.run(stop, poll_timeout=0.1)
+
+    assert waits == [2.5]
 
 
 # ensure_topics

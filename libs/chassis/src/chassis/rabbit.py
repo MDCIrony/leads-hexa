@@ -11,6 +11,10 @@ from chassis.outbox import OutboxRow
 _LOGGER = logging.getLogger(__name__)
 
 
+class _Rejected(RuntimeError):
+    """The broker refused the message: neither a reconnect nor a retry will help."""
+
+
 class RabbitJobDispatcher:
     """Publishes one outbox row to a queue with publisher confirms: dispatch()
     returns only once the broker confirmed, so published_at never precedes it.
@@ -44,9 +48,12 @@ class RabbitJobDispatcher:
         parameters.socket_timeout = self._timeout_seconds
         return pika.BlockingConnection(parameters)
 
+    def _is_open(self) -> bool:
+        return (self._connection is not None and not self._connection.is_closed
+                and self._channel is not None and not self._channel.is_closed)
+
     def _channel_ready(self):
-        if self._connection is not None and not self._connection.is_closed \
-                and self._channel is not None and not self._channel.is_closed:
+        if self._is_open():
             return self._channel
         self._reset()
         connection = self._connect()
@@ -63,6 +70,28 @@ class RabbitJobDispatcher:
         return channel
 
     def dispatch(self, row: OutboxRow) -> None:
+        reused = self._is_open()
+        try:
+            self._publish(row)
+        except _Rejected:
+            raise
+        except Exception:
+            self._reset()
+            if not reused:
+                raise
+            # An idle connection dies silently (heartbeats are only serviced during
+            # I/O) while is_closed stays False; retry once on a fresh one so a
+            # stale socket does not cost the row an attempt.
+            _LOGGER.info("Reused RabbitMQ connection failed, retrying on a fresh one", exc_info=True)
+            try:
+                self._publish(row)
+            except _Rejected:
+                raise
+            except Exception:
+                self._reset()
+                raise
+
+    def _publish(self, row: OutboxRow) -> None:
         try:
             self._channel_ready().basic_publish(
                 exchange="",
@@ -75,10 +104,7 @@ class RabbitJobDispatcher:
             )
         except (NackError, UnroutableError) as exc:
             # The broker answered, so the connection is fine; the row is not.
-            raise RuntimeError(f"RabbitMQ did not accept row {row.id} for {self._queue}: {exc!r}") from exc
-        except Exception:
-            self._reset()
-            raise
+            raise _Rejected(f"RabbitMQ did not accept row {row.id} for {self._queue}: {exc!r}") from exc
 
     def _reset(self) -> None:
         connection, self._connection, self._channel = self._connection, None, None

@@ -25,8 +25,8 @@ def _row(channel="internal", correlation_id="corr-1", tenant_id="t-1", **overrid
 class FakeStore:
     """Records every call, in order, in a log shared with the dispatchers."""
 
-    def __init__(self, rows, log):
-        self.rows, self.log = rows, log
+    def __init__(self, rows, log, broken=()):
+        self.rows, self.log, self.broken = rows, log, set(broken)
 
     @contextmanager
     def open(self):
@@ -38,6 +38,8 @@ class FakeStore:
 
     def fetch(self, channel, limit):
         self.log.append(f"fetch:{channel}:{limit}")
+        if channel in self.broken:
+            raise ConnectionError(f"{channel} store down")
         return list(self.rows.get(channel, []))
 
     def mark_published(self, row_id):
@@ -88,6 +90,17 @@ def test_a_failing_channel_does_not_affect_the_others(caplog):
 
     assert f"failed:{product[0].id}:webhook down" in log
     assert all(f"published:{r.id}" in log for r in internal)
+
+
+def test_a_channel_that_cannot_be_read_does_not_starve_the_others(caplog):
+    log = []
+    relay = OutboxRelay(
+        FakeStore({"internal": [_row("internal")]}, log, broken={"product"}).open,
+        {"product": [FakeDispatcher("webhook", log)], "internal": [FakeDispatcher("kafka", log)]},
+    )
+
+    with caplog.at_level(logging.CRITICAL):
+        assert relay.drain_all() == {"product": 0, "internal": 1}
 
 
 def test_a_failing_dispatcher_does_not_stop_the_others_of_its_channel(caplog):
