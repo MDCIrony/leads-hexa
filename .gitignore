@@ -56,3 +56,6 @@ demo/credenciales.local.json
 # Base de datos de la aplicación consumidora de prueba, cuando se ejecuta fuera
 # de su contenedor.
 test-consumer/data/
+
+# Database dumps taken as restore points (e.g. monolith-baseline): data, not source.
+backups/

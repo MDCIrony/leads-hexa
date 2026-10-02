@@ -103,6 +103,16 @@ nav:
       - Modelo de datos: arquitectura/modelo-de-datos.md
       - El recorrido de un lead: arquitectura/recorrido-de-un-lead.md
 
+  - Desacople en microservicios:
+      - microservices/index.md
+      - "01 · Punto de partida": microservices/01-punto-de-partida.md
+      - "02 · Servicios y datos": microservices/02-servicios-y-datos.md
+      - "03 · Gateway y autenticación": microservices/03-gateway-y-autenticacion.md
+      - "04 · Comunicación y eventos": microservices/04-comunicacion-y-eventos.md
+      - "05 · Despliegue local": microservices/05-despliegue-local.md
+      - "06 · Plan de desacople": microservices/06-plan-de-desacople.md
+      - "07 · Evoluciones y riesgos": microservices/07-evoluciones-y-riesgos.md
+
   - Decisiones:
       - decisiones/index.md
       - "ADR-0001 · Arquitectura hexagonal": decisiones/0001-arquitectura-hexagonal.md
@@ -135,6 +145,12 @@ nav:
       - "ADR-0028 · Autenticación de la mensajería": decisiones/0028-autenticacion-de-la-mensajeria.md
       - "ADR-0029 · Sesiones humanas opacas": decisiones/0029-sesiones-opacas.md
       - "ADR-0030 · MFA TOTP": decisiones/0030-mfa-totp.md
+      - "ADR-0031 · Microservicios por contexto": decisiones/0031-microservicios-por-contexto.md
+      - "ADR-0032 · Gateway y phantom token": decisiones/0032-gateway-y-phantom-token.md
+      - "ADR-0033 · Eventos internos en Kafka": decisiones/0033-eventos-internos-en-kafka.md
+      - "ADR-0034 · Encolado por outbox": decisiones/0034-encolado-por-outbox-y-fichero-durable.md
+      - "ADR-0035 · Admisión síncrona idempotente": decisiones/0035-admision-sincrona-idempotente.md
+      - "ADR-0036 · Cambios de contrato público": decisiones/0036-cambios-de-contrato-publico.md
 
   - Módulos:
       - modulos/index.md

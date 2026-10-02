@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — sustituye a [ADR-0019](0019-trabajo-de-fondo-en-proceso.md) |
+| **Estado** | Aceptada — sustituye a [ADR-0019](0019-trabajo-de-fondo-en-proceso.md). El *fallback* en proceso y el parseo del fichero en la API quedan sustituidos por [ADR-0034](0034-encolado-por-outbox-y-fichero-durable.md) al completar F1 |
 | **Fecha** | 2026-08-24 |
 | **Ámbito** | Backend · Infraestructura |
 
