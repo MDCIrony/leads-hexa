@@ -2,6 +2,7 @@
 
 Knows nothing of intake records beyond their id: claiming and closing the
 record is intake's half, which reaches this one over /internal/v1/admissions."""
+from decimal import Decimal
 from typing import Dict, Optional
 from uuid import UUID
 
@@ -30,7 +31,9 @@ _FIELD_BY_ERROR_CODE = {
 _REQUIRED_TEXT = ("first_name", "last_name", "company", "industry")
 # leads.budget is NUMERIC(14, 2). Money accepts larger figures, and the overflow
 # at the insert is as deterministic as any validation: REJECTED, never a retry.
-_BUDGET_CEILING = 10 ** 12
+# Compared unquantized: rounding a 28+ digit amount raises InvalidOperation, and
+# that 500 would poison the whole job. Anything from .995 rounds up past the column.
+_BUDGET_CEILING = Decimal("999999999999.995")
 
 
 class AdmitLeadUseCase(AdmitLeadInputPort):
@@ -63,7 +66,7 @@ class AdmitLeadUseCase(AdmitLeadInputPort):
                     field = _FIELD_BY_ERROR_CODE.get(exc.error_code, "_record")
                     return AdmissionResult(outcome="REJECTED", errors=(
                         AdmissionError(field=field, message=str(exc), error_code=exc.error_code),))
-                if round(lead.budget.amount, 2) >= _BUDGET_CEILING:
+                if lead.budget.amount >= _BUDGET_CEILING:
                     return AdmissionResult(outcome="REJECTED", errors=(AdmissionError(
                         field="budget", message="El importe excede el máximo admitido",
                         error_code="AMOUNT_OUT_OF_RANGE"),))

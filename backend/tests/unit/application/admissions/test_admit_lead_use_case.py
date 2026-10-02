@@ -173,7 +173,7 @@ def test_a_missing_required_text_field_is_rejected_before_the_database():
     assert uow.outbox._entries == {}
 
 
-@pytest.mark.parametrize("budget", ["1000000000000", "999999999999.995"])
+@pytest.mark.parametrize("budget", ["1000000000000", "999999999999.995", "1E+26", "1e30"])
 def test_a_budget_the_column_cannot_hold_is_rejected_before_the_database(budget):
     uow = InMemoryUnitOfWork()
 
