@@ -2,6 +2,7 @@ import logging
 import signal
 import threading
 
+import psycopg
 from chassis.consumer import ConsumerLoop, dlq_topic, ensure_topics_until_ready, run_consumer_lane
 from chassis.kafka_config import consumer_config, producer_config
 from chassis.web import configure_logging
@@ -25,6 +26,9 @@ def _consumer_loop(container: Container, bootstrap: str, group: str, topic: str)
         group,
         [topic],
         handler_for(group, container.unit_of_work),
+        # A database outage is waited out: dead-lettering an AgentState would
+        # leave the members projection silently diverged for good.
+        retryable=lambda exc: isinstance(exc, psycopg.OperationalError),
     )
 
 

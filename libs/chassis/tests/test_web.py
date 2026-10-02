@@ -98,3 +98,18 @@ def test_log_filter_injects_current_id():
     finally:
         request_id_var.reset(token)
     assert record.request_id == "rid-1"
+
+
+def test_configure_logging_routes_uvicorn_through_the_root_handler_and_quiets_httpx():
+    from chassis.web import configure_logging
+
+    access = logging.getLogger("uvicorn.access")
+    access.addHandler(logging.StreamHandler())
+    access.propagate = False
+    configure_logging("INFO")
+
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        assert logging.getLogger(name).handlers == [] and logging.getLogger(name).propagate
+    assert logging.getLogger("httpx").level == logging.WARNING
+    root_filters = [f for h in logging.getLogger().handlers for f in h.filters]
+    assert any(isinstance(f, RequestIdLogFilter) for f in root_filters)

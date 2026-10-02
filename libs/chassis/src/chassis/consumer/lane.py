@@ -19,8 +19,10 @@ def run_consumer_lane(
     A fatal Kafka error or a failed subscribe ends one consumer, not the lane:
     nothing restarts a dead thread, and under the dev file watcher a crashed
     process stays up doing nothing. Only `stop` ends this."""
-    # Subscribing earlier would let a group join and read a topic that Kafka
-    # auto-created with the wrong configuration.
+    # `ready` means this service's own topics are declared: its DLQs and, in a
+    # process that also produces, its outbound topics. Input topics belong to
+    # their producer; a consumer never auto-creates them (librdkafka defaults
+    # allow.auto.create.topics to false), it waits for them to appear.
     while not ready.wait(0.5):
         if stop.is_set():
             return

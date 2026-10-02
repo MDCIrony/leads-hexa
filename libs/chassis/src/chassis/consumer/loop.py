@@ -2,7 +2,7 @@
 import logging
 import threading
 import time
-from typing import Callable, Sequence
+from typing import Callable, Optional, Sequence
 
 from chassis.consumer.envelope import Envelope
 from chassis.consumer.kafka import publish_dead_letter, raise_if_fatal, rewind, shut_down
@@ -32,6 +32,7 @@ class ConsumerLoop:
         sleep: Callable[[float], None] = time.sleep,
         flush_timeout_seconds: float = 10.0,
         rewind_delay_seconds: float = 1.0,
+        retryable: Optional[Callable[[Exception], bool]] = None,
     ) -> None:
         self._consumer = consumer
         self._dlq_producer = dlq_producer
@@ -43,26 +44,28 @@ class ConsumerLoop:
         self._sleep = sleep
         self._flush_timeout_seconds = flush_timeout_seconds
         self._rewind_delay_seconds = rewind_delay_seconds
+        self._retryable = retryable
         # (topic, partition) -> offset of an unsettled message whose rewind failed.
         self._blocked: dict[tuple[str, int], int] = {}
 
     def process(self, message) -> str:
         """Returns "handled" or "dead-lettered"; the offset is committed either way.
 
-        Raises, without committing, if the dead-letter topic cannot be written."""
+        Raises, without committing, if the dead-letter topic cannot be written or
+        the last failure is `retryable`: an outage is waited out, not dead-lettered."""
         try:
             envelope = Envelope.from_bytes(message.value())
         except ValueError as exc:
             # Retrying cannot fix bytes that do not parse.
             return self._dead_letter(message, str(exc), attempts=0)
 
-        error = ""
+        error: Optional[Exception] = None
         for attempt in range(1, self._max_attempts + 1):
             token = request_id_var.set(envelope.correlation_id) if envelope.correlation_id else None
             try:
                 self._handle(envelope)
             except Exception as exc:
-                error = str(exc)
+                error = exc
                 _LOGGER.warning("Attempt %d/%d failed for event %s", attempt, self._max_attempts,
                                 envelope.event_id, exc_info=True)
             else:
@@ -73,7 +76,9 @@ class ConsumerLoop:
                     request_id_var.reset(token)
             if attempt < self._max_attempts and self._backoff_seconds:
                 self._sleep(self._backoff_seconds[min(attempt, len(self._backoff_seconds)) - 1])
-        return self._dead_letter(message, error, attempts=self._max_attempts)
+        if error is not None and self._retryable is not None and self._retryable(error):
+            raise error
+        return self._dead_letter(message, str(error or ""), attempts=self._max_attempts)
 
     def run(self, stop: threading.Event, poll_timeout: float = 1.0) -> None:
         try:
@@ -98,8 +103,8 @@ class ConsumerLoop:
                 try:
                     self.process(message)
                 except Exception:
-                    # The dead-letter topic is unavailable. Not committing is not
-                    # enough on its own: the next poll moves on and its commit
+                    # The DLQ or a retryable dependency is down. Not committing is
+                    # not enough on its own: the next poll moves on and its commit
                     # would cover this offset too. Rewind so it is redelivered.
                     _LOGGER.error("Message %s[%s]@%s not settled, rewinding",
                                   message.topic(), message.partition(), message.offset(),
@@ -108,7 +113,7 @@ class ConsumerLoop:
                         self._blocked.pop(partition, None)
                     else:
                         self._blocked[partition] = message.offset()
-                    # Longer than a poll: the dead-letter topic is down, not busy.
+                    # Longer than a poll: the dependency is down, not busy.
                     stop.wait(self._rewind_delay_seconds)
                 else:
                     if blocked_at is not None and message.offset() == blocked_at:

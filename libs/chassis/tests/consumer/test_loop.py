@@ -317,3 +317,70 @@ def test_a_producer_without_close_is_tolerated():
         def flush(self, timeout): return 0
 
     _loop(lambda e: None, FakeConsumer(stop=stop), NoClose()).run(stop, poll_timeout=0)
+
+
+class _DatabaseDown(Exception):
+    pass
+
+
+def _always(exc):
+    def handle(envelope):
+        raise exc
+    return handle
+
+
+def test_a_retryable_failure_is_raised_without_dlq_or_commit():
+    consumer, producer = FakeConsumer(), FakeProducer()
+    loop = ConsumerLoop(consumer, producer, GROUP, ["t"], _always(_DatabaseDown("db down")),
+                        sleep=lambda seconds: None,
+                        retryable=lambda exc: isinstance(exc, _DatabaseDown))
+
+    with pytest.raises(_DatabaseDown):
+        loop.process(FakeMessage(raw()))
+
+    assert producer.produced == [] and consumer.commits == []
+
+
+def test_run_rewinds_a_retryable_failure_instead_of_dead_lettering(caplog):
+    stop = threading.Event()
+    consumer, producer = FakeConsumer([FakeMessage(raw(), partition=1, offset=7)], stop), FakeProducer()
+    loop = ConsumerLoop(consumer, producer, GROUP, ["t"], _always(_DatabaseDown("db down")),
+                        sleep=lambda seconds: None, rewind_delay_seconds=0,
+                        retryable=lambda exc: isinstance(exc, _DatabaseDown))
+    with caplog.at_level(logging.CRITICAL):
+        loop.run(stop, poll_timeout=0)
+
+    assert producer.produced == [] and consumer.commits == []
+    (partition,) = consumer.seeks
+    assert (partition.partition, partition.offset) == (1, 7)
+
+
+def test_a_non_retryable_failure_is_still_dead_lettered():
+    consumer, producer = FakeConsumer(), FakeProducer()
+    loop = ConsumerLoop(consumer, producer, GROUP, ["t"], _always(ValueError("bad payload")),
+                        sleep=lambda seconds: None,
+                        retryable=lambda exc: isinstance(exc, _DatabaseDown))
+
+    assert loop.process(FakeMessage(raw())) == "dead-lettered"
+    assert len(producer.produced) == 1 and len(consumer.commits) == 1
+
+
+def test_only_the_last_failure_decides_retryability():
+    consumer, producer, failures = FakeConsumer(), FakeProducer(), [_DatabaseDown("db"), _DatabaseDown("db"),
+                                                                     ValueError("bad")]
+
+    def handle(envelope):
+        raise failures.pop(0)
+
+    loop = ConsumerLoop(consumer, producer, GROUP, ["t"], handle, sleep=lambda seconds: None,
+                        retryable=lambda exc: isinstance(exc, _DatabaseDown))
+
+    assert loop.process(FakeMessage(raw())) == "dead-lettered"
+
+
+def test_without_retryable_every_exhausted_failure_is_dead_lettered():
+    consumer, producer = FakeConsumer(), FakeProducer()
+
+    assert _loop(_always(_DatabaseDown("db down")), consumer, producer).process(FakeMessage(raw())) \
+        == "dead-lettered"
+    assert len(producer.produced) == 1 and len(consumer.commits) == 1

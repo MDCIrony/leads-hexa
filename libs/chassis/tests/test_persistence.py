@@ -66,3 +66,36 @@ def test_constructing_the_database_does_not_open_the_pool():
 
     assert database._pool is None
     database.close()
+
+
+def test_concurrent_first_use_builds_exactly_one_pool(monkeypatch):
+    import threading
+    import time
+
+    from chassis.persistence import database as module
+
+    built = []
+
+    class SlowPool:
+        def __init__(self, **kwargs):
+            built.append(self)
+
+        def wait(self):
+            time.sleep(0.05)
+
+    monkeypatch.setattr(module, "ConnectionPool", SlowPool)
+    db = RawSqlDatabase("postgresql://unused")
+    start = threading.Barrier(8)
+    seen = []
+
+    def first_use():
+        start.wait()
+        seen.append(db._get_pool())
+
+    threads = [threading.Thread(target=first_use) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(built) == 1
+    assert all(pool is built[0] for pool in seen)
