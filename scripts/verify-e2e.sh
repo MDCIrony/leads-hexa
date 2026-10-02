@@ -1040,7 +1040,7 @@ PY
 # Gateway and phantom token (ADR-0032): what the edge guarantees and what the
 # service still enforces on its own. Runs last: it stops the backend.
 verify_ms_f0() {
-  local r headers base mgr_a_id forged key status i unprotected
+  local r headers base mgr_a_id forged key status i unprotected config
   section "Microservicios F0 · gateway y phantom token"
   base=${API%/api/v1}
   headers=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.headers")
@@ -1048,7 +1048,11 @@ verify_ms_f0() {
   # Static check over the effective config: a protected location that skips the
   # shared include would serve unauthenticated, and no request-level test sees it.
   check "nginx -t en el gateway" 0 "$(docker compose exec -T gateway nginx -t >/dev/null 2>&1; echo $?)"
-  unprotected=$(docker compose exec -T gateway nginx -T 2>/dev/null | awk '
+  config=$(docker compose exec -T gateway nginx -T 2>/dev/null)
+  # An empty dump would report zero unprotected locations for the wrong reason.
+  check "locations /api/v1/ vistas en nginx -T (>=1)" True \
+    "$(test "$(printf '%s\n' "$config" | grep -cE '^[[:blank:]]*location[[:blank:]]+(=[[:blank:]]+)?/api/v1/')" -ge 1 && printf True || printf False)"
+  unprotected=$(printf '%s\n' "$config" | awk '
     function close_block() {
       if (loc != "" && loc ~ /^\/api\/v1\// && loc != "/api/v1/auth/" && !guarded) print loc
       loc = ""
@@ -1058,7 +1062,7 @@ verify_ms_f0() {
       loc = ($2 ~ /^(=|~|~\*|\^~)$/) ? $3 : $2; guarded = 0
     }
     /^[ \t]*}[ \t]*$/ { close_block() }
-    loc != "" && /include[ \t]+\/etc\/nginx\/conf\.d\/protected(_optional)?\.inc;/ { guarded = 1 }
+    loc != "" && /^[ \t]*include[ \t]+\/etc\/nginx\/conf\.d\/protected(_optional)?\.inc;/ { guarded = 1 }
     END { close_block() }')
   check "locations protegidas sin include de auth" 0 "$(printf '%s' "$unprotected" | grep -c .)"
   [ -z "$unprotected" ] || printf '%s\n' "$unprotected" | sed 's/^/      sin include: /'
@@ -1206,18 +1210,18 @@ verify_ms_f1() {
   check "llega LEAD_ASSIGNED al asesor (<=15 s)" 1 "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | f "$notices")"
   # The committed offset alone would replay nothing; rewinding the group makes
   # the consumer see the same event again, so only the dedupe keeps it at one.
-  docker compose stop backend-worker >/dev/null 2>&1
+  docker compose stop notifications-worker >/dev/null 2>&1
   docker compose exec -T kafka "$kafka_bin/kafka-consumer-groups.sh" --bootstrap-server localhost:9092 \
     --group notifications.lead-events --topic internal.lead-core.events --reset-offsets --to-earliest --execute >/dev/null 2>&1
   lag=$(group_lag notifications.lead-events)
   check "el grupo vuelve a quedar por leer desde el principio" True "$(test "${lag:-0}" -gt 0 && printf True || printf False)"
-  docker compose start backend-worker >/dev/null 2>&1
+  docker compose start notifications-worker >/dev/null 2>&1
   for i in $(seq 1 90); do
     lag=$(group_lag notifications.lead-events)
     [ "$lag" = 0 ] && break
     sleep 1
   done
-  check "backend-worker relee el topic hasta lag 0" 0 "$lag"
+  check "notifications-worker relee el topic hasta lag 0" 0 "$lag"
   sleep 2
   check "tras la relectura sigue habiendo una" 1 "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | f "$notices")"
 
@@ -1269,6 +1273,101 @@ verify_ms_f1() {
 }
 
 
+# ------------------------------------------------ microservicios · F2 ---
+# The inbox in its own service (ADR-0031): the gateway routes /notifications
+# to it, notifications-worker is the only consumer of its three groups, and
+# leads_db stops receiving notices. Runs before verify_ms_f1, which rewinds a group.
+leads_db_notices() {
+  docker compose exec -T db psql -U postgres -d leads_db -tAc "SELECT count(*) FROM notifications"
+}
+
+verify_ms_f2() {
+  local r rid before ip lead job notif_id tenant_c mgr_c mgr_c_id lead_c i lag group topic end begin sum_offsets
+  local kafka_bin=/opt/kafka/bin
+  rid="f2-$STAMP"
+  section "Microservicios F2 · la bandeja en su propio servicio"
+  before=$(leads_db_notices)
+
+  r=$(req "$API/notifications" -H "Authorization: Bearer $MGR_A" -H "X-Request-Id: $rid")
+  check "GET /notifications por el gateway" 200 "$(code "$r")"
+  # The service logs nothing on a plain read (the JWKS fetch is cached), so the
+  # access log's upstream is what proves where the request landed.
+  ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q notifications)")
+  check "el gateway la envía al servicio notifications" True \
+    "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -q "upstream=$ip:8000" && printf True || printf False)"
+
+  section "Microservicios F2 · avisos escritos por notifications-worker"
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
+    -d "{\"first_name\":\"F2\",\"last_name\":\"Asignado\",\"email\":\"f2-assign-$STAMP@lead.test\",\"company\":\"Acme\",\"industry\":\"Tech\",\"budget\":5000}")
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el lead de OrgA se procesa" COMPLETED "$(await_job "$MGR_A" "$job")"
+  lead=$(body "$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  r=$(req -X POST "$API/leads/$lead/assign" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' -d "{\"agent_id\":\"$AGENT_1\"}")
+  check "asignación manual a AGENT_1" "$AGENT_1" "$(body "$r" | f 'd.get("assigned_agent_id")')"
+  for i in $(seq 1 75); do
+    notif_id=$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | \
+      f "next((n['id'] for n in d['items'] if n['kind'] == 'LEAD_ASSIGNED' and n['lead_id'] == '$lead'), '')")
+    [ -n "$notif_id" ] && break
+    sleep 0.2
+  done
+  check "llega LEAD_ASSIGNED al asesor (<=15 s)" True "$(test -n "$notif_id" && printf True || printf False)"
+
+  r=$(req -X POST "$API/tenants" -H "Authorization: Bearer $ADMIN_TOKEN" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"OrgC-$STAMP\",\"manager\":{\"name\":\"MgrC\",\"email\":\"mgr-c-$STAMP@x.test\",\"password\":\"$ADMIN_PASS\"}}")
+  check "organización C creada" 201 "$(code "$r")"
+  mgr_c_id=$(body "$r" | f 'd["manager"]["id"]')
+  mgr_c=$(login "mgr-c-$STAMP@x.test" "$ADMIN_PASS")
+  # Without its row in the projection the unassigned notice has no recipient.
+  for i in $(seq 1 75); do
+    [ "$(docker compose exec -T db psql -U postgres -d notifications_db -tAc \
+      "SELECT count(*) FROM members WHERE agent_id = '$mgr_c_id' AND role = 'MANAGER' AND is_active")" = 1 ] && break
+    sleep 0.2
+  done
+  check "el gestor de OrgC llega a members (<=15 s)" 1 "$(docker compose exec -T db psql -U postgres -d notifications_db -tAc \
+    "SELECT count(*) FROM members WHERE agent_id = '$mgr_c_id' AND role = 'MANAGER' AND is_active")"
+  r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $mgr_c" -H 'Content-Type: application/json' \
+    -d "{\"first_name\":\"F2\",\"last_name\":\"Huerfano\",\"email\":\"f2-orphan-$STAMP@lead.test\",\"company\":\"Acme\",\"industry\":\"Tech\",\"budget\":5000}")
+  job=$(body "$r" | f 'd.get("job_id") or ""')
+  check "el lead de OrgC se procesa" COMPLETED "$(await_job "$mgr_c" "$job")"
+  lead_c=$(body "$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $mgr_c")" | f '(d.get("items") or [{}])[0].get("lead_id") or ""')
+  check "sin asesores queda UNASSIGNED" UNASSIGNED "$(body "$(req "$API/leads/${lead_c:-missing}" -H "Authorization: Bearer $mgr_c")" | f 'd.get("status")')"
+  await_notice "$mgr_c" "any(i.get('kind') == 'LEAD_LEFT_UNASSIGNED' and i.get('lead_id') == '$lead_c' for i in d.get('items') or [])"
+  check "el gestor de OrgC recibe LEAD_LEFT_UNASSIGNED" True "$(body "$(req "$API/notifications" -H "Authorization: Bearer $mgr_c")" | \
+    f 'any(i.get("kind") == "LEAD_LEFT_UNASSIGNED" and i.get("lead_id") == "'"$lead_c"'" for i in d.get("items") or [])')"
+
+  section "Microservicios F2 · marcado y aislamiento"
+  check "marcar una como leída" 204 "$(code "$(req -X POST "$API/notifications/$notif_id/read" -H "Authorization: Bearer $TOKEN_1")")"
+  check "y queda is_read" True "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $TOKEN_1")" | \
+    f "next((n['is_read'] for n in d['items'] if n['id'] == '$notif_id'), None)")"
+  check "marcar todas" 204 "$(code "$(req -X POST "$API/notifications/read-all" -H "Authorization: Bearer $TOKEN_1")")"
+  check "el contador queda en cero" 0 "$(body "$(req "$API/notifications" -H "Authorization: Bearer $TOKEN_1")" | f 'd.get("unread_count")')"
+  check "otra organización no puede marcarla (404)" 404 "$(code "$(req -X POST "$API/notifications/$notif_id/read" -H "Authorization: Bearer $MGR_B")")"
+  check "ni la ve en su lista" False "$(body "$(req "$API/notifications?limit=1000" -H "Authorization: Bearer $MGR_B")" | \
+    f "any(n['id'] == '$notif_id' for n in d['items'])")"
+
+  section "Microservicios F2 · grupos y colas de error"
+  for group in notifications.lead-events notifications.intake-events notifications.members; do
+    for i in $(seq 1 30); do
+      lag=$(group_lag "$group")
+      [ "$lag" = 0 ] && break
+      sleep 1
+    done
+    check "$group sin lag (<=30 s)" 0 "$lag"
+  done
+  for group in notifications.lead-events notifications.intake-events notifications.members; do
+    topic="internal.dlq.$group"
+    end=$(docker compose exec -T kafka "$kafka_bin/kafka-get-offsets.sh" --bootstrap-server localhost:9092 \
+      --topic "$topic" --time -1 2>/dev/null | awk -F: 'NF==3 {n++; s+=$3} END {if (n) print s; else print "missing"}')
+    begin=$(docker compose exec -T kafka "$kafka_bin/kafka-get-offsets.sh" --bootstrap-server localhost:9092 \
+      --topic "$topic" --time -2 2>/dev/null | awk -F: 'NF==3 {n++; s+=$3} END {if (n) print s; else print "missing"}')
+    if [ "$end" = missing ] || [ "$begin" = missing ]; then sum_offsets=missing; else sum_offsets=$((end - begin)); fi
+    check "$topic existe y está vacía" 0 "$sum_offsets"
+  done
+  check "leads_db.notifications ya no crece" "$before" "$(leads_db_notices)"
+  rm -f "$mgr_c"
+}
+
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -1295,6 +1394,7 @@ verify_f31
 verify_f41
 verify_f5
 verify_social_oauth
+verify_ms_f2
 verify_ms_f1
 verify_ms_f0
 

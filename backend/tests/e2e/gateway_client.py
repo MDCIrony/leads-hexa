@@ -17,7 +17,7 @@ from chassis.outbox import OutboxRow, envelope
 from fastapi.testclient import TestClient
 
 from infrastructure.adapters.input.events.notification_consumer import NotificationConsumer
-from infrastructure.adapters.output.events.internal_topics import NOTIFICATION_GROUPS, topic_for
+from infrastructure.adapters.output.events.internal_topics import topic_for
 from infrastructure.intake_worker.messages import job_message, process_job_message
 
 _INTROSPECT = "/internal/v1/auth/introspect"
@@ -28,6 +28,12 @@ _UNAUTHORIZED = {"error": True, "error_code": "UNAUTHORIZED", "message": "Authen
 _NOT_FOUND = {"error": True, "error_code": "NOT_FOUND", "message": "Not Found"}
 # RabbitMQ's delivery limit on intake.jobs; past it the real message goes to the DLQ.
 _MAX_JOB_DELIVERIES = 3
+# A local copy: in the stack these groups now belong to notifications-worker,
+# but the suite still drains them in process until Task 9 removes the backend's inbox.
+_NOTIFICATION_GROUPS = {
+    "notifications.lead-events": "internal.lead-core.events",
+    "notifications.intake-events": "internal.intake.events",
+}
 
 
 class GatewayClient(TestClient):
@@ -110,7 +116,7 @@ class GatewayClient(TestClient):
             return
         consumers = {
             topic: NotificationConsumer(container.unit_of_work, group)
-            for group, topic in NOTIFICATION_GROUPS.items()
+            for group, topic in _NOTIFICATION_GROUPS.items()
         }
         while True:
             with container.unit_of_work() as uow:

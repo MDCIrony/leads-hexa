@@ -2,18 +2,14 @@ import logging
 import signal
 import threading
 
-from chassis.consumer import ensure_topics_until_ready, run_consumer_lane
+from chassis.consumer import ensure_topics_until_ready
 from chassis.kafka_config import producer_config
 from chassis.outbox import KafkaEventDispatcher, run_relay
 from chassis.rabbit import RabbitJobDispatcher
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient
 
-from infrastructure.adapters.output.events.internal_topics import (
-    INTERNAL_TOPIC_SPECS,
-    NOTIFICATION_GROUPS,
-    topic_for,
-)
+from infrastructure.adapters.output.events.internal_topics import INTERNAL_TOPIC_SPECS, topic_for
 from infrastructure.adapters.output.events.kafka_outbound_dispatcher import KafkaOutboundDispatcher
 from infrastructure.adapters.output.events.webhook_outbound_dispatcher import WebhookOutboundDispatcher
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
@@ -24,7 +20,6 @@ from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
 from infrastructure.intake_worker.messages import job_message
 from infrastructure.logging_config import configure_logging
-from infrastructure.worker.lanes import consumer_loop
 from infrastructure.worker.producers import PRODUCER_NAME
 from infrastructure.worker.relays import build_dispatchers, build_relays
 
@@ -38,7 +33,7 @@ def main() -> int:
     settings = Settings.from_environment()
     container = Container(settings)
     bootstrap = settings.kafka_bootstrap_servers
-    stop, ready = threading.Event(), threading.Event()
+    stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
@@ -59,7 +54,6 @@ def main() -> int:
 
     def activate_internal() -> None:
         dispatchers["internal"].append(internal_dispatcher)
-        ready.set()
 
     relays = build_relays(lambda: open_outbox_store(container.database), dispatchers)
     admin = AdminClient({"bootstrap.servers": bootstrap})
@@ -75,18 +69,6 @@ def main() -> int:
             target=ensure_topics_until_ready,
             args=(admin, [*INTERNAL_TOPIC_SPECS], stop, activate_internal),
             name="ensure-topics", daemon=True,
-        ),
-        *(
-            threading.Thread(
-                target=run_consumer_lane,
-                args=(
-                    group,
-                    lambda group=group, topic=topic: consumer_loop(container, bootstrap, group, topic),
-                    ready, stop,
-                ),
-                name=f"consumer-{group}", daemon=True,
-            )
-            for group, topic in NOTIFICATION_GROUPS.items()
         ),
     ]
     for thread in threads:

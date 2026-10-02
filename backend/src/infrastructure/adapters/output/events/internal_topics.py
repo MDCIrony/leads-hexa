@@ -1,5 +1,7 @@
-"""Where each internal event travels, and the topics that must exist for it."""
-from chassis.consumer import TopicSpec, dlq_topic
+"""Where each internal event travels, and the topics that must exist for it.
+
+Only the topics this producer writes: each consumer declares its own dead letters."""
+from chassis.consumer import TopicSpec
 from chassis.outbox import OutboxRow
 
 _SEVEN_DAYS_MS = str(7 * 24 * 60 * 60 * 1000)
@@ -16,17 +18,11 @@ _TOPIC_BY_EVENT_TYPE = {
     "TenantState": "internal.identity.tenants",
 }
 
-NOTIFICATION_GROUPS = {
-    "notifications.lead-events": "internal.lead-core.events",
-    "notifications.intake-events": "internal.intake.events",
-}
-
 INTERNAL_TOPIC_SPECS: list[TopicSpec] = [
     TopicSpec("internal.lead-core.events", 3, _EVENTS),
     TopicSpec("internal.intake.events", 3, _EVENTS),
     TopicSpec("internal.identity.agents", 3, _STATE),
     TopicSpec("internal.identity.tenants", 3, _STATE),
-    *(TopicSpec(dlq_topic(group), 1, _EVENTS) for group in NOTIFICATION_GROUPS),
 ]
 
 

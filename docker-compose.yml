@@ -251,8 +251,8 @@ services:
     restart: on-failure
 
   backend-worker:
-    # Same image and target as `backend`: delivery (outbox relay, webhooks,
-    # notification consumers) lives here so the API owns only request handling.
+    # Same image and target as `backend`: delivery (outbox relay, webhooks) lives
+    # here so the API owns only request handling.
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -284,6 +284,64 @@ services:
         condition: service_healthy
       # No condition on kafka (ADR-0026): the worker retries its topics and
       # keeps relaying the rest while the broker is away.
+    restart: on-failure
+
+  notifications:
+    # The inbox, cut over from the monolith in F2 (ADR-0031). The layout mirrors
+    # the repository (/srv/services/..., /srv/libs/...) because uv.lock records
+    # chassis as ../../libs/chassis. Not published: the gateway is the only way in.
+    build:
+      context: ./services/notifications
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: dev
+    volumes:
+      - ./services/notifications/src:/srv/services/notifications/src:ro
+      - ./services/notifications/migrations:/srv/services/notifications/migrations:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+    environment:
+      - DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_db
+      - JWKS_URL=http://backend:8000/internal/v1/jwks
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOG_LEVEL=INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      # The role and the database are db-bootstrap's; the service only migrates its tables.
+      db-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  notifications-worker:
+    # Same image: the only consumer of the notifications.* groups. It must never
+    # share a group with another process, or Kafka splits the partitions between them.
+    build:
+      context: ./services/notifications
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: dev
+    working_dir: /srv/services/notifications/src
+    volumes:
+      - ./services/notifications/src:/srv/services/notifications/src:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+    environment:
+      - DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_db
+      - JWKS_URL=http://backend:8000/internal/v1/jwks
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOG_LEVEL=INFO
+    command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/notifications/src", "/srv/libs/chassis/src"]
+    depends_on:
+      # The API applies the migrations at startup; the consumers write those tables.
+      notifications:
+        condition: service_healthy
+      # No condition on kafka (ADR-0026): the lanes retry until the broker answers.
     restart: on-failure
 
   frontend:
