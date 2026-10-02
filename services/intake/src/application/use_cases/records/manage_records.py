@@ -98,6 +98,10 @@ class DiscardIntakeRecordUseCase(DiscardIntakeRecordInputPort):
 
     def execute(self, tenant_id: UUID, record_id: UUID) -> None:
         with self.uow:
-            record = _get_owned_record(self.uow, tenant_id, record_id)
+            # Locked like the worker's claim: a plain read could overwrite a
+            # promotion committed in between, orphaning its lead.
+            record = self.uow.intake_records.claim_unpromoted(record_id, tenant_id)
+            if record is None:
+                record = _get_owned_record(self.uow, tenant_id, record_id)
             record.discard()
             self.uow.intake_records.save(record)

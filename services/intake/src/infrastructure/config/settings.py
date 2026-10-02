@@ -16,7 +16,7 @@ def _required(name: str) -> str:
 
 @dataclass(frozen=True)
 class ApiSettings:
-    database_url: str
+    database_url: str = field(repr=False)
     jwks_url: str
     lead_core_url: str
     # Out of repr, so logging the settings never prints it.
@@ -40,7 +40,7 @@ class ApiSettings:
 
 @dataclass(frozen=True)
 class WorkerSettings:
-    database_url: str
+    database_url: str = field(repr=False)
     lead_core_url: str
     service_client_secret: str = field(repr=False)
     rabbitmq_url: str = field(repr=False)
@@ -70,7 +70,7 @@ class ReconcileSettings:
     """The reconciliation command reads intake_db and asks lead-core, nothing else:
     no broker, so it also runs from the API container."""
 
-    database_url: str
+    database_url: str = field(repr=False)
     lead_core_url: str
     service_client_secret: str = field(repr=False)
     identity_url: str = "http://identity:8000"
