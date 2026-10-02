@@ -9,7 +9,7 @@ from application.ports.input.sales_group_use_case_ports import (
     CreateSalesGroupInputPort, DeleteSalesGroupInputPort, GetSalesGroupsInputPort,
     UpdateSalesGroupInputPort,
 )
-from domain.entities.sales_group import SalesGroup
+from domain.groups.sales_group import SalesGroup
 from infrastructure.adapters.input.api.dependencies import (
     get_create_sales_group_use_case, get_delete_sales_group_use_case,
     get_get_sales_groups_use_case, get_update_sales_group_use_case,

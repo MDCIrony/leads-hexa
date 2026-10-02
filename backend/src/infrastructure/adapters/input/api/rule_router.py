@@ -15,8 +15,9 @@ from application.ports.input.disqualification_rule_use_case_ports import (
     CreateDisqualificationRuleInputPort, DeleteDisqualificationRuleInputPort,
     GetDisqualificationRulesInputPort, UpdateDisqualificationRuleInputPort,
 )
-from domain.entities.disqualification_rule import DisqualificationRule
-from domain.entities.rule import AssignmentRule, ScoringRule
+from domain.rules.disqualification_rule import DisqualificationRule
+from domain.rules.assignment_rule import AssignmentRule
+from domain.rules.scoring_rule import ScoringRule
 from infrastructure.adapters.input.api.dependencies import (
     get_create_scoring_rule_use_case, get_get_scoring_rules_use_case,
     get_update_scoring_rule_use_case, get_delete_scoring_rule_use_case,
@@ -34,7 +35,6 @@ from infrastructure.adapters.input.api.schemas import (
 )
 
 router = APIRouter()
-
 
 def _to_scoring_response(rule: ScoringRule) -> ScoringRuleResponse:
     return ScoringRuleResponse(

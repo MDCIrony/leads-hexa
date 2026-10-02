@@ -10,7 +10,7 @@ from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.dtos.commands import OutboxEntry
-from domain.entities.disqualification_rule import DisqualificationRule
+from domain.rules.disqualification_rule import DisqualificationRule
 from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
 from infrastructure.adapters.output.persistence.correlation import current_correlation_id

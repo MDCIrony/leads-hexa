@@ -7,7 +7,7 @@ from application.dtos.commands import (
     UpdateDisqualificationRuleCommand,
 )
 from application.dtos.queries import GetDisqualificationRulesQuery
-from domain.entities.disqualification_rule import DisqualificationRule
+from domain.rules.disqualification_rule import DisqualificationRule
 
 
 class CreateDisqualificationRuleInputPort(ABC):

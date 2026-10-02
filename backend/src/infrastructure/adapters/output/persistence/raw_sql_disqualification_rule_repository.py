@@ -7,7 +7,7 @@ from psycopg.types.json import Jsonb
 from application.ports.output.disqualification_rule_repository_port import (
     DisqualificationRuleRepositoryPort,
 )
-from domain.entities.disqualification_rule import DisqualificationRule
+from domain.rules.disqualification_rule import DisqualificationRule
 
 
 class RawSqlDisqualificationRuleRepository(DisqualificationRuleRepositoryPort):

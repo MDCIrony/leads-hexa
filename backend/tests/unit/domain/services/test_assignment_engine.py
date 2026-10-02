@@ -4,9 +4,9 @@ from typing import Dict, List, Optional
 import pytest
 
 from domain.advisors.advisor import Advisor
-from domain.entities.lead import Lead
-from domain.entities.rule import AssignmentRule
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.rules.assignment_rule import AssignmentRule
+from domain.groups.sales_group import SalesGroup
 from domain.services.assignment_engine import AssignmentEngine
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.agent_id import AgentId

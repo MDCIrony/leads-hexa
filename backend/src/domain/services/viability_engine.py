@@ -1,7 +1,7 @@
 from typing import List, Optional
 
-from domain.entities.disqualification_rule import DisqualificationRule
-from domain.entities.lead import Lead
+from domain.rules.disqualification_rule import DisqualificationRule
+from domain.leads.lead import Lead
 
 
 class ViabilityEngine:

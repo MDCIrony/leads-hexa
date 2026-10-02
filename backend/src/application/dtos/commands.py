@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
 if TYPE_CHECKING:
-    from domain.entities.disqualification_rule import DisqualificationRule
-    from domain.entities.lead import Lead
-    from domain.entities.rule import ScoringRule
-    from domain.entities.sales_group import SalesGroup
+    from domain.rules.disqualification_rule import DisqualificationRule
+    from domain.leads.lead import Lead
+    from domain.rules.scoring_rule import ScoringRule
+    from domain.groups.sales_group import SalesGroup
 
 
 @dataclass(frozen=True)

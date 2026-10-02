@@ -26,7 +26,7 @@ def _admin_auth_headers() -> dict:
 
 def _create_group(tenant_id: str) -> str:
     from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.sales_group import SalesGroup
+    from domain.groups.sales_group import SalesGroup
 
     db = app.state.container.database
     uow = PostgresUnitOfWork(db)

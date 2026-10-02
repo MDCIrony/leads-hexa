@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 
-from domain.entities.sales_group import SalesGroup
+from domain.groups.sales_group import SalesGroup
 from domain.value_objects.enums import AssignmentStrategy
 from domain.value_objects.tenant_id import TenantId
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (

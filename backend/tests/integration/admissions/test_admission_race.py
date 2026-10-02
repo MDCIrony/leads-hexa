@@ -4,9 +4,9 @@ import uuid
 from application.dtos.admissions import AdmissionCandidate, AdmissionRequest
 from application.use_cases.admissions.admit_lead import AdmitLeadUseCase
 from domain.advisors.advisor import Advisor
-from domain.entities.lead import Lead
-from domain.entities.rule import AssignmentRule
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.rules.assignment_rule import AssignmentRule
+from domain.groups.sales_group import SalesGroup
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentRole, AssignmentStrategy
 from domain.value_objects.tenant_id import TenantId

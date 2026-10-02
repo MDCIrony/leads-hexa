@@ -9,7 +9,7 @@ from application.use_cases.lead_lifecycle_use_cases import (
     DiscardLeadUseCase,
     GetMyLeadsUseCase,
 )
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole, LeadStatus
 from tests.unit.mocks.in_memory_advisor_repo import ProjectionOnlyDirectory, make_advisor

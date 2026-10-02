@@ -11,8 +11,8 @@ from concurrent.futures import TimeoutError as FuturesTimeout
 
 import pytest
 
-from domain.entities.rule import AssignmentRule
-from domain.entities.sales_group import SalesGroup
+from domain.rules.assignment_rule import AssignmentRule
+from domain.groups.sales_group import SalesGroup
 from domain.value_objects.enums import AssignmentStrategy
 from chassis.persistence import RawSqlDatabase
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork

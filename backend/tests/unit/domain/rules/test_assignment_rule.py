@@ -2,9 +2,9 @@ import uuid
 
 import pytest
 
-from domain.entities.lead import Lead
-from domain.entities.rule import AssignmentRule
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.rules.assignment_rule import AssignmentRule
+from domain.groups.sales_group import SalesGroup
 from domain.exceptions import DomainException
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, Operator

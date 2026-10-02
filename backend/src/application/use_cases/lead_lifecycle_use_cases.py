@@ -10,7 +10,7 @@ from application.ports.input.lead_lifecycle_use_case_ports import (
 )
 from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.events.lead_events import LeadAssigned, LeadProcessedEvent, LeadReassigned
 from domain.exceptions import DomainException
 from domain.value_objects.enums import LeadStatus

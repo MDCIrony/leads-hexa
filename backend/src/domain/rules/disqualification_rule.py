@@ -7,7 +7,7 @@ from domain.exceptions import DomainException
 from domain.value_objects.criterion import Criterion, all_match
 
 if TYPE_CHECKING:
-    from domain.entities.lead import Lead
+    from domain.leads.lead import Lead
 
 
 @dataclass

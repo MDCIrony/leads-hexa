@@ -1,7 +1,8 @@
 from typing import List, Dict, Optional
 from uuid import UUID
 from application.ports.output.rule_repository_port import RuleRepositoryPort
-from domain.entities.rule import AssignmentRule, ScoringRule
+from domain.rules.assignment_rule import AssignmentRule
+from domain.rules.scoring_rule import ScoringRule
 
 class InMemoryRuleRepository(RuleRepositoryPort):
     def __init__(self) -> None:

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from domain.entities.webhook import WebhookConfig
+from domain.webhooks.webhook import WebhookConfig
 from domain.value_objects.enums import WebhookEventType
 
 

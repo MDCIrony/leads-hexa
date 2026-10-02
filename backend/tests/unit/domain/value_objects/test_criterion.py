@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.exceptions import DomainException
 from domain.value_objects.criterion import Criterion, all_match
 from domain.value_objects.enums import Operator

@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from domain.entities.sales_group import SalesGroup
+from domain.groups.sales_group import SalesGroup
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AssignmentStrategy
 

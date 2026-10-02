@@ -1,6 +1,8 @@
 import uuid
 import pytest
-from domain.entities import Lead, ScoringRule, WebhookConfig
+from domain.leads.lead import Lead
+from domain.rules.scoring_rule import ScoringRule
+from domain.webhooks.webhook import WebhookConfig
 from domain.exceptions import InvalidEmailException
 from domain.value_objects import (
     LeadId,

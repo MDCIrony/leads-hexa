@@ -12,7 +12,7 @@ from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInp
 from application.ports.input.lead_lifecycle_use_case_ports import (
     AssignLeadInputPort, DiscardLeadInputPort, GetLeadInputPort, GetMyLeadsInputPort,
 )
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.exceptions import DomainException
 from domain.policies.authorization_policy import AuthorizationPolicy
 from infrastructure.adapters.input.api.dependencies import (

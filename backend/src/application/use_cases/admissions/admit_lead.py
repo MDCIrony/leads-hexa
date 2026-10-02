@@ -10,8 +10,8 @@ from application.dtos.admissions import AdmissionError, AdmissionRequest, Admiss
 from application.ports.input.admissions.admission_ports import AdmitLeadInputPort
 from application.ports.output.lead_repository_port import DuplicateAdmission
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.entities.lead import Lead
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.groups.sales_group import SalesGroup
 from domain.events.lead_events import LeadAssigned, LeadDisqualified, LeadLeftUnassigned, LeadProcessedEvent
 from domain.exceptions import DomainException
 from domain.services.assignment_engine import AssignmentEngine

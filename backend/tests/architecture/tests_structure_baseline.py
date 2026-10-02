@@ -7,5 +7,4 @@ tree measures, or already within the limit, fails too. Regenerate with
 
 BASELINE = {
     "e2e/": 14,
-    "unit/domain/": 13,
 }

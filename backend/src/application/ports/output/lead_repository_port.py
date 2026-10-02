@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 from application.dtos.admissions import AdmissionLookupItem
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.value_objects.enums import LeadStatus
 
 

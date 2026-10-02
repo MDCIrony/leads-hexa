@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 from uuid import UUID
 
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
-from domain.entities.sales_group import SalesGroup
+from domain.groups.sales_group import SalesGroup
 
 
 class InMemorySalesGroupRepository(SalesGroupRepositoryPort):

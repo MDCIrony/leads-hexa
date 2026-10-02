@@ -3,8 +3,8 @@ from typing import Any
 
 import pytest
 
-from domain.entities.disqualification_rule import DisqualificationRule
-from domain.entities.lead import Lead
+from domain.rules.disqualification_rule import DisqualificationRule
+from domain.leads.lead import Lead
 from domain.exceptions import DomainException
 from domain.services.viability_engine import ViabilityEngine
 from domain.value_objects.criterion import Criterion

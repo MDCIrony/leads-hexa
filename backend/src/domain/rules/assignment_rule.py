@@ -1,66 +1,16 @@
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 from domain.exceptions import DomainException
-from domain.value_objects.criterion import Criterion, all_match
-from domain.value_objects.criterion import EVALUABLE_FIELDS as SCORABLE_FIELDS
+from domain.rules.assignment_rule_behavior import AssignmentRuleBehavior
+from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 
-if TYPE_CHECKING:
-    # Only for the type hint in resolve_strategy: importing SalesGroup at
-    # module level would create a cycle the moment it needs a rule back.
-    from domain.entities.sales_group import SalesGroup
-    from domain.entities.lead import Lead
-
 
 @dataclass
-class ScoringRule:
-    """A rule that adds or subtracts points when all its conditions hold.
-
-    Several conditions instead of one is what lets a manager write "high
-    budget AND target industry" as a single rule. Alternatives are separate
-    rules: there is no OR."""
-
-    id: UUID
-    tenant_id: UUID
-    name: str
-    conditions: List[Criterion]
-    score_delta: int
-    priority: int = 0
-    is_active: bool = True
-
-    @classmethod
-    def create(
-        cls,
-        tenant_id: Union[str, UUID],
-        name: str,
-        conditions: List[Union[Criterion, Dict[str, Any]]],
-        score_delta: int,
-        priority: int = 0,
-        is_active: bool = True,
-        rule_id: Optional[Union[str, UUID]] = None,
-    ) -> "ScoringRule":
-        # Accepts dicts so the SQL adapter can hand over what JSONB gave it
-        # without importing Criterion to rebuild each one.
-        parsed = [c if isinstance(c, Criterion) else Criterion.from_dict(c) for c in conditions]
-        return cls(
-            id=UUID(str(rule_id)) if rule_id else uuid.uuid4(),
-            tenant_id=UUID(str(tenant_id)),
-            name=name,
-            conditions=parsed,
-            score_delta=score_delta,
-            priority=priority,
-            is_active=is_active,
-        )
-
-    def matches(self, lead: "Lead") -> bool:
-        return all_match(self.conditions, lead)
-
-
-@dataclass
-class AssignmentRule:
+class AssignmentRule(AssignmentRuleBehavior):
     """Decides which agents may receive a lead of a given score.
 
     Replaces the free-form routing rule that came before it. The
@@ -193,37 +143,3 @@ class AssignmentRule:
             rr_cursor=rr_cursor,
             conditions=parsed_conditions,
         )
-
-    def matches_score(self, score: int) -> bool:
-        if score < self.min_score:
-            return False
-        return self.max_score is None or score <= self.max_score
-
-    def matches(self, lead: "Lead") -> bool:
-        """Band and conditions, both required.
-
-        An empty condition list means the rule discriminates by score alone,
-        which is what every rule written before this phase does."""
-        return self.matches_score(int(lead.score)) and all_match(self.conditions, lead)
-
-    def resolve_strategy(self, group: Optional["SalesGroup"]) -> AssignmentStrategy:
-        """The rule's own strategy, or the group's, or the safe default."""
-        if self.strategy is not None:
-            return self.strategy
-        if group is not None:
-            return group.default_strategy
-        return AssignmentStrategy.LOWEST_LOAD
-
-    def advance_cursor(self, size: int) -> int:
-        """Return the index to use now and move the cursor past it.
-
-        The modulo is applied on read, not on write, so the cursor stays valid
-        when agents join or leave the group between two assignments."""
-        if size <= 0:
-            raise DomainException(
-                "No hay candidatos sobre los que rotar",
-                error_code="EMPTY_CANDIDATE_POOL",
-            )
-        index = self.rr_cursor % size
-        self.rr_cursor = index + 1
-        return index

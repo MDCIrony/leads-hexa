@@ -8,9 +8,6 @@ that shrinks the code. Each context leaves this list when it is extracted
 BASELINE = {
     "application/dtos/commands.py": 190,
     "application/use_cases/rule_use_cases.py": 193,
-    "domain/entities/lead.py": 238,
-    "domain/entities/rule.py": 229,
-    "domain/value_objects/criterion.py": 163,
     "infrastructure/adapters/input/api/dependencies.py": 202,
     "infrastructure/adapters/input/api/lead_router.py": 227,
     "infrastructure/adapters/input/api/rule_router.py": 285,

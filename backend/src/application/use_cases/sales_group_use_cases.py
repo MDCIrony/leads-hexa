@@ -14,7 +14,7 @@ from application.ports.input.sales_group_use_case_ports import (
     UpdateSalesGroupInputPort,
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.entities.sales_group import SalesGroup
+from domain.groups.sales_group import SalesGroup
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AssignmentStrategy
 

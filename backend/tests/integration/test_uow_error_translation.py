@@ -4,8 +4,8 @@ from uuid import uuid4
 import psycopg
 import pytest
 
-from domain.entities.rule import AssignmentRule
-from domain.entities.sales_group import SalesGroup
+from domain.rules.assignment_rule import AssignmentRule
+from domain.groups.sales_group import SalesGroup
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 from domain.value_objects.tenant_id import TenantId

@@ -5,8 +5,8 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from application.ports.output.rule_repository_port import RuleRepositoryPort
-from domain.entities.rule import AssignmentRule, ScoringRule
-
+from domain.rules.assignment_rule import AssignmentRule
+from domain.rules.scoring_rule import ScoringRule
 
 class RawSqlRuleRepository(RuleRepositoryPort):
     def __init__(self, connection: psycopg.Connection) -> None:

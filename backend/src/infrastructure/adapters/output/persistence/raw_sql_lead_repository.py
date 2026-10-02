@@ -5,7 +5,7 @@ from uuid import UUID
 import psycopg
 
 from application.ports.output.lead_repository_port import LeadRepositoryPort
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.value_objects.enums import LeadStatus
 from infrastructure.adapters.output.persistence.leads.admission_lookups import LeadAdmissionLookups
 from infrastructure.adapters.output.persistence.leads.lead_rows import row_to_lead, save_lead

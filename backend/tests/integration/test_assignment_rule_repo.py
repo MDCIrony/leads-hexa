@@ -4,8 +4,8 @@ from uuid import uuid4
 import psycopg
 
 from domain.value_objects.tenant_id import TenantId
-from domain.entities.rule import AssignmentRule
-from domain.entities.sales_group import SalesGroup
+from domain.rules.assignment_rule import AssignmentRule
+from domain.groups.sales_group import SalesGroup
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 from infrastructure.adapters.output.persistence.raw_sql_rule_repository import (
     RawSqlRuleRepository,

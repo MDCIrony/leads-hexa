@@ -7,7 +7,7 @@ from application.dtos.commands import (
     UpdateSalesGroupCommand,
 )
 from application.dtos.queries import GetSalesGroupsQuery
-from domain.entities.sales_group import SalesGroup
+from domain.groups.sales_group import SalesGroup
 
 
 class CreateSalesGroupInputPort(ABC):

@@ -5,8 +5,8 @@ import pytest
 from application.dtos.advisors import ListAdvisorsQuery, SetAdvisorGroupCommand
 from application.use_cases.advisors.advisor_use_cases import ListAdvisorsUseCase, SetAdvisorGroupUseCase
 from domain.advisors.advisor import Advisor
-from domain.entities.lead import Lead
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.groups.sales_group import SalesGroup
 from domain.exceptions import DomainException
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentRole, LeadStatus

@@ -1,8 +1,8 @@
 import uuid
 from typing import Any
 
-from domain.entities.lead import Lead
-from domain.entities.rule import ScoringRule
+from domain.leads.lead import Lead
+from domain.rules.scoring_rule import ScoringRule
 from domain.services.scoring_engine import ScoringEngine
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator

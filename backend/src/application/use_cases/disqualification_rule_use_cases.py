@@ -13,7 +13,7 @@ from application.ports.input.disqualification_rule_use_case_ports import (
     UpdateDisqualificationRuleInputPort,
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.entities.disqualification_rule import DisqualificationRule
+from domain.rules.disqualification_rule import DisqualificationRule
 from domain.exceptions import DomainException
 
 

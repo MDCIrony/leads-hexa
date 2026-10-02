@@ -7,9 +7,9 @@ import pytest
 from application.dtos.admissions import AdmissionCandidate, AdmissionRequest
 from application.ports.output.lead_repository_port import DuplicateAdmission
 from application.use_cases.admissions.admit_lead import AdmitLeadUseCase
-from domain.entities import AssignmentRule
-from domain.entities.disqualification_rule import DisqualificationRule
-from domain.entities.lead import Lead
+from domain.rules.assignment_rule import AssignmentRule
+from domain.rules.disqualification_rule import DisqualificationRule
+from domain.leads.lead import Lead
 from domain.value_objects.enums import Operator
 from tests.unit.mocks.in_memory_advisor_repo import make_advisor
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository

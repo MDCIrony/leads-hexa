@@ -10,7 +10,8 @@ from application.dtos.commands import (
     UpdateScoringRuleCommand,
 )
 from application.dtos.queries import GetAssignmentRulesQuery, GetRulesQuery
-from domain.entities.rule import AssignmentRule, ScoringRule
+from domain.rules.assignment_rule import AssignmentRule
+from domain.rules.scoring_rule import ScoringRule
 
 
 class GetScoringRulesInputPort(ABC):

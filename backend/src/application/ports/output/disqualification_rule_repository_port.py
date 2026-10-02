@@ -2,7 +2,7 @@ import abc
 from typing import List, Optional
 from uuid import UUID
 
-from domain.entities.disqualification_rule import DisqualificationRule
+from domain.rules.disqualification_rule import DisqualificationRule
 
 
 class DisqualificationRuleRepositoryPort(abc.ABC):

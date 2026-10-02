@@ -2,7 +2,7 @@ import abc
 from typing import List, Optional
 from uuid import UUID
 
-from domain.entities.sales_group import SalesGroup
+from domain.groups.sales_group import SalesGroup
 
 
 class SalesGroupRepositoryPort(abc.ABC):

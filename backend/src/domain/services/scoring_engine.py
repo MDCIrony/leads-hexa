@@ -1,7 +1,7 @@
 from typing import List
 
-from domain.entities.lead import Lead
-from domain.entities.rule import ScoringRule
+from domain.leads.lead import Lead
+from domain.rules.scoring_rule import ScoringRule
 from domain.value_objects.score_breakdown import AppliedRule, ScoreBreakdown
 
 

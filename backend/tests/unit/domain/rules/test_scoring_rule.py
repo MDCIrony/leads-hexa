@@ -4,8 +4,8 @@ from typing import Any
 
 import pytest
 
-from domain.entities.lead import Lead
-from domain.entities.rule import ScoringRule
+from domain.leads.lead import Lead
+from domain.rules.scoring_rule import ScoringRule
 from domain.exceptions import DomainException
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator

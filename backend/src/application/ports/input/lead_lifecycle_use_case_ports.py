@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand, LeadsPageResult
 from application.dtos.queries import GetLeadQuery, GetMyLeadsQuery
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 
 
 class AssignLeadInputPort(ABC):

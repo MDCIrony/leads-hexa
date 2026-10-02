@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 from uuid import UUID
-from domain.entities.rule import AssignmentRule, ScoringRule
+from domain.rules.assignment_rule import AssignmentRule
+from domain.rules.scoring_rule import ScoringRule
 
 class RuleRepositoryPort(ABC):
     @abstractmethod

@@ -4,7 +4,7 @@ from psycopg.types.json import Jsonb
 from uuid import UUID
 
 from application.ports.output.lead_repository_port import DuplicateAdmission
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.value_objects.score_breakdown import AppliedRule
 
 _ADMISSION_CONSTRAINT = "uq_leads_tenant_intake_record"

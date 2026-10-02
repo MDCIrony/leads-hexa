@@ -20,11 +20,11 @@ from application.ports.input.rule_use_case_ports import (
     UpdateScoringRuleInputPort,
 )
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from domain.entities.rule import AssignmentRule, ScoringRule
+from domain.rules.assignment_rule import AssignmentRule
+from domain.rules.scoring_rule import ScoringRule
 from domain.exceptions import DomainException
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
-
 
 def _get_owned_scoring_rule(uow: UnitOfWorkPort, tenant_id: UUID, rule_id: UUID) -> ScoringRule:
     """A rule from another organization must read back as missing, never as

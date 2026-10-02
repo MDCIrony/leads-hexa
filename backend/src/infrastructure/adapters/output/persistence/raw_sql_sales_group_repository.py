@@ -4,7 +4,7 @@ from uuid import UUID
 import psycopg
 
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
-from domain.entities.sales_group import SalesGroup
+from domain.groups.sales_group import SalesGroup
 
 
 class RawSqlSalesGroupRepository(SalesGroupRepositoryPort):

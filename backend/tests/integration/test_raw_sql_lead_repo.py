@@ -6,8 +6,8 @@ from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository i
     RawSqlSalesGroupRepository,
 )
 from domain.advisors.advisor import Advisor
-from domain.entities.lead import Lead
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.groups.sales_group import SalesGroup
 from domain.value_objects import LeadStatus
 from domain.value_objects.enums import AgentRole
 from domain.value_objects.agent_id import AgentId
