@@ -246,14 +246,14 @@ después del corte. `backend` no contiene ningún módulo de notificaciones. La 
 
 ## F3 · Identity
 
-**Estado: implantada** (`61f697e..cf84fc9`, más el commit que registra este rango). Lo construido
+**Estado: implantada** (`61f697e..16ff566`, más el commit que registra este rango). Lo construido
 sigue el plan salvo las desviaciones de abajo. El corte copió 95 tenants, 197 agentes, 262 sesiones
 (236 activas), 10 desafíos, 2 MFA, 16 códigos de recuperación y 4 identidades sociales, con recuentos
 y `md5` idénticos en origen y destino; `advisors` quedó con 196 filas (todos menos el `ADMIN`) y
-`provisioned_tenants` con 95. Tras el corte: `backend-test` 618, `pytest -m unit` del backend 370,
-`identity-test` 417 y su `pytest -m unit` 263, `notifications-test` 93, `libs/chassis` 217,
-`verify-structure.sh` en verde y `verify-e2e.sh` con 314 checks en verde; los commits del rango
-posteriores al corte le añaden comprobaciones.
+`provisioned_tenants` con 95. Al cerrar la fase: `backend-test` 620, `pytest -m unit` del backend 372,
+`identity-test` 417 y su `pytest -m unit` 263, `notifications-test` 93, `libs/chassis` 218,
+`verify-structure.sh` en verde, `verify-e2e.sh` con 327 checks en verde tanto en frío (`--reset`) como
+en caliente, y los flujos de Bruno 98/98.
 
 **Objetivo.** Autenticación, organizaciones y agentes viven en su servicio; nadie más lee sus tablas.
 
