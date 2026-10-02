@@ -135,7 +135,7 @@ def test_load_signers_parses_spec_and_keeps_order():
     assert signers[0].public_jwk()["kid"] == "a"
 
 
-@pytest.mark.parametrize("spec", ["", "  ", "nokey", "a=short", "a=AAAA,a=AAAA", "a=" + "*" + "A" * 42])
+@pytest.mark.parametrize("spec", ["", "  ", "nokey", "a=short", "a=AAAA,a=AAAA", "a=" + "****" + "A" * 43])
 def test_load_signers_rejects_bad_specs(spec):
     with pytest.raises(ValueError):
         load_signers(spec)
