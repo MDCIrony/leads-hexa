@@ -356,7 +356,7 @@ variables de MFA u OAuth.
 
 ## F4 · Intake
 
-**Estado: implantada** (`RANGO_F4`, más el commit que registra este rango). Lo construido sigue el
+**Estado: implantada** (`d0370a2..160237a`, más el commit que registra este rango). Lo construido sigue el
 plan salvo las desviaciones de abajo. El corte copió 76 fuentes, 38 `provisioned_tenants`, 117 jobs,
 139 registros, 36 errores, 22 ficheros y 42 filas de `processed_events` (las del grupo
 `intake.tenants`), con recuentos y `md5` idénticos en origen y destino. El digest cubre ids, claves
