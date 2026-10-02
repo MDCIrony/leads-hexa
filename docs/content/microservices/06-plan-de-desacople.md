@@ -185,7 +185,7 @@ veces termina en `internal.dlq.<grupo>`; un job con un registro que falla vuelve
 
 ## F2 · Notifications
 
-**Estado: cerrada** (a partir de `1f4fb47`; el rango de cierre se fija al cerrar la fase). Lo construido
+**Estado: implantada** (`1f4fb47..befd63e`, más el commit que registra este rango). Lo construido
 sigue el plan salvo las desviaciones de abajo. El corte copió 511 notificaciones, 408 `processed_events`
 y 104 miembros, con recuentos y `md5` de ids idénticos en origen y destino.
 
