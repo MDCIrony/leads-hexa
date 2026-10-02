@@ -142,15 +142,17 @@ await_quiet() {
   done
 }
 
-# await_advisor <session> <agent_id> — waits until lead-core's advisors
+# await_advisor <session> <agent_id> [inactive] — waits until lead-core's advisors
 # projection has the agent (F3). Agents are written by identity and reach
 # lead-core through Kafka, so routing right after creating one would race it.
 # Returns non-zero on timeout. 30 s: on a cold start the first message also
 # waits for the consumer group to join.
 await_advisor() {
-  local i
+  local i query="limit=200"
+  # An optional third argument "inactive" waits for the deactivation instead.
+  [ "${3:-}" = inactive ] && query="limit=200&is_active=false"
   for i in $(seq 1 150); do
-    [ "$(body "$(req "$API/advisors?limit=200" -H "Authorization: Bearer $1")" | \
+    [ "$(body "$(req "$API/advisors?$query" -H "Authorization: Bearer $1")" | \
       f "any(a.get('agent_id') == '$2' for a in d.get('items') or [])")" = True ] && return 0
     sleep 0.2
   done
@@ -766,6 +768,9 @@ verify_f3a() {
 
   r=$(req -X DELETE "$API/agents/$agent_tmp" -H "Authorization: Bearer $MGR_A")
   check "y desactivado" 200 "$(code "$r")"
+  # Since F3 routing reads lead-core's copy of the agent, which learns of the
+  # deactivation through Kafka a moment later.
+  check "lead-core lo sabe desactivado" True "$(ok await_advisor "$MGR_A" "$agent_tmp" inactive)"
 
   r=$(req -X POST "$API/rules/assignment" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
     -d "{\"name\":\"F3a huérfano\",\"target_agent_ids\":[\"$agent_tmp\"],\"conditions\":[{\"field\":\"custom_attributes.f3a\",\"operator\":\"EQUALS\",\"value\":\"orphan\"}]}")
@@ -1191,8 +1196,10 @@ except urllib.error.HTTPError as e:
   check "lead-core caído → 503" 503 "$(code "$r")"
   check "  con el sobre" SERVICE_UNAVAILABLE "$(body "$r" | f 'd.get("error_code")')"
   docker compose start backend >/dev/null 2>&1
+  # Through the gateway, not the healthcheck: its upstream re-resolves the
+  # container's address within resolver valid=10s.
   for i in $(seq 1 60); do
-    docker compose ps backend --format '{{.Status}}' | grep -q '(healthy)' && break
+    [ "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")" = 200 ] && break
     sleep 1
   done
   check "lead-core vuelve tras el corte" 200 "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")"
