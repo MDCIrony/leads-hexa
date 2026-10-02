@@ -81,3 +81,36 @@ def test_mark_parsed_stamps_the_file(test_db):
         assert repo.get(job.id.value, job.tenant_id.value).parsed_at is not None
     finally:
         ctx.__exit__(None, None, None)
+
+
+def test_a_second_reader_waits_for_the_first_parse_and_then_sees_it_done(test_db):
+    """Two consumers of the same job: the second cannot read the file while the
+    first holds it, so it can never parse it a second time."""
+    import psycopg
+    import pytest
+
+    seed, seed_ctx = _ctx(test_db)
+    try:
+        job = _seed_job(seed)
+        RawSqlIntakeFileRepository(seed).save(job.id.value, job.tenant_id.value, "leads.csv", b"x")
+    finally:
+        seed_ctx.__exit__(None, None, None)
+
+    first_ctx, second_ctx = test_db.get_connection(), test_db.get_connection()
+    first, second = first_ctx.__enter__(), second_ctx.__enter__()
+    try:
+        assert RawSqlIntakeFileRepository(first).get(job.id.value, job.tenant_id.value).parsed_at is None
+
+        second.execute("SET lock_timeout = '200ms'")
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            RawSqlIntakeFileRepository(second).get(job.id.value, job.tenant_id.value)
+        second.rollback()
+
+        RawSqlIntakeFileRepository(first).mark_parsed(job.id.value)
+        first.commit()
+
+        assert RawSqlIntakeFileRepository(second).get(job.id.value, job.tenant_id.value).parsed_at is not None
+        second.commit()
+    finally:
+        first_ctx.__exit__(None, None, None)
+        second_ctx.__exit__(None, None, None)

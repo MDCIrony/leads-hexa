@@ -81,7 +81,12 @@ class OutboxRelay:
         with self._store() as store:
             rows = store.fetch(channel, batch_size)
 
-        outcomes = [(row, self._deliver(row, dispatchers)) for row in rows]
+        outcomes = []
+        for row in rows:
+            # One traceback per pass is enough to diagnose an outage; a full
+            # one for every queued row would bury everything else in the log.
+            traced = any(error is not None for _, error in outcomes)
+            outcomes.append((row, self._deliver(row, dispatchers, traced)))
 
         with self._store() as store:
             for row, error in outcomes:
@@ -103,7 +108,7 @@ class OutboxRelay:
         return counts
 
     @staticmethod
-    def _deliver(row: OutboxRow, dispatchers: Sequence[Dispatcher]) -> Optional[str]:
+    def _deliver(row: OutboxRow, dispatchers: Sequence[Dispatcher], traced: bool = False) -> Optional[str]:
         """Hands the row to every dispatcher of its channel. Returns the last error, if any.
 
         A dispatcher that fails must not stop the others from trying. The row
@@ -116,10 +121,13 @@ class OutboxRelay:
                 try:
                     dispatcher.dispatch(row)
                 except Exception as exc:
+                    if traced or error is not None:
+                        _LOGGER.warning("Dispatcher %s failed for outbox row %s: %s", dispatcher, row.id, exc)
+                    else:
+                        _LOGGER.error(
+                            "Dispatcher %s failed for outbox row %s", dispatcher, row.id, exc_info=True,
+                        )
                     error = str(exc)
-                    _LOGGER.error(
-                        "Dispatcher %s failed for outbox row %s", dispatcher, row.id, exc_info=True,
-                    )
         return error
 
 

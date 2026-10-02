@@ -8,6 +8,7 @@ until the job's run returns, and a run only ever reads PENDING records back."""
 import json
 import logging
 import time
+from uuid import UUID
 
 import pika
 from pika.exceptions import AMQPConnectionError, ChannelClosedByBroker
@@ -22,16 +23,24 @@ _LOGGER = logging.getLogger(__name__)
 _MAX_BACKOFF_SECONDS = 30.0
 
 
+def _decode(body: bytes) -> dict:
+    message = json.loads(body)
+    for key in ("tenant_id", "job_id"):
+        UUID(message[key])
+    return message
+
+
 def _handle_message(container: Container, channel, method, body: bytes) -> None:
     try:
-        outcome = process_job_message(container, json.loads(body))
-    except (ValueError, KeyError, TypeError):
-        # Only a body that is not a job message gets here: no redelivery will
-        # fix it, so it goes straight to the dead-letter queue.
-        _LOGGER.error("Malformed intake job message, dead-lettering", exc_info=True)
+        message = _decode(body)
+    except Exception as exc:
+        # Anything raising here would escape start_consuming and end the
+        # worker; no redelivery fixes a body that is not a job message, so it
+        # goes straight to the dead-letter queue.
+        _LOGGER.warning("Malformed intake job message dead-lettered: %r", exc)
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         return
-    if outcome == "nack":
+    if process_job_message(container, message) == "nack":
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
     else:
         channel.basic_ack(delivery_tag=method.delivery_tag)

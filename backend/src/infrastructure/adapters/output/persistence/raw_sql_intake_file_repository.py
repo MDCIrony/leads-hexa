@@ -21,11 +21,15 @@ class RawSqlIntakeFileRepository(IntakeFileRepositoryPort):
         )
 
     def get(self, job_id: UUID, tenant_id: UUID) -> Optional[StoredIntakeFile]:
+        # Locked until the caller's transaction ends: the parse reads parsed_at
+        # and writes the records in one transaction, so a second consumer of
+        # the same job waits here and then sees the file already parsed.
         row = self.connection.execute(
             """
             SELECT job_id, tenant_id, filename, content, parsed_at
             FROM intake_files
             WHERE job_id = %s AND tenant_id = %s
+            FOR UPDATE
             """,
             (job_id, tenant_id),
         ).fetchone()

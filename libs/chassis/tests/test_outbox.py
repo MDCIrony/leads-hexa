@@ -221,3 +221,17 @@ def test_kafka_dispatcher_raises_on_a_failed_delivery_callback():
 def test_kafka_dispatcher_raises_when_flush_leaves_messages_pending():
     with pytest.raises(RuntimeError, match="timed out"):
         _dispatcher(FakeProducer(pending=1)).dispatch(_row())
+
+
+def test_an_outage_logs_one_traceback_per_pass_not_one_per_row(caplog):
+    log = []
+    rows = [_row("job"), _row("job"), _row("job")]
+    relay = OutboxRelay(FakeStore({"job": rows}, log).open, {"job": [FakeDispatcher("rabbit", log, fail=True)]})
+
+    with caplog.at_level(logging.WARNING, logger="chassis.outbox"):
+        assert relay.drain("job") == 0
+
+    failures = [r for r in caplog.records if "failed for outbox row" in r.getMessage()]
+    assert len(failures) == 3
+    assert [bool(r.exc_info) for r in failures] == [True, False, False]
+    assert all("rabbit down" in r.getMessage() for r in failures[1:])

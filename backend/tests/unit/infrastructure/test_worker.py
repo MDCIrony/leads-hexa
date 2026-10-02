@@ -65,10 +65,10 @@ class _FlakyAdmin:
         return SimpleNamespace(topics={name: None for name in self.topics})
 
 
-def test_the_job_channel_has_no_dispatcher_so_its_rows_stay_untouched():
+def test_a_channel_without_dispatchers_leaves_its_rows_untouched():
     job = _row("job")
     store = _Store([job])
-    relay = build_relays(store.open, build_dispatchers([_Recorder()]))["job"]
+    relay = build_relays(store.open, build_dispatchers([_Recorder()], []))["job"]
 
     assert relay.drain("job") == 0
 
@@ -78,7 +78,7 @@ def test_the_job_channel_has_no_dispatcher_so_its_rows_stay_untouched():
 def test_the_internal_channel_waits_for_its_dispatcher():
     internal = _row("internal")
     store = _Store([internal])
-    dispatchers = build_dispatchers([_Recorder()])
+    dispatchers = build_dispatchers([_Recorder()], [])
     relay = build_relays(store.open, dispatchers)["internal"]
 
     assert relay.drain("internal") == 0
@@ -128,7 +128,7 @@ def test_each_channel_has_its_own_relay_that_drains_only_that_channel():
     product, internal = _row("product"), _row("internal")
     store = _Store([product, internal])
     product_dispatcher = _Recorder()
-    dispatchers = build_dispatchers([product_dispatcher])
+    dispatchers = build_dispatchers([product_dispatcher], [])
     relays = build_relays(store.open, dispatchers)
 
     assert set(relays) == {"product", "internal", "job"}

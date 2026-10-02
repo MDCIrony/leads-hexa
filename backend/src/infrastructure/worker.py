@@ -79,7 +79,7 @@ def producer_config(bootstrap_servers: str, auto_create_topics: bool = True) -> 
 
 
 def build_dispatchers(
-    product: Sequence[Dispatcher], job: Sequence[Dispatcher] = (),
+    product: Sequence[Dispatcher], job: Sequence[Dispatcher],
 ) -> dict[str, list[Dispatcher]]:
     """Dispatchers by outbox channel.
 
