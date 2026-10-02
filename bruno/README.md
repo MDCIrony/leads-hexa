@@ -61,7 +61,7 @@ bruno.json          Nombre, entorno por defecto, exclusiones
 collection.bru      La puerta de entrada: cómo se parametriza y qué invariantes explican las respuestas
 environments/       local.bru — las cuatro variables de las que cuelga todo lo demás
 fixtures/           El CSV mixto que usa la carga por lotes
-health/ auth/ tenants/ agents/ groups/ sources/ rules/ intake/ leads/ notifications/
+health/ auth/ tenants/ agents/ advisors/ groups/ sources/ rules/ intake/ leads/ notifications/
                     Un request por endpoint, documentado al completo
 flows/              Un flujo por diagrama de secuencia de la documentación
 ```
@@ -87,14 +87,14 @@ pide; las variables quedan cargadas en la sesión y las peticiones ya responden.
 encadenar el flujo y la carpeta **en la misma invocación**:
 
 ```bash
-bru run flows/organization-onboarding agents groups sources tenants --env local -r
+bru run flows/organization-onboarding agents groups advisors sources tenants --env local -r
 bru run flows/lead-processing         leads  intake                 --env local -r
 bru run flows/notifications           notifications                 --env local -r
 ```
 
 | Carpeta | Qué la alimenta | Qué le deja |
 |---|---|---|
-| `tenants`, `agents`, `groups`, `sources` | `flows/organization-onboarding` | `adminSession`, `managerSession`, `tenantId`, `agentId` |
+| `tenants`, `agents`, `groups`, `advisors`, `sources` | `flows/organization-onboarding` | `adminSession`, `managerSession`, `tenantId`, `agentId` |
 | `leads`, `intake` | `flows/lead-processing` | además `leadId`, `jobId`, `recordId` |
 | `notifications` | `flows/notifications` | además `agentSession` y un aviso sin leer |
 | `auth` | `flows/organization-onboarding` | `managerEmail` y `managerSession` |

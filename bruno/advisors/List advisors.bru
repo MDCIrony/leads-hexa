@@ -1,0 +1,92 @@
+meta {
+  name: List advisors
+  type: http
+  seq: 1
+  tags: [
+    reference
+  ]
+}
+
+get {
+  url: {{apiBase}}/advisors
+  body: none
+  auth: none
+}
+
+params:query {
+  ~group_id: {{groupId}}
+  ~is_active: true
+  limit: 100
+  offset: 0
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.total: isNumber
+  res.body.limit: eq 100
+  res.body.offset: eq 0
+  res.body.has_more: isBoolean
+}
+
+docs {
+  # `GET /advisors`
+
+  Lista los asesores de la organización de la sesión con su grupo y su carga, paginados. Exige rol
+  `MANAGER`.
+
+  ## Los parámetros
+
+  | Parámetro | Tipo | Obligatorio | Nota |
+  |---|---|---|---|
+  | `group_id` | uuid | no | Sólo los asesores de ese grupo. Desactivado por defecto en este request |
+  | `is_active` | boolean | no | Sin él se listan activos **y** desactivados — al revés que `GET /agents`, donde el defecto es sólo activos. Desactivado por defecto en este request |
+  | `limit` | number | no | Por defecto `100`, entre `1` y `1000` |
+  | `offset` | number | no | Por defecto `0` |
+
+  ## Qué devuelve
+
+  `200`, envuelto en paginación:
+
+  ```json
+  {
+    "items": [
+      {
+        "agent_id": "…",
+        "name": "Carlos Ruiz",
+        "group_id": null,
+        "is_active": true,
+        "active_load": 0
+      }
+    ],
+    "total": 1,
+    "limit": 100,
+    "offset": 0,
+    "has_more": false
+  }
+  ```
+
+  `agent_id` es el `id` de `GET /agents`: así se cruzan las dos respuestas para mostrar correo y rol
+  junto al grupo. `active_load` es el número de leads abiertos que el asesor lleva ahora mismo.
+
+  ## Qué toca
+
+  Nada. Sólo lee, y sólo dentro de la organización de la sesión.
+
+  ## Qué esperar después
+
+  Un agente recién creado en identity aparece aquí en cuanto lead-core consume su alta, en torno a un
+  segundo. `has_more` dice si queda una página siguiente.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin sesión |
+  | `403 FORBIDDEN` | La sesión no es de `MANAGER` |
+  | `422 VALIDATION_ERROR` | `group_id` no es un uuid, o `limit`/`offset` fuera de rango |
+}

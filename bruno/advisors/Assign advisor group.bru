@@ -1,0 +1,90 @@
+meta {
+  name: Assign advisor group
+  type: http
+  seq: 2
+  tags: [
+    reference
+  ]
+}
+
+patch {
+  url: {{apiBase}}/advisors/:agentId
+  body: json
+  auth: none
+}
+
+params:path {
+  agentId: {{agentId}}
+}
+
+headers {
+  Cookie: leads_session={{managerSession}}
+}
+
+body:json {
+  {
+    "group_id": "{{groupId}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.agent_id: eq {{agentId}}
+  res.body.group_id: eq {{groupId}}
+}
+
+docs {
+  # `PATCH /advisors/{{agentId}}`
+
+  Asigna un asesor a un grupo, o lo saca de él. Exige rol `MANAGER`.
+
+  ## El cuerpo
+
+  | Campo | Tipo | Obligatorio | Nota |
+  |---|---|---|---|
+  | `group_id` | uuid o `null` | sí | `null` quita al asesor de su grupo |
+
+  ```json
+  {
+    "group_id": "9c1f2e…"
+  }
+  ```
+
+  El campo es obligatorio aunque admita `null`: un cuerpo vacío responde `422` en vez de leerse como
+  «quitar el grupo». Cualquier otro campo también responde `422`.
+
+  ## Qué devuelve
+
+  `200` con el asesor ya actualizado, misma forma que un elemento de `GET /advisors`:
+
+  ```json
+  {
+    "agent_id": "…",
+    "name": "Carlos Ruiz",
+    "group_id": "9c1f2e…",
+    "is_active": true,
+    "active_load": 0
+  }
+  ```
+
+  ## Qué toca
+
+  Actualiza el grupo del asesor en lead-core. Identity no se entera: el grupo es un concepto de
+  enrutado. Si el agente se creó hace un instante y su alta todavía no ha llegado por Kafka, se
+  hidrata bajo demanda desde identity antes de asignar.
+
+  ## Qué esperar después
+
+  El asesor entra o sale del reparto automático de ese grupo desde la siguiente asignación; no se
+  reasigna con retroactividad lo que ya tenía. `GET /advisors?group_id={{groupId}}` lo lista.
+
+  ## Errores
+
+  | Código | Cuándo |
+  |---|---|
+  | `401 UNAUTHORIZED` | Sin sesión |
+  | `403 FORBIDDEN` | La sesión no es de `MANAGER` |
+  | `404 AGENT_NOT_FOUND` | El agente no existe, o es de otra organización |
+  | `404 GROUP_NOT_FOUND` | El grupo no existe, o es de otra organización |
+  | `422 VALIDATION_ERROR` | Falta `group_id`, no es un uuid, o llega un campo extra |
+}

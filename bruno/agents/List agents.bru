@@ -14,7 +14,6 @@ get {
 }
 
 params:query {
-  ~group_id: {{groupId}}
   ~is_active: false
   limit: 100
   offset: 0
@@ -36,13 +35,14 @@ assert {
 docs {
   # `GET /agents`
 
-  Lista los agentes de la organización de la sesión, paginados. Exige rol `MANAGER`.
+  Lista los agentes de la organización de la sesión, paginados. Exige rol `MANAGER`. El grupo ya no
+  forma parte de este recurso: para filtrar por grupo, `GET /advisors?group_id=` (ver la carpeta
+  `advisors`).
 
   ## Los parámetros
 
   | Parámetro | Tipo | Obligatorio | Nota |
   |---|---|---|---|
-  | `group_id` | string | no | Filtra por grupo. Desactivado por defecto en este request |
   | `is_active` | boolean | no | Por defecto `true` — sólo activos. `false` lista la papelera de desactivados. Desactivado por defecto en este request |
   | `limit` | number | no | Por defecto `100` |
   | `offset` | number | no | Por defecto `0` |
@@ -58,7 +58,6 @@ docs {
         "id": "…",
         "name": "Carlos Ruiz",
         "email": "carlos@acme.test",
-        "group_id": null,
         "is_active": true,
         "role": "AGENT",
         "tenant_id": "…"

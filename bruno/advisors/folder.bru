@@ -1,0 +1,23 @@
+meta {
+  name: advisors
+  seq: 12
+}
+
+auth {
+  mode: none
+}
+
+docs {
+  La vista de lead-core sobre los asesores: a qué grupo pertenece cada uno, si está activo y cuántos
+  leads abiertos lleva. Complementa a `agents`, que es la identidad (nombre, correo, rol, acceso).
+
+  Los dos endpoints exigen `MANAGER` y operan siempre dentro de la organización de la sesión.
+
+  **El grupo vive aquí, no en `/agents`** (ADR-0036). `POST` y `PATCH /agents` rechazan `group_id` con
+  `422`; el grupo se fija con `PATCH /advisors/{agent_id}` y se lista con `GET /advisors`.
+
+  **Un asesor es una proyección.** Un agente creado en identity llega a lead-core un segundo más
+  tarde, por Kafka. `PATCH /advisors/{agent_id}` lo hidrata bajo demanda si todavía no ha llegado, así
+  que asignar grupo justo después de crear el agente funciona; `GET /advisors` puede tardar ese
+  segundo en listarlo.
+}

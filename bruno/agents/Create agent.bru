@@ -22,8 +22,7 @@ body:json {
     "name": "Carlos Ruiz",
     "email": "carlos-{{runId}}@acme.test",
     "password": "{{password}}",
-    "role": "AGENT",
-    "group_id": null
+    "role": "AGENT"
   }
 }
 
@@ -38,7 +37,6 @@ assert {
   res.body.email: eq carlos-{{runId}}@acme.test
   res.body.role: eq AGENT
   res.body.is_active: eq true
-  res.body.group_id: isNull
   res.body.tenant_id: isString
 }
 
@@ -56,7 +54,6 @@ docs {
   | `email` | string | sí | Validado en el esquema: necesita `@` y un punto en el dominio |
   | `password` | string | sí | |
   | `role` | string | no | `ADMIN`, `MANAGER` o `AGENT`; por defecto `AGENT` — pedir `ADMIN` fuera del arranque responde `403` |
-  | `group_id` | string o `null` | no | |
   | `is_active` | boolean | no | Por defecto `true` |
 
   ```json
@@ -64,8 +61,7 @@ docs {
     "name": "Carlos Ruiz",
     "email": "carlos-7f3a1c@acme.test",
     "password": "Secret123",
-    "role": "AGENT",
-    "group_id": null
+    "role": "AGENT"
   }
   ```
 
@@ -78,7 +74,6 @@ docs {
     "id": "…",
     "name": "Carlos Ruiz",
     "email": "carlos-7f3a1c@acme.test",
-    "group_id": null,
     "is_active": true,
     "role": "AGENT",
     "tenant_id": "…"
@@ -99,7 +94,8 @@ docs {
   ## Qué esperar después
 
   El agente puede iniciar sesión de inmediato con `POST /auth/login`. `GET /agents/{{agentId}}`
-  confirma el alta, y si tiene `group_id`, entra en el reparto automático de ese grupo.
+  confirma el alta. El grupo no se fija aquí: se asigna con `PATCH /advisors/{{agentId}}` (ver la carpeta
+  `advisors`) una vez que lead-core ha recibido al asesor.
 
   ## Errores
 
@@ -107,6 +103,6 @@ docs {
   |---|---|
   | `401 UNAUTHORIZED` | Fuera del arranque, sin sesión |
   | `403 FORBIDDEN` | La sesión no es de `MANAGER`, o el cuerpo pide `role: ADMIN` |
-  | `422 VALIDATION_ERROR` | Email inválido o falta algún campo obligatorio |
+  | `422 VALIDATION_ERROR` | Email inválido, falta algún campo obligatorio o llega un campo desconocido como `group_id` |
   | `500 INTERNAL_ERROR` | El correo ya existe en la organización. Hay un índice único, pero no se captura antes de insertar: llega como error interno, no como conflicto |
 }

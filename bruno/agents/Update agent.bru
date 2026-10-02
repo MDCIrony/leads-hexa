@@ -23,8 +23,7 @@ headers {
 
 body:json {
   {
-    "name": "Carlos Ruiz Actualizado",
-    "group_id": null
+    "name": "Carlos Ruiz Actualizado"
   }
 }
 
@@ -32,7 +31,6 @@ assert {
   res.status: eq 200
   res.body.id: eq {{agentId}}
   res.body.name: eq Carlos Ruiz Actualizado
-  res.body.group_id: isNull
 }
 
 docs {
@@ -42,26 +40,24 @@ docs {
 
   ## El cuerpo
 
-  `name`, `group_id` e `is_active` son editables — el correo, el rol y la contraseña no se pueden
-  cambiar por este endpoint. Los tres campos son opcionales; se actualiza sólo lo que llega.
+  `name` e `is_active` son editables — el correo, el rol y la contraseña no se pueden
+  cambiar por este endpoint. Los dos campos son opcionales; se actualiza sólo lo que llega.
 
   | Campo | Tipo | Nota |
   |---|---|---|
   | `name` | string | |
-  | `group_id` | string o `null` | `null` quita al agente de su grupo |
   | `is_active` | boolean | `false` desactiva (mismo efecto que `DELETE`), `true` **reactiva** |
 
   ```json
   {
-    "name": "Carlos Ruiz Actualizado",
-    "group_id": null
+    "name": "Carlos Ruiz Actualizado"
   }
   ```
 
   Reactivar un agente que `DELETE /agents/{{agentId}}` había desactivado es este mismo endpoint con
   `{"is_active": true}` — no hay un endpoint aparte para eso. Devuelve el acceso en el acto: la
   siguiente petición autenticada de ese agente vuelve a resolverse contra la base de datos, que ya lo
-  ve activo. `group_id` y las asignaciones que tenía no se tocan; sólo `is_active` cambia.
+  ve activo. Su grupo y las asignaciones que tenía no se tocan; sólo `is_active` cambia.
 
   ## Qué devuelve
 
@@ -69,8 +65,8 @@ docs {
 
   ## Qué toca
 
-  Actualiza la fila del agente. Si cambia `group_id`, el agente entra o sale del reparto automático
-  de ese grupo desde la siguiente asignación — no reasigna con retroactividad lo que ya tenía.
+  Actualiza la fila del agente. El grupo no se edita aquí: un `group_id` en el cuerpo responde `422`
+  (`extra="forbid"`, ADR-0036). Se cambia con `PATCH /advisors/{{agentId}}`.
 
   ## Qué esperar después
 
@@ -83,6 +79,5 @@ docs {
   | `401 UNAUTHORIZED` | Sin sesión |
   | `403 FORBIDDEN` | La sesión no es de `MANAGER` |
   | `404 AGENT_NOT_FOUND` | El agente del path no existe, o es de otra organización |
-  | `404 GROUP_NOT_FOUND` | El `group_id` del cuerpo no existe, o es de otra organización |
-  | `422 VALIDATION_ERROR` | Tipo de dato incorrecto en algún campo |
+  | `422 VALIDATION_ERROR` | Tipo de dato incorrecto en algún campo, o un campo desconocido como `group_id` |
 }
