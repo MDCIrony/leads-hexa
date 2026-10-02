@@ -4,8 +4,8 @@ title: Lead Router · Migración a microservicios
 info: |
   Cómo se separó el monolito modular de Lead Router en servicios por contexto:
   arquitectura objetivo, separación de datos, gateway y phantom token,
-  comunicación entre servicios y plan por fases. Versión 1: F0–F3 implantadas;
-  F4 y F5 se completan al cerrarlas.
+  comunicación entre servicios y plan por fases. Versión 2: F0–F4 implantadas;
+  F5 se completa al cerrarla.
 layout: portada
 highlighter: shiki
 lineNumbers: false
@@ -25,7 +25,7 @@ transition: none
 
 Separación por contexto · una base por servicio · gateway y phantom token · eventos internos
 
-Versión 1 · F0–F3 implantadas, F4–F5 en curso
+Versión 2 · F0–F4 implantadas, F5 en curso
 
 ---
 layout: blocked
@@ -140,8 +140,8 @@ flowchart LR
     F4 --> F5["F5<br/>lead-core<br/>residual"]
     classDef done fill:#e6f2ea,stroke:#3c7d52
     classDef todo fill:#f4f4f4,stroke:#999,stroke-dasharray: 4 3
-    class F0,F1,F2,F3 done
-    class F4,F5 todo
+    class F0,F1,F2,F3,F4 done
+    class F5 todo
 ```
 
 | Fase | Qué cambia | Qué demuestra |
@@ -150,6 +150,7 @@ flowchart LR
 | **F1** | Outbox con canales `product`, `internal`, `job`; relays en `backend-worker` | Una caída de broker retrasa el trabajo, no lo pierde |
 | **F2** | Primer servicio extraído, sobre un esqueleto que copian los demás | La plantilla funciona antes de repetirla tres veces |
 | **F3** | Identity sale; lead-core pasa a una proyección `advisors` | Autenticación entera fuera del monolito, sin cerrar sesiones |
+| **F4** | Intake sale; la decisión queda en lead-core detrás de `admissions` | La idempotencia sustituye a la transacción única sin duplicar leads |
 
 ---
 layout: blocked
@@ -541,7 +542,8 @@ flowchart LR
 | `AgentState`, `TenantState` | identity | lead-core, notifications, intake |
 | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned` | lead-core | notifications |
 | `IntakeRejected` | intake | notifications |
-| `admissions`, mensaje `intake.jobs` | *se añaden en F4* | |
+| `lead-core-internal.v1.yaml` (`admissions`, lookup) | lead-core | intake |
+| `intake/job-message.v1` | intake (relay) | intake-worker |
 
 Compatible = campo opcional nuevo en la misma versión. Incompatible = fichero `v2` y convivencia hasta que no quedan consumidores.
 
@@ -561,73 +563,95 @@ idea: "Es lo que permite aceptar trabajo sin releer el diff entero: un agente af
 | `./scripts/verify-structure.sh` | Regla de estructura (ADR-0037) en todas las raíces Python |
 | `bru run flows` | El contrato como lo ve un cliente, con una sesión por rol |
 
-| Al cerrar F3 | |
-|---|---|
-| `verify-e2e.sh` | **327 checks** en verde, en frío (`--reset`) y en caliente |
-| Suites | lead-core 620 · identity 417 · notifications 93 · chassis 218 · frontend 175 |
-| Bruno | 98/98 peticiones |
+| Al cerrar | F3 | F4 |
+|---|---|---|
+| `verify-e2e.sh`, en frío (`--reset`) y en caliente | 327 checks | **369 checks** |
+| Suites | lead-core 620 · identity 417 · notifications 93 · chassis 218 · frontend 175 | lead-core 475 · intake 421 · identity 417 · notifications 93 · chassis 231 · frontend 176 |
+| Bruno | 98/98 | 99/99 |
 
 ---
 layout: blocked
 bloque: "12 · Estado"
-idea: "Tres de los cuatro contextos ya no comparten base. Lo que queda en el monolito es intake y lead-core."
+idea: "Los cuatro contextos tienen ya su base. Lo que queda en el monolito es lead-core, que pasa a ser el servicio que siempre fue."
 ---
 
-# Estado tras F3
+# Estado tras F4
 
-```mermaid {scale: 0.56}
+```mermaid {scale: 0.52}
 flowchart LR
     GW["gateway"] --> ID["identity<br/>+ identity-worker"]
     GW --> NO["notifications<br/>+ notifications-worker"]
-    GW --> BE["backend<br/><i>lead-core + intake</i><br/>+ backend-worker · intake-worker"]
+    GW --> IN["intake<br/>+ intake-worker"]
+    GW --> BE["backend<br/><i>lead-core</i><br/>+ backend-worker"]
     ID --> IDB[("identity_db")]
     NO --> NDB[("notifications_db")]
+    IN --> INB[("intake_db")]
     BE --> LDB[("leads_db")]
-    ID -->|"internal.identity.*"| K["Kafka"]
-    BE -->|"internal.lead-core.events<br/>internal.intake.events"| K
-    K --> NO & BE
+    IN -->|"HTTP · admissions"| BE
+    IN -->|"intake.jobs"| R["RabbitMQ"]
+    ID & BE & IN -->|"internal.*"| K["Kafka"]
+    K --> NO & BE & IN
     BE -.->|"hidratación"| ID
     classDef extracted fill:#e6f2ea,stroke:#3c7d52
-    class ID,NO extracted
+    class ID,NO,IN extracted
 ```
 
-| Hecho en F3 | |
+| Hecho en F3–F4 | |
 |---|---|
-| Fuera del monolito | Autenticación, MFA, OAuth, tenants, agentes, credenciales de integración |
-| Sólo identity tiene | Clave de firma, `MFA_ENCRYPTION_KEY`, secretos OAuth, acceso a `identity_db` |
-| Cambio de contrato 1 | El grupo del asesor pasa de `/agents` a `/advisors` (ADR-0036) |
+| Fuera del monolito | Autenticación, organizaciones y agentes (F3); fuentes, jobs, registros, ficheros y cola (F4) |
+| Sólo intake tiene | Acceso a `intake_db`, la cola `intake.jobs` y el parser (`pandas`, `openpyxl` salen de lead-core) |
+| Cambios de contrato | 1: grupo del asesor en `/advisors` (F3). 2: `pending_intake` pasa a `GET /intake/stats` (F4) |
 
 ---
 layout: blocked
-bloque: "13 · Pendiente"
-idea: "Se completa al cerrar F4 y F5."
+bloque: "13 · F4"
+idea: "Recepción y decisión se separan. Lo que antes garantizaba una transacción lo garantiza ahora una clave única."
 ---
 
 # F4 · Intake
 
-```mermaid {scale: 0.48}
+```mermaid {scale: 0.46}
 sequenceDiagram
     participant W as intake-worker
+    participant IDB as intake_db
     participant LC as lead-core
-    W->>LC: POST /internal/v1/admissions · intake_record_id
+    W->>IDB: relee el registro (abierto)
+    W->>LC: POST /internal/v1/admissions · sin transacción abierta
     LC->>LC: UNIQUE (tenant_id, intake_record_id)
-    LC-->>W: lead creado o el ya existente
+    LC-->>W: ADMITTED (nuevo o el existente) · REJECTED
+    W->>IDB: reclama, PROMOTED o REJECTED + outbox
 ```
 
-| Cambio | Por qué |
+| Decisión | Por qué |
 |---|---|
-| `leads.intake_record_id` con `UNIQUE (tenant_id, intake_record_id)` | La transacción única deja de existir; la idempotencia la sustituye |
-| `services/intake/` con su worker, cola y parser | Recepción y decisión se despliegan por separado |
-| `GET /intake/stats`; `/leads/stats` pierde `pending_intake` | Cambio de contrato 2 (ADR-0036) |
-
-<div class="destacado">
-<span class="destacado-tag">Por completar</span>
-Resultado del corte, mediciones del job de 1.000 registros con admisión por HTTP y lecciones de la fase.
-</div>
+| Ninguna transacción abierta durante la llamada | Una conexión no espera a la red; la carrera la resuelve la restricción única |
+| `REJECTED` cubre todo fallo determinista (campo obligatorio, importe fuera de rango) | Un 4xx se reintentaría hasta la DLQ por un dato que no va a cambiar |
+| Un job interrumpido espera 10 s antes del `nack` y se corta en el primer fallo de lead-core | Un reinicio de segundos no agota las tres entregas |
 
 ---
 layout: blocked
-bloque: "13 · Pendiente"
+bloque: "13 · F4"
+idea: "La admisión por HTTP no encarece el job. El primer número, cuatro veces peor, señalaba un artefacto del modo desarrollo."
+---
+
+# F4 · Resultado del corte
+
+| Copiado a `intake_db` (recuentos y md5 iguales) | |
+|---|---|
+| `lead_sources` · `intake_jobs` · `intake_records` | 76 · 117 · 139 |
+| `intake_errors` · `intake_files` · `provisioned_tenants` | 36 · 22 · 38 |
+
+| Job de 1.000 registros, de `202` a `COMPLETED` | |
+|---|---|
+| F0, decisión en proceso | 14,5 s |
+| F4, primera medida | 59,8 s · ≈ 42 ms por llamada |
+| F4, tras corregir el arranque en desarrollo | 12,9 s y 11,9 s |
+
+`uvicorn --reload` entrega el socket al proceso hijo por descriptor y asyncio deja `TCP_NODELAY` desactivado: cada respuesta en una conexión reutilizada esperaba el ACK retardado. Las APIs arrancan ahora con `watchfiles`, como los workers. En producción no hay recargador.
+
+---
+layout: blocked
+bloque: "14 · Pendiente"
 idea: "Se completa al cerrar F5."
 ---
 
@@ -646,7 +670,7 @@ Arquitectura final desplegada, recuento de procesos y bases, y comparación de m
 
 ---
 layout: blocked
-bloque: "14 · Costes y riesgos"
+bloque: "15 · Costes y riesgos"
 idea: "Lo que el plan introduce también se escribe, con su mitigación."
 ---
 
@@ -664,7 +688,7 @@ idea: "Lo que el plan introduce también se escribe, con su mitigación."
 
 ---
 layout: blocked
-bloque: "15 · Cierre"
+bloque: "16 · Cierre"
 idea: "Se movió código que ya tenía puertos, se cambiaron adaptadores y no se reescribió dominio."
 ---
 
@@ -678,4 +702,4 @@ idea: "Se movió código que ya tenía puertos, se cambiaron adaptadores y no se
 | **Datos de otros** | Proyecciones locales con upsert por `version` e hidratación bajo demanda |
 | **Construcción** | Esqueleto idéntico por servicio, `chassis` técnico, contratos probados en ambos lados |
 | **Migración** | Fases secuenciales con corte verificado; construcción en paralelo contra contratos congelados |
-| **Pendiente** | F4 (intake) y F5 (lead-core residual) |
+| **Pendiente** | F5 (lead-core residual) |
