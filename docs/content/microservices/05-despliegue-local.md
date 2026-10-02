@@ -127,7 +127,8 @@ Las migraciones siguen siendo de cada servicio y se aplican al arrancar su proce
 ## Recarga en caliente
 
 Igual que hoy: `src/` y `migrations/` del servicio, más `libs/chassis/src`, montados en sólo lectura.
-`api` corre con `uvicorn --reload`; `worker` con `watchfiles`. Un cambio de código no necesita
+`api` y `worker` se reinician con `watchfiles` (no con `uvicorn --reload`, que deja las conexiones sin
+`TCP_NODELAY` y añadía ≈ 40 ms a cada llamada entre servicios; ver [Mediciones](07-evoluciones-y-riesgos.md#mediciones)). Un cambio de código no necesita
 `--build` ni `restart`; sólo se reconstruye si cambian `pyproject.toml`, `uv.lock` o un `Dockerfile`.
 
 ## Configuración por servicio

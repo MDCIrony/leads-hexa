@@ -31,7 +31,7 @@ lectura en los contenedores `backend` y `backend-test`, y lo mismo vale para `se
 `services/identity`, `services/intake` y `libs/chassis/src` en sus contenedores (`notifications`,
 `notifications-worker`, `notifications-test`, `identity`, `identity-worker`, `identity-test`, `intake`,
 `intake-worker`, `intake-test`; ver `docker-compose.yml`). La API además
-corre con recarga en caliente (`uvicorn --reload --reload-dir /app/src`, en `backend/Dockerfile`),
+corre con recarga en caliente (`watchfiles` reinicia Uvicorn al cambiar `/app/src`, en `backend/Dockerfile`),
 así que un cambio guardado se refleja sin reiniciar nada.
 
 Sólo hace falta reconstruir la imagen cuando cambia algo que se instala en tiempo de build:

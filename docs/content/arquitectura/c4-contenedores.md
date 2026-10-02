@@ -107,8 +107,8 @@ leerse incluso cuando el producto no arranca, que es precisamente cuando más se
 `backend`, `identity`, `intake`, `notifications` y `docs` montan su código fuente como volumen de sólo lectura
 (`./backend/src`, `./backend/migrations`, `./services/<svc>/src`, `./services/<svc>/migrations`,
 `./docs/content`) en vez de copiarlo en la imagen. Un cambio en un
-fichero se sirve sin `--build` ni `restart`: Uvicorn recarga con `--reload`, MkDocs sirve en
-caliente, y `backend-worker`, `identity-worker`, `notifications-worker` e `intake-worker` se reinician solos con
+fichero se sirve sin `--build` ni `restart`: las APIs y MkDocs sirven en
+caliente (las APIs reinician Uvicorn con `watchfiles`), y `backend-worker`, `identity-worker`, `notifications-worker` e `intake-worker` se reinician solos con
 `watchfiles` al cambiar su `src` o `libs/chassis/src`. Sólo `pgdata`, el volumen de `db`, persiste datos entre arranques; los demás contenedores
 son efímeros por diseño.
 
