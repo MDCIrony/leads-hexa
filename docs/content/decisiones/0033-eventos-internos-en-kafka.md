@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — se implementa en F1 |
+| **Estado** | Aceptada — implantada en F1 |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Backend · Mensajería |
 

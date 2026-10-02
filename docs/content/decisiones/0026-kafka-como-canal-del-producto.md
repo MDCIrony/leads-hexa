@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada |
+| **Estado** | Aceptada. **Nota F1:** `OutboundDispatcherPort` es hoy el protocolo `Dispatcher` de `chassis.outbox`, y el relay que lo usa corre en `backend-worker`. El contrato de `leads.{tenant_id}` no cambia |
 | **Fecha** | 2026-08-24 |
 | **Ámbito** | Backend · Dominio · Infraestructura |
 

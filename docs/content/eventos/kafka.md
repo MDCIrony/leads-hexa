@@ -120,10 +120,81 @@ cuenta, y si necesitara una librería nuestra sería señal de que el contrato n
 
 ## El backend arranca sin Kafka
 
-El servicio `kafka` no lleva `depends_on` desde `backend`. Si el bróker no responde, el relay falla
-al entregar, lo registra y reintenta en el ciclo siguiente; la API sigue aceptando y guardando
-leads. Es exactamente el comportamiento que el outbox existe para dar, y está verificado: con Kafka
-apagado, `/health` responde `200` y los leads se guardan.
+El servicio `kafka` no lleva `depends_on` desde `backend` ni desde `backend-worker`. Si el bróker no
+responde, la API sigue aceptando y guardando leads: sólo escribe en el outbox. El relay del canal
+`product`, que vive en `backend-worker`, falla al entregar, lo registra y reintenta en el ciclo
+siguiente; lo que no salió se queda en el outbox. Es exactamente el comportamiento que el outbox
+existe para dar, y está verificado: con Kafka apagado, `/health` responde `200` y los leads se
+guardan.
+
+## Los topics internos
+
+Además de `leads.{tenant_id}`, el sistema usa Kafka entre sus propios procesos
+([ADR-0033](../decisiones/0033-eventos-internos-en-kafka.md)). Son topics `internal.*`, separados del
+canal del cliente: un contrato con terceros y uno interno evolucionan a ritmos distintos, y el
+primero no debe exponer datos internos a la organización.
+
+| Topic | Qué lleva | Configuración | Quién lo lee |
+|---|---|---|---|
+| `internal.lead-core.events` | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned` | 3 particiones, `delete`, 7 días | Grupo `notifications.lead-events` |
+| `internal.intake.events` | `IntakeRejected` | 3 particiones, `delete`, 7 días | Grupo `notifications.intake-events` |
+| `internal.identity.agents` | `AgentState`: el estado completo de cada agente | 3 particiones, **`compact`** | Nadie todavía |
+| `internal.identity.tenants` | `TenantState`: el estado completo de cada organización | 3 particiones, **`compact`** | Nadie todavía |
+| `internal.dlq.<grupo>` | Lo que un grupo no pudo procesar | 1 partición, `delete`, 7 días | Un humano |
+
+Los hechos se retienen siete días; el estado se **compacta**: de cada clave sólo importa el último
+mensaje, y una copia derivada se reconstruye leyendo el topic desde el principio. Cada mensaje de
+estado lleva la `version` de su fila (la sube la base en cada escritura), para que quien lo
+proyecte descarte lo que ya tiene.
+
+**Se crean al arrancar `backend-worker`**, con `ensure_topics`, idempotente y con reintentos mientras
+Kafka no responda. El productor interno lleva `allow.auto.create.topics=false`: un topic que se
+perdiera después debe fallar a la vista, no reaparecer sin compactación por la creación automática del
+bróker. Mientras los topics no existen, el canal `internal` no entrega y sus filas esperan en el
+outbox.
+
+Los productores usan `acks=all`, `enable.idempotence=true` y `message.timeout.ms=9000`, por debajo
+de los 10 s de `flush`: un mensaje que el productor aún reintenta no puede llegar después de que su
+fila se haya marcado como fallida.
+
+### El sobre
+
+Los topics internos llevan un sobre común; `leads.{tenant_id}` conserva su forma, porque es un
+contrato con terceros.
+
+```json
+{
+  "event_id": "7a4dfb8d-2b5d-46d9-a5ea-9e83a5c0e3ad",
+  "event_type": "LeadAssigned",
+  "schema_version": 1,
+  "occurred_at": "2026-10-01T10:00:00+00:00",
+  "producer": "lead-core",
+  "tenant_id": "04047f84-...",
+  "aggregate_id": "e40fa333-...",
+  "correlation_id": "f0d7fdf8-...",
+  "payload": { "lead_id": "e40fa333-...", "agent_id": "9b1c..." }
+}
+```
+
+La clave del mensaje es el `aggregate_id` (el lead, el agente o la organización), y `event_type` y
+`correlation_id` viajan también como cabeceras. `producer` es `lead-core` en todos los eventos:
+mientras sólo el monolito escribe, publica en nombre de todos los contextos.
+
+### El consumidor de notificaciones
+
+`NotificationConsumer` corre en `backend-worker`, un hilo por grupo, sobre `chassis.consumer`:
+
+- `processed_events (consumer, event_id)` se escribe **en la misma transacción** que las
+  notificaciones: un duplicado encuentra la marca y no hace nada, y un fallo deshace ambas cosas.
+- El offset se confirma **después** del commit en base.
+- Tres intentos, con espera creciente; al tercer fallo el mensaje se aparca en
+  `internal.dlq.<grupo>` con cabeceras `error`, `attempts` y `original_topic`/`partition`/`offset`, y
+  el offset avanza. Un mensaje que no es un sobre válido va directo a la DLQ, sin reintentos.
+- Si la DLQ no se puede escribir, el consumidor retrocede al offset y vuelve a intentarlo; una
+  partición cuyo retroceso falla queda bloqueada hasta que ese mensaje se resuelve, para no confirmar
+  por encima de él.
+- Si un consumidor muere por un fallo del cliente de Kafka, el hilo construye otro tras una espera de
+  1 s que se duplica hasta 30 s.
 
 ## Límites de hoy
 
@@ -131,7 +202,7 @@ apagado, `/health` responde `200` y los leads se guardan.
 |---|---|
 | **Retención de 168 h** (el valor por defecto, no elegido) | Reobtener funciona siete días |
 | **`num.partitions=1`** por defecto | La clave de partición está bien elegida, pero el reparto que justifica todavía no existe |
-| **`AUTO_CREATE_TOPICS_ENABLE=true`** | Un `tenant_id` mal escrito crea un topic fantasma en silencio |
+| **`AUTO_CREATE_TOPICS_ENABLE=true`** | Un `tenant_id` mal escrito crea un topic fantasma en silencio. Los `internal.*` quedan fuera: se crean a propósito y su productor no usa la creación automática |
 
 Los tres están asumidos como decisiones de MVP con fecha de caducidad, no como descuidos. El cuarto
 límite que estaba aquí —el listener del host sin autenticación— ya se cerró:

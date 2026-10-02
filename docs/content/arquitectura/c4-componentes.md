@@ -103,8 +103,10 @@ Las entidades viven en `domain/entities/`: `tenant.py`, `agent.py`, `sales_group
 `lead_source.py`, `lead.py`, `rule.py` (`ScoringRule` y `AssignmentRule`),
 `disqualification_rule.py`, `intake_record.py` (`IntakeRecord` e `IntakeError`), `intake_job.py`,
 `notification.py` y `webhook.py` (`WebhookConfig`). `domain/policies/authorization_policy.py`
-concentra `AuthorizationPolicy`. `domain/events/` declara los eventos que las entidades emiten:
-`lead_events.py` y `notification_events.py`.
+concentra `AuthorizationPolicy`. `domain/events/` declara los eventos que los casos de uso registran en el outbox:
+`lead_events.py` (los dos del canal de salida), `notification_events.py` e `intake_events.py` (los
+hechos internos de leads e ingesta), `identity_events.py` (`AgentState` y `TenantState`) y las bases
+`domain_event.py` e `internal_event.py`.
 
 ## Puertos y adaptadores de salida
 
@@ -123,12 +125,14 @@ composition root.
 | `IntakeRecordRepositoryPort` | `RawSqlIntakeRecordRepository` | `persistence/raw_sql_intake_record_repository.py` |
 | `IntakeJobRepositoryPort` | `RawSqlIntakeJobRepository` | `persistence/raw_sql_intake_job_repository.py` |
 | `NotificationRepositoryPort` | `RawSqlNotificationRepository` | `persistence/raw_sql_notification_repository.py` |
+| `OutboxRepositoryPort` | `RawSqlOutboxRepository` | `persistence/raw_sql_outbox_repository.py` |
+| `ProcessedEventRepositoryPort` | `RawSqlProcessedEventRepository` | `persistence/raw_sql_processed_event_repository.py` |
+| `IntakeFileRepositoryPort` | `RawSqlIntakeFileRepository` | `persistence/raw_sql_intake_file_repository.py` |
 | `WebhookRepositoryPort` | `RawSqlWebhookRepository` | `persistence/raw_sql_webhook_repository.py` |
 | `UnitOfWorkPort` | `PostgresUnitOfWork` | `persistence/postgres_unit_of_work.py` |
 | `PasswordHasherPort` | `BcryptPasswordHasher` | `security/bcrypt_password_hasher.py` |
 | `ClockPort` | `SystemClock` | `system_clock.py` |
 | `IdGeneratorPort` | `UuidGenerator` | `uuid_generator.py` |
-| `DomainEventPublisherPort` | `InMemoryEventPublisher` | `events/in_memory_event_publisher.py` |
 | `WebhookDispatcherPort` | `HttpxWebhookDispatcher` | `http/httpx_webhook_dispatcher.py` |
 | `FileParserPort` | `PandasFileParser` | `parsers/pandas_file_parser.py` |
 
@@ -137,11 +141,18 @@ sustituirlas: `persistence/connection.py` (`RawSqlDatabase`, el pool de conexion
 `persistence/migration_runner.py` (`MigrationRunner`, invocado una vez al arrancar desde
 `infrastructure/main.py`).
 
+La entrega no pasa por un puerto de la aplicación: los casos de uso sólo escriben en
+`OutboxRepositoryPort`. Quien lee el outbox y entrega es `backend-worker` (ver
+[C4 · Contenedores](c4-contenedores.md)), con los despachadores de `chassis.outbox` y
+`chassis.rabbit` y los de `events/*_outbound_dispatcher.py`; el consumidor de notificaciones es
+`infrastructure/adapters/input/events/notification_consumer.py`, un adaptador de entrada como el
+router HTTP.
+
 ## El composition root
 
 `infrastructure/di/container.py` define `Container`: construye las implementaciones sin estado
 propio como instancias únicas para todo el proceso (`database`, `password_hasher`,
-`token_verifier`, `clock`, `id_generator`, `file_parser`, `event_publisher`, `assignment_engine`),
+`token_verifier`, `clock`, `id_generator`, `file_parser`, `assignment_engine`),
 y expone `unit_of_work()` como una fábrica — cada petición recibe la suya, porque una unidad de
 trabajo abre su propia transacción y no puede compartirse entre peticiones concurrentes. Es aquí
 donde se resolvió el defecto original del round-robin: el cursor ya no vive en una instancia que

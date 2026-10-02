@@ -40,24 +40,29 @@ consumió no puede volver a por él. Eso hace imposible la reobtención, que es 
 cliente pide. Y al revés: un log con retención puede emular una cola de trabajo, pero el reparto
 entre trabajadores disponibles pasa a depender de las particiones en vez de resolverse solo.
 
-## Las tres piezas
+## Las piezas
 
 ```mermaid
 flowchart LR
-    API["API"] -->|misma transacción| DB[("PostgreSQL<br/>leads + outbox")]
-    API -->|encola el trabajo| RMQ["RabbitMQ<br/>intake.jobs"]
-    RMQ --> W["Worker"]
-    W -->|misma transacción| DB
-    DB -.->|lee lo no publicado| Relay["Relay del outbox"]
-    Relay --> K["Kafka<br/>leads.{organización}"]
-    Relay --> WH["Webhooks"]
+    API["API"] -->|misma transacción| DB[("PostgreSQL<br/>datos + outbox")]
+    DB -.->|"lee lo no publicado,<br/>un relay por canal"| BW["backend-worker"]
+    BW -->|"product"| K["Kafka<br/>leads.{organización}"]
+    BW -->|"product"| WH["Webhooks"]
+    BW -->|"internal"| KI["Kafka<br/>internal.*"]
+    BW -->|"job"| RMQ["RabbitMQ<br/>intake.jobs"]
     K --> CRM["El CRM del cliente"]
+    KI --> BW
+    RMQ --> W["intake-worker"]
+    W -->|misma transacción| DB
 ```
 
-1. **[El outbox](outbox.md)** — el evento se registra en la misma transacción que el lead. Es lo que
-   impide que exista un lead del que el cliente nunca se entere.
-2. **[Kafka](kafka.md)** — un topic por organización, con retención. Es el producto: lo que el
-   cliente compra y puede volver a leer.
+1. **[El outbox](outbox.md)** — el evento, el aviso interno o la orden de procesar un trabajo se
+   registran en la misma transacción que el dato que los origina. Es lo que impide que exista un
+   lead del que el cliente nunca se entere, o un `202` cuyo trabajo nadie ejecute. La API sólo
+   escribe: entrega `backend-worker`, con un relay por canal (`product`, `internal`, `job`).
+2. **[Kafka](kafka.md)** — el canal del producto, un topic por organización con retención, que es lo
+   que el cliente compra y puede volver a leer; y los topics `internal.*`, con los hechos y el estado
+   que se mueven entre procesos de este sistema (hoy, las notificaciones).
 3. **[RabbitMQ](rabbitmq.md)** — la cola del trabajo pesado y el proceso que lo ejecuta. Es lo que
    permite que procesar un fichero grande deje de morir con el contenedor de la API.
 
@@ -66,8 +71,7 @@ levanta, qué mirar cuando algo no llega, y qué límites tiene esto todavía.
 
 ## Las decisiones que lo fijan
 
-Cinco ADR, tres de ellos sustituyendo a decisiones anteriores que el cambio de alcance dejó
-obsoletas:
+Siete ADR, cuatro de ellos sustituyendo, del todo o en parte, a decisiones anteriores:
 
 | ADR | Qué decide | Sustituye a |
 |---|---|---|
@@ -76,3 +80,5 @@ obsoletas:
 | [0025](../decisiones/0025-outbox-transaccional.md) | Cómo se garantiza que nada se pierde | — |
 | [0026](../decisiones/0026-kafka-como-canal-del-producto.md) | Topics, claves y contrato de Kafka | — |
 | [0027](../decisiones/0027-cola-para-el-trabajo-de-fondo.md) | La cola y el trabajador aparte | [0019](../decisiones/0019-trabajo-de-fondo-en-proceso.md) |
+| [0033](../decisiones/0033-eventos-internos-en-kafka.md) | Eventos internos en Kafka, outbox por canal y estado compactado | — |
+| [0034](../decisiones/0034-encolado-por-outbox-y-fichero-durable.md) | Encolado por outbox y fichero guardado en base | El *fallback* en proceso de [0027](../decisiones/0027-cola-para-el-trabajo-de-fondo.md) |

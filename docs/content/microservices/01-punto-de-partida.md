@@ -2,35 +2,38 @@
 
 Esta página fija lo que existe antes del desacople, verificado contra el código, y enumera los
 acoplamientos que cada fase tiene que cortar. Es la lista de trabajo: si un acoplamiento no aparece
-aquí, el plan no lo resuelve.
+aquí, el plan no lo resuelve. Las tablas reflejan el estado actual, con F0 y F1 ya implantadas; lo
+que una fase cortó lo dice su fila.
 
 ## Lo que corre hoy
 
-El gateway (F0) ya está en su sitio; el resto de la tabla es el punto de partida que las fases F1 a F5
-van cortando. `backend` no publica puerto en el host.
+El gateway (F0) y la durabilidad (F1) ya están en su sitio; el resto de la tabla es el punto de
+partida que las fases F2 a F5 van cortando. `backend` no publica puerto en el host.
 
 | Contenedor | Qué hace | Comparte |
 |---|---|---|
-| `backend` | API completa, migraciones, casos de uso y **relay del outbox en un hilo** (`OutboxRelayThread`) | Imagen, código y base con `intake-worker` |
-| `intake-worker` | Consume `intake.jobs` y ejecuta `ProcessIntakeJobUseCase` | Reutiliza el cableado de `dependencies.py` |
+| `backend` | API completa, migraciones y casos de uso. Sólo **escribe** en el outbox: no entrega nada | Imagen, código y base con los workers |
+| `backend-worker` | Un relay del outbox por canal (`product`, `internal`, `job`) y los consumidores de notificaciones (`worker.py`) | Imagen, código y base con `backend` |
+| `intake-worker` | Consume `intake.jobs` y ejecuta el procesamiento del trabajo | Reutiliza el cableado de `dependencies.py` |
 | `db` | Un único `leads_db` con las tablas de todos los contextos | — |
 | `rabbitmq` | `intake.jobs` (cuórum, `x-delivery-limit: 3`) y `intake.jobs.dlq` | — |
-| `kafka` | `leads.{tenant_id}`, ACL `LITERAL` por organización (ADR-0028) | — |
+| `kafka` | `leads.{tenant_id}`, ACL `LITERAL` por organización (ADR-0028), y los topics `internal.*` | — |
 | `gateway` | nginx: única entrada de la API en `:8001`; autentica con *phantom token* ([03](03-gateway-y-autenticacion.md)) | — |
 | `frontend` | SPA + proxy `/api/v1/` → `gateway:8080` | — |
 
 ```mermaid
 flowchart LR
     FE["frontend nginx"] --> GW["gateway nginx"]
-    GW --> API["backend<br/>API + relay"]
-    API --> DB[("leads_db<br/>todas las tablas")]
-    API -->|"enqueue o fallback en proceso"| R["RabbitMQ"]
+    GW --> API["backend<br/>API"]
+    API --> DB[("leads_db<br/>todas las tablas<br/>+ outbox por canal")]
+    DB -->|"relay por canal"| BW["backend-worker"]
+    BW -->|"job"| R["RabbitMQ"]
     R --> W["intake-worker<br/>mismo código"]
     W --> DB
-    API -->|"relay"| K["Kafka leads.{tenant_id}"]
-    API -->|"relay"| WH["webhooks"]
-    API -. "InMemoryEventPublisher" .-> N["NotificationHandler"]
-    W -. "InMemoryEventPublisher" .-> N
+    BW -->|"product"| K["Kafka leads.{tenant_id}"]
+    BW -->|"product"| WH["webhooks"]
+    BW -->|"internal"| KI["Kafka internal.*"]
+    KI -->|"consumidores de notificaciones"| BW
 ```
 
 El backend ya es hexagonal y el guardián AST (`tests/architecture/test_dependency_rule.py`) lo
@@ -79,22 +82,24 @@ solo contexto.
 **Se conserva:**
 
 - RabbitMQ para trabajo con un único ejecutor y Kafka para hechos reobtenibles (ADR-0026, ADR-0027).
-- El mensaje de `intake.jobs` lleva sólo `{tenant_id, job_id}`; el trabajo vive en base de datos.
-- Outbox transaccional para `LeadProcessedEvent` y `LeadDisqualified` (ADR-0025), con `event_id`
-  estable y entrega al menos una vez.
+- El mensaje de `intake.jobs` lleva sólo identificadores y metadatos (`message_id`, `schema_version`,
+  `tenant_id`, `job_id`, `correlation_id`); el trabajo vive en base de datos.
+- Outbox transaccional (ADR-0025), ahora con un canal por tipo de entrega: `LeadProcessedEvent` y
+  `LeadDisqualified` en `product`, y los hechos internos y las órdenes de trabajo en `internal` y
+  `job`. Con `event_id` estable y entrega al menos una vez.
 - Reentrega segura: `start()` acepta `PROCESSING`, sólo se releen registros `PENDING`, los contadores
   se derivan y `claim_unpromoted` impide dos leads del mismo registro.
 
-**No sobrevive a separar procesos o bases:**
+**No sobrevivía a separar procesos o bases, y F1 lo cortó:**
 
-| Hecho verificado | Dónde | Por qué bloquea |
+| Hecho verificado | Dónde estaba | Estado |
 |---|---|---|
-| Las notificaciones se publican con `InMemoryEventPublisher` | `di/event_wiring.py`, `application/handlers/notification_handler.py` | El bus no cruza procesos; un reinicio entre el commit y el handler pierde el aviso |
-| El relay corre en un hilo de la API | `main.py`, `outbox_relay_thread.py` | Reiniciar la API detiene la publicación |
-| Un job con un registro fallido hace `ACK` y queda en `PROCESSING` | `process_intake_job_use_case.py`, `intake_worker.py` | Con Lead Core remoto este fallo pasa a ser habitual; hoy sólo se recupera a mano |
-| Si RabbitMQ no responde, el job se procesa en el proceso de la API | `intake_router.py`, `process_batch_use_case.py` | Segunda ruta de ejecución sin la garantía de la cola |
-| `batch-upload` parsea el fichero en un `BackgroundTask` con los bytes en memoria | `intake_router.py` | Si el proceso cae antes de materializar las filas, el fichero se pierde |
-| Topics creados por *auto-create* | `docker-compose.yml` (`KAFKA_AUTO_CREATE_TOPICS_ENABLE`) | Un topic de estado creado así nace sin compactación |
+| Las notificaciones se publicaban con un bus en memoria (`InMemoryEventPublisher`) | `di/event_wiring.py`, `application/handlers/notification_handler.py` | **Resuelto en F1.** Los eventos se registran en el outbox `internal` dentro de la transacción y `NotificationConsumer` los consume desde `internal.lead-core.events` e `internal.intake.events` |
+| El relay corría en un hilo de la API | `main.py`, `outbox_relay_thread.py` | **Resuelto en F1.** La API ya no ejecuta ningún relay; los ejecuta `backend-worker`, uno por canal |
+| Un job con un registro fallido hacía `ACK` y quedaba en `PROCESSING` | `process_intake_job_use_case.py`, `intake_worker.py` | **Resuelto en F1.** Hace `nack` con reencolado y, a la tercera entrega, pasa a `intake.jobs.dlq` |
+| Si RabbitMQ no respondía, el job se procesaba en el proceso de la API | `intake_router.py`, `process_batch_use_case.py` | **Resuelto en F1.** Se elimina el *fallback*: el job espera en el outbox |
+| `batch-upload` parseaba el fichero en un `BackgroundTask` con los bytes en memoria | `intake_router.py` | **Resuelto en F1.** El fichero se guarda en `intake_files` en la transacción de recepción y lo parsea el worker |
+| Topics creados por *auto-create* | `docker-compose.yml` (`KAFKA_AUTO_CREATE_TOPICS_ENABLE`) | **Resuelto para `internal.*`** (F1): los crea `ensure_topics` y su productor no usa la creación automática. `leads.{tenant_id}` sigue creándose al publicar |
 
 ## Datos: referencias que hoy son FK y dejarán de serlo
 
@@ -115,7 +120,8 @@ La última fila es la que hace idempotente la admisión entre servicios: hoy la 
 1. Los contextos ya son reconocibles en el código; lo que los une es la unidad de trabajo compartida
    y nueve cruces concretos.
 2. La identidad se resuelve en un único punto, así que cambiar su origen es barato.
-3. La mensajería tiene la semántica correcta, pero tres piezas sólo funcionan dentro de un proceso:
-   el bus de notificaciones, el relay y el *fallback* de encolado.
+3. La mensajería tenía la semántica correcta, pero tres piezas sólo funcionaban dentro de un proceso:
+   el bus de notificaciones, el relay y el *fallback* de encolado. F1 las sustituyó por el outbox por
+   canal y por Kafka y RabbitMQ.
 4. El orden del plan sale de aquí: primero lo que es durable sólo dentro de un proceso, después los
    cruces, un contexto cada vez.

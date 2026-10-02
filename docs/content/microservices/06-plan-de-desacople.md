@@ -119,6 +119,10 @@ interna la leen.
 
 ## F1 · Durabilidad en el monolito
 
+**Estado: implantada** (`8608edb..c2c18c3`). Lo construido sigue el plan salvo las desviaciones de
+abajo; las pruebas de fallo de entrega y `verify_ms_f1` se describen en
+[Validación](../desarrollo/validacion.md).
+
 **Objetivo.** Todo lo que se publica o se encola pasa por el outbox; nada depende de que un proceso
 siga vivo.
 
@@ -146,12 +150,31 @@ siga vivo.
 - Procesos: `backend` deja de arrancar el relay. Nuevo servicio `backend-worker` (`worker.py`: relay +
   consumidores de notificaciones). `intake-worker` sigue igual.
 
+**Desviaciones respecto a lo anterior**
+
+- **`producer`:** `"lead-core"` en todos los sobres de F1, porque el monolito es el único productor.
+  Identity e intake publicarán con su nombre al extraerse.
+- **Reproceso asíncrono:** `POST /intake/jobs/{id}/reprocess` deja de procesar en línea y responde
+  `202` con el trabajo `PENDING`; la orden va por el outbox `job` como cualquier otra.
+- **`intake_jobs.correlation_id`:** se fija al insertar el trabajo. El mensaje de `intake.jobs` lleva
+  el `correlation_id` de la petición que lo encoló, y en un reproceso es el de la petición de reproceso.
+- **Un hilo por canal.** El plan no fija el reparto de hilos: los tres relays corren en hilos propios
+  de `backend-worker` para que un destino caído (un Kafka interno que no responde) no retenga a los
+  demás canales. El canal `internal` no entrega hasta que `ensure_topics` termina.
+- **Los carriles de consumidor se auto-reparan.** Un consumidor cuyo cliente de Kafka falla se
+  reconstruye tras una espera de 1 s que se duplica hasta 30 s, en vez de dejar morir su hilo.
+- **`intake-worker` reconecta a RabbitMQ** con la misma espera, en vez de salir y depender de
+  `restart: on-failure` (el plan lo daba por «sigue igual»).
+
 **`verify_ms_f1`**
 
 - Con `rabbitmq` parado, una ingesta → 202 y el job queda `PENDING`; al arrancar `rabbitmq`, el job
   termina y el lead aparece.
 - Tras asignarse un lead, la notificación aparece; reiniciar `backend-worker` no la duplica.
 - Una subida de fichero termina con los mismos recuentos que antes del cambio.
+- `internal.identity.agents` e `internal.identity.tenants` tienen `cleanup.policy=compact`; las DLQ de
+  los dos grupos existen y están vacías.
+- El `X-Request-Id` de la ingesta aparece en los logs de `backend-worker` o de `intake-worker`.
 
 **Criterio de salida.** Además de lo anterior, tests de integración que prueban: un relay que muere
 tras publicar y antes de marcar produce un duplicado que el consumidor ignora; un evento que falla tres

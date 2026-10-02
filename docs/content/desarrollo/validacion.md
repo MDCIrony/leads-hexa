@@ -20,7 +20,7 @@ Sólo hace falta reconstruir la imagen cuando cambia algo que se instala en tiem
 `pyproject.toml`, `uv.lock` o el propio `Dockerfile`.
 
 ```bash
-docker compose build backend intake-worker backend-test
+docker compose build backend backend-worker intake-worker backend-test
 ```
 
 ## Qué demuestra cada uno
@@ -34,7 +34,15 @@ Cubre los cuatro marcadores de `pyproject.toml`: `unit`, `integration`, `e2e` y 
 tests e2e usan `GatewayClient` (`backend/tests/e2e/gateway_client.py`), un `TestClient` que se comporta
 como el gateway: introspecciona la cookie o la `X-Api-Key` contra `/internal/v1/auth/introspect` y
 reenvía sólo el bearer resultante, igual que `gateway/nginx.conf`, de modo que ejercitan la misma
-frontera de confianza que el stack. Siguen sin servidor HTTP real. `test_internal_auth` usa un
+frontera de confianza que el stack. Siguen sin servidor HTTP real.
+
+Como la suite no levanta brókeres, `GatewayClient` hace también de `backend-worker` y de
+`intake-worker`: tras cada petición reenviada **drena en el propio proceso** el canal `internal` del
+outbox hacia los `NotificationConsumer` (el sobre pasa por bytes y vuelve, como un mensaje real) y el
+canal `job` a través de `process_job_message`, con las mismas tres entregas que concede la cola antes
+de la DLQ. Procesar un trabajo escribe eventos internos, así que el canal `internal` se drena otra
+vez. Por eso un test e2e ve la notificación o el lead promovido al terminar su petición, sin esperas.
+Lo que ese atajo no ejercita —Kafka, RabbitMQ, los hilos del relay— lo cubre `verify-e2e.sh`. `test_internal_auth` usa un
 `TestClient` plano a propósito, porque habla con la app sin gateway.
 
 !!! warning
@@ -82,6 +90,66 @@ la llama desde `main`, de modo que las comprobaciones anteriores siguen corriend
 que ya funcionaba sigue funcionando. Las fases del [desacople en microservicios](../microservices/06-plan-de-desacople.md)
 usan una `verify_ms_fN` por fase (`verify_ms_f0` es la primera), porque los nombres `verify_fN` ya eran
 de planes anteriores.
+
+Desde F1 las notificaciones llegan **de forma asíncrona** (relay, Kafka y consumidor), así que las
+comprobaciones que leen el buzón no pueden asumir que el aviso ya está. Dos ayudantes del script lo
+resuelven con esperas acotadas: `await_notice` espera, hasta unos 10 s, a que el buzón de una sesión
+cumpla una expresión; `await_quiet` espera a que el contador de no leídas deje de moverse, para fijar
+una línea base fiable antes de comprobar un «+1». Ninguno decide el resultado: la comprobación que les
+sigue sigue siendo la que pasa o falla.
+
+### La durabilidad: `verify_ms_f1`
+
+Que una caída de un bróker retrasa el trabajo sin perderlo sólo se prueba con los brókeres de verdad,
+así que vive en el script. Corre justo **antes** de `verify_ms_f0`, que detiene el backend. Comprueba:
+
+- **RabbitMQ caído no pierde trabajo.** Con `rabbitmq` parado, una ingesta responde `202` y el trabajo
+  sigue `PENDING` pasados 3 s; al arrancarlo, el trabajo llega a `COMPLETED` en menos de 60 s y el lead
+  existe (`GET /leads/{id}` → `200`).
+- **La notificación llega por Kafka, sin duplicados.** Se asigna ese lead a un asesor; su
+  `GET /notifications` contiene un `LEAD_ASSIGNED` de ese lead en menos de 15 s; tras
+  `docker compose restart backend-worker` y 5 s, sigue habiendo **exactamente uno**.
+- **La subida de un fichero** por el camino nuevo (fichero guardado, parseado por el worker) da las
+  mismas cifras que antes: una fila buena promovida y una mala rechazada, sin perder ninguna.
+- **Los topics y las colas de error.** `internal.identity.agents` e `internal.identity.tenants` tienen
+  `cleanup.policy=compact`; las DLQ de los dos grupos de notificaciones existen y están vacías, y también
+  `intake.jobs.dlq`.
+- **La correlación.** El `X-Request-Id` de la ingesta aparece en los logs de `backend-worker` y en los
+  de `intake-worker`.
+
+El límite de 10 MB del `batch-upload` (`413`) ya lo prueba `verify_ms_f0`, y no se repite.
+
+Si la ejecución se interrumpe con RabbitMQ parado, la función lo vuelve a arrancar.
+
+### Los tests de fallo de entrega
+
+`backend/tests/integration/test_delivery_failures.py` prueba, con la base real y brókeres sustituidos
+por dobles, lo que `verify_ms_f1` no puede provocar a voluntad:
+
+- **Un relay que publica y muere antes de marcar.** El despachador entrega y `mark_published` falla de
+  forma simulada: la siguiente pasada entrega la misma fila otra vez, y con las dos entregas el
+  `NotificationConsumer` deja **una sola** notificación.
+- **Un evento cuyo efecto falla siempre.** El `ConsumerLoop` lo reintenta tres veces, lo aparca en
+  `internal.dlq.notifications.lead-events` con `attempts=3`, confirma el offset, y no quedan ni
+  notificación ni marca en `processed_events`.
+- **Un trabajo con un registro que falla.** `process_job_message` devuelve `"nack"`, y la topología que
+  declara `declare_intake_topology` conserva `x-delivery-limit: 3` y la DLQ.
+
+### Mirar las colas de error
+
+Las DLQ vacías son parte de lo que se comprueba, y se pueden mirar a mano con lo mismo que usa el
+script:
+
+```bash
+# Mensajes en una DLQ de Kafka: suma de los offsets finales de sus particiones
+docker compose exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 \
+  --topic internal.dlq.notifications.lead-events
+
+# Cola muerta de RabbitMQ
+docker compose exec -T rabbitmq rabbitmqctl list_queues name messages
+```
+
+Qué hacer con un mensaje que aparezca ahí: [Operar la mensajería](../eventos/operacion.md#las-colas-muertas-y-como-reinyectar-un-mensaje).
 
 ### El gateway: `verify_ms_f0`
 

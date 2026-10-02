@@ -6,35 +6,43 @@ procesamiento independiente de la petición HTTP que lo trajo.
 
 ## Cómo funciona
 
-La ingesta ocurre en dos fases, en transacciones distintas. La primera responde rápido y sin
-interpretar nada: guarda el payload tal cual llegó. La segunda, en segundo plano, es la que intenta
-construir un `Lead` a partir de ese payload.
+La ingesta ocurre en dos fases, en transacciones y procesos distintos. La primera responde rápido y
+sin interpretar nada: guarda el payload tal cual llegó y deja constancia de que hay trabajo. La
+segunda, en el `intake-worker`, es la que intenta construir un `Lead` a partir de ese payload.
 
-- **Recepción** (`ReceiveIntakeUseCase`): crea un `IntakeJob` y, si la vía es el formulario
-  individual, también el `IntakeRecord` con el payload sin tocar. Responde `202 Accepted` con el
-  identificador del trabajo antes de intentar interpretar una sola línea.
+- **Recepción** (`ReceiveIntakeUseCase`): en **una transacción** crea un `IntakeJob`; si la vía es el
+  formulario individual, también el `IntakeRecord` con el payload sin tocar; si es una carga de
+  fichero, guarda el fichero crudo en `intake_files`; y registra la orden de procesarlo en el outbox
+  (canal `job`). Responde `202 Accepted` con el identificador del trabajo antes de interpretar una
+  sola línea.
 - **Procesamiento** (`ProcessIntakeJobUseCase`): recorre los `IntakeRecord` en estado `PENDING` de
   un trabajo y entrega cada uno a `IngestLeadUseCase`, que construye el `Lead`, lo hace atravesar
   viabilidad, puntuación y asignación, y marca el registro como `PROMOTED` o `REJECTED`.
 
+El camino entre las dos es [el outbox y RabbitMQ](../eventos/rabbitmq.md): `backend-worker` publica la
+orden en `intake.jobs` con *publisher confirms* y el worker la consume. Si RabbitMQ está caído, el
+trabajo espera `PENDING` en el outbox; no hay otra ruta que lo procese dentro de la API.
+
 ```mermaid
 flowchart TD
     A[Formulario individual] -->|POST /leads/ingest| R[ReceiveIntakeUseCase]
-    B[Carga de fichero CSV/XLSX] -->|POST /leads/batch-upload| R2[ReceiveIntakeUseCase]
+    B[Carga de fichero CSV/XLSX] -->|POST /leads/batch-upload| R
+    RP[Reproceso] -->|POST /jobs/id/reprocess| OB
 
-    R --> J1[(IntakeJob SINGLE)]
-    R --> REC1[(IntakeRecord PENDING)]
-    R2 --> J2[(IntakeJob BATCH)]
+    R --> J1[(IntakeJob)]
+    R --> REC1[(IntakeRecord PENDING<br/>sólo en el formulario)]
+    R --> FI[(intake_files<br/>sólo en la carga)]
+    R --> OB[(outbox canal job)]
 
     J1 --> RESP[202 Accepted]
-    J2 --> RESP
+    OB -. relay y RabbitMQ .-> W[intake-worker]
 
-    J1 -. tarea de fondo .-> PJ[ProcessIntakeJobUseCase]
-    REC1 --> PJ
-
-    J2 -. tarea de fondo .-> PBU[ProcessBatchUseCase]
+    W -->|carga de fichero| PBU[ProcessBatchUseCase]
+    FI --> PBU
     PBU -->|una fila, un registro| REC2[(IntakeRecord PENDING)]
-    PBU --> PJ
+    PBU --> PJ[ProcessIntakeJobUseCase]
+    W -->|formulario| PJ
+    REC1 --> PJ
     REC2 --> PJ
 
     PJ --> IL[IngestLeadUseCase]
@@ -54,11 +62,13 @@ resuelve la fuente activa según el tipo de trabajo, así que ninguna de las dos
 previa. Una tercera vía, `WEBHOOK`, está declarada en `LeadSourceKind` pero todavía no tiene un
 endpoint que la sirva.
 
-La carga de fichero tiene una asimetría respecto al formulario: en la recepción sólo se crea el
-`IntakeJob`, sin registros. `ProcessBatchUseCase` parsea el fichero en segundo plano y sólo entonces
-materializa un `IntakeRecord` por fila, antes de entregarlos al mismo `ProcessIntakeJobUseCase` que
-procesa la vía individual. El fichero en sí no se persiste: lo que sobrevive es una fila por
-registro.
+La carga de fichero tiene una asimetría respecto al formulario: en la recepción no se crean
+registros, sólo el `IntakeJob` y el fichero crudo en `intake_files` (`bytea`, con un límite de 10 MB:
+un cuerpo mayor se rechaza con `413 PAYLOAD_TOO_LARGE`, en el gateway y en el propio endpoint).
+`ProcessBatchUseCase` lo parsea **en el worker, una sola vez** —lo lee con `FOR UPDATE` y marca
+`parsed_at` en la misma transacción que los registros— y sólo entonces materializa un `IntakeRecord`
+por fila, antes de entregarlos al mismo `ProcessIntakeJobUseCase` que procesa la vía individual. El
+fichero se conserva: lo que sobrevive es el fichero y una fila por registro.
 
 ### Reproceso de un trabajo interrumpido
 
@@ -68,7 +78,7 @@ stateDiagram-v2
     PENDING --> PROCESSING: start()
     PENDING --> FAILED: fichero ilegible
     PROCESSING --> COMPLETED: todos los registros se resolvieron
-    PROCESSING --> PROCESSING: un registro falla de forma inesperada
+    PROCESSING --> PROCESSING: un registro falla, nack y reentrega
     PROCESSING --> PENDING: POST /jobs/{job_id}/reprocess
     COMPLETED --> [*]
     FAILED --> [*]
@@ -76,10 +86,15 @@ stateDiagram-v2
 
 Un trabajo que falla a mitad de proceso —una excepción no prevista al interpretar un registro— no se
 marca `FAILED`: se queda en `PROCESSING`, porque los registros que sí se resolvieron ya tienen su
-resultado y sólo faltan los que quedaron `PENDING`. `POST /jobs/{job_id}/reprocess` reinicia los
-contadores y relanza el procesamiento, que vuelve a leer únicamente los registros todavía `PENDING`.
-Sólo un fichero ilegible marca el trabajo `FAILED` de forma directa, porque en ese caso no llegó a
-generar ni una fila.
+resultado y sólo faltan los que quedaron `PENDING`. El worker hace entonces `nack` con reencolado, y
+RabbitMQ lo entrega de nuevo, hasta tres veces; a la tercera el mensaje pasa a `intake.jobs.dlq`.
+Cada entrega vuelve a leer únicamente los registros todavía `PENDING`. Sólo un fichero ilegible marca
+el trabajo `FAILED` de forma directa, porque en ese caso no llegó a generar ni una fila.
+
+`POST /jobs/{job_id}/reprocess` es el camino manual, para un trabajo que llegó a la DLQ o quedó
+detenido. **No procesa en la petición**: reinicia los contadores, deja el trabajo `PENDING`, registra
+una orden nueva en el outbox y responde `202`. El resultado se consulta después con
+`GET /jobs/{job_id}`.
 
 !!! note
     Cada ejecución procesa como máximo 10 000 registros pendientes. Un trabajo más grande que eso
@@ -100,16 +115,18 @@ está en la [referencia de la API](../desarrollo/api-referencia.md).
 |---|---|
 | `IntakeJob` | Agrega una operación de ingesta —una unidad o un fichero— y su progreso |
 | `IntakeRecord` | Guarda el payload tal cual llegó, y si se promovió, rechazó o descartó |
-| `ReceiveIntakeUseCase` | Persiste el trabajo y responde antes de interpretar el payload |
+| `ReceiveIntakeUseCase` | Persiste el trabajo (y el fichero, si lo hay), registra la orden en el outbox y responde antes de interpretar el payload |
 | `ProcessIntakeJobUseCase` | Recorre los registros `PENDING` de un trabajo y los interpreta |
 | `IngestLeadUseCase` | Interpreta el payload: viabilidad, puntuación y asignación |
-| `ProcessBatchUseCase` | Parsea el fichero subido y materializa un `IntakeRecord` por fila |
+| `ProcessBatchUseCase` | Parsea el fichero guardado, una sola vez, y materializa un `IntakeRecord` por fila |
+| `intake_worker.py`, `job_messages.py` | Consumen `intake.jobs` y ejecutan el trabajo; `ack`, `nack` o dead-letter según el resultado |
 | `intake_router.py` | Endpoints de ingesta, bandeja de revisión y reproceso |
 
 ## Decisiones que lo explican
 
 - [ADR-0009](../decisiones/0009-registrar-antes-de-interpretar.md): por qué se guarda antes de leer.
 - [ADR-0010](../decisiones/0010-recepcion-y-procesamiento-separados.md): por qué hay dos fases.
+- [ADR-0027](../decisiones/0027-cola-para-el-trabajo-de-fondo.md) y [ADR-0034](../decisiones/0034-encolado-por-outbox-y-fichero-durable.md): la cola, el outbox y el fichero guardado.
 - [ADR-0008](../decisiones/0008-correo-opcional.md): por qué un lead puede no traer correo.
 
 ## Dónde vive
@@ -122,4 +139,6 @@ está en la [referencia de la API](../desarrollo/api-referencia.md).
 - `backend/src/application/use_cases/process_batch_use_case.py`
 - `backend/src/application/use_cases/intake_job_use_cases.py`
 - `backend/src/application/use_cases/intake_record_use_cases.py`
+- `backend/src/infrastructure/workers/intake_worker.py`
+- `backend/src/infrastructure/workers/job_messages.py`
 - `backend/src/infrastructure/adapters/input/api/intake_router.py`

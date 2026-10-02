@@ -5,6 +5,12 @@ Decisiones registradas en [ADR-0033](../decisiones/0033-eventos-internos-en-kafk
 [ADR-0034](../decisiones/0034-encolado-por-outbox-y-fichero-durable.md) y
 [ADR-0035](../decisiones/0035-admision-sincrona-idempotente.md).
 
+!!! note "Estado de F1"
+    Lo que esta página describe de outbox, eventos internos, RabbitMQ y fichero durable está
+    implantado desde F1. Los «hoy» de las secciones de outbox y RabbitMQ se refieren al sistema
+    anterior a F1. Lo que se construyó difiere en lo que lista la
+    [fase F1 del plan](06-plan-de-desacople.md#f1-durabilidad-en-el-monolito).
+
 ## Regla de canal
 
 | Canal | Cuándo | Garantía |
