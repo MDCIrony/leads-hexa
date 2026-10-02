@@ -3,7 +3,7 @@ from uuid import UUID
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.intake_phase_use_case_ports import ProcessIntakeJobInputPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.use_cases.ingest_lead_use_case import command_from_record
+from application.use_cases.intake.payloads import command_from_record
 from domain.exceptions import DomainException
 from domain.value_objects.enums import IntakeRecordStatus
 
@@ -35,6 +35,12 @@ class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
         for record in pending:
             try:
                 self.ingest.execute(command_from_record(record), existing_record=record)
+            except DomainException as exc:
+                # Discarded by a manager while this run held it: finished, not
+                # pending, so it must not keep the job from completing.
+                if exc.error_code != "INVALID_INTAKE_TRANSITION":
+                    interrupted = True
+                continue
             except Exception:
                 # The record stays PENDING on purpose: it is the only state
                 # reprocessing reads, so a failure here is recoverable instead

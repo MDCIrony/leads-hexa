@@ -3,7 +3,7 @@ from uuid import UUID
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.output.file_parser_port import FileParserPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.use_cases.ingest_lead_use_case import payload_of
+from application.use_cases.intake.payloads import payload_of
 from domain.entities.intake_record import IntakeRecord
 from domain.exceptions import DomainException
 

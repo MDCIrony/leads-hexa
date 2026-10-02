@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Tuple
 from uuid import UUID
+from application.dtos.admissions import AdmissionLookupItem
 from application.ports.output.lead_repository_port import LeadRepositoryPort
 from domain.entities.lead import Lead
 from domain.value_objects.enums import LeadStatus
@@ -19,6 +20,14 @@ class InMemoryLeadRepository(LeadRepositoryPort):
 
     def get_by_id(self, lead_id: UUID) -> Optional[Lead]:
         return self.leads.get(lead_id)
+
+    def get_by_intake_record(self, tenant_id: UUID, intake_record_id: UUID) -> Optional[Lead]:
+        return next((lead for lead in self.leads.values()
+                     if lead.tenant_id.value == tenant_id and lead.intake_record_id == intake_record_id), None)
+
+    def list_by_intake_records(self, intake_record_ids: List[UUID]) -> List[AdmissionLookupItem]:
+        return [AdmissionLookupItem(str(lead.intake_record_id), str(lead.tenant_id.value), str(lead.id))
+                for lead in self.leads.values() if lead.intake_record_id in set(intake_record_ids)]
 
     def get_by_id_and_tenant(self, lead_id: UUID, tenant_id: UUID) -> Optional[Lead]:
         lead = self.leads.get(lead_id)

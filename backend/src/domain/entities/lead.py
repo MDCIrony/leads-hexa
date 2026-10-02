@@ -38,6 +38,8 @@ class Lead:
     assigned_at: Optional[datetime] = None
     discard_reason: Optional[str] = None
     disqualification_reason: Optional[str] = None
+    # The intake record it was admitted from: what makes admitting it twice impossible.
+    intake_record_id: Optional[UUID] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -64,6 +66,7 @@ class Lead:
         disqualification_reason: Optional[str] = None,
         updated_at: Optional[datetime] = None,
         created_at: Optional[Union[datetime, str]] = None,
+        intake_record_id: Optional[UUID] = None,
     ) -> "Lead":
         """Factory method que encapsula la construcción de Value Objects e invariantes del Lead."""
         tenant_id_vo = tenant_id if isinstance(tenant_id, TenantId) else TenantId(tenant_id)
@@ -82,12 +85,8 @@ class Lead:
         score_vo = score if isinstance(score, Score) else Score(score)
         status_vo = status if isinstance(status, LeadStatus) else LeadStatus(status)
 
-        if assigned_agent_id is None:
-            agent_id_vo = None
-        elif isinstance(assigned_agent_id, AgentId):
-            agent_id_vo = assigned_agent_id
-        else:
-            agent_id_vo = AgentId(assigned_agent_id)
+        agent_id_vo = (assigned_agent_id if assigned_agent_id is None or isinstance(assigned_agent_id, AgentId)
+                       else AgentId(assigned_agent_id))
 
         if created_at is None:
             created_at_dt = datetime.now(timezone.utc)
@@ -115,6 +114,7 @@ class Lead:
             assigned_at=assigned_at,
             discard_reason=discard_reason,
             disqualification_reason=disqualification_reason,
+            intake_record_id=intake_record_id,
             updated_at=updated_at or datetime.now(timezone.utc),
             created_at=created_at_dt,
         )

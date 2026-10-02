@@ -3,7 +3,9 @@ import uuid
 import pytest
 
 from application.dtos.commands import IngestLeadCommand
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
+from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
+from infrastructure.adapters.output.admissions.in_process_lead_admission import InProcessLeadAdmission
+from application.use_cases.intake.payloads import payload_of
 from domain.entities.intake_record import IntakeRecord
 from domain.entities.lead_source import LeadSource
 from domain.events.lead_events import LeadDisqualified
@@ -145,7 +147,9 @@ def test_a_full_ingestion_leaves_exactly_one_unpublished_entry(test_db):
     with test_db.get_connection(autocommit=True) as conn:
         RawSqlIntakeRecordRepository(conn).save(existing)
 
-    result = IngestLeadUseCase(uow=PostgresUnitOfWork(test_db)).execute(command, existing_record=existing)
+    admission = InProcessLeadAdmission(lambda: PostgresUnitOfWork(test_db))
+    result = IngestLeadUseCase(uow=PostgresUnitOfWork(test_db), admission=admission).execute(
+        command, existing_record=existing)
 
     repo, conn, ctx = _repo(test_db)
     try:

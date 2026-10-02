@@ -12,7 +12,9 @@ from concurrent.futures import TimeoutError as FuturesTimeout
 import pytest
 
 from application.dtos.commands import IngestLeadCommand
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
+from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
+from infrastructure.adapters.output.admissions.in_process_lead_admission import InProcessLeadAdmission
+from application.use_cases.intake.payloads import payload_of
 from domain.entities.intake_record import IntakeRecord
 from domain.entities.lead_source import LeadSource
 from domain.entities.rule import AssignmentRule
@@ -85,7 +87,8 @@ def test_two_runs_over_the_same_record_produce_one_lead(test_db, concurrent_db):
     def run():
         # One unit of work per thread: it holds a connection, and sharing it
         # would serialise the very thing this test needs to happen at once.
-        return IngestLeadUseCase(uow=PostgresUnitOfWork(concurrent_db)).execute(
+        admission = InProcessLeadAdmission(lambda: PostgresUnitOfWork(concurrent_db))
+        return IngestLeadUseCase(uow=PostgresUnitOfWork(concurrent_db), admission=admission).execute(
             command, existing_record=record
         )
 

@@ -5,7 +5,6 @@ import pytest
 
 from application.dtos.commands import IngestLeadCommand, LeadProcessedResult, ReceiveIntakeCommand
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
 from application.use_cases.intake_job_use_cases import ReprocessIntakeJobUseCase
 from application.use_cases.process_batch_use_case import ProcessBatchUseCase
 from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
@@ -15,6 +14,7 @@ from domain.entities.lead_source import LeadSource
 from domain.exceptions import DomainException
 from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus, IntakeRecordStatus, LeadSourceKind
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
+from tests.unit.mocks.in_process_ingest import in_process_ingest
 
 _VALID_PAYLOAD = {
     "first_name": "Maria",
@@ -126,7 +126,7 @@ def test_processing_a_job_with_a_valid_payload_completes_and_promotes():
         ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_VALID_PAYLOAD])
     )
 
-    ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow)).execute(
+    ProcessIntakeJobUseCase(uow=uow, ingest=in_process_ingest(uow)).execute(
         tenant_id=tenant_id, job_id=UUID(received.job_id)
     )
 
@@ -147,7 +147,7 @@ def test_processing_a_job_with_an_invalid_payload_completes_and_rejects():
         ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_INVALID_PAYLOAD])
     )
 
-    ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow)).execute(
+    ProcessIntakeJobUseCase(uow=uow, ingest=in_process_ingest(uow)).execute(
         tenant_id=tenant_id, job_id=UUID(received.job_id)
     )
 
@@ -169,7 +169,7 @@ def test_processing_a_mixed_job_counts_both_and_leaves_both_terminal():
         )
     )
 
-    ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow)).execute(
+    ProcessIntakeJobUseCase(uow=uow, ingest=in_process_ingest(uow)).execute(
         tenant_id=tenant_id, job_id=UUID(received.job_id)
     )
 
@@ -191,7 +191,7 @@ def test_processing_a_job_from_another_organization_is_not_found():
     )
 
     with pytest.raises(DomainException) as exc_info:
-        ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow)).execute(
+        ProcessIntakeJobUseCase(uow=uow, ingest=in_process_ingest(uow)).execute(
             tenant_id=other_tenant_id, job_id=UUID(received.job_id)
         )
 
@@ -230,7 +230,7 @@ def test_an_unforeseen_failure_does_not_lose_the_record_and_the_run_continues():
     )
     exploding_record_id, other_record_id = (UUID(r) for r in received.record_ids)
 
-    ingest = _ExplodingIngest(IngestLeadUseCase(uow=uow), explode_on_email="explodes@example.com")
+    ingest = _ExplodingIngest(in_process_ingest(uow), explode_on_email="explodes@example.com")
     ProcessIntakeJobUseCase(uow=uow, ingest=ingest).execute(tenant_id=tenant_id, job_id=UUID(received.job_id))
 
     job = uow.intake_jobs.get_by_id_and_tenant(UUID(received.job_id), tenant_id)
@@ -267,7 +267,7 @@ def test_a_run_that_dies_before_saving_recovers_its_counters():
         )
     )
     job_id = UUID(received.job_id)
-    process = ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow))
+    process = ProcessIntakeJobUseCase(uow=uow, ingest=in_process_ingest(uow))
     process.execute(tenant_id=tenant_id, job_id=job_id)
 
     # The records were promoted one transaction at a time and survived; the
@@ -291,7 +291,7 @@ def test_reprocessing_a_job_left_in_progress_does_not_duplicate_leads():
     received = ReceiveIntakeUseCase(uow=uow).execute(
         ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_VALID_PAYLOAD])
     )
-    process = ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow))
+    process = ProcessIntakeJobUseCase(uow=uow, ingest=in_process_ingest(uow))
     process.execute(tenant_id=tenant_id, job_id=UUID(received.job_id))
 
     # The state a worker that died mid-run leaves behind, which is what a
@@ -414,10 +414,10 @@ def test_processing_reports_whether_the_run_was_interrupted():
     received = ReceiveIntakeUseCase(uow=uow).execute(
         ReceiveIntakeCommand(tenant_id=tenant_id, kind=IntakeJobKind.SINGLE.value, payloads=[_VALID_PAYLOAD])
     )
-    exploding = _ExplodingIngest(IngestLeadUseCase(uow=uow), explode_on_email=_VALID_PAYLOAD["email"])
+    exploding = _ExplodingIngest(in_process_ingest(uow), explode_on_email=_VALID_PAYLOAD["email"])
 
     assert ProcessIntakeJobUseCase(uow=uow, ingest=exploding).execute(tenant_id, UUID(received.job_id)) is True
-    assert ProcessIntakeJobUseCase(uow=uow, ingest=IngestLeadUseCase(uow=uow)).execute(
+    assert ProcessIntakeJobUseCase(uow=uow, ingest=in_process_ingest(uow)).execute(
         tenant_id, UUID(received.job_id)
     ) is False
 

@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from typing import Optional
 from uuid import UUID
 
@@ -12,14 +13,13 @@ from application.ports.input.intake_job_use_case_ports import (
     GetIntakeJobsInputPort,
     ReprocessIntakeJobInputPort,
 )
+from application.ports.input.intake.intake_stats_port import GetIntakeStatsInputPort
 from application.ports.input.intake_phase_use_case_ports import ReceiveIntakeInputPort
 from application.ports.input.intake_record_use_case_ports import (
     DiscardIntakeRecordInputPort,
     GetIntakeRecordsInputPort,
     PromoteIntakeRecordInputPort,
 )
-from domain.entities.intake_job import IntakeJob
-from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.enums import IntakeJobKind, IntakeRecordStatus
 from infrastructure.adapters.input.api.dependencies import (
     get_discard_intake_record_use_case,
@@ -31,13 +31,13 @@ from infrastructure.adapters.input.api.dependencies import (
     get_reprocess_intake_job_use_case,
     require_organization_manager,
 )
+from infrastructure.adapters.input.api.intake.mappers import to_job_response, to_record_response
+from infrastructure.adapters.input.api.intake.stats import IntakeStatsResponse, get_get_intake_stats_use_case
 from infrastructure.adapters.input.api.schemas import (
     IngestLeadRequest,
     IntakeAcceptedResponse,
-    IntakeErrorResponse,
     IntakeJobResponse,
     IntakeJobsPageResponse,
-    IntakeRecordResponse,
     IntakeRecordsPageResponse,
     LeadProcessedResponse,
     PromoteIntakeRecordRequest,
@@ -50,38 +50,15 @@ router = APIRouter()
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
-def _to_record_response(record: IntakeRecord) -> IntakeRecordResponse:
-    return IntakeRecordResponse(
-        id=str(record.id),
-        source_id=str(record.source_id),
-        status=record.status.value,
-        payload=record.payload,
-        errors=[
-            IntakeErrorResponse(
-                field=error.field,
-                message=error.message,
-                received_value=error.received_value,
-                error_code=error.error_code,
-            )
-            for error in record.errors
-        ],
-        received_at=record.received_at,
-        processed_at=record.processed_at,
-        lead_id=str(record.lead_id) if record.lead_id else None,
-    )
+# Declared before the parametric routes: FastAPI resolves them in order.
+@router.get("/stats", response_model=IntakeStatsResponse, status_code=status.HTTP_200_OK)
+def get_intake_stats(
+    # Manager-only, like GET /leads/stats: the whole organization's inbox.
+    context: RequestContext = Depends(require_organization_manager),
+    use_case: GetIntakeStatsInputPort = Depends(get_get_intake_stats_use_case),
+) -> IntakeStatsResponse:
+    return IntakeStatsResponse(**asdict(use_case.execute(context.tenant_id)))
 
-def _to_job_response(job: IntakeJob) -> IntakeJobResponse:
-    return IntakeJobResponse(
-        id=str(job.id),
-        source_id=str(job.source_id),
-        kind=job.kind.value,
-        status=job.status.value,
-        total_items=job.total_items,
-        succeeded=job.succeeded,
-        failed=job.failed,
-        created_at=job.created_at,
-        completed_at=job.completed_at,
-    )
 
 @router.post("/leads/ingest", response_model=IntakeAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
 def ingest_lead(
@@ -143,7 +120,7 @@ def list_intake_records(
         tenant_id=context.tenant_id, status=status, job_id=job_id, limit=limit, offset=offset,
     )
     page = use_case.execute(query)
-    items = [_to_record_response(record) for record in page.items]
+    items = [to_record_response(record) for record in page.items]
     return IntakeRecordsPageResponse(
         items=items,
         total=page.total,
@@ -212,7 +189,7 @@ def list_intake_jobs(
 ):
     query = GetIntakeJobsQuery(tenant_id=context.tenant_id, status=status, limit=limit, offset=offset)
     page = use_case.execute(query)
-    items = [_to_job_response(job) for job in page.items]
+    items = [to_job_response(job) for job in page.items]
     return IntakeJobsPageResponse(
         items=items,
         total=page.total,
@@ -227,7 +204,7 @@ def get_intake_job(
     context: RequestContext = Depends(require_organization_manager),
     use_case: GetIntakeJobInputPort = Depends(get_get_intake_job_use_case),
 ):
-    return _to_job_response(use_case.execute(context.tenant_id, job_id))
+    return to_job_response(use_case.execute(context.tenant_id, job_id))
 
 @router.post("/jobs/{job_id}/reprocess", response_model=IntakeJobResponse, status_code=status.HTTP_202_ACCEPTED)
 def reprocess_intake_job(
@@ -239,4 +216,4 @@ def reprocess_intake_job(
     # The checks run here so an unowned or finished job is a clean 404/400;
     # the run itself is queued, and the job comes back as it now stands.
     reprocess.execute(context.tenant_id, job_id)
-    return _to_job_response(get_job.execute(context.tenant_id, job_id))
+    return to_job_response(get_job.execute(context.tenant_id, job_id))

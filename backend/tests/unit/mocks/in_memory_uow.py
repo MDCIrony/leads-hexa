@@ -50,7 +50,7 @@ class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
         # No locking to model: a single-threaded double cannot race with
         # itself, so the status check is the whole of the behaviour here.
         record = self.get_by_id_and_tenant(record_id, tenant_id)
-        return record if record and record.status != IntakeRecordStatus.PROMOTED else None
+        return record if record and record.status in (IntakeRecordStatus.PENDING, IntakeRecordStatus.REJECTED) else None
 
     def list_by_tenant(
         self,
