@@ -1040,10 +1040,28 @@ PY
 # Gateway and phantom token (ADR-0032): what the edge guarantees and what the
 # service still enforces on its own. Runs last: it stops the backend.
 verify_ms_f0() {
-  local r headers base mgr_a_id forged key status i
+  local r headers base mgr_a_id forged key status i unprotected
   section "Microservicios F0 · gateway y phantom token"
   base=${API%/api/v1}
   headers=$(mktemp "/tmp/leads-e2e-${STAMP}-XXXXXX.headers")
+
+  # Static check over the effective config: a protected location that skips the
+  # shared include would serve unauthenticated, and no request-level test sees it.
+  check "nginx -t en el gateway" 0 "$(docker compose exec -T gateway nginx -t >/dev/null 2>&1; echo $?)"
+  unprotected=$(docker compose exec -T gateway nginx -T 2>/dev/null | awk '
+    function close_block() {
+      if (loc != "" && loc ~ /^\/api\/v1\// && loc != "/api/v1/auth/" && !guarded) print loc
+      loc = ""
+    }
+    /^[ \t]*location[ \t]/ {
+      close_block()
+      loc = ($2 ~ /^(=|~|~\*|\^~)$/) ? $3 : $2; guarded = 0
+    }
+    /^[ \t]*}[ \t]*$/ { close_block() }
+    loc != "" && /include[ \t]+\/etc\/nginx\/conf\.d\/protected(_optional)?\.inc;/ { guarded = 1 }
+    END { close_block() }')
+  check "locations protegidas sin include de auth" 0 "$(printf '%s' "$unprotected" | grep -c .)"
+  [ -z "$unprotected" ] || printf '%s\n' "$unprotected" | sed 's/^/      sin include: /'
 
   r=$(req "$API/leads" -H "Authorization: Bearer not-a-jwt")
   check "bearer basura sin cookie → 401" 401 "$(code "$r")"

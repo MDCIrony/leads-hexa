@@ -76,9 +76,10 @@ services:
     # the port the backend used to publish, so every client keeps its URL.
     image: nginx:1.27-alpine
     volumes:
-      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./gateway/proxy_headers.conf:/etc/nginx/proxy_headers.conf:ro
-      - ./gateway/introspect.conf:/etc/nginx/introspect.conf:ro
+      # A directory, not three files: a single-file bind mount pins the inode, so
+      # an editor that replaces the file leaves the container on the old config.
+      # Only *.conf is loaded by the image; the *.inc files are includes.
+      - ./gateway:/etc/nginx/conf.d:ro
     ports:
       - "8001:8080"
     # No depends_on: the upstream is re-resolved at runtime (`resolve`), so the
