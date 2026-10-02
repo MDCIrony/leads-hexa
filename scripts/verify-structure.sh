@@ -25,6 +25,8 @@ check "$REPO/libs/chassis/src"
 check "$REPO/libs/chassis/tests" --no-line-limit
 check "$REPO/services/notifications/src"
 check "$REPO/services/notifications/tests" --no-line-limit
+check "$REPO/services/identity/src"
+check "$REPO/services/identity/tests" --no-line-limit
 check "$REPO/test-consumer"     --baseline "$REPO/scripts/structure_baseline.py:TEST_CONSUMER"
 check "$REPO/demo"              --baseline "$REPO/scripts/structure_baseline.py:DEMO"
 check "$REPO/tools"
