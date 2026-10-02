@@ -146,8 +146,13 @@ flowchart TD
   las particiones bloqueadas al perderlas o cederlas en un *rebalance*, y al parar cierra el
   consumidor y vacía el productor de la DLQ.
 - Cada grupo corre en un **carril** (`run_consumer_lane`): si su cliente de Kafka falla, se construye
-  otro tras una espera de 1 s que se duplica hasta 30 s. Un carril no arranca hasta que los topics
-  existen, para no unirse a uno que Kafka creó solo con la configuración por defecto.
+  otro tras una espera de 1 s que se duplica hasta 30 s. Un carril no construye su
+  consumidor hasta que el servicio ha declarado sus propias DLQ, para que la DLQ exista cuando un mensaje
+  la necesite. **No espera a los topics de entrada**, que son del productor: el consumidor nunca los
+  crea (`allow.auto.create.topics` es `false` por defecto en un consumidor de librdkafka; el
+  productor de la DLQ lo fija a `false` a propósito), así que no puede dejar uno sin compactar. Si el
+  topic de entrada aún no existe, el consumidor sigue suscrito y lo ve en la siguiente actualización de
+  metadatos, en menos de 10 s (`topic.metadata.refresh.interval.ms=10000` en `chassis.kafka_config`).
 - `internal.dlq.<grupo>` se ve en kafka-ui, igual que `intake.jobs.dlq` en la consola de RabbitMQ. Un
   mensaje aparcado se reinyecta a mano tras corregir la causa.
 

@@ -85,9 +85,9 @@ Cada caso de uso implementa un puerto de entrada (una clase abstracta en
 `application/dtos/` completa la capa: `commands.py` y `queries.py` son los `@dataclass(frozen=True)`
 que cruzan cada puerto, y `context.py` define `RequestContext`.
 
-Las notificaciones ya no son de este contenedor: desde F2 las sirve y las escribe el servicio
-`notifications` ([Notificaciones](../modulos/notificaciones.md)). El backend sólo registra en el
-outbox los eventos que ese servicio consume.
+Las notificaciones las sirve y las escribe el servicio `notifications`
+([Notificaciones](../modulos/notificaciones.md)); este contenedor no tiene ese módulo. El backend sólo
+registra en el outbox los eventos que ese servicio consume.
 
 ## El dominio y sus tres motores
 

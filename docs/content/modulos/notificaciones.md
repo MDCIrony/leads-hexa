@@ -58,8 +58,8 @@ Los grupos son tres:
 | `notifications.intake-events` | `internal.intake.events` | Avisos de registros rechazados |
 | `notifications.members` | `internal.identity.agents` | Mantiene la proyección `members` |
 
-Los dos primeros conservan los nombres que usaba el monolito, de modo que el corte continuó desde sus
-offsets. Cada grupo tiene su DLQ `internal.dlq.<grupo>` (1 partición, 7 días), que **declara el propio
+Los dos primeros conservan los nombres que usaba el monolito, así que sus offsets continúan en lugar
+de empezar de cero. Cada grupo tiene su DLQ `internal.dlq.<grupo>` (1 partición, 7 días), que **declara el propio
 servicio**, no el backend. Un mensaje que falla tres veces se aparca en ella y el offset avanza; el
 detalle del consumidor está en
 [Kafka](../eventos/kafka.md#el-consumidor-de-notificaciones) y cómo recuperarlo en
@@ -91,7 +91,8 @@ organización (`agent_id`, `tenant_id`, `role`, `is_active`, `version`), aliment
   un estado repetido, desordenado o escrito por dos consumidores a la vez no deshace un cambio más
   reciente. Por eso este consumidor no usa `processed_events`.
 - El administrador de plataforma no tiene tenant y no entra en la proyección.
-- En el corte se sembró desde `agents` (104 filas); desde entonces la mantiene el topic.
+- Se sembró en el corte desde `agents` y desde entonces la mantiene el topic (las cifras del corte
+  están en [06](../microservices/06-plan-de-desacople.md#f2-notifications)).
 
 **Carrera aceptada.** `members` y los eventos de lead viajan por grupos distintos, sin orden entre
 ellos. Si un lead queda sin asignar en un tenant cuyo manager todavía no está en `members` (un tenant

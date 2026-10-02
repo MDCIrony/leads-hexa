@@ -205,7 +205,11 @@ sobre `chassis.consumer`; el backend ya no consume ningún topic. Los grupos son
   partición cuyo retroceso falla queda bloqueada hasta que ese mensaje se resuelve, para no confirmar
   por encima de él.
 - Si un consumidor muere por un fallo del cliente de Kafka, el hilo (`run_consumer_lane`) construye
-  otro tras una espera de 1 s que se duplica hasta 30 s. No se suscribe hasta que los topics existen.
+  otro tras una espera de 1 s que se duplica hasta 30 s. No construye el consumidor hasta que el
+  servicio ha declarado sus propias DLQ; no espera a los topics de entrada, que son del productor. Como
+  el consumidor nunca auto-crea topics (`allow.auto.create.topics=false`, el valor por defecto de
+  librdkafka en un consumidor), uno que aún no existe se ve en la siguiente actualización de
+  metadatos, en menos de 10 s (`topic.metadata.refresh.interval.ms=10000`).
 - Al perder o ceder particiones en un *rebalance*, el bucle libera las que tenía bloqueadas; al parar,
   cierra el consumidor y vacía el productor de la DLQ.
 - `MemberConsumer` no usa `processed_events`: su *upsert* se condiciona por `version` en SQL.

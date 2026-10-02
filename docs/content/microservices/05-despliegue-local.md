@@ -147,7 +147,7 @@ contraseñas de los brokers. Los secretos de OAuth siguen leyéndose de `.env`.
 
 | Servicio | Espera a | Por qué |
 |---|---|---|
-| todos los de aplicación | `db` sano y `db-bootstrap` completado | Sin su base no hay nada que hacer |
+| servicios de aplicación | `db` sano y, para los extraídos, `db-bootstrap` completado | Sin su base no hay nada que hacer. Hoy sólo `notifications` y `notifications-test` dependen de `db-bootstrap`; cada servicio que se extraiga lo hará también |
 | `intake-worker` | `rabbitmq` sano | Su razón de ser es la cola (igual que hoy) |
 | `notifications-worker` | `notifications` sano | La API aplica las migraciones al arrancar y los consumidores escriben esas tablas |
 | `*-worker` y `api` | **no** esperan a Kafka | Los relays reintentan solos; la API sirve aunque el broker no esté (ADR-0026) |
