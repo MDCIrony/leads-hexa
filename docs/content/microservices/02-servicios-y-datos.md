@@ -40,10 +40,10 @@ flowchart LR
 | Tabla | Dueño | Nota |
 |---|---|---|
 | `tenants`, `agents`, `auth_*`, `agent_mfa`, `mfa_recovery_codes`, `social_identities` | identity | Copiadas en F3; `agents` sin `group_id`. Las de `leads_db` se quedan, sin crecer, hasta F5 |
-| `lead_sources`, `intake_jobs`, `intake_records`, `intake_errors` | intake | |
+| `lead_sources`, `intake_jobs`, `intake_records`, `intake_errors` | intake | Copiadas en F4, con los mismos ids; sin FK a `tenants` ni a `leads` (`intake_records.lead_id` es un UUID externo). Las de `leads_db` se quedan, sin crecer, hasta F5 |
 | `intake_files` | intake | **Nueva** (F1): el fichero crudo de un `batch-upload`, en `bytea`, antes de parsearlo |
-| `provisioned_tenants` | intake | **Nueva** (F3, todavía en `leads_db`; se mueve en F4): marca que las fuentes por defecto de un tenant ya se crearon una vez |
-| `leads`, reglas, `sales_groups`, `webhook_configs` | lead-core | `leads` gana `intake_record_id` (F4) |
+| `provisioned_tenants` | intake | **Nueva** (F3, en `leads_db`; movida a `intake_db` en F4): marca que las fuentes por defecto de un tenant ya se crearon una vez |
+| `leads`, reglas, `sales_groups`, `webhook_configs` | lead-core | `leads` gana `intake_record_id` (F4, migración 018) con `UNIQUE (tenant_id, intake_record_id)`, y pierde la FK de `source_id` hacia `lead_sources` |
 | `advisors` | lead-core | **Nueva** (F3, migración 017): proyección de identidad + `group_id` propio; sembrada desde `agents` |
 | `notifications` | notifications | Copiada en F2; `leads_db.notifications` se queda, sin crecer, hasta F5 |
 | `members` | notifications | **Nueva** (F2): proyección de identidad para decidir destinatarios; sembrada en el corte desde `agents` |
@@ -119,12 +119,12 @@ sequenceDiagram
 | `NotificationHandler` busca managers | Proyección `members` | F2 |
 | `SalesGroup*` cuenta y deja huérfanos agentes | Opera sobre `advisors.group_id`, local | F3 |
 | `UpdateAgentUseCase` valida `group_id` | `group_id` sale de `/agents`; pasa a `PATCH /advisors/{agent_id}` (cambio de contrato 1) | F3 |
-| `CreateTenantUseCase` crea fuentes | identity crea tenant + manager y publica el estado del tenant; intake crea las dos fuentes al verlo por primera vez | F3 (consumidor en el monolito), F4 (se mueve a intake) |
+| `CreateTenantUseCase` crea fuentes | identity crea tenant + manager y publica el estado del tenant; intake crea las dos fuentes al verlo por primera vez | F3 (consumidor en el monolito), F4 (consumidor en intake) |
 | `DeleteLeadSourceUseCase` cuenta leads | Cuenta `intake_records` de la fuente: todo lead nace de un registro, así que el resultado es el mismo | F4 |
 | `RawSqlLeadRepository` hace `JOIN agents` | `JOIN advisors` | F3 |
 | `KafkaCredentialProvisioner` y el principal `INTEGRATION` | Se mueven a identity | F3 |
 
-Los cruces de F3 están cortados; los de F4 siguen en el monolito.
+Los cruces de F3 y de F4 están cortados.
 
 ### Alta de una organización
 
@@ -133,7 +133,7 @@ sequenceDiagram
     actor Admin
     participant ID as identity
     participant K as Kafka
-    participant IN as intake.tenants<br/>(backend-worker hasta F4)
+    participant IN as intake.tenants<br/>(intake-worker)
 
     Admin->>ID: POST /tenants
     ID->>ID: tenant + manager + outbox (una transacción)
@@ -145,25 +145,32 @@ sequenceDiagram
 
 Consecuencia aceptada: una ingesta enviada en el primer segundo tras el alta puede recibir
 `SOURCE_NOT_FOUND`. `provisioned_tenants` evita que releer el topic compactado recree una fuente que
-el manager borró después; la migración 017 la sembró con los tenants que ya existían. El consumidor
-vive en `backend-worker` (grupo `intake.tenants`) hasta que F4 lo mueva a intake.
+el manager borró después; la migración 017 la sembró con los tenants que ya existían, y el corte de F4 la
+copió a `intake_db`. El consumidor (grupo `intake.tenants`) vive en `intake-worker` desde F4; antes
+era código de intake dentro de `backend-worker`.
 
 ## Cambios en el contrato público
 
 Son dos y están registrados en [ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md). El resto
-de rutas, cuerpos, códigos y el sobre de error no cambian. El primero está implantado desde F3; el
-segundo llega con F4.
+de rutas, cuerpos, códigos y el sobre de error no cambian. Los dos están implantados: el primero
+desde F3 y el segundo desde F4.
 
 | | Antes | Después |
 |---|---|---|
 | Grupo del asesor (F3, implantado) | `POST/PATCH /agents` aceptaban `group_id`; `GET /agents?group_id=` filtraba | `/agents` no lo admite (`422` en el cuerpo). Nuevo `GET /advisors?group_id=&is_active=` (id, nombre, grupo, carga activa) y `PATCH /advisors/{agent_id}` `{group_id}` |
-| Pendientes de ingesta (F4) | `GET /leads/stats` devuelve `pending_intake` | `GET /leads/stats` lo pierde. Nuevo `GET /intake/stats` → `{pending, rejected, pending_intake}` |
+| Pendientes de ingesta (F4, implantado) | `GET /leads/stats` devuelve `pending_intake` | `GET /leads/stats` lo pierde. Nuevo `GET /intake/stats` → `{pending, rejected, pending_intake}` |
 
 Impacto en el frontend del primero: ninguno visible. El MVP nunca tuvo interfaz de grupo
 ([Frontend](../roadmap/frontend.md)), así que sólo quitó `group_id` de su contrato de `/agents` y no
 llama a `/advisors`. Sus tipos se generan del OpenAPI de cada servicio, que publica el gateway:
-`/openapi.json` (lead-core), `/openapi/identity.json` y `/openapi/notifications.json`. El segundo
-cambio hará que el panel haga dos lecturas.
+`/openapi.json` (lead-core), `/openapi/identity.json`, `/openapi/notifications.json` y
+`/openapi/intake.json`.
+
+Impacto en el frontend del segundo: los tipos de `/sources` e `/intake` salen de
+`/openapi/intake.json` (`intake-schema.d.ts`), el de `/leads/stats` ya no incluye `pending_intake`, y
+existen los servicios de estadísticas de los dos lados (`GET /leads/stats` y `GET /intake/stats`). El
+MVP no tiene panel del gestor que los muestre: es un elemento del
+[roadmap](../roadmap/frontend.md), y el día que se construya leerá las dos fuentes.
 
 ## Patrón de construcción
 
@@ -193,7 +200,7 @@ repite aquí. Lo que añade cada servicio extraído:
 | Errores | Mismo sobre `{error, error_code, message}` y misma tabla `STATUS_BY_ERROR_CODE` por servicio |
 | Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que el servicio nuevo pasa sin lista base; sus `src/` y `tests/` se declaran en `scripts/verify-structure.sh`. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
 | Configuración | `Settings.from_environment()` falla al arrancar si falta un valor obligatorio, como hoy |
-| Configuración por proceso | identity la separa desde F3: `ApiSettings` y `WorkerSettings`, cada una exige sólo lo que usa su proceso (el worker no recibe la clave de firma; la API no exige broker). notifications y el backend siguen con un `Settings` para los dos procesos, así que cada uno exige también las variables del otro; el del backend se separa en F5 |
+| Configuración por proceso | identity la separa desde F3 e intake desde F4: `ApiSettings` y `WorkerSettings` (intake añade `ReconcileSettings` para su CLI), cada una exige sólo lo que usa su proceso (el worker no recibe la clave de firma ni la JWKS; la API no exige broker). notifications y el backend siguen con un `Settings` para los dos procesos, así que cada uno exige también las variables del otro; el del backend se separa en F5 |
 
 ### notifications, el servicio de referencia
 
@@ -243,6 +250,39 @@ services/identity/
 
 Sin `processed_events` ni consumidores: identity sólo produce. `agents.tenant_id` sigue sin FK hacia
 `tenants`, como en `leads_db`: hay agentes antiguos anteriores a su tenant, y `sync_tenants` los repara.
+
+### intake
+
+Tercer servicio extraído (F4), con el mismo árbol. La decisión sobre un registro no es suya: es de
+lead-core, detrás de `POST /internal/v1/admissions`.
+
+```text
+services/intake/
+├── Dockerfile · pyproject.toml · uv.lock · migrations/ (001 fuentes, 002 jobs y registros, 003 ficheros, 004 outbox, 005 consumidores)
+├── src/
+│   ├── domain/            sources/ · jobs/ · records/ · events/ · policies/ · value_objects/
+│   ├── application/       dtos/ · ports/{input,output}/ · use_cases/{sources,reception,jobs,records,tenants}/
+│   └── infrastructure/
+│       ├── main.py                      API: aplica las migraciones al arrancar, /health
+│       ├── worker/                      intake-worker: relays job e internal, consumidor de intake.jobs y de intake.tenants
+│       ├── cli/                         reconcile
+│       ├── config/ · di/
+│       └── adapters/
+│           ├── input/api/{sources,intake}/   routers y esquemas
+│           ├── input/consumers/              intake.tenants
+│           └── output/                       persistence/ · parsing/ · admissions/ · queue/ · events/
+└── tests/                 unit/ · integration/ · e2e/ · architecture/
+```
+
+- **Qué decide y qué no.** Intake reclama el registro, pide la admisión y lo cierra (`PROMOTED` con su
+  `lead_id`, o `REJECTED` con sus errores y `IntakeRejected` en su outbox). Las reglas, el scoring y la
+  asignación son de lead-core. Los dos lados tienen su copia de los DTOs de admisión: lo que comparten
+  es el contrato JSON de `contracts/`, no código ([ADR-0031](../decisiones/0031-microservicios-por-contexto.md)).
+- **`HttpLeadAdmission`** es el único adaptador de `LeadAdmissionPort`: un `httpx.Client` por proceso
+  con *timeout* de 10 s, `ServiceTokenClient(audience="lead-core")` y el `X-Request-Id` del contexto.
+  Cualquier respuesta que no sea un 200 con cuerpo válido es `AdmissionUnavailable`.
+- **Procesos.** `intake` (API) y `intake-worker`, de la misma imagen. Ninguno tiene credenciales sobre
+  `leads_db`: `intake_svc` sólo conecta a `intake_db`.
 
 ### `libs/chassis`
 

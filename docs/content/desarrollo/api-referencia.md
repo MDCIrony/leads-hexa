@@ -7,11 +7,14 @@ salvo `GET /health`. En desarrollo local, con la plataforma levantada, la API re
 explican una sola vez, completos, en [API · Errores](api-errores.md); aquí sólo se nombra cuáles
 puede devolver cada endpoint.
 
-Detrás del gateway responden tres servicios: `identity` sirve `/auth`, `/tenants` y `/agents`
-(desde F3); `notifications`, `/notifications` (desde F2); el backend (lead-core), todo lo demás. El
-contrato hacia el cliente es uno solo, con el mismo sobre de error en todos. `/openapi.json` y
-`/docs` son los del backend; los de los servicios extraídos se publican en `/openapi/identity.json` y
-`/openapi/notifications.json`. Esta página es la referencia completa de los tres.
+Detrás del gateway responden cuatro servicios: `identity` sirve `/auth`, `/tenants` y `/agents`
+(desde F3); `intake`, `/sources` e `/intake` (desde F4); `notifications`, `/notifications` (desde F2);
+el backend (lead-core), todo lo demás. El contrato hacia el cliente es uno solo, con el mismo sobre
+de error en todos. `/openapi.json` y `/docs` son los del backend; los de los servicios extraídos se
+publican en `/openapi/identity.json`, `/openapi/intake.json` y `/openapi/notifications.json`. Esta
+página es la referencia completa de los cuatro. Las rutas `/internal/v1/*` (introspección, JWKS,
+tokens de servicio, agentes y admisiones) no son parte de la API pública: el gateway responde `404` a
+cualquier `/internal/`, y sus contratos están en `contracts/` del repositorio.
 
 ## Resumen de endpoints
 
@@ -50,6 +53,7 @@ contrato hacia el cliente es uno solo, con el mismo sobre de error en todos. `/o
 | Trabajos de ingesta | `GET /api/v1/intake/jobs` | `MANAGER` | 200 |
 | Trabajos de ingesta | `GET /api/v1/intake/jobs/{job_id}` | `MANAGER` | 200 |
 | Trabajos de ingesta | `POST /api/v1/intake/jobs/{job_id}/reprocess` | `MANAGER` | 202 |
+| Bandeja de entrada | `GET /api/v1/intake/stats` | `MANAGER` | 200 |
 | Leads | `GET /api/v1/leads` | `MANAGER` o `X-Api-Key` de integración | 200 |
 | Leads | `GET /api/v1/leads/mine` | `MANAGER` o `AGENT` | 200 |
 | Leads | `GET /api/v1/leads/stats` | `MANAGER` | 200 |
@@ -465,10 +469,11 @@ si el agente no estaba en lead-core e identity no responde.
 ## Orígenes de leads
 
 `LeadSource` responde «¿de dónde vienen mis leads?»: cada lead ingerido lleva el `source_id` de la
-fuente por la que entró. Al crear una organización nacen automáticamente dos, `MANUAL_FORM` y
-`FILE_UPLOAD` — las que usan la ingesta individual y la carga de ficheros —, pocos segundos después
-de `POST /tenants`, cuando lead-core recibe el estado de la organización nueva. Se crean una sola
-vez: si el gestor borra una, no vuelve a aparecer. Los cuatro endpoints exigen `MANAGER`.
+fuente por la que entró. Los sirve `intake` (desde F4). Al crear una organización nacen
+automáticamente dos, `MANUAL_FORM` y `FILE_UPLOAD` — las que usan la ingesta individual y la carga de
+ficheros —, pocos segundos después de `POST /tenants`, cuando intake recibe el estado de la
+organización nueva. Se crean una sola vez: si el gestor borra una, no vuelve a aparecer. Los cuatro
+endpoints exigen `MANAGER`.
 
 ### `POST /api/v1/sources`
 
@@ -492,14 +497,16 @@ validan igual que en la creación).
 
 ### `DELETE /api/v1/sources/{source_id}`
 
-Errores: `404 Not Found` (`SOURCE_NOT_FOUND`); `400 Bad Request` (`SOURCE_IN_USE` si tiene leads
-asociados — no se borra en silencio la trazabilidad de esos leads).
+Errores: `404 Not Found` (`SOURCE_NOT_FOUND`); `400 Bad Request` (`SOURCE_IN_USE` si tiene registros
+o trabajos de ingesta asociados — todo lead nace de un registro, así que no se borra en silencio la
+trazabilidad de esos leads).
 
 ## Ingesta
 
 Recibe un lead y responde **antes** de interpretarlo: la recepción persiste el payload y crea su
-`IntakeJob` en una transacción propia; el procesamiento —viabilidad, puntuación, asignación— corre
-después, en segundo plano, en una transacción distinta. Ningún fallo en esa segunda fase puede ya
+`IntakeJob` en una transacción propia; el procesamiento corre después, en segundo plano, en el
+`intake-worker`, que pide la decisión —viabilidad, puntuación, asignación— a lead-core
+(`POST /internal/v1/admissions`, idempotente por registro). Ningún fallo en esa segunda fase puede ya
 borrar la constancia de haber recibido el lead. El resultado se consulta por `job_id` (más abajo,
 _Trabajos de ingesta_) o por el registro (_Bandeja de entrada_). El razonamiento completo está en
 [ADR-0009](../decisiones/0009-registrar-antes-de-interpretar.md) y
@@ -636,13 +643,30 @@ Si el `payload` corregido sigue sin validar, el registro permanece `REJECTED` co
 nuevos y la respuesta es `400 Bad Request` con la misma forma más `error` y `error_code` rellenos.
 Errores: `404 Not Found` (`INTAKE_RECORD_NOT_FOUND`); `400 Bad Request`
 (`INVALID_INTAKE_TRANSITION` si el registro no está en un estado promovible — por ejemplo, ya
-`PROMOTED`).
+`PROMOTED` o `DISCARDED`); `503 Service Unavailable` (`LEAD_CORE_UNAVAILABLE` si lead-core no
+responde: la promoción es la única admisión que se espera en línea, y el registro no cambia).
+
+Un campo de texto obligatorio ausente (`first_name`, `last_name`, `company`, `industry`) rechaza el
+registro con `error_code: MISSING_REQUIRED_FIELD` y el nombre del campo.
 
 ### `POST /api/v1/intake/records/{record_id}/discard`
 
 `MANAGER`. El gestor decide no recuperar el registro. Errores: `404 Not Found`
 (`INTAKE_RECORD_NOT_FOUND`); `400 Bad Request` (`INVALID_INTAKE_TRANSITION` si ya está
 `PROMOTED` o `DISCARDED`).
+
+### `GET /api/v1/intake/stats`
+
+`MANAGER`. Cuántos registros de la organización esperan al gestor: los `PENDING` aún sin procesar y
+los `REJECTED` por corregir. Es el dato que `GET /api/v1/leads/stats` devolvía como `pending_intake`
+([ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)). Un `AGENT` recibe `403`.
+
+```json
+{"pending": 3, "rejected": 14, "pending_intake": 17}
+```
+
+`pending_intake` es `pending + rejected`. Declarada antes de las rutas paramétricas, igual que
+`/leads/stats`.
 
 ## Trabajos de ingesta
 
@@ -765,7 +789,7 @@ recibe `403` (su vista es `GET /api/v1/leads/mine`, no un panel de organización
 router, misma razón que `/mine`: si fuera después, `stats` caería en la ruta paramétrica y se
 rechazaría como UUID inválido.
 
-Los cinco indicadores que pinta el Panel, en una sola petición:
+Los indicadores que pinta el Panel de lead-core, en una sola petición:
 
 | Parámetro | Tipo | Contra qué |
 |---|---|---|
@@ -773,7 +797,7 @@ Los cinco indicadores que pinta el Panel, en una sola petición:
 | `to` | fecha | `leads.created_at <=` este valor. Ausente: sin límite superior |
 
 Ambos opcionales; sin ninguno, la cifra es "desde siempre". Nada se cachea ni se materializa: las
-cuatro consultas viajan en una única transacción, así que las cinco cifras son la misma foto.
+consultas viajan en una única transacción, así que las cifras son la misma foto.
 
 ```json
 {
@@ -783,7 +807,6 @@ cuatro consultas viajan en una única transacción, así que las cinco cifras so
     "UNASSIGNED": 40, "ASSIGNED": 700, "DISCARDED": 100
   },
   "unassigned": 40,
-  "pending_intake": 17,
   "load_by_agent": [
     {"agent_id": "5c8a1234-...", "name": "Ana Ruiz", "active_leads": 23}
   ]
@@ -792,8 +815,8 @@ cuatro consultas viajan en una única transacción, así que las cinco cifras so
 
 `by_status` lleva siempre los seis valores de `LeadStatus`, con `0` donde no haya leads. `unassigned`
 es redundante a propósito con `by_status["UNASSIGNED"]`: el indicador propio que pide el Panel, sin
-que el cliente tenga que conocer ese nombre de estado interno. `pending_intake` suma los registros
-de entrada en `PENDING` y `REJECTED` — los dos estados sobre los que un gestor tiene algo pendiente.
+que el cliente tenga que conocer ese nombre de estado interno. Desde F4 no lleva `pending_intake`:
+los registros de entrada son de intake y su cifra está en `GET /api/v1/intake/stats`.
 `load_by_agent` reutiliza la misma consulta que el motor de asignación (`active_load_by_agent`), con
 el nombre de cada asesor añadido para que el Panel no necesite una segunda petición a
 `GET /api/v1/agents`.

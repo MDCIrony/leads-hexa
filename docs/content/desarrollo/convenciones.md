@@ -74,7 +74,8 @@ chassis/
 
 El script recorre cada raíz Python declarada —`backend/src`, `backend/tests`, `libs/chassis/src`,
 `libs/chassis/tests`, `services/notifications/src`, `services/notifications/tests`,
-`services/identity/src`, `services/identity/tests`, `test-consumer/`, `demo/` y `tools/`— y aplica su lista base a las heredadas; en las de tests sólo mide carpetas. Los
+`services/identity/src`, `services/identity/tests`, `services/intake/src`, `services/intake/tests`,
+`test-consumer/`, `demo/` y `tools/`— y aplica su lista base a las heredadas; en las de tests sólo mide carpetas. Los
 servicios extraídos no tienen lista base. Además, `chassis.testing` ofrece `assert_structure` (con
 `max_lines=None` para los tests), `assert_domain_tests_isolated` y, para el guardián de capas,
 `layer_violations` y `stdlib_only_violations`, y cada servicio los llama desde

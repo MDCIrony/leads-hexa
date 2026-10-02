@@ -16,7 +16,8 @@ ella, «añade latencia» es una opinión.
 | `GET /api/v1/leads` por el gateway, con cookie | 10,6 ms | 13,9 ms | Sobrecoste del borde ≈ 3,3 ms en p50, del orden de una introspección |
 | `POST /api/v1/auth/login` por el gateway | 292 ms | 314 ms | Dominado por bcrypt |
 | `GET /api/v1/leads` con `X-Api-Key` por el gateway | 289 ms | 310 ms | bcrypt en cada petición (en la introspección), como antes |
-| Job de 1.000 registros, de `202` a `COMPLETED` | 14,5 s | — | Una ejecución; `completed_at − created_at` = 14,2 s. Se repite tras F4 para ver el coste de la admisión por HTTP |
+| Job de 1.000 registros, de `202` a `COMPLETED` (línea base de F0) | 14,5 s | — | Una ejecución; `completed_at − created_at` = 14,2 s. Admisión en proceso, dentro de una única transacción |
+| Job de 1.000 registros, de `202` a `COMPLETED`, tras F4 | MEDICION_F4 | — | Mismo método. La admisión es una llamada HTTP por registro a lead-core; es el coste que la señal de la admisión por lotes compara |
 
 **Conclusión.** El gateway con introspección añade ≈ 3 ms por petición: nada de lo medido justifica una
 caché de introspección. La ruta `X-Api-Key` está limitada por bcrypt (≈ 290 ms) y es la primera

@@ -11,6 +11,16 @@ las tres máquinas de estados que gobiernan el ciclo de vida de un lead mientras
     `TENANT` del diagrama son lógicas, garantizadas por el token. `NOTIFICATION` vive en
     `notifications_db` desde F2.
 
+!!! note "Tras F4"
+    `LEAD_SOURCE`, `INTAKE_JOB`, `INTAKE_RECORD`, `INTAKE_ERROR` (y `intake_files` y
+    `provisioned_tenants`, que el diagrama no dibuja) viven en `intake_db`
+    (`services/intake/migrations/`), con los mismos ids; sus copias en `leads_db` se quedan
+    congeladas hasta F5. En `intake_db` `INTAKE_RECORD.lead_id` es un UUID externo y ninguna tabla
+    lleva clave foránea hacia `tenants` ni `leads`. En `leads_db`, `LEAD` gana `intake_record_id` con
+    `UNIQUE (tenant_id, intake_record_id)` (la clave de la idempotencia de la admisión) y la migración
+    018 quitó la clave foránea de `LEAD.source_id` hacia `LEAD_SOURCE`: `source_id` es ya una
+    referencia lógica.
+
 ## Diagrama entidad-relación
 
 ```mermaid
@@ -65,7 +75,8 @@ erDiagram
     LEAD {
         uuid id PK
         uuid tenant_id
-        uuid source_id FK
+        uuid source_id "referencia lógica desde F4"
+        uuid intake_record_id "único con tenant_id"
         text first_name
         text last_name
         text email "opcional"
@@ -199,7 +210,7 @@ organización cliente. `name` no puede quedar vacío; `slug` se deriva del nombr
 símbolos (`slugify()`) y es único en toda la plataforma, no sólo dentro de una organización — evita
 que "Solución" y "Solucion" produzcan dos organizaciones indistinguibles en el listado del
 administrador. Crear una organización crea, en la misma transacción, su primer gestor; sus dos
-fuentes por defecto (`Formulario manual`, `Carga de fichero`) las crea lead-core en cuanto recibe el
+fuentes por defecto (`Formulario manual`, `Carga de fichero`) las crea intake en cuanto recibe el
 `TenantState` ([Organizaciones](../modulos/organizaciones.md#el-alta-una-transaccion-y-un-evento)).
 `version` sube en cada escritura.
 
@@ -234,7 +245,7 @@ hueco en vez de perder datos en cascada.
 
 ### LeadSource
 
-`domain/entities/lead_source.py`, tabla `lead_sources`. El canal por el que entra un lead. `name`
+`services/intake/src/domain/sources/lead_source.py`, tabla `lead_sources` de `intake_db`. El canal por el que entra un lead. `name`
 no vacío y único por organización; `field_mapping`, si se define, exige claves y valores no
 vacíos. Toda organización nace con dos fuentes activas, `MANUAL_FORM` y `FILE_UPLOAD`. La columna
 `secret_hash` está reservada para el webhook entrante — la entidad de dominio no tiene hoy ningún
@@ -266,8 +277,8 @@ descalificaría a la organización entera.
 
 ### IntakeJob, IntakeRecord e IntakeError
 
-`domain/entities/intake_job.py` y `domain/entities/intake_record.py`; tablas `intake_jobs`,
-`intake_records` e `intake_errors`. Un `IntakeJob` agrupa una operación de ingesta completa, sea de
+`services/intake/src/domain/jobs/intake_job.py` y `services/intake/src/domain/records/intake_record.py`;
+tablas `intake_jobs`, `intake_records` e `intake_errors` de `intake_db`. Un `IntakeJob` agrupa una operación de ingesta completa, sea de
 un único lead o de un fichero entero. Cada payload recibido genera su propio `IntakeRecord`, con el
 dato **tal cual llegó** en `payload`. Los errores de validación viven en su propia tabla,
 `intake_errors`, no embebidos en JSONB: un registro puede fallar por varios campos a la vez, y el

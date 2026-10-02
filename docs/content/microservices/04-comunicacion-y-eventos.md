@@ -5,15 +5,17 @@ Decisiones registradas en [ADR-0033](../decisiones/0033-eventos-internos-en-kafk
 [ADR-0034](../decisiones/0034-encolado-por-outbox-y-fichero-durable.md) y
 [ADR-0035](../decisiones/0035-admision-sincrona-idempotente.md).
 
-!!! note "Estado de F1 y F3"
+!!! note "Estado de F1, F3 y F4"
     Lo que esta página describe de outbox, eventos internos, RabbitMQ y fichero durable está
     implantado desde F1. Los «hoy» de las secciones de outbox y RabbitMQ se refieren al sistema
     anterior a F1. Lo que se construyó difiere en lo que lista la
     [fase F1 del plan](06-plan-de-desacople.md#f1-durabilidad-en-el-monolito).
 
-    Desde F3, `internal.identity.*` lo produce identity (`identity-worker`, `producer="identity"`), y
-    los grupos `lead-core.advisors` e `intake.tenants` consumen en `backend-worker`. La admisión y lo
-    que la rodea son de F4.
+    Desde F3, `internal.identity.*` lo produce identity (`identity-worker`, `producer="identity"`).
+    Desde F4, la admisión, el worker de intake y el consumidor `intake.tenants` son de
+    `services/intake` (`intake-worker`, `producer="intake"`), y `backend-worker` sólo consume
+    `lead-core.advisors`. Lo que se construyó difiere en lo que lista la
+    [fase F4 del plan](06-plan-de-desacople.md#f4-intake).
 
 ## Regla de canal
 
@@ -74,9 +76,9 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
 - **Las DLQ las declara el consumidor.** `internal.dlq.<grupo>` (1 partición, `cleanup.policy=delete`,
   7 días) la crea el servicio dueño del grupo, con `ensure_topics_until_ready()`, que reintenta con
   *backoff* hasta que el broker responde y sólo entonces deja arrancar los carriles. Desde F2 las de
-  los tres grupos de notifications son suyas; desde F3 `backend-worker` declara las de sus dos grupos,
-  `internal.dlq.lead-core.advisors` e `internal.dlq.intake.tenants`, y ya no declara
-  `internal.identity.*`, que son de `identity-worker`.
+  los tres grupos de notifications son suyas; desde F3 `backend-worker` declara las de sus dos grupos y ya no declara
+  `internal.identity.*`, que son de `identity-worker`; desde F4 `intake-worker` declara
+  `internal.dlq.intake.tenants` y `backend-worker` sólo `internal.dlq.lead-core.advisors`.
 - **Cliente.** `chassis.kafka_config` fija los ajustes de productor y consumidor de todos los
   servicios; entre ellos, `topic.metadata.refresh.interval.ms=10000`, para que un grupo suscrito
   antes de que el productor cree su topic lo vea en segundos y no a los 5 minutos por defecto.
@@ -92,7 +94,7 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
 | `notifications.intake-events` | `internal.intake.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
 | `notifications.members` | `internal.identity.agents` | `notifications-worker` | F2 (nuevo; mantiene `members`) |
 | `lead-core.advisors` | `internal.identity.agents` | `backend-worker` | F3 (nuevo; mantiene `advisors`) |
-| `intake.tenants` | `internal.identity.tenants` | `backend-worker` (código de intake en el monolito hasta F4) | F3 (nuevo; crea las fuentes por defecto) |
+| `intake.tenants` | `internal.identity.tenants` | `intake-worker` (hasta F4, `backend-worker`) | F3 (nuevo; crea las fuentes por defecto); movido a intake en F4, con su DLQ y sus `processed_events` |
 
 ### Sobre de los eventos internos
 
@@ -213,6 +215,7 @@ sequenceDiagram
 - Desaparece el *fallback* de procesar en el proceso de la API (`BackgroundTasks`). Con RabbitMQ caído
   el job espera en el outbox y sale cuando vuelve: más latencia, ninguna pérdida y una sola ruta de
   ejecución. Sustituye esa parte de [ADR-0027](../decisiones/0027-cola-para-el-trabajo-de-fondo.md).
+  Desde F4 el relay `job` es el de `intake-worker`, sobre el outbox de `intake_db`.
 - El relay publica con *publisher confirms* (`confirm_delivery`): sin confirmación no hay `published_at`.
 - El mensaje gana campos aditivos: `{message_id, schema_version, tenant_id, job_id, correlation_id}`.
 
@@ -239,20 +242,39 @@ flowchart TD
     LOOP --> ADM["POST /internal/v1/admissions"]
     ADM -->|ADMITTED| PROM["record.promote(lead_id)"]
     ADM -->|REJECTED| REJ["record.reject(errores)<br/>+ outbox IntakeRejected"]
-    ADM -->|"5xx / timeout"| KEEP["sigue PENDING<br/>interrupted = true"]
+    ADM -->|"fallo transitorio"| KEEP["sigue PENDING<br/>interrupted = true"]
     PROM --> LOOP
     REJ --> LOOP
-    KEEP --> LOOP
-    LOOP -->|fin| COUNT["contadores derivados"]
+    KEEP -->|"corta la ejecución"| COUNT["contadores derivados"]
+    LOOP -->|fin| COUNT
     COUNT --> Q{"¿interrupted?"}
     Q -->|no| DONE["job.complete() → ack"]
-    Q -->|sí| NACK["nack(requeue) → 3ª entrega → DLQ"]
+    Q -->|sí| NACK["espera 10 s → nack(requeue) → 3ª entrega → DLQ"]
 ```
 
 El cambio respecto a hoy es la última rama: un job interrumpido hace `nack` en lugar de `ack`. Hoy se
 queda en `PROCESSING` sin nadie que lo retome; con lead-core al otro lado de la red un fallo
 transitorio deja de ser raro. El reproceso manual (`POST /intake/jobs/{id}/reprocess`) sigue
 existiendo, ahora encolando por outbox, y es lo que recupera un job desde la DLQ.
+
+Lo que añadió la construcción de F4:
+
+- **Fallo transitorio** es cualquier respuesta que no sea un 200 con cuerpo válido, un error de
+  transporte, un *timeout* o `ServiceTokenUnavailable` (`AdmissionUnavailable`). El registro sigue
+  `PENDING`.
+- **La ejecución se corta en la primera caída de la admisión.** Con lead-core colgado, cada llamada
+  agota su *timeout* de 10 s, y miles de ellas sobrepasarían el de consumo de RabbitMQ. Los registros
+  no alcanzados siguen `PENDING` y los recoge la redelivery. Un error inesperado en un registro, en
+  cambio, no corta: ese registro queda `PENDING` y el job sigue con los demás.
+- **Espera de 10 s antes del `nack(requeue)`**, interrumpible al parar el worker. Un reinicio de
+  lead-core dura segundos; una redelivery inmediata gastaría las tres entregas del job antes de que
+  vuelva y lo mandaría a la DLQ sin necesidad. Coste: hasta 30 s de latencia añadida ante una caída
+  real, antes de que el job llegue a la DLQ.
+- **Un registro descartado a mitad de un lote** (`INVALID_INTAKE_TRANSITION`) se salta y no cuenta
+  como interrupción: reentregar el job no lo cambiaría.
+- **Un job largo no pierde la conexión.** El trabajo corre en un hilo mientras el de la conexión
+  atiende `process_data_events`, de modo que el *heartbeat* (60 s) sigue vivo; `ack` y `nack` vuelven
+  por `add_callback_threadsafe`. Al parar, el worker termina el job en curso (`stop_grace_period: 5m`).
 
 ## Contrato de admisión
 
@@ -268,14 +290,30 @@ X-Request-Id: <correlation_id>
                  "custom_attributes": {} }
 }
 
-200 { "outcome": "ADMITTED", "lead_id": "…", "status": "ASSIGNED|UNASSIGNED|DISQUALIFIED",
+200 { "outcome": "ADMITTED", "lead_id": "…",
+      "status": "NEW|QUALIFIED|ASSIGNED|UNASSIGNED|DISQUALIFIED|DISCARDED",
       "score": 65, "assigned_agent_id": "…|null", "applied_rules_count": 3 }
 200 { "outcome": "REJECTED", "errors": [{ "field": "email", "message": "…", "error_code": "INVALID_EMAIL" }] }
-401 / 403  token de servicio ausente o de otro llamante
+401        token de servicio ausente, inválido o de otro llamante (un único mensaje)
+422        cuerpo que no conforma el esquema
 5xx        error del servicio → el llamante lo trata como fallo transitorio
+
+GET /internal/v1/admissions?intake_record_ids=<uuid>&intake_record_ids=<uuid>…   (1 a 200 ids)
+200 { "items": [{ "intake_record_id": "…", "tenant_id": "…", "lead_id": "…" }] }
+    los ids que lead-core no conoce no aparecen; más de 200 o un id inválido → 422
 ```
 
-`budget` viaja como texto decimal, nunca como `float`.
+- `budget` viaja como texto decimal, nunca como `float`. Un valor ilegible es un `REJECTED`
+  `INVALID_BUDGET`, nunca un 422: el 4xx lo reintentaría el worker hasta la DLQ. Intake convierte a
+  texto los escalares no nulos que no lo sean.
+- **El `status` del `ADMITTED` cubre los seis de `LeadStatus`.** Una admisión nueva produce
+  `ASSIGNED`, `UNASSIGNED` o `DISQUALIFIED`, pero una admisión repetida devuelve el lead tal como está
+  ahora, y entre las dos un gestor puede haberlo descartado o liberado. La ampliación del enum es
+  aditiva dentro de v1.
+- **`MISSING_REQUIRED_FIELD` es `REJECTED`, no un error.** `first_name`, `last_name`, `company` e
+  `industry` son `NOT NULL` en `leads`; si falta alguno, lead-core responde `REJECTED` con ese código
+  y el campo, y no guarda nada. Un 400 sería para intake un fallo transitorio y el mensaje acabaría en
+  la DLQ.
 
 ### Lo que hace lead-core
 
@@ -290,9 +328,9 @@ sequenceDiagram
     LC->>DB: ¿lead con (tenant_id, intake_record_id)?
     alt ya existe
         DB-->>LC: lead
-        LC-->>W: ADMITTED con el mismo lead_id (nada se publica)
+        LC-->>W: ADMITTED con el mismo lead_id y su estado actual (nada se publica)
     else nuevo
-        LC->>LC: Lead.create → REJECTED si no valida
+        LC->>LC: campos obligatorios y Lead.create → REJECTED si no valida
         LC->>DB: viabilidad → scoring → lock reglas → asignación
         LC->>DB: lead + rr_cursor + outbox product + outbox internal
         DB-->>LC: COMMIT
@@ -304,18 +342,30 @@ sequenceDiagram
   evaluar los motores dos veces; la restricción cubre la carrera de dos llamadas simultáneas: la
   perdedora recibe `UniqueViolation`, revierte (incluido el avance del cursor) y responde con el lead
   de la ganadora.
-- **`REJECTED` no guarda nada.** Depende sólo de la validación de `Lead.create`, que es determinista:
-  repetir la llamada da la misma respuesta.
+- **`REJECTED` no guarda nada.** Depende sólo de los campos obligatorios y de la validación de
+  `Lead.create`, que son deterministas: repetir la llamada da la misma respuesta.
+- **Un `ADMITTED` de un lead que ya existía** lleva su `status`, `score`, `assigned_agent_id` y
+  `applied_rules_count` (el número de entradas de `score_breakdown`) reales.
 - **Mejora sobre hoy:** `LeadAssigned` y `LeadLeftUnassigned` dejan de publicarse en memoria después
   del commit y pasan al outbox `internal` **dentro** de la transacción del lead. Ya no hay ventana en
   la que un reinicio pierda el aviso.
 
 ### Lo que hace intake con la respuesta
 
-En una transacción propia: marca el registro (`PROMOTED` con `lead_id`, o `REJECTED` con sus
-errores), y si fue rechazado registra `IntakeRejected` en su outbox `internal`. Si el worker cae entre
-la respuesta de lead-core y este commit, la redelivery repite la admisión y obtiene el mismo
-`lead_id`.
+El flujo partido **no mantiene una transacción abierta durante la admisión**: una conexión retenida
+mientras lead-core puntúa y asigna agotaría el pool.
+
+1. Lee el registro. Si ya está `PROMOTED`, responde con su `lead_id` sin llamar; si no está abierto
+   (`PENDING` o `REJECTED`), `INVALID_INTAKE_TRANSITION`.
+2. Llama a lead-core, sin unidad de trabajo. La organización y la fuente salen del registro
+   persistido.
+3. En una transacción propia, **reclama el registro sólo si sigue abierto** (`claim_unpromoted` toma
+   `PENDING` o `REJECTED`, nunca `DISCARDED`) y lo marca: `PROMOTED` con `lead_id`, o `REJECTED` con
+   sus errores y `IntakeRejected` en su outbox `internal`. Si el reclamo no devuelve nada, relee: un
+   `PROMOTED` ganador responde con su resultado, cualquier otro estado es `INVALID_INTAKE_TRANSITION`.
+
+Si el worker cae entre la respuesta de lead-core y este commit, la redelivery repite la admisión y
+obtiene el mismo `lead_id`; la idempotencia de lead-core cubre también la carrera entre dos ejecuciones.
 
 La **promoción manual** desde la bandeja (`POST /intake/records/{id}/promote`, con el payload
 corregido) usa el mismo endpoint, llamado desde la API de intake. Es la única admisión que el usuario
@@ -323,9 +373,20 @@ espera en línea.
 
 ### Reconciliación
 
-Un comando de intake recorre los registros `PROMOTED` de un periodo y pide a lead-core, con
-`GET /internal/v1/admissions?intake_record_ids=…`, cuáles conoce y con qué `lead_id`. Una diferencia no se corrige escribiendo en la base ajena: se vuelve a
-admitir el registro, que es idempotente, o se emite una alerta. Se usa como criterio de salida de F4.
+`python -m infrastructure.cli.reconcile [--since ISO8601]` (por defecto, las últimas 24 h) recorre los
+registros `PROMOTED` de intake en lotes de 200 y pide a lead-core, con
+`GET /internal/v1/admissions?intake_record_ids=…`, cuáles conoce y con qué `lead_id`. **Sólo informa:**
+no escribe ni readmite. Una diferencia no se corrige escribiendo en la base ajena: se vuelve a admitir
+el registro, que es idempotente, o se atiende la alerta. Se usó como criterio de salida de F4.
+
+| Código | Significado |
+|---|---|
+| `0` | Ninguna diferencia |
+| `1` | Hay diferencias; cada una sale por la salida estándar: `MISSING` (lead-core no conoce el registro), `LEAD_MISMATCH` (otro `lead_id`) o `TENANT_MISMATCH` (lead-core lo tiene en otra organización) |
+| `2` | No hay respuesta: configuración incompleta (`ReconcileSettings`), `intake_db` o lead-core inalcanzables. Un silencio no es «sin diferencias» |
+
+Sólo ve lo que intake dio por `PROMOTED`. Un lead que lead-core creó y que ningún registro `PROMOTED`
+referencia no aparece; ver la ventana residual de la [matriz de fallos](#matriz-de-fallos).
 
 ## Correlación
 
@@ -346,3 +407,4 @@ Seguir un lead de punta a punta es filtrar los logs de los cinco servicios por u
 | Kafka | Los eventos esperan en cada outbox; las proyecciones dejan de avanzar | Los relays publican al volver |
 | Un relay a mitad de lote | Algunas filas se entregan dos veces | Deduplicación por `event_id` |
 | Un worker a mitad de job | El mensaje vuelve a la cola | Redelivery; la admisión es idempotente |
+| Un registro se descarta mientras lead-core lo admite | **Ventana residual aceptada.** Intake no puede reclamar el registro (`DISCARDED`) y lead-core conserva un lead al que ningún registro apunta. La reconciliación, que recorre registros `PROMOTED`, no lo ve | Ninguna automática. Cerrarla exigiría una llamada compensatoria a lead-core; se acepta porque exige que un gestor descarte a mano un registro justo mientras se admite ese mismo registro |

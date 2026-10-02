@@ -17,13 +17,14 @@ docker compose up -d
 Levanta `db` (PostgreSQL 16), `backend` (la API, que aplica las migraciones pendientes al arrancar y
 recarga en caliente lo que cambie en `backend/src`), `gateway` (nginx, la única entrada de la API),
 `frontend` (nginx sirviendo la interfaz) y `docs` (este sitio), más `rabbitmq`, `kafka`, `kafka-ui`,
-`backend-worker` (la entrega: los relays del outbox, y las proyecciones de agentes y organizaciones),
-`intake-worker`, el servicio de identidad —`identity` (autenticación, organizaciones y agentes; aplica
+`backend-worker` (la entrega: los relays del outbox, y la proyección de asesores), el servicio de
+recepción —`intake` (fuentes, trabajos y registros; aplica sus migraciones al arrancar) e
+`intake-worker` (relays, `intake.jobs` y las fuentes por defecto de cada organización)—, el servicio de identidad —`identity` (autenticación, organizaciones y agentes; aplica
 sus migraciones al arrancar) e `identity-worker` (publica sus eventos)— y el de notificaciones:
 `notifications` (su API; aplica sus migraciones al arrancar) y `notifications-worker` (sus consumidores
 de Kafka). Un servicio de una sola ejecución, `db-bootstrap`, crea antes los roles y las bases de
-`identity` y `notifications`. `backend` espera a que `db` esté sano; `gateway` no espera a nadie
-(vuelve a resolver `backend`, `identity` y `notifications` por DNS); `frontend` espera a que `gateway`
+`identity`, `intake` y `notifications`. `backend` espera a que `db` esté sano; `gateway` no espera a
+nadie (vuelve a resolver `backend`, `identity`, `intake` y `notifications` por DNS); `frontend` espera a que `gateway`
 esté sano.
 
 Puertos reales en el host:
@@ -178,7 +179,7 @@ curl -s -X POST http://localhost:8001/api/v1/tenants \
 ```
 
 La organización recibe además dos orígenes de leads (`LeadSource`), `MANUAL_FORM` y `FILE_UPLOAD`,
-unos segundos después: identity publica la organización nueva y lead-core los crea al recibirla. Sin
+unos segundos después: identity publica la organización nueva e intake los crea al recibirla. Sin
 uno de ellos activo, la ingesta de la siguiente sección respondería `404 SOURCE_NOT_FOUND`;
 `GET /api/v1/sources` como gestor muestra cuándo están.
 

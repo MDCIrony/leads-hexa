@@ -24,9 +24,9 @@ transacción. Antes de escribir comprueba que el nombre —por su `slug`— y el
 administrarla.
 
 Las dos `LeadSource` por defecto (`MANUAL_FORM` y `FILE_UPLOAD`, ver [Ingesta](ingesta.md)) ya no
-nacen en esa transacción, porque son de otro servicio. Las crea lead-core al recibir el primer
-`TenantState` de la organización, con el consumidor `intake.tenants` (código de ingesta que vive en
-el monolito hasta F4). `provisioned_tenants` marca que ya se crearon una vez: releer el topic
+nacen en esa transacción, porque son de otro servicio. Las crea intake al recibir el primer
+`TenantState` de la organización, con el consumidor `intake.tenants` de `intake-worker` (hasta F4,
+código de intake dentro del monolito). `provisioned_tenants` marca que ya se crearon una vez: releer el topic
 compactado no vuelve a crear una fuente que el gestor borró después.
 
 ```mermaid
@@ -34,15 +34,15 @@ sequenceDiagram
     participant A as Administrador de plataforma
     participant ID as identity · CreateTenantUseCase
     participant K as Kafka
-    participant LC as lead-core · intake.tenants
+    participant IN as intake · intake.tenants
 
     A->>ID: POST /tenants: nombre + datos del primer gestor
     ID->>ID: comprueba nombre y correo únicos
     ID->>ID: Tenant + Agent gestor + TenantState y AgentState en el outbox (una transacción)
     ID-->>A: 201 Created
     ID->>K: internal.identity.tenants
-    K->>LC: TenantState
-    LC->>LC: si no está en provisioned_tenants: marca + MANUAL_FORM + FILE_UPLOAD<br/>(una transacción con processed_events)
+    K->>IN: TenantState
+    IN->>IN: si no está en provisioned_tenants: marca + MANUAL_FORM + FILE_UPLOAD<br/>(una transacción con processed_events)
 ```
 
 Consecuencia aceptada: durante esos segundos la organización existe pero no tiene fuentes, y una
@@ -105,9 +105,9 @@ El esquema completo de estas tablas está en [Modelo de datos](../arquitectura/m
 - `services/identity/src/application/use_cases/tenants/` y `services/identity/src/application/use_cases/agents/`
 - `services/identity/src/infrastructure/adapters/input/api/tenants/` y `.../api/agents/`
 - `backend/src/domain/advisors/advisor.py` y `backend/src/application/use_cases/advisors/`
-- `backend/src/infrastructure/adapters/input/consumers/advisor_consumer.py` y `.../consumers/intake/tenant_consumer.py`
+- `backend/src/infrastructure/adapters/input/consumers/advisor_consumer.py`
+- `services/intake/src/infrastructure/adapters/input/consumers/tenant_consumer.py` y `services/intake/src/application/use_cases/tenants/provision_tenant_sources.py` — las fuentes por defecto
 - `backend/src/infrastructure/adapters/output/persistence/advisors/` — repositorio y `HydratingAdvisorDirectory`
-- `backend/src/application/use_cases/intake/provision_tenant_sources.py`
 - `backend/src/domain/entities/sales_group.py`
 - `backend/src/application/use_cases/sales_group_use_cases.py`
 - `backend/src/infrastructure/adapters/input/api/sales_group_router.py`

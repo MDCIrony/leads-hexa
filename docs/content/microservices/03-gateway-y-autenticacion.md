@@ -40,11 +40,11 @@ la fuerza bruta de login, y la carga legítima del frontend y de `verify-e2e.sh`
 | `/api/v1/auth/` | identity | **No** | Es la frontera de autenticación: valida su propia cookie y emite la sesión. Es el único prefijo con `limit_req` |
 | `/api/v1/agents` y `/api/v1/agents/` (ruta exacta) | identity | **Opcional** | `POST /agents` crea al administrador de plataforma sin credencial sobre una base vacía; ver [Bootstrap](#bootstrap-anonimo-de-post-agents) |
 | `/api/v1/tenants` (exacta) y `/api/v1/tenants/`, `/api/v1/agents/` (resto) | identity | Sí | |
-| `/api/v1/sources/`, `/api/v1/intake/` | intake | Sí | |
+| `/api/v1/sources` (exacta), `/api/v1/sources/` y `/api/v1/intake/` | intake | Sí | `/api/v1/intake/` repite `client_max_body_size 10m`: es el borde del límite que `batch-upload` aplica con `413` |
 | `/api/v1/leads/`, `/api/v1/rules/`, `/api/v1/groups/`, `/api/v1/advisors/` | lead-core | Sí | |
 | `/api/v1/notifications/` | notifications | Sí | |
 | `/openapi.json`, `/docs` | lead-core | **No** | Documentación de la API; el gateway quita `Cookie` |
-| `/openapi/identity.json`, `/openapi/notifications.json` | identity, notifications | **No** | El OpenAPI de cada servicio extraído, para generar los tipos del frontend; sin `Cookie` |
+| `/openapi/identity.json`, `/openapi/notifications.json`, `/openapi/intake.json` | identity, notifications, intake | **No** | El OpenAPI de cada servicio extraído, para generar los tipos del frontend; sin `Cookie` |
 | `/internal/` | — | — | `return 404`: nunca se publica |
 | `/health` | el propio gateway | No | |
 | Cualquier otra ruta | — | — | `404` con el sobre `NOT_FOUND` |
@@ -52,13 +52,14 @@ la fuerza bruta de login, y la carga legítima del frontend y de `verify-e2e.sh`
 Durante la migración, un prefijo cuyo servicio todavía no existe apunta a `lead-core` (el monolito).
 Mover una capacidad es añadir un `location` más específico con su `upstream`.
 
-!!! note "Tras F3"
+!!! note "Tras F4"
     Van a `identity` la introspección (`/_introspect` y `/_introspect_optional`), `/api/v1/auth/`,
-    `/api/v1/agents` y `/api/v1/tenants`; a `notifications`, `/api/v1/notifications` (F2). Cada
-    prefijo extraído se declara en las dos formas, exacta y con barra: un `location` de prefijo solo
-    mandaría la ruta sin barra al monolito. `/api/v1/sources/` e `/api/v1/intake/` todavía caen en el
-    `location /api/v1/` genérico, que apunta a `backend`, hasta F4. `/openapi.json` y `/docs` son los
-    de lead-core; el contrato de identity se publica aparte, en `/openapi/identity.json`.
+    `/api/v1/agents` y `/api/v1/tenants` (F3); a `notifications`, `/api/v1/notifications` (F2); a
+    `intake`, `/api/v1/sources` y `/api/v1/intake/` (F4). Cada prefijo extraído se declara en las dos
+    formas, exacta y con barra: un `location` de prefijo solo mandaría la ruta sin barra al monolito
+    (`/api/v1/intake/` no tiene forma exacta: no existe `GET /intake`). `/openapi.json` y `/docs` son los
+    de lead-core; el contrato de cada servicio extraído se publica aparte, en `/openapi/identity.json`,
+    `/openapi/notifications.json` y `/openapi/intake.json`.
 
 ## *Phantom token*
 
@@ -322,7 +323,7 @@ POST /internal/v1/service-tokens
 | Llamante | Audiencia permitida | Para | Estado |
 |---|---|---|---|
 | `lead-core` | `identity` | `GET /internal/v1/agents/{agent_id}` | F3 |
-| `intake` | `lead-core` | `POST /internal/v1/admissions` | F4 |
+| `intake` | `lead-core` | `POST` y `GET /internal/v1/admissions` | F4 |
 
 - Los clientes y sus audiencias permitidas son configuración de identity, no una tabla: son un
   conjunto fijo que sólo cambia cuando cambia la arquitectura. `SERVICE_CLIENTS` tiene la forma
@@ -339,8 +340,15 @@ POST /internal/v1/service-tokens
   provocó.
 - Las rutas `/internal/v1/*` que lo exigen lo verifican con `chassis.auth.ServiceTokenVerifier`:
   `ptype=service`, `aud` igual al propio servicio y un `sub` de la lista de llamantes permitidos para
-  esa ruta (`GET /internal/v1/agents/{agent_id}` sólo admite `lead-core`). El contrato está en
-  `contracts/openapi/identity-internal.v1.yaml`.
+  esa ruta (`GET /internal/v1/agents/{agent_id}` sólo admite `lead-core`; `/internal/v1/admissions`,
+  con `aud=lead-core`, sólo `intake`). Un token ausente, inválido o de otro llamante es el mismo `401`
+  con el sobre de error: distinguirlos diría a quien sondea qué llamantes existen. Los contratos están
+  en `contracts/openapi/identity-internal.v1.yaml` y `contracts/openapi/lead-core-internal.v1.yaml`.
+- **El cliente de servicio de intake** (`intake→lead-core`) vive en `HttpLeadAdmission` y su
+  `ServiceTokenClient(audience="lead-core")`, un `httpx.Client` por proceso, con *timeout* de 10 s para
+  la admisión y de 2 s para pedir el token a identity. Lo usan las dos formas de admisión: el
+  `intake-worker` y la promoción manual de la API de intake. `SERVICE_CLIENTS` de identity gana
+  `intake:lead-core:<sha256>`; si identity no lo conoce, no entrega el token y toda admisión falla como transitoria (`AdmissionUnavailable`).
 - **El `tenant_id` de una llamada interna sale del dato persistido del llamante**, no de una entrada
   del usuario: la admisión lleva el `tenant_id` del `intake_record`, que a su vez se derivó del token
   del usuario al recibirlo. ADR-0004 se mantiene de punta a punta.
@@ -353,15 +361,17 @@ POST /internal/v1/service-tokens
 | `MFA_ENCRYPTION_KEY` | ✓ | | | | |
 | Secretos OAuth Google/GitHub | ✓ | | | | |
 | Hashes de los secretos de servicio (`SERVICE_CLIENTS`) | ✓ | | | | |
-| Secreto de servicio propio (`SERVICE_CLIENT_SECRET`) | | F4 | ✓ | | |
+| Secreto de servicio propio (`SERVICE_CLIENT_SECRET`) | | ✓ | ✓ | | |
 | DSN de su base | ✓ | ✓ | ✓ | ✓ | |
-| URL de la JWKS (`JWKS_URL`) | | ✓ | ✓ | ✓ | |
+| URL de la JWKS (`JWKS_URL`) | | ✓ (sólo la API) | ✓ | ✓ | |
 
 Desde F3 la tabla es la de `docker-compose.yml`. Sólo `identity` recibe la clave de firma, la de MFA y
 OAuth; `identity-worker` no recibe ninguna, porque su `WorkerSettings` no las pide. En lead-core sólo
-la API exige `SERVICE_CLIENT_SECRET` (lo comprueba al arrancar); `backend-worker` e `intake-worker`
-reciben `JWKS_URL` porque comparten con ella un único `Settings` hasta F5. La columna intake es hoy el
-`intake-worker`, que vive en la imagen del backend.
+la API exige `SERVICE_CLIENT_SECRET` (lo comprueba al arrancar); `backend-worker` recibe `JWKS_URL`
+porque comparte con ella un único `Settings` hasta F5. Intake separa la configuración por proceso
+desde F4: `intake` (API) exige `JWKS_URL`, `LEAD_CORE_URL` y `SERVICE_CLIENT_SECRET` (la promoción
+manual admite en línea), e `intake-worker` exige el secreto y `LEAD_CORE_URL` pero no la JWKS, porque
+no verifica ningún token de usuario.
 
 ## Fuera de alcance, a propósito
 

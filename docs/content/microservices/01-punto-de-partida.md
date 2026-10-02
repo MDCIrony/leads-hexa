@@ -7,18 +7,19 @@ que una fase cortó lo dice su fila.
 
 ## Lo que corre hoy
 
-El gateway (F0), la durabilidad (F1), el servicio `notifications` (F2) y el servicio `identity` (F3)
-ya están en su sitio; el resto de la tabla es el punto de partida que las fases F4 y F5 van cortando.
+El gateway (F0), la durabilidad (F1), el servicio `notifications` (F2), el servicio `identity` (F3) y
+el servicio `intake` (F4) ya están en su sitio; el resto de la tabla es el punto de partida que F5
+termina de cortar.
 `backend` no publica puerto en el host.
 
 | Contenedor | Qué hace | Comparte |
 |---|---|---|
-| `backend` | La API salvo identidad y notificaciones: leads, reglas, grupos, asesores, fuentes e ingesta; migraciones y casos de uso. Sólo **escribe** en el outbox: no entrega nada | Imagen, código y base con los workers |
-| `backend-worker` | Un relay del outbox por canal (`product`, `internal`, `job`) (`infrastructure/worker/`) y, desde F3, los consumidores `lead-core.advisors` e `intake.tenants` | Imagen, código y base con `backend` |
+| `backend` | La API salvo identidad, ingesta y notificaciones: leads, reglas, grupos y asesores, más la admisión (`/internal/v1/admissions`); migraciones y casos de uso. Sólo **escribe** en el outbox: no entrega nada | Imagen, código y base con los workers |
+| `backend-worker` | Un relay del outbox por canal (`infrastructure/worker/`) y, desde F3, el consumidor `lead-core.advisors`. Hasta F4 relevaba también el canal `job` y consumía `intake.tenants` | Imagen, código y base con `backend` |
 | `identity`, `identity-worker` | **Servicio extraído en F3**: autenticación, organizaciones y agentes (API y relay de su outbox) con su base `identity_db`; sirve la introspección y la JWKS | Nada: imagen propia con `libs/chassis`; sólo comparte el servidor PostgreSQL |
 | `notifications`, `notifications-worker` | **Servicio extraído en F2**: la bandeja (API y tres consumidores) con su base `notifications_db` | Nada: imagen propia con `libs/chassis`; sólo comparte el servidor PostgreSQL |
-| `intake-worker` | Consume `intake.jobs` y ejecuta el procesamiento del trabajo | Reutiliza el cableado de `dependencies.py` |
-| `db` | `leads_db` con las tablas de los contextos aún no extraídos, e `identity_db` y `notifications_db`, que crea `db-bootstrap` | — |
+| `intake`, `intake-worker` | **Servicio extraído en F4**: fuentes, jobs, registros, errores y ficheros (API; worker con los relays `job` e `internal`, `intake.jobs` e `intake.tenants`) con su base `intake_db`; pide la decisión a lead-core | Nada: imagen propia con `libs/chassis`; sólo comparte el servidor PostgreSQL |
+| `db` | `leads_db` con las tablas de lead-core (y las ya copiadas, congeladas hasta F5), e `identity_db`, `intake_db` y `notifications_db`, que crea `db-bootstrap` | — |
 | `rabbitmq` | `intake.jobs` (cuórum, `x-delivery-limit: 3`) y `intake.jobs.dlq` | — |
 | `kafka` | `leads.{tenant_id}`, ACL `LITERAL` por organización (ADR-0028), y los topics `internal.*` | — |
 | `gateway` | nginx: única entrada de la API en `:8001`; autentica con *phantom token* ([03](03-gateway-y-autenticacion.md)) | — |
@@ -35,14 +36,18 @@ flowchart LR
     GW --> API["backend<br/>API"]
     API --> DB[("leads_db<br/>todas las tablas<br/>+ outbox por canal")]
     DB -->|"relay por canal"| BW["backend-worker"]
-    BW -->|"job"| R["RabbitMQ"]
-    R --> W["intake-worker<br/>mismo código"]
-    W --> DB
+    GW --> INS["intake<br/>API"]
+    INS --> INDB[("intake_db")]
+    INDB -->|"relay job e internal"| W["intake-worker"]
+    W -->|"publica y consume intake.jobs"| R["RabbitMQ"]
+    W -->|"POST /internal/v1/admissions"| API
+    W -->|"internal.intake.events"| KI
     BW -->|"product"| K["Kafka leads.{tenant_id}"]
     BW -->|"product"| WH["webhooks"]
     BW -->|"internal"| KI["Kafka internal.*"]
     KI -->|"tres grupos"| NW["notifications-worker"]
-    KI -->|"lead-core.advisors<br/>intake.tenants"| BW
+    KI -->|"lead-core.advisors"| BW
+    KI -->|"intake.tenants"| W
     NW --> NDB[("notifications_db")]
     GW --> NS["notifications<br/>API"]
     NS --> NDB
@@ -62,14 +67,14 @@ los cruces entre contextos.
 
 | Caso de uso | Repositorios que usa | Cruce |
 |---|---|---|
-| `IngestLeadUseCase` | `intake_records`, `sources`, `leads`, `rules`, `disqualification_rules`, **`agents`**, **`groups`**, `outbox` | Ingesta ↔ decisión ↔ identidad. **Identidad cortada en F3**: lee `advisors` |
-| `GetLeadStatsUseCase` | `leads`, **`intake_records`** | Leads ↔ ingesta |
+| `IngestLeadUseCase` | `intake_records`, `sources`, `leads`, `rules`, `disqualification_rules`, **`agents`**, **`groups`**, `outbox` | Ingesta ↔ decisión ↔ identidad. **Identidad cortada en F3**: lee `advisors`. **Ingesta ↔ decisión cortada en F4**: intake reclama y cierra el registro, lead-core decide en `POST /internal/v1/admissions` |
+| `GetLeadStatsUseCase` | `leads`, **`intake_records`** | Leads ↔ ingesta. **Cortado en F4**: `pending_intake` pasó a `GET /intake/stats` |
 | `AssignLeadUseCase` | `leads`, **`agents`**, `outbox` | Leads ↔ identidad. **Cortado en F3**: resuelve el agente con `AdvisorDirectory` |
 | `NotificationHandler` | `notifications`, **`agents`** (managers del tenant) | Notificaciones ↔ identidad. **Cortado en F2**: vive en `notifications` y lee su proyección `members` |
 | `SalesGroup*UseCase` | `groups`, **`agents`** (recuento y huérfanos al borrar) | Leads ↔ identidad. **Cortado en F3**: cuenta sobre `advisors`; al borrar un grupo, `advisors.group_id` queda en `NULL` por `ON DELETE SET NULL` |
 | `UpdateAgentUseCase` | `agents`, **`groups`** (valida `group_id`) | Identidad ↔ leads. **Cortado en F3**: `group_id` sale de `/agents` y pasa a `PATCH /advisors/{agent_id}` |
-| `CreateTenantUseCase` | `tenants`, `agents`, **`sources`** (dos fuentes por defecto) | Identidad ↔ ingesta. **Cortado en F3**: identity ya no crea fuentes; las crea el consumidor `intake.tenants` |
-| `DeleteLeadSourceUseCase` | `sources`, **`leads`** (`count_by_source`) | Ingesta ↔ leads |
+| `CreateTenantUseCase` | `tenants`, `agents`, **`sources`** (dos fuentes por defecto) | Identidad ↔ ingesta. **Cortado en F3**: identity ya no crea fuentes; las crea el consumidor `intake.tenants` (de intake desde F4) |
+| `DeleteLeadSourceUseCase` | `sources`, **`leads`** (`count_by_source`) | Ingesta ↔ leads. **Cortado en F4**: cuenta `intake_records` e `intake_jobs` de la fuente |
 | `RawSqlLeadRepository` | `JOIN agents` en la carga con nombres y subconsulta por `group_id` | SQL directo entre contextos. **Cortado en F3**: `JOIN advisors` |
 
 Todo lo demás (reglas, fuentes, jobs, registros, sesiones, MFA, OAuth, notificaciones) ya vive en un
@@ -119,15 +124,15 @@ solo contexto.
 
 | Referencia | Hoy | Tras separar |
 |---|---|---|
-| `intake_records.lead_id` → `leads` | FK | UUID externo |
-| `leads.source_id` → `lead_sources` | FK | UUID externo |
+| `intake_records.lead_id` → `leads` | FK | UUID externo. **En `intake_db` (F4)**; la FK de `leads_db` se queda en la tabla congelada hasta F5 |
+| `leads.source_id` → `lead_sources` | FK | UUID externo. **Quitada en F4** (migración 018) |
 | `leads.assigned_agent_id` → `agents` | Lógica | UUID externo, resuelto contra la proyección `advisors` (F3) |
 | `notifications.recipient_id` → `agents` | FK | UUID externo, resuelto contra la proyección `members` |
 | `*.tenant_id` → `tenants` | FK en casi todas | UUID externo; la validez la garantiza el token. **Quitadas en F3** (migración 017) |
-| `leads` ↔ `intake_records` | Sólo `intake_records.lead_id` | Nueva columna `leads.intake_record_id` con `UNIQUE (tenant_id, intake_record_id)` |
+| `leads` ↔ `intake_records` | Sólo `intake_records.lead_id` | Nueva columna `leads.intake_record_id` con `UNIQUE (tenant_id, intake_record_id)`. **Hecha en F4** (migración 018) |
 
-La última fila es la que hace idempotente la admisión entre servicios: hoy la garantiza
-`claim_unpromoted` dentro de una única transacción, y esa transacción deja de existir.
+La última fila es la que hace idempotente la admisión entre servicios: antes de F4 la garantizaba
+`claim_unpromoted` dentro de una única transacción, y esa transacción dejó de existir.
 
 ## Conclusión
 

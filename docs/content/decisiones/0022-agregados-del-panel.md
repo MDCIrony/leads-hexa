@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada |
+| **Estado** | Aceptada — `pending_intake` pasó a `GET /intake/stats` en F4 ([ADR-0036](0036-cambios-de-contrato-publico.md)); el resto sigue vigente |
 | **Fecha** | 2026-08-10 |
 | **Ámbito** | Backend · Aplicación |
 

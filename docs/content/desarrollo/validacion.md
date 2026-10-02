@@ -12,22 +12,25 @@ cd bruno && bru run flows --env local -r               # contrato como cliente ~
 ```
 
 Cada servicio extraído trae su propia suite, con los mismos dos primeros comandos sobre su carpeta
-(hoy, notifications e identity; ver [La suite de notifications](#la-suite-de-notifications) y
-[La suite de identity](#la-suite-de-identity)):
+(hoy, notifications, identity e intake; ver [La suite de notifications](#la-suite-de-notifications),
+[La suite de identity](#la-suite-de-identity) y [La suite de intake](#la-suite-de-intake)):
 
 ```bash
 docker compose --profile test run --rm notifications-test
 cd services/notifications && uv run pytest -m unit -q
 docker compose --profile test run --rm identity-test
 cd services/identity && uv run pytest -m unit -q
+docker compose --profile test run --rm intake-test
+cd services/intake && uv run pytest -m unit -q
 ```
 
 ## Por qué no hace falta reconstruir
 
 El código de `backend/src`, sus tests y las migraciones están montados como volúmenes de sólo
 lectura en los contenedores `backend` y `backend-test`, y lo mismo vale para `services/notifications`,
-`services/identity` y `libs/chassis/src` en sus contenedores (`notifications`, `notifications-worker`,
-`notifications-test`, `identity`, `identity-worker`, `identity-test`; ver `docker-compose.yml`). La API además
+`services/identity`, `services/intake` y `libs/chassis/src` en sus contenedores (`notifications`,
+`notifications-worker`, `notifications-test`, `identity`, `identity-worker`, `identity-test`, `intake`,
+`intake-worker`, `intake-test`; ver `docker-compose.yml`). La API además
 corre con recarga en caliente (`uvicorn --reload --reload-dir /app/src`, en `backend/Dockerfile`),
 así que un cambio guardado se refleja sin reiniciar nada.
 
@@ -35,7 +38,7 @@ Sólo hace falta reconstruir la imagen cuando cambia algo que se instala en tiem
 `pyproject.toml`, `uv.lock` o el propio `Dockerfile`.
 
 ```bash
-docker compose build backend backend-worker intake-worker backend-test notifications notifications-worker notifications-test identity identity-worker identity-test
+docker compose build backend backend-worker backend-test notifications notifications-worker notifications-test identity identity-worker identity-test intake intake-worker intake-test
 ```
 
 ## Qué demuestra cada uno
@@ -54,13 +57,13 @@ petición llega sin bearer y el backend responde 401. La hidratación de `Adviso
 `IdentityDouble` (`tests/advisors_sync.py`), un mapa en memoria con la forma del contrato de identity.
 Siguen sin servidor HTTP real.
 
-Como la suite no levanta brókeres, `GatewayClient` hace también de `intake-worker`: tras cada petición
-reenviada **drena en el propio proceso** el canal `job` a través de `process_job_message`, con las
-mismas tres entregas que concede la cola antes de la DLQ. El canal `internal` no se drena: sus filas
-quedan sin publicar, porque desde F2 su único consumidor vive en notifications y se prueba en la suite
-de ese servicio. Por eso un test e2e ve el lead promovido al terminar su petición, sin esperas. Lo que
-ese atajo no ejercita —Kafka, RabbitMQ, los hilos del relay, el identity de verdad— lo cubre
-`verify-e2e.sh`.
+La suite no levanta brókeres, y `GatewayClient` no drena ningún outbox: las filas quedan sin publicar,
+como con el worker parado. Desde F4 la ingesta no es de este servicio: la decisión de un registro se
+prueba aquí a través de `POST /internal/v1/admissions` (con tokens de servicio de prueba:
+sin token, de un humano o de otro llamante → 401; `intake` → 200 conforme a `contracts/`; repetir la
+admisión da el mismo `lead_id` sin añadir filas al outbox), y el recorrido completo, con un worker
+real, lo cubre `verify-e2e.sh`. Lo que el test e2e no ejercita —Kafka, RabbitMQ, los hilos del relay,
+el identity de verdad— también.
 
 !!! warning
     `docker compose run` reemplaza el `CMD` de la imagen, no lo extiende. Para correr sólo una
@@ -143,8 +146,8 @@ así que vive en el script. Corre justo **antes** de `verify_ms_f0`, que detiene
 - **Los topics y las colas de error.** `internal.identity.agents` e `internal.identity.tenants` tienen
   `cleanup.policy=compact`; las DLQ de los dos grupos de notificaciones existen y están vacías, y también
   `intake.jobs.dlq`.
-- **La correlación.** El `X-Request-Id` de la ingesta aparece en los logs de `backend-worker` y en los
-  de `intake-worker`.
+- **La correlación.** El `X-Request-Id` de la ingesta aparece en los logs de `intake-worker` y en el
+  acceso de lead-core a `/internal/v1/admissions`.
 
 El límite de 10 MB del `batch-upload` (`413`) ya lo prueba `verify_ms_f0`, y no se repite.
 
@@ -193,6 +196,30 @@ el monolito y que lead-core sigue enrutando con su proyección:
   lag 0 en menos de 30 s y su `internal.dlq.<grupo>` existe y está vacía; el gestor de la
   organización nueva llega a `members` de notifications.
 
+### La ingesta en su servicio: `verify_ms_f4`
+
+Corre después de `verify_ms_f3` y antes de `verify_ms_f1`. Comprueba que la recepción ya no está en el
+monolito y que lead-core sigue decidiendo por el contrato de admisión:
+
+- **El enrutado.** `GET /sources` por el gateway → 200 y el *access log* muestra el `upstream` de
+  intake con el `X-Request-Id` de la petición; el backend contesta 404 en `/api/v1/sources`;
+  `/openapi/intake.json` publica las rutas de `/api/v1/intake`.
+- **Las credenciales.** `intake_svc` entra en `intake_db` (control positivo) y no puede conectarse a
+  `leads_db` ni a `identity_db`.
+- **Una ingesta individual** con una regla de asignación creada para la prueba termina `COMPLETED`,
+  su registro `PROMOTED`, el lead `ASSIGNED` al asesor de la regla y visible una sola vez en
+  `GET /leads`.
+- **Un fichero con tres filas** (válida, con el correo mal formado y descalificada por una regla):
+  `total_items/succeeded/failed` = 3/2/1, dos registros `PROMOTED`, uno `REJECTED` por `email`, y la
+  descalificada es un lead `DISQUALIFIED`. Reprocesar el trabajo completado no crea leads nuevos.
+- **lead-core caído.** Con `backend` parado, una ingesta responde `202` y su trabajo no termina; el
+  registro sigue `PENDING`. Al arrancarlo, el trabajo termina (por redelivery o, si ya llegó a la DLQ,
+  con el reproceso) con su registro `PROMOTED` y un único lead para ese correo.
+- **Estadísticas.** `GET /leads/stats` ya no lleva `pending_intake`; `GET /intake/stats` lo trae y
+  cuadra con `pending + rejected` y con la bandeja.
+- **Reconciliación y consumidores.** `python -m infrastructure.cli.reconcile` sale con 0, e
+  `intake.tenants` llega a lag 0 con su `internal.dlq.intake.tenants` vacía.
+
 ### Los tests de fallo de entrega
 
 Lo que `verify_ms_f1` no puede provocar a voluntad se prueba con la base real y brókeres
@@ -207,9 +234,11 @@ sustituidos por dobles:
   (`services/notifications/tests/integration/consumers/test_dead_letter.py`). El `ConsumerLoop` lo
   reintenta tres veces, lo aparca en `internal.dlq.notifications.lead-events` con `attempts=3`,
   confirma el offset, y no quedan ni notificación ni marca en `processed_events`.
-- **Un trabajo con un registro que falla** (`backend/tests/integration/test_delivery_failures.py`).
-  `process_job_message` devuelve `"nack"`, y la topología que declara `declare_intake_topology`
-  conserva `x-delivery-limit: 3` y la DLQ.
+- **Un trabajo interrumpido** (`services/intake/tests/unit/infrastructure/worker/`).
+  `process_job_message` devuelve `"nack"`, el `nack` sale sólo tras la espera de 10 s, un trabajo largo
+  se liquida por `add_callback_threadsafe` mientras el hilo de la conexión sigue atendiendo eventos
+  (el *heartbeat*) y la topología que declara `declare_intake_topology` conserva `x-delivery-limit: 3`
+  y la DLQ.
 
 ### Mirar las colas de error
 
@@ -262,7 +291,8 @@ entorno que no sea `test`, no usa credenciales de proveedor y el contenedor temp
 `./scripts/verify-structure.sh` aplica la regla de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md)
 a cada raíz Python del repositorio —`backend/src`, `backend/tests`, `libs/chassis/src`,
 `libs/chassis/tests`, `services/notifications/src`, `services/notifications/tests`,
-`services/identity/src`, `services/identity/tests`, `test-consumer/`, `demo/` y `tools/`— con `python -m chassis.testing check`, sobre el entorno de `libs/chassis` y sin
+`services/identity/src`, `services/identity/tests`, `services/intake/src`, `services/intake/tests`,
+`test-consumer/`, `demo/` y `tools/`— con `python -m chassis.testing check`, sobre el entorno de `libs/chassis` y sin
 Docker. Las fuentes no pasan de 150 líneas por fichero; fuentes y
 tests, de 12 ficheros `.py` por carpeta. Lo heredado se compara con su lista base, que sólo encoge;
 imprime `ok` por raíz, o lo que falla y por qué, y sale con código distinto de cero si alguna falla.
@@ -336,6 +366,26 @@ Los tests de contrato (`chassis.testing.contracts`) comprueban en los dos lados 
 produce —sus eventos, el agente de `GET /internal/v1/agents/{agent_id}`, el token de servicio—
 conforma `contracts/`, y que lead-core sabe leer sus fixtures. `contracts/` se monta de sólo lectura
 en `/srv/contracts` (servicios extraídos) o en `/contracts` (`backend-test`).
+
+## La suite de intake
+
+`docker compose --profile test run --rm intake-test` corre contra `intake_test`, que también crea
+`db-bootstrap`. `cd services/intake && uv run pytest -m unit -q` corre sin base ni variables de
+entorno; `tests/conftest.py` fija el entorno una sola vez. Mismos marcadores por carpeta:
+
+| Carpeta | Qué cubre |
+|---|---|
+| `tests/unit/` | Dominio, casos de uso con un `LeadAdmissionPort` falso, `ApiSettings`/`WorkerSettings`/`ReconcileSettings`, el consumidor de jobs, los relays y la reconciliación |
+| `tests/integration/` | Migraciones (reaplicables, sin FK hacia `tenants` ni `leads`), repositorios, el reclamo concurrente de un registro, el consumidor `intake.tenants` y las consultas de la reconciliación, sobre PostgreSQL |
+| `tests/e2e/` | La API pública con tokens firmados, un lead-core falso (`fake_lead_core.py`) y el trabajo procesado en proceso: fuentes, bandeja, trabajos, `batch-upload` (incluido el `413`), `GET /intake/stats` y el aislamiento entre organizaciones |
+| `tests/architecture/` | Los cuatro guardianes y la estructura |
+
+Los tests de contrato comprueban que lo que intake envía conforma `contracts/schemas/lead-core/admission-request.v1`, que
+sabe leer los fixtures de resultado (`ADMITTED`, `REJECTED`) y de consulta, que el mensaje de
+`intake.jobs` conforma `contracts/schemas/intake/job-message.v1` y que `IntakeRejected` conforma su
+esquema de evento. El lado de lead-core (`backend-test`) comprueba que sus respuestas conforman los
+mismos esquemas. Un 401 invalida el token de servicio en caché (`invalidate()`), y un 5xx, un
+*timeout* o un cuerpo inválido son `AdmissionUnavailable`.
 
 ## El test de contrato de serialización
 

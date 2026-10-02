@@ -149,10 +149,11 @@ proyecte descarte lo que ya tiene.
 
 **Los `internal.*` de hechos y de estado los crea al arrancar su productor**, con `ensure_topics`,
 idempotente y con reintentos mientras Kafka no responda: `backend-worker` crea
-`internal.lead-core.events` e `internal.intake.events`; `identity-worker`, desde F3,
-`internal.identity.agents` e `internal.identity.tenants`. **Las `internal.dlq.<grupo>` las crea el
+`internal.lead-core.events`; `identity-worker`, desde F3, `internal.identity.agents` e
+`internal.identity.tenants`; `intake-worker`, desde F4, `internal.intake.events`. **Las `internal.dlq.<grupo>` las crea el
 servicio dueño del grupo**, al arrancar y con `ensure_topics_until_ready`: `notifications-worker` las
-de sus tres grupos y `backend-worker` las de `lead-core.advisors` e `intake.tenants`. Si un topic existente difiere de lo declarado (particiones
+de sus tres grupos, `backend-worker` la de `lead-core.advisors` e `intake-worker` la de
+`intake.tenants`. Si un topic existente difiere de lo declarado (particiones
 o configuración), `ensure_topics` no lo toca y registra un `WARNING`. El productor interno lleva `allow.auto.create.topics=false`: un topic que se
 perdiera después debe fallar a la vista, no reaparecer sin compactación por la creación automática del
 bróker. Mientras los topics no existen, el canal `internal` no entrega y sus filas esperan en el
@@ -189,8 +190,8 @@ sobre válido de ejemplo, están en `contracts/events/` y `contracts/fixtures/ev
 
 La clave del mensaje es el `aggregate_id` (el lead, el registro de ingesta, el agente o la organización), y `event_type` y
 `correlation_id` viajan también como cabeceras. `producer` dice qué servicio publicó: `lead-core`
-en los de hechos, que el monolito publica también en nombre de la ingesta hasta F4, e `identity` en
-`AgentState` y `TenantState` desde F3. Ningún consumidor filtra por él.
+en los de hechos de lead, `intake` en `IntakeRejected` desde F4 (hasta entonces lo publicaba el
+monolito en su nombre) e `identity` en `AgentState` y `TenantState` desde F3. Ningún consumidor filtra por él.
 
 ### El consumidor de notificaciones
 
@@ -223,18 +224,21 @@ sobre `chassis.consumer`; el backend ya no consume ningún topic. Los grupos son
   cierra el consumidor y vacía el productor de la DLQ.
 - `MemberConsumer` no usa `processed_events`: su *upsert* se condiciona por `version` en SQL.
 
-### Los consumidores de lead-core
+### Los consumidores de lead-core e intake
 
-Desde F3 `backend-worker` vuelve a consumir, con el mismo `chassis.consumer` y un carril por grupo:
+Desde F3 `backend-worker` vuelve a consumir, y desde F4 `intake-worker` también, con el mismo
+`chassis.consumer` y un carril por grupo:
 
-| Grupo | Topic | Efecto |
-|---|---|---|
-| `lead-core.advisors` | `internal.identity.agents` | `AdvisorConsumer` mantiene la proyección `advisors`: el mismo *upsert* condicionado por `version` que `members`, sin `processed_events`. Nunca toca `group_id`, que es de lead-core |
-| `intake.tenants` | `internal.identity.tenants` | `TenantConsumer` crea las dos fuentes por defecto del primer `TenantState` de cada organización. Crear fuentes no es idempotente, así que escribe `processed_events` y la marca de `provisioned_tenants` en la misma transacción que las fuentes. Es código de ingesta que vive en el monolito hasta F4 |
+| Grupo | Topic | Proceso | Efecto |
+|---|---|---|---|
+| `lead-core.advisors` | `internal.identity.agents` | `backend-worker` | `AdvisorConsumer` mantiene la proyección `advisors`: el mismo *upsert* condicionado por `version` que `members`, sin `processed_events`. Nunca toca `group_id`, que es de lead-core |
+| `intake.tenants` | `internal.identity.tenants` | `intake-worker` (hasta F4, `backend-worker`) | `TenantConsumer` crea las dos fuentes por defecto del primer `TenantState` de cada organización. Crear fuentes no es idempotente, así que escribe `processed_events` y la marca de `provisioned_tenants` en la misma transacción que las fuentes, en `intake_db` |
 
 Los dos esperan a la base cuando no responde (`psycopg.OperationalError` es `retryable`): aparcar un
 estado dejaría `advisors` divergida, o una organización sin fuentes, para siempre. Un `TenantState`
-sin un `tenant_id` válido sí se aparca, al tercer intento, en `internal.dlq.intake.tenants`.
+sin un `tenant_id` válido sí se aparca, al tercer intento, en `internal.dlq.intake.tenants`. El grupo
+conservó su nombre al pasar a intake, así que mantuvo sus offsets: el corte copió también sus
+`processed_events`.
 
 ## Límites de hoy
 

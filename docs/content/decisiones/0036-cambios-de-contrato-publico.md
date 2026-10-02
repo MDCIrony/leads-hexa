@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — cambio 1 implantado en F3; cambio 2 en F4 |
+| **Estado** | Aceptada — cambio 1 implantado en F3; cambio 2 implantado en F4 |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | API · Frontend |
 
@@ -44,7 +44,8 @@ regeneran desde el OpenAPI de cada servicio.
 dependencia es única: identity → lead-core.
 
 **Difícil:** el formulario de agente hace dos llamadas (crear en `/agents`, asignar grupo en
-`/advisors`) y el listado combina dos respuestas por `agent_id`; el panel hace dos lecturas. La
+`/advisors`) y el listado combina dos respuestas por `agent_id`; un panel que muestre los pendientes haría dos lecturas
+(`GET /leads/stats` y `GET /intake/stats`; el MVP no tiene ese panel todavía). La
 asignación de grupo inmediatamente después de crear un agente depende de la hidratación de
 `AdvisorDirectory`, y responde `503` si identity no contesta mientras hidrata: el agente queda creado
 sin grupo y la interfaz lo dice. Un agente recién creado puede faltar un instante en `/advisors`; el

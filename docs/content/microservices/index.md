@@ -6,17 +6,17 @@
     [el plan](06-plan-de-desacople.md) se complete. Las decisiones están registradas como ADR
     ([0031](../decisiones/0031-microservicios-por-contexto.md)–[0036](../decisiones/0036-cambios-de-contrato-publico.md)).
 
-    **F0 a F3 están implantadas**: el gateway y el *phantom token* sirven la API, la durabilidad
-    pasa por el outbox, y la bandeja de notificaciones (`services/notifications/`) y la identidad
-    —autenticación, organizaciones y agentes— (`services/identity/`) son ya servicios propios con su
-    base. El resto del sistema (leads, reglas, grupos, asesores, fuentes e ingesta) sigue siendo el
-    monolito.
+    **F0 a F4 están implantadas**: el gateway y el *phantom token* sirven la API, la durabilidad
+    pasa por el outbox, y la bandeja de notificaciones (`services/notifications/`), la identidad
+    —autenticación, organizaciones y agentes— (`services/identity/`) y la recepción de leads —fuentes,
+    jobs, registros y ficheros— (`services/intake/`) son ya servicios propios con su base. El resto
+    del sistema (leads, reglas, grupos y asesores) sigue siendo el monolito.
 
-Lead Router es hoy un monolito modular hexagonal: un proceso API, un `backend-worker` (los relays
-del outbox y las proyecciones de identidad) y un `intake-worker`, los tres con la misma imagen y la
-misma base, más los servicios `identity` (API e `identity-worker`) y `notifications` (API y
-`notifications-worker`), cada uno con imagen y base propias, RabbitMQ para el trabajo de fondo y Kafka
-para el canal de producto y los eventos internos. Esta
+Lead Router es hoy lo que queda del monolito modular hexagonal (lead-core: un proceso API y un
+`backend-worker`, con los relays del outbox y la proyección de asesores, con la misma imagen y la
+misma base), más los servicios `identity` (API e `identity-worker`), `intake` (API e `intake-worker`)
+y `notifications` (API y `notifications-worker`), cada uno con imagen y base propias, RabbitMQ para el
+trabajo de fondo y Kafka para el canal de producto y los eventos internos. Esta
 sección lo separa en **cuatro servicios con datos propios detrás de un gateway**, con el menor número
 de cambios que no deje deuda: se mueve código que ya tiene puertos, se cambian adaptadores y no se
 reescribe dominio.

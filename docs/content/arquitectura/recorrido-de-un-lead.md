@@ -6,15 +6,15 @@ viabilidad, puntuación y asignación.
 
 ## Fase 1 · Recepción
 
-La API nunca interpreta un lead en la misma petición que lo recibe: guarda el payload tal cual
-llegó, responde `202` y deja la interpretación para el `intake-worker`, al que le llega una orden
+La API de intake nunca interpreta un lead en la misma petición que lo recibe: guarda el payload tal
+cual llegó, responde `202` y deja la interpretación para el `intake-worker`, al que le llega una orden
 registrada en el outbox en la misma transacción. Así, un payload que no se
 puede interpretar nunca borra la constancia de haberse recibido.
 
 ```mermaid
 sequenceDiagram
     participant Gestor
-    participant Router as intake_router
+    participant Router as API de intake
     participant Caso as ReceiveIntakeUseCase
     participant BD as IntakeJob · IntakeRecord
     participant Out as Outbox · canal job
@@ -36,39 +36,48 @@ fila se convierte en su propio `IntakeRecord` ya dentro de la fase de procesamie
 
 ## Fase 2 · Procesamiento en segundo plano
 
-`backend-worker` publica la orden en RabbitMQ y el `intake-worker` la recoge. `ProcessIntakeJobUseCase`
-recorre los registros `PENDING` del trabajo, uno a uno, cada uno en su
-propia transacción: un fallo al interpretar el registro trescientos no debe poder deshacer los
-doscientos noventa y nueve que ya se guardaron.
+El relay del outbox de intake (en `intake-worker`) publica la orden en RabbitMQ y el propio
+`intake-worker` la recoge. `ProcessIntakeJobUseCase` recorre los registros `PENDING` del trabajo, uno
+a uno: un fallo al interpretar el registro trescientos no debe poder deshacer los doscientos noventa y
+nueve que ya se guardaron. Para cada registro, intake **pide la decisión a lead-core** y cierra el
+registro en una transacción propia; la decisión no comparte transacción con el registro, así que su
+idempotencia es lo que hace seguro repetirla
+([Comunicación y eventos](../microservices/04-comunicacion-y-eventos.md#contrato-de-admision)).
 
 ```mermaid
 sequenceDiagram
     participant Fondo as intake-worker
     participant Job as ProcessIntakeJobUseCase
-    participant BD1 as IntakeJob
+    participant BD1 as IntakeJob · IntakeRecord
     participant Ingesta as IngestLeadUseCase
+    participant LC as lead-core · AdmitLeadUseCase
     participant Motores as Viabilidad · Puntuación · Asignación
-    participant BD2 as Lead · IntakeRecord
-    participant Eventos as Outbox
+    participant BD2 as Lead (leads_db)
 
     Fondo->>Job: execute(tenant_id, job_id)
     Job->>BD1: start() — PENDING → PROCESSING
     Job->>BD1: listar IntakeRecord en PENDING de este job
     Note over Job,BD1: primera transacción, ya confirmada
 
-    loop por cada registro pendiente, en su propia transacción
+    loop por cada registro pendiente
         Job->>Ingesta: execute(comando, registro)
-        Ingesta->>Motores: viabilidad, puntuación y asignación
-        Motores-->>Ingesta: lead calificado y, si hay asesor, asignado
-        Ingesta->>BD2: guardar Lead y marcar IntakeRecord como PROMOTED o REJECTED
-        Ingesta->>Eventos: registra el evento correspondiente, en la misma transacción
+        Ingesta->>BD1: releer el registro (¿ya PROMOTED o cerrado?)
+        Ingesta->>LC: POST /internal/v1/admissions — sin transacción abierta
+        LC->>Motores: viabilidad, puntuación y asignación
+        Motores-->>LC: lead calificado y, si hay asesor, asignado
+        LC->>BD2: guardar Lead y registrar sus eventos en el outbox, en una transacción
+        LC-->>Ingesta: ADMITTED (lead_id) o REJECTED (errores)
+        Ingesta->>BD1: reclamar el registro abierto y marcarlo PROMOTED o REJECTED
+        Note over Ingesta,BD1: REJECTED registra además IntakeRejected en el outbox de intake
         Ingesta-->>Job: resultado
-        Job->>BD1: record_success() o record_failure()
     end
 
-    Job->>BD1: complete() — PROCESSING → COMPLETED
+    Job->>BD1: contadores derivados de los registros; complete() — PROCESSING → COMPLETED
     Note over Job,BD1: tercera transacción
 ```
+
+Si lead-core no responde, el registro sigue `PENDING` y el worker corta la ejecución en la primera
+caída: el trabajo queda interrumpido y vuelve a la cola tras una espera de 10 s.
 
 Si el proceso muere a mitad de un registro por un fallo inesperado, ese registro sigue `PENDING` —
 es el único estado que la relectura considera— y el trabajo se queda en `PROCESSING` sin cerrar. El

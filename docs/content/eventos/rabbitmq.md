@@ -14,8 +14,8 @@ retomaba**. Peor aún: si caía entre el `202` y el encolado, el trabajo no exis
 
 ```mermaid
 flowchart LR
-    B1["POST /batch-upload"] --> B2["API<br/>guarda el fichero, el trabajo<br/>y la orden en el outbox"]
-    B2 --> B6["backend-worker<br/>relay del canal job"]
+    B1["POST /batch-upload"] --> B2["API de intake<br/>guarda el fichero, el trabajo<br/>y la orden en el outbox"]
+    B2 --> B6["intake-worker<br/>relay del canal job"]
     B6 -->|"publisher confirm"| B3["intake.jobs"]
     B3 --> B4["intake-worker"]
     B4 -.->|muere| B3
@@ -43,7 +43,7 @@ trabajadores pasaría a depender del número de particiones en vez de resolverse
 
 ```mermaid
 flowchart LR
-    R["backend-worker<br/>relay del canal job"] -->|"{message_id, schema_version,<br/>tenant_id, job_id, correlation_id}"| Q["intake.jobs<br/><i>quorum · x-delivery-limit 3</i>"]
+    R["intake-worker<br/>relay del canal job"] -->|"{message_id, schema_version,<br/>tenant_id, job_id, correlation_id}"| Q["intake.jobs<br/><i>quorum · x-delivery-limit 3</i>"]
     Q --> W1["intake-worker<br/><i>prefetch 1</i>"]
     W1 -->|ack al terminar| Q
     W1 -.->|"nack: se reencola"| Q
@@ -55,7 +55,9 @@ flowchart LR
 |---|---|
 | **El relay publica con *publisher confirms*** | `published_at` no se escribe hasta que el bróker confirma: lo que no se confirmó se reintenta |
 | **`ack` manual y al terminar**, no al recibir | Un trabajo confirmado antes de acabar es un trabajo perdido si el worker muere a mitad |
-| **`nack` con reencolado** si el trabajo se interrumpe | Un registro que falló de forma imprevista sigue `PENDING`, y la reentrega es lo que termina el trabajo. A la tercera entrega RabbitMQ lo mueve a la DLQ |
+| **`nack` con reencolado** si el trabajo se interrumpe | Un registro que falló de forma imprevista, o una admisión que lead-core no contestó, sigue `PENDING`, y la reentrega es lo que termina el trabajo. A la tercera entrega RabbitMQ lo mueve a la DLQ |
+| **Espera de 10 s antes del `nack`** | Un reinicio de lead-core dura segundos; una reentrega inmediata gastaría las tres entregas antes de que vuelva. La espera se interrumpe al parar el worker |
+| **El trabajo corre en un hilo; la conexión sigue atendiendo eventos** | pika sólo sirve el *heartbeat* dentro de `process_data_events`: un trabajo de más de 60 s ejecutado en el callback perdería la conexión. El `ack` y el `nack` vuelven por `add_callback_threadsafe` |
 | **`prefetch_count=1`** | Los trabajos son largos; un prefetch mayor dejaría a un worker acaparando varios mientras otro está libre |
 | **Cola `quorum` con `x-delivery-limit: 3`** | RabbitMQ lleva la cuenta de entregas él mismo. Contarlas a mano por la cabecera `x-death` sería código nuestro haciendo lo que el bróker ya hace |
 | **El mensaje no lleva el trabajo**, sólo sus identificadores y metadatos | El trabajo ya está en base de datos. Meter también el payload sería tenerlo en dos sitios que pueden discrepar |
@@ -89,7 +91,7 @@ flowchart LR
     O --> Q["intake.jobs"]
     Q --> W["intake-worker"]
     W -->|"parsea una vez"| REC[("intake_records PENDING")]
-    W -->|"puntúa y enruta"| REC
+    W -->|"pide la admisión a lead-core"| REC
 ```
 
 Un `batch-upload` guarda el fichero en `intake_files` (`bytea`) en la **misma transacción** que crea
@@ -98,7 +100,7 @@ el trabajo y registra la orden en el outbox. El límite es de 10 MB, en el gatew
 
 Parsear lo hace el worker, una sola vez: lee el fichero con `FOR UPDATE`, materializa un
 `IntakeRecord` por fila y marca `parsed_at` en la misma transacción. Una reentrega encuentra
-`parsed_at` y salta directamente a puntuar y enrutar los registros `PENDING`. Un fichero ilegible
+`parsed_at` y salta directamente a pedir la admisión de los registros `PENDING`. Un fichero ilegible
 marca el trabajo `FAILED` y hace `ack`: no hay filas que reintentar.
 
 Una ingesta individual y un reproceso siguen el mismo camino sin fichero: la orden entra en el
@@ -123,12 +125,13 @@ Un `NackError` o un mensaje no enrutable no se reintentan por reconexión: la fi
 
 | Pieza | Fichero |
 |---|---|
-| El mensaje y su procesamiento | `infrastructure/intake_worker/messages.py` |
-| El trabajador | `infrastructure/intake_worker/` (`consumer.py`, `main.py`), `python -m infrastructure.intake_worker` |
-| La topología de la cola | `infrastructure/adapters/output/queue/intake_queue_topology.py` |
-| El despachador que publica | `libs/chassis/src/chassis/rabbit.py` (`RabbitJobDispatcher`), cableado en `infrastructure/worker/` |
-| El fichero guardado | `infrastructure/adapters/output/persistence/raw_sql_intake_file_repository.py` |
-| Los servicios | `docker-compose.yml`, `backend-worker` e `intake-worker` |
+| El mensaje y su procesamiento | `services/intake/src/infrastructure/adapters/output/queue/job_message.py`, `infrastructure/worker/jobs.py` |
+| El trabajador | `services/intake/src/infrastructure/worker/` (`job_consumer.py`, `rabbit_lane.py`, `main.py`), `python -m infrastructure.worker` |
+| La topología de la cola | `services/intake/src/infrastructure/adapters/output/queue/topology.py` |
+| El despachador que publica | `libs/chassis/src/chassis/rabbit.py` (`RabbitJobDispatcher`), cableado en `services/intake/src/infrastructure/worker/relays.py` |
+| El fichero guardado | `services/intake/src/infrastructure/adapters/output/persistence/intake_file_repository.py` |
+| El esquema del mensaje | `contracts/schemas/intake/job-message.v1.schema.json` |
+| Los servicios | `docker-compose.yml`, `intake` e `intake-worker` |
 
 ## Límites de hoy
 
@@ -145,8 +148,9 @@ Un `NackError` o un mensaje no enrutable no se reintentan por reconexión: la fi
 - **Un registro que falla siempre** lleva su trabajo a la DLQ en tres entregas, y recuperarlo es manual.
 - **Los ficheros no se purgan.** `intake_files` crece con cada `batch-upload`; necesita una política de
   retención.
-- **Sin apagado ordenado:** un `SIGTERM` a mitad de un mensaje lo mata, y es justo el caso que la
-  reentrega ya cubre por diseño.
+- **Apagado ordenado, con límite:** al parar, `intake-worker` deja de tomar trabajos y termina el que
+  tiene en curso (`stop_grace_period: 5m`); un trabajo que supere ese plazo se mata a mitad, y es
+  justo el caso que la reentrega ya cubre por diseño.
 - **Credenciales en claro** en el fichero de compose, sin TLS. Aplazado con razón escrita, no
   olvidado: ver «Alternativas consideradas» en el
   [ADR-0028](../decisiones/0028-autenticacion-de-la-mensajeria.md#alternativas-consideradas).

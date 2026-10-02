@@ -37,7 +37,7 @@ aquí: lo hace el servicio [`notifications`](../modulos/notificaciones.md).
 Todo lo que depende de un framework o de un driver externo. `adapters/input/api/` son los routers
 FastAPI, finos: convierten HTTP en comandos y comandos en respuestas, sin lógica de negocio propia.
 `adapters/output/` implementa cada puerto de salida sobre PostgreSQL con SQL crudo (`psycopg`),
-`pandas`, el cliente HTTP de identity (`httpx`) y las escrituras en el outbox, que entrega `backend-worker` con sus despachadores (Kafka, webhooks, RabbitMQ). `di/container.py` es el composition
+el cliente HTTP de identity (`httpx`) y las escrituras en el outbox, que entrega `backend-worker` con sus despachadores (Kafka y webhooks). `di/container.py` es el composition
 root: decide qué implementación concreta recibe cada puerto y su ciclo de vida.
 
 ## La regla de dependencia

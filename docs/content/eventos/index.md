@@ -49,21 +49,25 @@ flowchart LR
     BW -->|"product"| K["Kafka<br/>leads.{organización}"]
     BW -->|"product"| WH["Webhooks"]
     BW -->|"internal"| KI["Kafka<br/>internal.*"]
-    BW -->|"job"| RMQ["RabbitMQ<br/>intake.jobs"]
     K --> CRM["El CRM del cliente"]
     KI --> NW["notifications-worker"]
     NW -->|"su base"| NDB[("notifications_db")]
     IDDB[("identity_db<br/>datos + outbox")] -.->|"relay internal"| IW["identity-worker"]
     IW -->|"internal.identity.*"| KI
-    KI -->|"lead-core.advisors<br/>intake.tenants"| BW
-    RMQ --> W["intake-worker"]
-    W -->|misma transacción| DB
+    KI -->|"lead-core.advisors"| BW
+    INDB[("intake_db<br/>datos + outbox")] -.->|"relays job e internal"| W["intake-worker"]
+    W -->|"job"| RMQ["RabbitMQ<br/>intake.jobs"]
+    RMQ --> W
+    W -->|"internal.intake.events"| KI
+    KI -->|"intake.tenants"| W
+    W -->|"admissions, token de servicio"| API
 ```
 
 1. **[El outbox](outbox.md)** — el evento, el aviso interno o la orden de procesar un trabajo se
    registran en la misma transacción que el dato que los origina. Es lo que impide que exista un
    lead del que el cliente nunca se entere, o un `202` cuyo trabajo nadie ejecute. La API sólo
-   escribe: entrega `backend-worker`, con un relay por canal (`product`, `internal`, `job`).
+   escribe: entrega `backend-worker`, con un relay por canal (`product`, `internal`), e
+   `intake-worker` para el outbox de intake (`internal` y `job`).
 2. **[Kafka](kafka.md)** — el canal del producto, un topic por organización con retención, que es lo
    que el cliente compra y puede volver a leer; y los topics `internal.*`, con los hechos y el estado
    que se mueven entre procesos de este sistema: los avisos que consume el servicio `notifications`

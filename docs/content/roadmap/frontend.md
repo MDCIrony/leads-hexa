@@ -70,7 +70,8 @@ su cuenta.
 Esta tabla es el alcance de la primera pieza a construir. Los contratos exactos —campos, tipos,
 obligatoriedad— no se copian aquí: se generan desde `/openapi.json`, que es la única fuente que no
 puede desincronizarse. Desde F3 cada servicio publica el suyo a través del gateway: `/openapi.json`
-(lead-core), `/openapi/identity.json` (`auth`, `tenants`, `agents`) y `/openapi/notifications.json`;
+(lead-core), `/openapi/identity.json` (`auth`, `tenants`, `agents`), `/openapi/notifications.json` y,
+desde F4, `/openapi/intake.json` (`sources`, `intake`, `intakeJobs`);
 `npm run gen:api` genera un fichero de tipos por cada uno. Lo que fija esta tabla es **qué servicio
 existe, qué operaciones expone y qué contrato devuelve cada una**.
 
@@ -82,7 +83,8 @@ existe, qué operaciones expone y qué contrato devuelve cada una**.
 | `groups` | `GET` lista · `POST` · `PATCH /{id}` · `DELETE /{id}` | `PaginatedGroupsResponse` · `SalesGroupResponse` · `204` |
 | `sources` | `GET` lista · `POST` · `PATCH /{id}` · `DELETE /{id}` | `PaginatedSourcesResponse` · `LeadSourceResponse` · `204` |
 | `leads` | `GET` lista · `GET /mine` · `GET /{id}` · `POST /{id}/assign` · `POST /{id}/discard` | `PaginatedLeadsResponse` · `LeadDetailResponse` |
-| `leadStats` | `GET /leads/stats` | `LeadStatsResponse` |
+| `leadStats` | `GET /leads/stats` | `LeadStatsResponse` (sin `pending_intake` desde F4) |
+| `intakeStats` | `GET /intake/stats` | `IntakeStatsResponse` (`pending`, `rejected`, `pending_intake`) |
 | `intake` | `POST /leads/ingest` · `POST /leads/batch-upload` · `GET /records` · `POST /records/{id}/promote` · `POST /records/{id}/discard` | `IntakeAcceptedResponse` · `IntakeRecordsPageResponse` · `LeadProcessedResponse` · `204` |
 | `intakeJobs` | `GET /jobs` · `GET /jobs/{id}` · `POST /jobs/{id}/reprocess` | `IntakeJobsPageResponse` · `IntakeJobResponse` |
 | `rules` | Tres familias —puntuación, asignación, descalificación— cada una con `GET` lista, `POST`, `PATCH /{id}`, `DELETE /{id}` | `Paginated*RulesResponse` · `*RuleResponse` · `204` |
@@ -170,7 +172,7 @@ flowchart LR
 
 | Vista | Por qué no bloquea el recorrido |
 |---|---|
-| Panel del gestor | `GET /leads/stats` ya está construido y probado; sólo queda sin consumir |
+| Panel del gestor | `GET /leads/stats` y `GET /intake/stats` ya están construidos y probados, y el frontend tiene sus servicios; sólo queda sin consumir |
 | Leads del gestor | El recorrido se verifica desde el lado del asesor, que es lo que demuestra el reparto |
 | Bandeja de entrada y trabajos | Sólo hacen falta cuando algo se rechaza; el recorrido feliz no pasa por ahí |
 | Orígenes | Dar de alta una organización ya crea sus dos orígenes, «Formulario manual» y «Carga de fichero» |
@@ -212,7 +214,7 @@ sin `curl`.
 
 | Vista | Funcionalidad mínima |
 |---|---|
-| Panel | Pintar las cinco cifras de `GET /leads/stats` en una sola petición: total, distribución por estado, sin asignar, bandeja pendiente y carga por asesor. Acotar por periodo con `from`/`to` |
+| Panel | Pintar las cifras del panel con dos lecturas: `GET /leads/stats` (total, distribución por estado, sin asignar y carga por asesor; acotable por periodo con `from`/`to`) y `GET /intake/stats` (bandeja pendiente: `pending_intake`, que desde F4 es de intake) |
 | Leads | Tabla paginada con los cinco filtros del backend —estado, asesor, grupo, fuente y búsqueda— combinables entre sí, y columna de asesor asignado |
 | Detalle del lead | Ficha completa, desglose de las reglas que produjeron la puntuación, motivo de descalificación o descarte cuando lo haya, asignación manual a un asesor y descarte con motivo |
 | Bandeja de entrada | Registros de entrada con su estado; para uno rechazado, ver el payload tal como llegó y el error por campo; corregir y reintentar, o descartar |

@@ -12,12 +12,13 @@ consumidores).
 
 ## Cómo funciona
 
-Un caso de uso —`IngestLeadUseCase`, `AssignLeadUseCase`— registra el evento en el outbox, canal
+Un caso de uso —`AdmitLeadUseCase` de lead-core, `IngestLeadUseCase` de intake, `AssignLeadUseCase`— registra el evento en el outbox, canal
 `internal`, **dentro de su propia transacción** ([ADR-0033](../decisiones/0033-eventos-internos-en-kafka.md)):
 si el lead se guarda, el aviso existe, y si se deshace, el aviso se deshace con él. Ya no hay un
 paso posterior que pueda perderse si el proceso cae entre el commit y el aviso.
 
-`backend-worker` entrega esa fila a Kafka (`internal.lead-core.events` o `internal.intake.events`) y
+`backend-worker` entrega las filas de lead-core a `internal.lead-core.events` e `intake-worker` las de
+intake (`IntakeRejected`) a `internal.intake.events`, y
 `notifications-worker` la lee con dos consumidores, uno por grupo. `NotificationConsumer` abre **una** unidad de trabajo por
 mensaje: marca el evento en `processed_events` y, sólo si es nuevo, deja que `NotificationHandler`
 escriba las notificaciones en esa misma transacción. Un fallo deshace ambas cosas; un duplicado
@@ -28,7 +29,7 @@ relay y el consumidor, no en el mismo instante que la acción que lo origina.
 sequenceDiagram
     participant UC as Caso de uso
     participant DB as PostgreSQL
-    participant R as Relay internal (backend-worker)
+    participant R as Relay internal (backend-worker o intake-worker)
     participant K as Kafka internal.*
     participant NC as NotificationConsumer (notifications-worker)
     participant NH as NotificationHandler
@@ -122,7 +123,7 @@ gestor sobre un lead ya existente.
 | `notifications/router.py` | Listado, marcado individual y marcado masivo de avisos propios; el principal sale del JWT interno |
 
 Los eventos (`LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned`, `IntakeRejected`, `AgentState`) los
-define y publica el monolito; el servicio sólo conoce su sobre y su `payload`.
+publican lead-core (`backend-worker`), identity (`identity-worker`) e intake (`intake-worker`); el servicio sólo conoce su sobre y su `payload`.
 
 ## Decisiones que lo explican
 
@@ -140,4 +141,5 @@ define y publica el monolito; el servicio sólo conoce su sobre y su `payload`.
 - `services/notifications/src/infrastructure/adapters/output/persistence/` — repositorios y unidad de trabajo
 - `services/notifications/src/infrastructure/worker/` — el proceso de `notifications-worker`
 - `services/notifications/migrations/` — `notifications`, `members` y `processed_events`
-- `backend/src/domain/events/` y `backend/src/infrastructure/adapters/output/events/internal_topics.py` — los eventos que produce el monolito
+- `backend/src/domain/events/` y `backend/src/infrastructure/adapters/output/events/internal_topics.py` — los eventos que produce lead-core
+- `services/intake/src/domain/events/` y `services/intake/src/infrastructure/adapters/output/events/internal_topics.py` — `IntakeRejected`

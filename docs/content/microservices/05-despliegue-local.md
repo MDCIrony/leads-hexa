@@ -33,7 +33,7 @@ flowchart TB
 
     ID & IDW & IN & INW & LC & LCW & NO & NOW --> DB[("db")]
     BOOT["db-bootstrap<br/>una ejecución"] --> DB
-    IN & INW --> RMQ["rabbitmq"]
+    INW --> RMQ["rabbitmq"]
     IDW & INW & LCW & NOW --> K["kafka"]
 ```
 
@@ -82,9 +82,10 @@ en todas. Un servicio que intentara leer otra base fallaría al conectar, no al 
 
 **Las crea `db-bootstrap`**, un servicio de una sola ejecución con un script `psql` idempotente
 (`db/bootstrap.sql`), del que dependen los servicios con `condition: service_completed_successfully`.
-Hoy crea, para notifications y para identity, los roles `notifications_svc` e `identity_svc` (con la
-contraseña de desarrollo que le pasa Compose, que vuelve a fijar en cada ejecución), las bases
-`notifications_db`, `notifications_test`, `identity_db` e `identity_test` con su rol de propietario, y
+Hoy crea, para notifications, identity e intake, los roles `notifications_svc`, `identity_svc` e
+`intake_svc` (con la contraseña de desarrollo que le pasa Compose, que vuelve a fijar en cada
+ejecución), las bases `notifications_db`, `notifications_test`, `identity_db`, `identity_test`,
+`intake_db` e `intake_test` con su rol de propietario, y
 aplica `REVOKE CONNECT … FROM PUBLIC` y `GRANT CONNECT` sólo al rol. Las bases de pruebas las crea él
 porque ningún rol de servicio tiene `CREATEDB`. También quita `CONNECT` a `PUBLIC` en `leads_db` y
 `leads_test`, si existen: el monolito entra con el superusuario `postgres`, que no lo necesita, y así
@@ -138,33 +139,39 @@ Igual que hoy: `src/` y `migrations/` del servicio, más `libs/chassis/src`, mon
 | `SERVICE_CLIENTS` (hashes y audiencias) | ✓ | | | |
 | `MFA_ENCRYPTION_KEY`, `GOOGLE_*`, `GITHUB_*`, `FRONTEND_ORIGIN` | ✓ | | | |
 | `CORS_ORIGINS` (sólo para validar `FRONTEND_ORIGIN`) | ✓ | | | |
-| `JWKS_URL` (`http://identity:8000/internal/v1/jwks`) | | ✓ | ✓ | ✓ |
-| `SERVICE_CLIENT_ID`, `SERVICE_CLIENT_SECRET` | | F4 | ✓ | |
-| `LEAD_CORE_URL` | | F4 | | |
-| `IDENTITY_URL` (`http://identity:8000`) | | | ✓ | |
-| `KAFKA_BOOTSTRAP_SERVERS` | ✓ | ✓ | ✓ | ✓ |
+| `JWKS_URL` (`http://identity:8000/internal/v1/jwks`) | | ✓ (sólo la API) | ✓ | ✓ |
+| `SERVICE_CLIENT_ID`, `SERVICE_CLIENT_SECRET` | | ✓ (`intake`) | ✓ (`lead-core`) | |
+| `LEAD_CORE_URL` (`http://backend:8000`) | | ✓ | | |
+| `IDENTITY_URL` (`http://identity:8000`) | | ✓ | ✓ | |
+| `KAFKA_BOOTSTRAP_SERVERS` | ✓ | ✓ (sólo el worker) | ✓ | ✓ |
 | `KAFKA_EXTERNAL_BOOTSTRAP_SERVERS` | ✓ | | | |
-| `RABBITMQ_URL` | | ✓ | ✓ | |
-| `LOG_LEVEL` (`INFO` por defecto) | ✓ | | | ✓ |
+| `RABBITMQ_URL` | | ✓ (sólo el worker) | ✓ | |
+| `OUTBOX_RELAY_INTERVAL_SECONDS` (1 s por defecto) | | ✓ (sólo el worker) | | |
+| `LOG_LEVEL` (`INFO` por defecto) | ✓ | ✓ | | ✓ |
 
 **Por proceso.** identity separa la configuración: `identity` exige `DATABASE_URL`, `SIGNING_KEYS`,
 `SERVICE_CLIENTS` y `MFA_ENCRYPTION_KEY`; `identity-worker` sólo `DATABASE_URL` y
-`KAFKA_BOOTSTRAP_SERVERS`. El backend tiene un único `Settings` hasta F5: `backend`, `backend-worker`
-e `intake-worker` exigen los tres `DATABASE_URL` y `JWKS_URL`, y sólo la API comprueba al arrancar
-`SERVICE_CLIENT_SECRET`. `IDENTITY_URL` y `SERVICE_CLIENT_ID` tienen valores por defecto
-(`http://identity:8000`, `lead-core`). La columna intake describe el servicio de F4; hoy es el
-`intake-worker` del backend, con las variables de lead-core.
+`KAFKA_BOOTSTRAP_SERVERS`. Intake la separa igual desde F4: `intake` exige `DATABASE_URL`,
+`JWKS_URL`, `LEAD_CORE_URL` y `SERVICE_CLIENT_SECRET` (la promoción manual admite en línea);
+`intake-worker` exige `DATABASE_URL`, `LEAD_CORE_URL`, `SERVICE_CLIENT_SECRET`, `RABBITMQ_URL` y
+`KAFKA_BOOTSTRAP_SERVERS`, y no necesita `JWKS_URL`. La CLI de reconciliación
+(`python -m infrastructure.cli.reconcile`) tiene una tercera clase, `ReconcileSettings`, sin broker, y
+corre desde cualquiera de los dos contenedores. El secreto de servicio va fuera del `repr` de los
+ajustes. El backend tiene un único `Settings` hasta F5: `backend` y `backend-worker` exigen
+`DATABASE_URL` y `JWKS_URL`, y sólo la API comprueba al arrancar `SERVICE_CLIENT_SECRET`.
+`IDENTITY_URL` y `SERVICE_CLIENT_ID` tienen valores por defecto (`http://identity:8000`, `lead-core`
+en el backend y `intake` en intake).
 
 Los valores de desarrollo viven en `docker-compose.yml`, como `MFA_ENCRYPTION_KEY`, `SIGNING_KEYS`,
-`SERVICE_CLIENTS` y su secreto (`SERVICE_CLIENT_SECRET` de `backend`) y las contraseñas de los
-brokers. Los secretos de OAuth siguen leyéndose de `.env`, ahora sólo en `identity`.
+`SERVICE_CLIENTS` y los secretos de servicio (`SERVICE_CLIENT_SECRET` de `backend` y de `intake`, que
+son el mismo en `intake` y `intake-worker`) y las contraseñas de los brokers. Los secretos de OAuth siguen leyéndose de `.env`, ahora sólo en `identity`.
 
 ## Arranque y dependencias
 
 | Servicio | Espera a | Por qué |
 |---|---|---|
-| servicios de aplicación | `db` sano y, para los extraídos, `db-bootstrap` completado | Sin su base no hay nada que hacer. Hoy dependen de `db-bootstrap` `identity`, `notifications`, `identity-test` y `notifications-test`; cada servicio que se extraiga lo hará también |
-| `intake-worker` | `rabbitmq` sano | Su razón de ser es la cola (igual que hoy) |
+| servicios de aplicación | `db` sano y, para los extraídos, `db-bootstrap` completado | Sin su base no hay nada que hacer. Hoy dependen de `db-bootstrap` `identity`, `notifications`, `intake` y sus `*-test`; cada servicio que se extraiga lo hará también |
+| `intake-worker` | `db` y `rabbitmq` sanos, e `intake` sano | Su razón de ser es la cola. La API aplica las migraciones al arrancar y el relay y los consumidores leen las tablas que crean. **Sin condición sobre `backend`**: una caída de lead-core interrumpe un job (`nack` y redelivery), no para el worker |
 | `backend-worker` | `backend` sano | La API aplica las migraciones al arrancar y el relay lee las columnas que crean |
 | `identity-worker` | `identity` sano | La API aplica las migraciones al arrancar y el relay lee su outbox |
 | `notifications-worker` | `notifications` sano | La API aplica las migraciones al arrancar y los consumidores escriben esas tablas |
@@ -176,7 +183,7 @@ brokers. Los secretos de OAuth siguen leyéndose de `.env`, ahora sólo en `iden
 
 | Comando | Qué demuestra |
 |---|---|
-| `docker compose --profile test run --rm <svc>-test` | La suite completa de un servicio, con su base `*_test` (hoy `identity-test` y `notifications-test`; el backend usa `backend-test`) |
+| `docker compose --profile test run --rm <svc>-test` | La suite completa de un servicio, con su base `*_test` (hoy `identity-test`, `intake-test` y `notifications-test`; el backend usa `backend-test`). `intake-test` monta además `contracts/`, para los tests de contrato de la admisión |
 | `cd services/<svc> && uv run pytest -m unit -q` | El dominio aislado: **sin base y sin variables de entorno**, como hoy |
 | `./scripts/verify-e2e.sh` | El negocio de punta a punta sobre HTTP real, contra el gateway en `:8001` |
 
@@ -206,5 +213,5 @@ sirviendo tráfico.
 | F1 | + `backend-worker` (relay y consumidores) |
 | F2 | + `notifications`, `notifications-worker`, `db-bootstrap`; `backend-worker` conserva los relays y deja de consumir |
 | F3 | + `identity`, `identity-worker`; `backend-worker` vuelve a consumir (`lead-core.advisors`, `intake.tenants`) |
-| F4 | + `intake` (el `intake-worker` pasa a ser suyo) |
+| F4 | + `intake`; el `intake-worker` pasa a ser suyo (imagen de `services/intake`, `stop_grace_period: 5m`) y `backend-worker` deja de consumir `intake.tenants` |
 | F5 | `backend` → `lead-core`, `backend-worker` → `lead-core-worker` |

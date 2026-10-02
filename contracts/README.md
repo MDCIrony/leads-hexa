@@ -22,6 +22,12 @@ quien produce demuestra que su salida conforma; quien consume, que sabe leer las
 Los esquemas son JSON Schema 2020-12 y se identifican por su `$id` (`envelope.v1`, `AgentState.v1`,
 `identity.agent.v1`…), no por su ruta.
 
+El `status` de `schemas/lead-core/admission-result.v1.schema.json` cubre los seis valores de
+`LeadStatus` (`NEW`, `QUALIFIED`, `ASSIGNED`, `UNASSIGNED`, `DISQUALIFIED`, `DISCARDED`): una admisión
+repetida devuelve el lead como está ahora, y no sólo los estados que produce una admisión nueva. Se
+amplió dentro de v1, como cambio aditivo, antes de que intake lo consumiera
+([plan de F4](../docs/content/microservices/06-plan-de-desacople.md#f4-intake)).
+
 Eventos en v1: `AgentState`, `TenantState`, `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned`,
 `IntakeRejected`. El `payload` es el `as_payload()` del evento: sus campos sin `event_id` ni
 `occurred_on`, con `tenant_id`.

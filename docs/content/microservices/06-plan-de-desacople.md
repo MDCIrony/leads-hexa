@@ -356,36 +356,131 @@ variables de MFA u OAuth.
 
 ## F4 · Intake
 
+**Estado: implantada** (`RANGO_F4`, más el commit que registra este rango). Lo construido sigue el
+plan salvo las desviaciones de abajo. El corte copió 76 fuentes, 38 `provisioned_tenants`, 117 jobs,
+139 registros, 36 errores, 22 ficheros y 42 filas de `processed_events` (las del grupo
+`intake.tenants`), con recuentos y `md5` idénticos en origen y destino.
+
 **Objetivo.** La recepción y la decisión se separan; la idempotencia sustituye a la transacción.
 
 **Cambios**
 
-- En `backend`, **antes de mover nada**: `leads.intake_record_id`, rellenada desde
-  `intake_records.lead_id`, y `UNIQUE (tenant_id, intake_record_id)`.
-- En `backend`: `POST /internal/v1/admissions` (la parte de decisión de `IngestLeadUseCase`) y
-  `GET /internal/v1/admissions?intake_record_ids=…` para la reconciliación. `/leads/stats` pierde
-  `pending_intake`.
-- `services/intake/`: recepción, jobs, registros, errores, fuentes, ficheros, parser (`pandas` y
-  `openpyxl` salen de lead-core), cola, consumidor `intake.tenants`, `LeadAdmissionPort` con adaptador
-  HTTP, `GET /intake/stats`, borrado de fuente contando registros. El `intake-worker` pasa a ser su
-  worker (`infrastructure/worker/`), con el relay de su outbox (`job` e `internal`).
-- `intake_db`. `scripts/migrate/f4_intake.sh` copia `lead_sources`, `intake_jobs`, `intake_records`,
-  `intake_errors`, `intake_files` y `provisioned_tenants`. Antes de congelar, se drenan el outbox `job`
-  y `intake.jobs`.
-- Gateway: `/sources` e `/intake` → `intake`.
-- Frontend: cambio de contrato 2.
+- En `backend`, **antes de mover nada** (migración 018): `leads.intake_record_id`, rellenada desde
+  `intake_records.lead_id`, y `UNIQUE (tenant_id, intake_record_id)`. El flujo de ingesta se partió
+  en el propio monolito, con un adaptador en proceso detrás de `LeadAdmissionPort`, y se validó con
+  `verify-e2e.sh` antes de mover tablas.
+- En `backend`: `POST /internal/v1/admissions` (`AdmitLeadUseCase`, la parte de decisión de
+  `IngestLeadUseCase`) y `GET /internal/v1/admissions?intake_record_ids=…` para la reconciliación,
+  ambos con token de servicio (`sub=intake`, `aud=lead-core`). Tras el corte se retiraron del
+  monolito el dominio, los casos de uso, los repositorios, los routers `/sources` e `/intake`, el
+  parser (`pandas`, `openpyxl` y `python-multipart` salen de lead-core), la cola, el `intake_worker/`
+  y el consumidor `intake.tenants`. `/leads/stats` pierde `pending_intake`.
+- `services/intake/`: recepción, jobs, registros, errores, fuentes, ficheros, parser, cola, consumidor
+  `intake.tenants`, `LeadAdmissionPort` con adaptador HTTP (`HttpLeadAdmission`),
+  `GET /intake/stats` y borrado de fuente contando registros. `intake-worker` es su worker
+  (`infrastructure/worker/`), con el relay de su outbox (`job` a RabbitMQ, `internal` a Kafka;
+  `producer="intake"`, topic `internal.intake.events`) y la CLI `infrastructure.cli.reconcile`.
+- `intake_db` (rol `intake_svc`, base de pruebas `intake_test`, las dos de `db/bootstrap.sql`).
+  `scripts/migrate/f4_intake.sh` copia `lead_sources`, `provisioned_tenants`, `intake_jobs`,
+  `intake_records`, `intake_errors`, `intake_files` y los `processed_events` de `intake.tenants`, con
+  los mismos ids. Verifica recuentos y `md5`, y se niega a ejecutarse con `gateway`, `backend-worker`
+  o `intake-worker` en marcha, con `job` o `IntakeRejected` sin publicar en `leads_db`, con mensajes
+  en `intake.jobs` o con filas en el outbox de `intake_db` (el corte ya se hizo y truncar borraría lo
+  que intake escribió).
+- `contracts/`: `openapi/lead-core-internal.v1.yaml`, los esquemas `lead-core/admission-*` y
+  `intake/job-message`, con sus fixtures. `SERVICE_CLIENTS` de identity gana `intake:lead-core:<sha256>`.
+- Gateway: `/api/v1/sources` y `/api/v1/intake/` → `intake` (con `client_max_body_size 10m`);
+  `/openapi/intake.json` publica su contrato.
+- Frontend: cambio de contrato 2 ([ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)). Los
+  tipos de `/sources` e `/intake` se generan de `/openapi/intake.json` (`intake-schema.d.ts`) y
+  existen los servicios de estadísticas de los dos lados. El panel del gestor sigue sin existir:
+  es un elemento del [roadmap](../roadmap/frontend.md), no de esta fase.
+
+**Desviaciones y decisiones tomadas al construirla**
+
+- **El flujo partido no mantiene una transacción abierta durante la admisión.** Intake lee el
+  registro (si ya está `PROMOTED`, responde con su `lead_id` sin llamar), llama a lead-core sin
+  unidad de trabajo, y después, en una transacción, reclama el registro y lo promueve o lo rechaza
+  (con `IntakeRejected` en su outbox). Tener una conexión retenida mientras lead-core puntúa y asigna
+  agotaría el pool; la idempotencia de lead-core cubre la carrera.
+- **Sólo se reclama un registro abierto.** `claim_unpromoted` toma `PENDING` o `REJECTED`; un registro
+  `DISCARDED` no se reclama. Si el reclamo no devuelve nada, se relee el registro: `PROMOTED` responde
+  con el ganador, cualquier otro estado es `INVALID_INTAKE_TRANSITION`. Antes del corte el monolito
+  aplicaba la misma regla. Un registro descartado a mitad de un lote se salta, no cuenta como interrupción: reentregar
+  no lo cambiaría.
+- **La admisión repetida devuelve el estado actual del lead.** `ADMITTED` de un lead que ya existía
+  lleva su `status`, `score`, `assigned_agent_id` y `applied_rules_count` reales, y no publica nada.
+  Como el lead puede haber cambiado desde la primera admisión, el `status` del resultado cubre todos
+  los seis de `LeadStatus` (también `QUALIFIED`, `NEW` y `DISCARDED`), no sólo los que produce una
+  admisión nueva. Es un cambio
+  aditivo dentro de v1.
+- **Un campo de texto obligatorio nulo es `REJECTED`, no un error.** `first_name`, `last_name`,
+  `company` e `industry` son `NOT NULL` en `leads`; si faltan, `AdmitLeadUseCase` responde
+  `REJECTED` con `error_code=MISSING_REQUIRED_FIELD` y el campo, sin guardar nada. Un 4xx o un 5xx
+  sería un fallo transitorio para intake y el mensaje acabaría en la DLQ.
+- **Fallo transitorio = `AdmissionUnavailable`.** Cualquier respuesta que no sea 200 con un cuerpo
+  válido, un error de transporte, un *timeout* (10 s) o `ServiceTokenUnavailable`. En el worker el
+  registro sigue `PENDING` y el job se interrumpe; en la promoción manual, `503 LEAD_CORE_UNAVAILABLE`.
+  Ante un 401 el adaptador descarta su token de servicio (`invalidate()`).
+- **El worker corta la ejecución en la primera caída de la admisión.** Con lead-core colgado, cada
+  llamada agota su *timeout*, y miles de ellas sobrepasan el de consumo del broker. Los registros no
+  alcanzados siguen `PENDING` para la redelivery.
+- **Un job interrumpido espera 10 s antes del `nack(requeue)`** (interrumpible al parar). Una
+  redelivery inmediata gasta las tres entregas del job antes de que lead-core vuelva de un reinicio de
+  segundos y lo manda a la DLQ sin necesidad. Coste: hasta 30 s más de latencia ante una caída real
+  antes de llegar a la DLQ.
+- **Un job largo mantiene vivo el *heartbeat*.** El job corre en su propio hilo mientras el hilo de la
+  conexión atiende `process_data_events`, y `ack` y `nack` vuelven por `add_callback_threadsafe`; un
+  job de más de 60 s ya no pierde la conexión. El consumidor captura `AMQPError` en general y
+  `OSError`, y reconecta con *backoff*. `intake-worker` declara `stop_grace_period: 5m`: al parar
+  termina el job en curso en vez de devolverlo a la cola.
+- **La FK `leads.source_id → lead_sources` se quita en F4** (migración 018), por la misma razón que las
+  de `tenants` en F3: tras el corte las fuentes nuevas nacen en `intake_db` y un lead suyo violaría la
+  FK hacia la tabla congelada. Las FK de tablas congeladas (`intake_records.lead_id → leads`,
+  `intake_errors`, `intake_files`) esperan a F5. En `intake_db`, `intake_records.lead_id` es un UUID
+  sin FK.
+- **`SOURCE_IN_USE` cuenta registros o jobs de la fuente.** El monolito se apoyaba en la traducción de
+  una FK al borrar; en intake el borrado cuenta `intake_records` e `intake_jobs` de la fuente.
+- **Autenticación interna.** Un token ausente, inválido o de otro llamante es el mismo 401 con el
+  sobre de error (el verificador no distingue al llamante, igual que identity); `KeysUnavailable` es
+  503. El `tenant_id` sale del registro persistido, no de un token.
+- **La reconciliación sólo informa.** `python -m infrastructure.cli.reconcile [--since ISO8601]` (por
+  defecto, las últimas 24 h; lotes de 200) recorre los registros `PROMOTED` y los compara con
+  `GET /internal/v1/admissions`. Nunca escribe. Sale con **0** sin diferencias, **1** si hay alguna
+  (`MISSING`, `LEAD_MISMATCH` o `TENANT_MISMATCH`: un lead de otra organización) y **2** si no pudo
+  obtener respuesta (configuración incompleta, `intake_db` o lead-core inalcanzables): un silencio no
+  es «sin diferencias». Por eso usa su propia `ReconcileSettings`, sin broker.
+- **Configuración por proceso.** `ApiSettings`, `WorkerSettings` y `ReconcileSettings`: `intake` exige
+  `JWKS_URL` y `intake-worker` no; el backend conserva un único `Settings` hasta F5.
+- **Ventana residual aceptada.** Un registro descartado *durante* la llamada de admisión no se puede
+  deshacer: lead-core conserva un lead al que ningún registro apunta, y la reconciliación, que recorre
+  registros `PROMOTED`, no lo ve. Cerrarla exigiría una llamada compensatoria a lead-core; ver
+  [Matriz de fallos](04-comunicacion-y-eventos.md#matriz-de-fallos).
+- **Orden del corte.** El frontend se adaptó tras el corte, con los tipos de `/openapi/intake.json` ya
+  publicados; la retirada del monolito se fusionó antes de arrancar de nuevo `backend-worker`, porque
+  su consumidor `intake.tenants` habría competido en el mismo grupo con el de intake escribiendo en
+  `leads_db`. Tras el corte `backend-worker` sólo consume `lead-core.advisors`.
+- **Medición.** El job de 1.000 registros se midió con el mismo método de F0; el resultado está en
+  [Mediciones](07-evoluciones-y-riesgos.md#mediciones).
 
 **`verify_ms_f4`**
 
-- Ingesta individual → lead asignado, visible en `GET /leads` y con su registro `PROMOTED`.
-- Subida de fichero con filas válidas, inválidas y descalificadas → los recuentos de siempre.
+- `GET /sources` por el gateway llega a intake (`upstream=` del *access log*) con su `X-Request-Id`;
+  el backend ya no sirve `/api/v1/sources` (404); `/openapi/intake.json` publica las rutas de
+  `/api/v1/intake`; `intake_svc` entra en `intake_db` y no puede conectarse a `leads_db` ni a
+  `identity_db`.
+- Ingesta individual → lead asignado, visible en `GET /leads` una sola vez y con su registro `PROMOTED`.
+- Subida de fichero con filas válidas, inválidas y descalificadas → total, correctos y fallidos de
+  siempre; la descalificada es un lead `DISQUALIFIED`.
 - Reprocesar un job completado no crea leads nuevos.
-- Con `lead-core` parado, una ingesta queda en el job; al arrancarlo, termina sin duplicados.
-- `GET /leads/stats` y `GET /intake/stats` suman lo que antes devolvía el primero.
+- Con `lead-core` parado, una ingesta queda `PENDING` en su job; al arrancarlo, termina sin duplicados.
+- `GET /leads/stats` ya no lleva `pending_intake`; `GET /intake/stats` cuadra con la bandeja
+  (`pending_intake = pending + rejected`).
+- La reconciliación sale con 0; `intake.tenants` sin *lag* y con su DLQ vacía.
 
-**Criterio de salida.** Tests de contrato de la admisión en los dos lados (fixture capturado de
-lead-core, usado por el adaptador de intake); la reconciliación sale sin diferencias tras una carga de
-prueba; ningún servicio salvo intake tiene credenciales sobre `intake_db`.
+**Criterio de salida.** Tests de contrato de la admisión en los dos lados (fixtures de `contracts/`
+que produce lead-core y lee el adaptador de intake); la reconciliación sale sin diferencias tras una
+carga de prueba; ningún servicio salvo intake tiene credenciales sobre `intake_db`.
 
 ---
 
