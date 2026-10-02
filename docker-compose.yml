@@ -262,6 +262,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # The backend applies the migrations at startup; the relay reads columns
+      # and indexes they create (channel, correlation_id, key order).
+      backend:
+        condition: service_healthy
       # No condition on kafka (ADR-0026): the worker retries its topics and
       # keeps relaying the rest while the broker is away.
     restart: on-failure
