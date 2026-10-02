@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Self
 
 
+# The API and the worker read this one Settings, so each requires the other's
+# variables; the split is F3 debt, noted in microservices doc 02.
 @dataclass(frozen=True)
 class Settings:
     database_url: str

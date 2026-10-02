@@ -179,6 +179,7 @@ repite aquí. Lo que añade cada servicio extraído:
 | Errores | Mismo sobre `{error, error_code, message}` y misma tabla `STATUS_BY_ERROR_CODE` por servicio |
 | Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que el servicio nuevo pasa sin lista base; sus `src/` y `tests/` se declaran en `scripts/verify-structure.sh`. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
 | Configuración | `Settings.from_environment()` falla al arrancar si falta un valor obligatorio, como hoy |
+| Configuración por proceso | Deuda anotada para F3. En notifications, `api` y `worker` leen el mismo `Settings`, así que cada proceso exige también las variables del otro. F3 separa la configuración por proceso |
 
 ### notifications, el servicio de referencia
 

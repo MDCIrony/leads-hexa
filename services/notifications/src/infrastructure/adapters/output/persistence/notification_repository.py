@@ -41,18 +41,18 @@ class PostgresNotificationRepository(NotificationRepositoryPort):
     def list_by_recipient(
         self, recipient_id: UUID, unread_only: bool = False, limit: int = 100, offset: int = 0
     ) -> list[Notification]:
-        # The f-string composes only a fixed fragment written in this file; every value travels through %s.
         rows = self.connection.execute(
-            f"SELECT * FROM notifications WHERE recipient_id = %s{self._unread(unread_only)}"
+            "SELECT * FROM notifications WHERE recipient_id = %s AND (NOT %s OR is_read = FALSE)"
             " ORDER BY created_at DESC, id LIMIT %s OFFSET %s",
-            (recipient_id, limit, offset),
+            (recipient_id, unread_only, limit, offset),
         ).fetchall()
         return [self._to_notification(row) for row in rows]
 
     def count_by_recipient(self, recipient_id: UUID, unread_only: bool = False) -> int:
         row = self.connection.execute(
-            f"SELECT COUNT(*) AS count FROM notifications WHERE recipient_id = %s{self._unread(unread_only)}",
-            (recipient_id,),
+            "SELECT COUNT(*) AS count FROM notifications"
+            " WHERE recipient_id = %s AND (NOT %s OR is_read = FALSE)",
+            (recipient_id, unread_only),
         ).fetchone()
         return row["count"]
 
@@ -63,10 +63,6 @@ class PostgresNotificationRepository(NotificationRepositoryPort):
             (recipient_id,),
         )
         return cursor.rowcount
-
-    @staticmethod
-    def _unread(unread_only: bool) -> str:
-        return " AND is_read = FALSE" if unread_only else ""
 
     @staticmethod
     def _to_notification(row: dict) -> Notification:

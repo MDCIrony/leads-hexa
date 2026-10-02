@@ -6,7 +6,7 @@ from chassis.persistence import MigrationRunner
 from chassis.web import RequestIdMiddleware, configure_logging
 from fastapi import FastAPI
 
-from infrastructure.adapters.input.api.errors import add_exception_handlers
+from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 from infrastructure.adapters.input.api.notifications.router import router as notifications_router
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
