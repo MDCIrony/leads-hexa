@@ -11,9 +11,6 @@ ENV UV_COMPILE_BYTECODE=1 \
 # ../libs/chassis, i.e. /libs/chassis from /app, without widening the build
 # context to the whole repository.
 COPY --from=chassis . /libs/chassis
-# A named context ignores .dockerignore: drop the host's virtualenv and caches
-# so they do not reach the runner image.
-RUN rm -rf /libs/chassis/.venv /libs/chassis/.pytest_cache
 
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \

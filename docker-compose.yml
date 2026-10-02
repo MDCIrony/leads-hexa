@@ -208,7 +208,7 @@ services:
     # Restarting mid-message is safe by design: RabbitMQ redelivers, start()
     # accepts PROCESSING, only PENDING records are read, and the counters are
     # derived from those records.
-    command: ["watchfiles", "python -m infrastructure.workers.intake_worker", "/app/src"]
+    command: ["watchfiles", "python -m infrastructure.workers.intake_worker", "/app/src", "/libs/chassis/src"]
     depends_on:
       db:
         condition: service_healthy
