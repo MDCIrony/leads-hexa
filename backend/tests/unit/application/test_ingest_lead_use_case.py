@@ -83,7 +83,7 @@ def test_ingest_lead_use_case_successful_flow():
     # The outbound fact this flow must leave behind (ADR-0025): recorded in
     # the outbox inside the same transaction, not dispatched to a webhook
     # directly — WebhookOutboundDispatcher and OutboxRelay own delivery now.
-    outbox_entries = uow.outbox.list_unpublished(10)
+    outbox_entries = uow.outbox.list_unpublished("product", 10)
     assert [entry.event_type for entry in outbox_entries] == ["LeadProcessedEvent"]
     assert outbox_entries[0].payload["assigned_agent_id"] == str(agent.id)
 

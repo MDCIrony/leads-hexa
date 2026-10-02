@@ -146,3 +146,47 @@ def test_email_lookup_is_case_insensitive_and_unique_globally(test_db):
             repo.save(Agent.create("B", "agent@ACME.test", tenant_id=uuid4()))
     finally:
         ctx.__exit__(None, None, None)
+
+
+def test_every_write_bumps_the_agent_version(test_db):
+    """A projection applies a state only if it is newer, so version must grow
+    on each write, including the one that unassigns the group."""
+    ctx = test_db.get_connection(autocommit=True)
+    conn = ctx.__enter__()
+    try:
+        tenant = RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+        group = RawSqlSalesGroupRepository(conn).save(
+            SalesGroup.create(tenant_id=tenant.id.value, name="Sales")
+        )
+        repo = RawSqlAgentRepository(conn)
+        agent = Agent.create(
+            "A One", "a1@a.test", group.id.value, role=AgentRole.AGENT, tenant_id=tenant.id.value
+        )
+
+        saved = repo.save(agent)
+        assert saved.version == 1
+
+        saved = repo.save(saved)
+        assert saved.version == 2
+
+        # The path DeleteSalesGroupUseCase takes for each orphaned agent.
+        saved.group_id = None
+        saved = repo.save(saved)
+        assert saved.version == 3
+        assert repo.get_by_id(saved.id.value).version == 3
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_deactivating_a_tenant_bumps_its_agents_version(test_db):
+    ctx = test_db.get_connection(autocommit=True)
+    conn = ctx.__enter__()
+    try:
+        repo = RawSqlAgentRepository(conn)
+        agent = repo.save(Agent.create("A One", "a1@a.test", role=AgentRole.AGENT, tenant_id=_TENANT_A))
+
+        repo.deactivate_all_by_tenant(_TENANT_A)
+
+        assert repo.get_by_id(agent.id.value).version == agent.version + 1
+    finally:
+        ctx.__exit__(None, None, None)

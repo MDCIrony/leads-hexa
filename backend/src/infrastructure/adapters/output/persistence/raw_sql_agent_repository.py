@@ -21,6 +21,7 @@ class RawSqlAgentRepository(AgentRepositoryPort):
             role=r["role"],
             hashed_password=r["hashed_password"],
             tenant_id=r["tenant_id"],
+            version=r["version"],
         )
 
     def get_available_agents(self, tenant_id: UUID, group_id: Optional[UUID] = None) -> List[Agent]:
@@ -37,7 +38,7 @@ class RawSqlAgentRepository(AgentRepositoryPort):
         return [self._row_to_agent(r) for r in rows]
 
     def save(self, agent: Agent) -> Agent:
-        self.connection.execute(
+        row = self.connection.execute(
             """
             INSERT INTO agents (id, name, email, group_id, is_active, role, hashed_password, tenant_id)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -48,7 +49,9 @@ class RawSqlAgentRepository(AgentRepositoryPort):
                 is_active = EXCLUDED.is_active,
                 role = EXCLUDED.role,
                 hashed_password = EXCLUDED.hashed_password,
-                tenant_id = EXCLUDED.tenant_id
+                tenant_id = EXCLUDED.tenant_id,
+                version = agents.version + 1
+            RETURNING version
             """,
             (
                 agent.id.value,
@@ -60,7 +63,8 @@ class RawSqlAgentRepository(AgentRepositoryPort):
                 agent.hashed_password,
                 agent.tenant_id.value if agent.tenant_id else None,
             ),
-        )
+        ).fetchone()
+        agent.version = row["version"]
         return agent
 
     def get_by_id(self, agent_id: UUID) -> Optional[Agent]:
@@ -158,7 +162,7 @@ class RawSqlAgentRepository(AgentRepositoryPort):
 
     def deactivate_all_by_tenant(self, tenant_id: UUID) -> int:
         cursor = self.connection.execute(
-            "UPDATE agents SET is_active = FALSE WHERE tenant_id = %s AND is_active = TRUE",
+            "UPDATE agents SET is_active = FALSE, version = version + 1 WHERE tenant_id = %s AND is_active = TRUE",
             (tenant_id,),
         )
         return cursor.rowcount

@@ -118,3 +118,20 @@ def test_counts_only_active_agents_of_that_organization(test_db):
         assert repo.count_active_agents(tenant.id.value) == 2
     finally:
         ctx.__exit__(None, None, None)
+
+
+def test_every_write_bumps_the_tenant_version(test_db):
+    repo, ctx = _repo(test_db)
+    try:
+        saved = repo.save(Tenant.create(name="Acme Corp"))
+        assert saved.version == 1
+
+        saved = repo.save(saved)
+        assert saved.version == 2
+
+        saved.deactivate()
+        saved = repo.save(saved)
+        assert saved.version == 3
+        assert repo.get_by_id(saved.id.value).version == 3
+    finally:
+        ctx.__exit__(None, None, None)

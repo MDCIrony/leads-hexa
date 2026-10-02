@@ -5,6 +5,7 @@ import psycopg
 
 from application.ports.output.intake_job_repository_port import IntakeJobRepositoryPort
 from domain.entities.intake_job import IntakeJob
+from infrastructure.adapters.output.persistence.correlation import current_correlation_id
 from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus
 from domain.value_objects.intake_job_id import IntakeJobId
 from domain.value_objects.lead_source_id import LeadSourceId
@@ -20,9 +21,11 @@ class RawSqlIntakeJobRepository(IntakeJobRepositoryPort):
             """
             INSERT INTO intake_jobs (
                 id, tenant_id, source_id, kind, status, total_items, succeeded, failed,
-                created_at, completed_at
+                created_at, completed_at, correlation_id
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            -- correlation_id is left out of the UPDATE: it names the request that
+            -- created the job, not the worker that later advances it.
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 total_items = EXCLUDED.total_items,
@@ -41,6 +44,7 @@ class RawSqlIntakeJobRepository(IntakeJobRepositoryPort):
                 job.failed,
                 job.created_at,
                 job.completed_at,
+                current_correlation_id(),
             ),
         )
         return job

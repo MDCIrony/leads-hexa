@@ -22,6 +22,8 @@ class Agent:
     role: AgentRole = AgentRole.AGENT
     hashed_password: Optional[str] = None
     tenant_id: Optional[TenantId] = None
+    # Assigned by the database on every write; see AgentRepositoryPort.save.
+    version: int = 1
 
     @classmethod
     def create(
@@ -34,6 +36,7 @@ class Agent:
         role: Union[str, AgentRole] = AgentRole.AGENT,
         hashed_password: Optional[str] = None,
         tenant_id: Optional[Union[str, UUID, TenantId]] = None,
+        version: int = 1,
     ) -> "Agent":
         aid = agent_id if isinstance(agent_id, AgentId) else AgentId(agent_id)
         agent_role = role if isinstance(role, AgentRole) else AgentRole(role)
@@ -60,4 +63,5 @@ class Agent:
             role=agent_role,
             hashed_password=hashed_password,
             tenant_id=tid,
+            version=version,
         )

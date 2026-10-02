@@ -26,6 +26,10 @@ from infrastructure.adapters.output.persistence.raw_sql_auth_session_repository 
 from infrastructure.adapters.output.persistence.raw_sql_auth_challenge_repository import RawSqlAuthChallengeRepository
 from infrastructure.adapters.output.persistence.raw_sql_agent_mfa_repository import RawSqlAgentMfaRepository
 from infrastructure.adapters.output.persistence.raw_sql_social_identity_repository import RawSqlSocialIdentityRepository
+from infrastructure.adapters.output.persistence.raw_sql_processed_event_repository import (
+    RawSqlProcessedEventRepository,
+)
+from infrastructure.adapters.output.persistence.raw_sql_intake_file_repository import RawSqlIntakeFileRepository
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):
@@ -59,6 +63,8 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.challenges = RawSqlAuthChallengeRepository(self.connection)
         self.mfa = RawSqlAgentMfaRepository(self.connection)
         self.social_identities = RawSqlSocialIdentityRepository(self.connection)
+        self.processed_events = RawSqlProcessedEventRepository(self.connection)
+        self.intake_files = RawSqlIntakeFileRepository(self.connection)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

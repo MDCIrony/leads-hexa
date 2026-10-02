@@ -3,6 +3,8 @@ from uuid import uuid4
 
 import psycopg
 
+from chassis.web import request_id_var
+
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
 from domain.entities.lead_source import LeadSource
@@ -179,5 +181,51 @@ def test_list_by_tenant_orders_newest_first(test_db):
         found = repo.list_by_tenant(tenant.id.value, limit=3, offset=0)
 
         assert [j.id.value for j in found] == [third.id.value, second.id.value, first.id.value]
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_correlation_id_is_fixed_on_insert_and_survives_later_saves(test_db):
+    repo, conn, ctx = _repo(test_db)
+    try:
+        tenant = _tenant(conn)
+        source = _source(conn, tenant.id.value)
+        job = IntakeJob.create(
+            tenant_id=tenant.id.value, source_id=source.id.value, kind=IntakeJobKind.SINGLE
+        )
+
+        token = request_id_var.set("rid-insert")
+        try:
+            repo.save(job)
+        finally:
+            request_id_var.reset(token)
+        token = request_id_var.set("rid-worker")
+        try:
+            job.start()
+            repo.save(job)
+        finally:
+            request_id_var.reset(token)
+
+        row = conn.execute(
+            "SELECT correlation_id FROM intake_jobs WHERE id = %s", (job.id.value,)
+        ).fetchone()
+        assert row["correlation_id"] == "rid-insert"
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_correlation_id_is_null_outside_a_request(test_db):
+    repo, conn, ctx = _repo(test_db)
+    try:
+        tenant = _tenant(conn)
+        source = _source(conn, tenant.id.value)
+        job = repo.save(
+            IntakeJob.create(tenant_id=tenant.id.value, source_id=source.id.value, kind=IntakeJobKind.SINGLE)
+        )
+
+        row = conn.execute(
+            "SELECT correlation_id FROM intake_jobs WHERE id = %s", (job.id.value,)
+        ).fetchone()
+        assert row["correlation_id"] is None
     finally:
         ctx.__exit__(None, None, None)

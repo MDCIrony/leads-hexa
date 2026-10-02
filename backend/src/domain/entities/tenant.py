@@ -35,6 +35,8 @@ class Tenant:
     slug: str
     is_active: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # Assigned by the database on every write; see TenantRepositoryPort.save.
+    version: int = 1
 
     @classmethod
     def create(
@@ -44,6 +46,7 @@ class Tenant:
         slug: Optional[str] = None,
         is_active: bool = True,
         created_at: Optional[datetime] = None,
+        version: int = 1,
     ) -> "Tenant":
         clean_name = _require_name(name)
         identifier = tenant_id if isinstance(tenant_id, TenantId) else TenantId(tenant_id)
@@ -53,6 +56,7 @@ class Tenant:
             slug=slug or slugify(clean_name),
             is_active=is_active,
             created_at=created_at or datetime.now(timezone.utc),
+            version=version,
         )
 
     def activate(self) -> None:

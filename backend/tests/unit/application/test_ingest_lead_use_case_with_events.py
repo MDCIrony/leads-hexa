@@ -57,7 +57,7 @@ def test_ingest_lead_publishes_event() -> None:
     assert isinstance(published[0], LeadLeftUnassigned)
     assert published[0].tenant_id == str(tenant_id_val)
 
-    outbox_entries = uow.outbox.list_unpublished(10)
+    outbox_entries = uow.outbox.list_unpublished("product", 10)
     assert len(outbox_entries) == 1
     assert outbox_entries[0].event_type == "LeadProcessedEvent"
     assert outbox_entries[0].tenant_id == str(tenant_id_val)
@@ -113,7 +113,7 @@ def test_a_disqualified_lead_does_not_travel_as_processed() -> None:
     # outbox instead (ADR-0025).
     assert mock_event_publisher.publish.call_count == 0
 
-    outbox_entries = uow.outbox.list_unpublished(10)
+    outbox_entries = uow.outbox.list_unpublished("product", 10)
     assert [entry.event_type for entry in outbox_entries] == ["LeadDisqualified"]
     assert outbox_entries[0].payload["reason"] == "Sin forma de contactar"
     assert outbox_entries[0].payload["lead_id"] == result.lead_id

@@ -46,7 +46,7 @@ def test_a_failing_dispatcher_does_not_stop_the_others_but_the_entry_stays_undel
     assert event.event_id in outbox.failed_ids
     assert event.event_id not in outbox.published_ids
     # Still there for the next pass — a partial failure must not be lost.
-    assert [entry.id for entry in outbox.list_unpublished(10)] == [event.event_id]
+    assert [entry.id for entry in outbox.list_unpublished("product", 10)] == [event.event_id]
 
 
 def test_a_published_entry_is_not_delivered_again():
@@ -62,7 +62,7 @@ def test_a_published_entry_is_not_delivered_again():
     assert first_pass == 1
     assert second_pass == 0
     assert len(dispatcher.calls) == 1
-    assert outbox.list_unpublished(10) == []
+    assert outbox.list_unpublished("product", 10) == []
 
 
 def test_delivery_happens_outside_the_reading_transaction():

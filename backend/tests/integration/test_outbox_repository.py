@@ -1,11 +1,14 @@
 import uuid
 
+import pytest
+
 from application.dtos.commands import IngestLeadCommand
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
 from domain.entities.intake_record import IntakeRecord
 from domain.entities.lead_source import LeadSource
 from domain.events.lead_events import LeadDisqualified
 from domain.value_objects.enums import LeadSourceKind
+from chassis.web import request_id_var
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import (
     RawSqlIntakeRecordRepository,
@@ -53,7 +56,7 @@ def test_record_and_list_unpublished_round_trips_the_payload(test_db):
         event = _event()
         repo.record(event)
 
-        entries = repo.list_unpublished(10)
+        entries = repo.list_unpublished("product", 10)
 
         assert [entry.id for entry in entries] == [event.event_id]
         entry = entries[0]
@@ -74,7 +77,7 @@ def test_mark_published_removes_it_from_the_unpublished_list(test_db):
 
         repo.mark_published(event.event_id)
 
-        assert repo.list_unpublished(10) == []
+        assert repo.list_unpublished("product", 10) == []
     finally:
         ctx.__exit__(None, None, None)
 
@@ -87,7 +90,7 @@ def test_mark_failed_keeps_it_in_the_unpublished_list(test_db):
 
         repo.mark_failed(event.event_id, "connection refused")
 
-        entries = repo.list_unpublished(10)
+        entries = repo.list_unpublished("product", 10)
         assert [entry.id for entry in entries] == [event.event_id]
     finally:
         ctx.__exit__(None, None, None)
@@ -109,7 +112,7 @@ def test_a_rolled_back_record_leaves_no_row(test_db):
 
     repo, conn, ctx = _repo(test_db)
     try:
-        assert repo.list_unpublished(10) == []
+        assert repo.list_unpublished("product", 10) == []
     finally:
         ctx.__exit__(None, None, None)
 
@@ -142,7 +145,7 @@ def test_a_full_ingestion_leaves_exactly_one_unpublished_entry(test_db):
 
     repo, conn, ctx = _repo(test_db)
     try:
-        entries = repo.list_unpublished(10)
+        entries = repo.list_unpublished("product", 10)
         assert len(entries) == 1
         assert entries[0].partition_key == result.lead_id
         assert entries[0].tenant_id == str(tenant_id)
@@ -163,12 +166,83 @@ def test_a_repeatedly_failing_entry_is_never_dropped_and_never_starves_the_rest(
             repo.mark_failed(stubborn.event_id, f"broker unreachable (attempt {attempt})")
 
         # Well past any cap a retry limit would have imposed.
-        assert [entry.id for entry in repo.list_unpublished(10)] == [stubborn.event_id]
+        assert [entry.id for entry in repo.list_unpublished("product", 10)] == [stubborn.event_id]
 
         fresh = _event()
         repo.record(fresh)
 
         # The newcomer goes first: the failing one no longer holds the batch.
-        assert [entry.id for entry in repo.list_unpublished(10)] == [fresh.event_id, stubborn.event_id]
+        assert [entry.id for entry in repo.list_unpublished("product", 10)] == [fresh.event_id, stubborn.event_id]
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_an_event_goes_out_only_through_its_own_channel(test_db):
+    repo, _, ctx = _repo(test_db)
+    try:
+        event = _event()
+        repo.record(event, channel="internal")
+
+        assert [entry.id for entry in repo.list_unpublished("internal", 10)] == [event.event_id]
+        assert repo.list_unpublished("product", 10) == []
+        assert repo.list_unpublished("job", 10) == []
+        assert repo.list_unpublished("internal", 10)[0].channel == "internal"
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_the_default_channel_is_product(test_db):
+    repo, _, ctx = _repo(test_db)
+    try:
+        repo.record(_event())
+
+        assert repo.list_unpublished("product", 10)[0].channel == "product"
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_an_unknown_channel_is_rejected_by_the_database(test_db):
+    repo, _, ctx = _repo(test_db)
+    try:
+        with pytest.raises(Exception):
+            repo.record(_event(), channel="carrier-pigeon")
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_correlation_id_comes_from_the_current_request(test_db):
+    repo, _, ctx = _repo(test_db)
+    token = request_id_var.set("rid-1")
+    try:
+        event = _event()
+        repo.record(event)
+
+        assert repo.list_unpublished("product", 10)[0].correlation_id == "rid-1"
+    finally:
+        request_id_var.reset(token)
+        ctx.__exit__(None, None, None)
+
+
+def test_correlation_id_is_none_outside_a_request(test_db):
+    repo, _, ctx = _repo(test_db)
+    try:
+        repo.record(_event())
+
+        # The ContextVar default "-" means "no request"; it is stored as NULL.
+        assert repo.list_unpublished("product", 10)[0].correlation_id is None
+    finally:
+        ctx.__exit__(None, None, None)
+
+
+def test_an_event_without_a_tenant_is_stored(test_db):
+    repo, _, ctx = _repo(test_db)
+    try:
+        event = _event()
+        object.__setattr__(event, "tenant_id", None)
+        repo.record(event, channel="internal")
+
+        entries = repo.list_unpublished("internal", 10)
+        assert [entry.id for entry in entries] == [event.event_id]
+        assert entries[0].tenant_id is None
     finally:
         ctx.__exit__(None, None, None)

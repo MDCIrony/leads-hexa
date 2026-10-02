@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import Dict, List, Optional
 from uuid import UUID
 
@@ -11,11 +12,13 @@ from application.ports.output.lead_repository_port import LeadRepositoryPort
 from application.ports.output.lead_source_repository_port import LeadSourceRepositoryPort
 from application.ports.output.notification_repository_port import NotificationRepositoryPort
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
+from application.ports.output.processed_event_repository_port import ProcessedEventRepositoryPort
+from application.ports.output.intake_file_repository_port import IntakeFileRepositoryPort
 from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.tenant_repository_port import TenantRepositoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.dtos.commands import OutboxEntry
+from application.dtos.commands import OutboxEntry, StoredIntakeFile
 from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
@@ -36,7 +39,7 @@ from domain.entities.auth_challenge import AuthChallenge
 from domain.entities.agent_mfa import AgentMfa
 from domain.entities.social_identity import SocialIdentity
 from application.ports.output.social_identity_repository_port import SocialIdentityRepositoryPort
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class InMemoryAuthSessionRepository(AuthSessionRepositoryPort):
@@ -368,7 +371,7 @@ class InMemoryOutboxRepository(OutboxRepositoryPort):
         self.published_ids: List[UUID] = []
         self.failed_ids: List[UUID] = []
 
-    def record(self, event: OutboundEvent) -> None:
+    def record(self, event: OutboundEvent, channel: str = "product") -> None:
         self._entries[event.event_id] = OutboxEntry(
             id=event.event_id,
             tenant_id=event.tenant_id,
@@ -376,10 +379,14 @@ class InMemoryOutboxRepository(OutboxRepositoryPort):
             event_type=event.event_type,
             payload=event.as_payload(),
             occurred_on=event.occurred_on,
+            channel=channel,
         )
 
-    def list_unpublished(self, limit: int) -> List[OutboxEntry]:
-        items = [e for e in self._entries.values() if e.id not in self.published_ids]
+    def list_unpublished(self, channel: str, limit: int) -> List[OutboxEntry]:
+        items = [
+            e for e in self._entries.values()
+            if e.channel == channel and e.id not in self.published_ids
+        ]
         items.sort(key=lambda e: e.occurred_on)
         return items[:limit]
 
@@ -390,6 +397,35 @@ class InMemoryOutboxRepository(OutboxRepositoryPort):
         # Left off both lists on purpose: a failed entry must still show up
         # in the next list_unpublished() call, same as the real adapter.
         self.failed_ids.append(event_id)
+
+
+class InMemoryProcessedEventRepository(ProcessedEventRepositoryPort):
+    def __init__(self) -> None:
+        self._seen: set = set()
+
+    def mark(self, consumer: str, event_id: UUID) -> bool:
+        key = (consumer, event_id)
+        if key in self._seen:
+            return False
+        self._seen.add(key)
+        return True
+
+
+class InMemoryIntakeFileRepository(IntakeFileRepositoryPort):
+    def __init__(self) -> None:
+        self._files: Dict[UUID, StoredIntakeFile] = {}
+
+    def save(self, job_id: UUID, tenant_id: UUID, filename: str, content: bytes) -> None:
+        self._files[job_id] = StoredIntakeFile(job_id, tenant_id, filename, content)
+
+    def get(self, job_id: UUID, tenant_id: UUID) -> Optional[StoredIntakeFile]:
+        stored = self._files.get(job_id)
+        return stored if stored is not None and stored.tenant_id == tenant_id else None
+
+    def mark_parsed(self, job_id: UUID) -> None:
+        stored = self._files.get(job_id)
+        if stored is not None:
+            self._files[job_id] = replace(stored, parsed_at=datetime.now(timezone.utc))
 
 
 class InMemoryUnitOfWork(UnitOfWorkPort):
@@ -431,6 +467,8 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.challenges = InMemoryAuthChallengeRepository()
         self.mfa = InMemoryAgentMfaRepository()
         self.social_identities = InMemorySocialIdentityRepository()
+        self.processed_events = InMemoryProcessedEventRepository()
+        self.intake_files = InMemoryIntakeFileRepository()
 
     def __enter__(self) -> 'InMemoryUnitOfWork':
         return self

@@ -118,7 +118,7 @@ def test_assigning_by_hand_republishes_the_lead_to_the_customer():
     published = [call.args[0] for call in publisher.publish.call_args_list]
     assert [type(event) for event in published] == [LeadAssigned]
 
-    outbox_entries = uow.outbox.list_unpublished(10)
+    outbox_entries = uow.outbox.list_unpublished("product", 10)
     assert [entry.event_type for entry in outbox_entries] == ["LeadProcessedEvent"]
     outbound = outbox_entries[0].payload
     assert outbound["status"] == LeadStatus.ASSIGNED.value

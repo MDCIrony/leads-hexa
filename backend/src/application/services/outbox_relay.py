@@ -32,7 +32,7 @@ class OutboxRelay:
         as long as the slowest receiver takes to answer, and a handful of
         timing-out webhooks would drain the pool the API needs to serve."""
         with self.uow_factory() as uow:
-            entries = uow.outbox.list_unpublished(batch_size)
+            entries = uow.outbox.list_unpublished("product", batch_size)
 
         outcomes = [(entry, self._deliver(entry)) for entry in entries]
 

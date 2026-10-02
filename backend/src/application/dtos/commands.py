@@ -388,8 +388,22 @@ class OutboxEntry:
     a lead is, only that this payload needs to reach a transport."""
 
     id: UUID
-    tenant_id: str
+    # None for state with no organization, e.g. the platform admin's identity.
+    tenant_id: Optional[str]
     partition_key: str
     event_type: str
     payload: Dict[str, Any]
     occurred_on: datetime
+    channel: str = "product"
+    correlation_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class StoredIntakeFile:
+    """An uploaded file as received, kept before anything parses it."""
+
+    job_id: UUID
+    tenant_id: UUID
+    filename: str
+    content: bytes
+    parsed_at: Optional[datetime] = None

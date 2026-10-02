@@ -10,14 +10,16 @@ class RawSqlTenantRepository(TenantRepositoryPort):
         self.connection = connection
 
     def save(self, tenant: Tenant) -> Tenant:
-        self.connection.execute(
+        row = self.connection.execute(
             """
             INSERT INTO tenants (id, name, slug, is_active, created_at)
             VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
                 name = EXCLUDED.name,
                 slug = EXCLUDED.slug,
-                is_active = EXCLUDED.is_active
+                is_active = EXCLUDED.is_active,
+                version = tenants.version + 1
+            RETURNING version
             """,
             (
                 tenant.id.value,
@@ -26,7 +28,8 @@ class RawSqlTenantRepository(TenantRepositoryPort):
                 tenant.is_active,
                 tenant.created_at,
             ),
-        )
+        ).fetchone()
+        tenant.version = row["version"]
         return tenant
 
     def get_by_id(self, tenant_id: UUID) -> Optional[Tenant]:
@@ -70,4 +73,5 @@ class RawSqlTenantRepository(TenantRepositoryPort):
             slug=row["slug"],
             is_active=row["is_active"],
             created_at=row["created_at"],
+            version=row["version"],
         )

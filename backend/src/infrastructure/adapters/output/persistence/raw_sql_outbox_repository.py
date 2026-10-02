@@ -7,18 +7,22 @@ from psycopg.types.json import Jsonb
 from application.dtos.commands import OutboxEntry
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from domain.events.lead_events import OutboundEvent
+from infrastructure.adapters.output.persistence.correlation import current_correlation_id
 
 class RawSqlOutboxRepository(OutboxRepositoryPort):
     def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
 
-    def record(self, event: OutboundEvent) -> None:
+    def record(self, event: OutboundEvent, channel: str = "product") -> None:
+        # Read here and not passed in: the application has no notion of the
+        # request that triggered the event, only the adapter sees the ContextVar.
         self.connection.execute(
             """
             INSERT INTO outbox_events (
-                id, tenant_id, partition_key, event_type, payload, occurred_on
+                id, tenant_id, partition_key, event_type, payload, occurred_on,
+                channel, correlation_id
             )
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 event.event_id,
@@ -27,10 +31,12 @@ class RawSqlOutboxRepository(OutboxRepositoryPort):
                 event.event_type,
                 Jsonb(event.as_payload()),
                 event.occurred_on,
+                channel,
+                current_correlation_id(),
             ),
         )
 
-    def list_unpublished(self, limit: int) -> List[OutboxEntry]:
+    def list_unpublished(self, channel: str, limit: int) -> List[OutboxEntry]:
         # No row lock: the relay closes this transaction before it delivers,
         # so a lock would be released long before the HTTP call it was meant
         # to cover. Two relays racing may deliver the same entry twice, which
@@ -47,22 +53,25 @@ class RawSqlOutboxRepository(OutboxRepositoryPort):
         # overtake it, and it keeps being retried for as long as it takes.
         rows = self.connection.execute(
             """
-            SELECT id, tenant_id, partition_key, event_type, payload, occurred_on
+            SELECT id, tenant_id, partition_key, event_type, payload, occurred_on,
+                   channel, correlation_id
             FROM outbox_events
-            WHERE published_at IS NULL
+            WHERE channel = %s AND published_at IS NULL
             ORDER BY attempts, occurred_on
             LIMIT %s
             """,
-            (limit,),
+            (channel, limit),
         ).fetchall()
         return [
             OutboxEntry(
                 id=row["id"],
-                tenant_id=str(row["tenant_id"]),
+                tenant_id=str(row["tenant_id"]) if row["tenant_id"] is not None else None,
                 partition_key=row["partition_key"],
                 event_type=row["event_type"],
                 payload=row["payload"],
                 occurred_on=row["occurred_on"],
+                channel=row["channel"],
+                correlation_id=row["correlation_id"],
             )
             for row in rows
         ]
