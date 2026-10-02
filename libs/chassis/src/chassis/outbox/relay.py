@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from typing import Callable, ContextManager, Mapping, Optional, Protocol, Sequence
 from uuid import UUID
 
-from chassis.outbox.envelope import OutboxRow
+from chassis.outbox.row import OutboxRow
 from chassis.web import request_id_var
 
 _LOGGER = logging.getLogger(__name__)

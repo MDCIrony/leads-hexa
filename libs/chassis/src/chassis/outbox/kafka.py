@@ -1,7 +1,8 @@
 import json
 from typing import Callable
 
-from chassis.outbox.envelope import OutboxRow, envelope
+from chassis.outbox.envelope import envelope
+from chassis.outbox.row import OutboxRow
 
 
 class KafkaEventDispatcher:

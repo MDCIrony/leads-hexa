@@ -4,8 +4,8 @@ import threading
 import time
 from typing import Callable, Sequence
 
-from chassis.consumer.kafka import publish_dead_letter, raise_if_fatal
 from chassis.consumer.envelope import Envelope
+from chassis.consumer.kafka import publish_dead_letter, raise_if_fatal
 from chassis.consumer.topics import dlq_topic
 from chassis.web import request_id_var
 
