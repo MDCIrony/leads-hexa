@@ -201,45 +201,50 @@ services:
       - kafka
 
   intake-worker:
-    # Same context, dockerfile and target as `backend` (ADR-0027): reuses
-    # its build instead of maintaining a second image for one process that
-    # differs only in which command it runs.
+    # Same image as `intake` (ADR-0027, F4): one process that differs only in
+    # its command. Relays intake's outbox (`job` to RabbitMQ, `internal` to
+    # Kafka), consumes intake.jobs and intake.tenants, and admits each record
+    # through lead-core's internal API; it never opens leads_db.
     build:
-      context: ./backend
+      context: ./services/intake
       dockerfile: Dockerfile
-      # Named context: the image needs libs/chassis without widening the build
-      # context to the whole repository.
       additional_contexts:
         chassis: ./libs/chassis
       target: dev
-    working_dir: /app/src
+    working_dir: /srv/services/intake/src
     volumes:
-      - ./backend/src:/app/src:ro
-      - ./libs/chassis/src:/libs/chassis/src:ro
+      - ./services/intake/src:/srv/services/intake/src:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
     environment:
-      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/leads_db
-      - JWKS_URL=http://identity:8000/internal/v1/jwks
-      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_db
       - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
-      # Needed even though this process never publishes: the container it
-      # builds owns the Kafka admin client, and without this it dials
-      # localhost and logs a connection failure every few seconds.
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LEAD_CORE_URL=http://backend:8000
+      - IDENTITY_URL=http://identity:8000
+      - SERVICE_CLIENT_ID=intake
+      - SERVICE_CLIENT_SECRET=intake-dev-secret-a91b68b5a560
+      - LOG_LEVEL=INFO
     # Reloaded on change, like the API is. Without this the worker keeps
     # running whatever it imported at startup while src/ says otherwise, and
     # the symptom is a job stuck in PROCESSING with nothing failing anywhere.
     # Restarting mid-message is safe by design: RabbitMQ redelivers, start()
-    # accepts PROCESSING, only PENDING records are read, and the counters are
-    # derived from those records.
-    command: ["watchfiles", "python -m infrastructure.intake_worker", "/app/src", "/libs/chassis/src"]
+    # accepts PROCESSING, only PENDING records are read, lead-core's admission
+    # is idempotent per record, and the counters are derived from the records.
+    command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/intake/src", "/srv/libs/chassis/src"]
     depends_on:
       db:
         condition: service_healthy
-      # Blocking here, unlike on `backend`: this process has nothing to do
+      # Blocking here, unlike on the APIs: this process has nothing to do
       # without a broker, so waiting for it removes a connect-crash-restart
       # cycle at cold start instead of degrading to it.
       rabbitmq:
         condition: service_healthy
+      # The API applies the migrations at startup; the relay and the consumers
+      # read the tables they create.
+      intake:
+        condition: service_healthy
+      # No condition on backend: a lead-core outage interrupts a job (nack and
+      # redelivery), it does not stop the worker.
     restart: on-failure
 
   backend-worker:
@@ -296,7 +301,7 @@ services:
       # Development-only Ed25519 seed: never reuse outside this stack.
       - SIGNING_KEYS=dev-1=_tS3Kljdu1EaOrOFVqdVQ2G1VaP7q5pWZKmqPb9W-mU
       # client:audience:sha256(secret). The secret itself lives only with its caller.
-      - SERVICE_CLIENTS=lead-core:identity:21c1a510ed8f851deccca537c6c7d35aed463034a5c938518a607bdfa9eaf93d
+      - SERVICE_CLIENTS=lead-core:identity:21c1a510ed8f851deccca537c6c7d35aed463034a5c938518a607bdfa9eaf93d,intake:lead-core:a565768fddaddf20edac7326fb55c2b0eb222509797d76a16e0823a87bfe9c63
       - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
       - FRONTEND_ORIGIN=http://localhost
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
@@ -344,6 +349,43 @@ services:
         condition: service_healthy
       # No condition on kafka (ADR-0026): the relay retries until the broker answers.
     restart: on-failure
+
+  intake:
+    # Reception (ADR-0031, F4): sources, intake jobs, records, errors and files.
+    # The decision stays in lead-core behind POST /internal/v1/admissions, which
+    # this service calls with its own service token (sub=intake, aud=lead-core).
+    # Not published: the gateway is the only way in.
+    build:
+      context: ./services/intake
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: dev
+    volumes:
+      - ./services/intake/src:/srv/services/intake/src:ro
+      - ./services/intake/migrations:/srv/services/intake/migrations:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+    environment:
+      - DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_db
+      - JWKS_URL=http://identity:8000/internal/v1/jwks
+      # Manual promotion admits in line, so the API needs lead-core and a token too.
+      - LEAD_CORE_URL=http://backend:8000
+      - IDENTITY_URL=http://identity:8000
+      - SERVICE_CLIENT_ID=intake
+      - SERVICE_CLIENT_SECRET=intake-dev-secret-a91b68b5a560
+      - LOG_LEVEL=INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      # The role and the database are db-bootstrap's; the service only migrates its tables.
+      db-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   notifications:
     # The inbox, cut over from the monolith in F2 (ADR-0031). The layout mirrors
