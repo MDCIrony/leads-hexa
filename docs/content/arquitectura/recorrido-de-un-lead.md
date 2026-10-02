@@ -7,7 +7,8 @@ viabilidad, puntuación y asignación.
 ## Fase 1 · Recepción
 
 La API nunca interpreta un lead en la misma petición que lo recibe: guarda el payload tal cual
-llegó, responde `202` y deja la interpretación para un trabajo de fondo. Así, un payload que no se
+llegó, responde `202` y deja la interpretación para el `intake-worker`, al que le llega una orden
+registrada en el outbox en la misma transacción. Así, un payload que no se
 puede interpretar nunca borra la constancia de haberse recibido.
 
 ```mermaid
@@ -16,38 +17,39 @@ sequenceDiagram
     participant Router as intake_router
     participant Caso as ReceiveIntakeUseCase
     participant BD as IntakeJob · IntakeRecord
-    participant Fondo as Tarea de fondo
+    participant Out as Outbox · canal job
 
     Gestor->>Router: POST /api/v1/intake/leads/ingest
     Router->>Router: verifica el bearer interno del gateway y deriva tenant_id de sus claims
     Router->>Caso: execute(ReceiveIntakeCommand)
     Caso->>BD: crear IntakeJob (PENDING)
     Caso->>BD: crear IntakeRecord (PENDING, payload sin transformar)
-    Note over Caso,BD: una única transacción — confirma antes de responder
+    Caso->>Out: registrar la orden de procesar el trabajo
+    Note over Caso,Out: una única transacción — confirma antes de responder
     Caso-->>Router: job_id, record_ids
-    Router->>Fondo: encola process.execute(tenant_id, job_id)
     Router-->>Gestor: 202 Accepted — job_id, status PENDING
 ```
 
 La carga de fichero (`POST /api/v1/intake/leads/batch-upload`) responde con el mismo contrato, pero
-en esta fase sólo crea el `IntakeJob`: el fichero se lee, se parte en filas y cada fila se
-convierte en su propio `IntakeRecord` ya dentro de la fase de procesamiento, no antes.
+en esta fase sólo crea el `IntakeJob` y guarda el fichero crudo: se lee, se parte en filas y cada
+fila se convierte en su propio `IntakeRecord` ya dentro de la fase de procesamiento, no antes.
 
 ## Fase 2 · Procesamiento en segundo plano
 
-`ProcessIntakeJobUseCase` recorre los registros `PENDING` del trabajo, uno a uno, cada uno en su
+`backend-worker` publica la orden en RabbitMQ y el `intake-worker` la recoge. `ProcessIntakeJobUseCase`
+recorre los registros `PENDING` del trabajo, uno a uno, cada uno en su
 propia transacción: un fallo al interpretar el registro trescientos no debe poder deshacer los
 doscientos noventa y nueve que ya se guardaron.
 
 ```mermaid
 sequenceDiagram
-    participant Fondo as Tarea de fondo
+    participant Fondo as intake-worker
     participant Job as ProcessIntakeJobUseCase
     participant BD1 as IntakeJob
     participant Ingesta as IngestLeadUseCase
     participant Motores as Viabilidad · Puntuación · Asignación
     participant BD2 as Lead · IntakeRecord
-    participant Eventos as Publicador de eventos
+    participant Eventos as Outbox
 
     Fondo->>Job: execute(tenant_id, job_id)
     Job->>BD1: start() — PENDING → PROCESSING
@@ -59,7 +61,7 @@ sequenceDiagram
         Ingesta->>Motores: viabilidad, puntuación y asignación
         Motores-->>Ingesta: lead calificado y, si hay asesor, asignado
         Ingesta->>BD2: guardar Lead y marcar IntakeRecord como PROMOTED o REJECTED
-        Ingesta-->>Eventos: publica el evento correspondiente, tras confirmar
+        Ingesta->>Eventos: registra el evento correspondiente, en la misma transacción
         Ingesta-->>Job: resultado
         Job->>BD1: record_success() o record_failure()
     end
@@ -70,8 +72,10 @@ sequenceDiagram
 
 Si el proceso muere a mitad de un registro por un fallo inesperado, ese registro sigue `PENDING` —
 es el único estado que la relectura considera— y el trabajo se queda en `PROCESSING` sin cerrar. El
-gestor lo ve en la lista de trabajos y lo reprocesa desde `POST /api/v1/intake/jobs/{id}/reprocess`,
-que retoma exactamente los registros que quedaron pendientes.
+trabajo se reentrega solo, por la muerte del proceso o por un `nack`, hasta tres veces; luego pasa a la
+cola muerta. Si llegó ahí, el gestor
+lo reprocesa desde `POST /api/v1/intake/jobs/{id}/reprocess`, que encola otra orden y retoma
+exactamente los registros que quedaron pendientes.
 
 Cuando el payload no llega a construir un `Lead` válido —un correo mal formado, por ejemplo— el
 registro se marca `REJECTED` con el detalle del error por campo, y ahí termina su paso por esta

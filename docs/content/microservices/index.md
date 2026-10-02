@@ -9,8 +9,8 @@
     **F0 está implantada**: el gateway y el *phantom token* ya sirven la API sobre el monolito. Eso no es
     el desacople: sigue habiendo un único servicio de aplicación.
 
-Lead Router es hoy un monolito modular hexagonal: un proceso API, un `intake-worker` con la misma
-imagen y la misma base, RabbitMQ para el trabajo de fondo y Kafka para el canal de producto. Esta
+Lead Router es hoy un monolito modular hexagonal: un proceso API, un `backend-worker` (relay del
+outbox y consumidores de notificaciones) y un `intake-worker`, los tres con la misma imagen y la misma base, RabbitMQ para el trabajo de fondo y Kafka para el canal de producto. Esta
 sección lo separa en **cuatro servicios con datos propios detrás de un gateway**, con el menor número
 de cambios que no deje deuda: se mueve código que ya tiene puertos, se cambian adaptadores y no se
 reescribe dominio.

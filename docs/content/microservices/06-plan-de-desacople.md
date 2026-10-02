@@ -119,7 +119,7 @@ interna la leen.
 
 ## F1 · Durabilidad en el monolito
 
-**Estado: implantada** (`8608edb..c2c18c3`). Lo construido sigue el plan salvo las desviaciones de
+**Estado: implantada** (`8608edb..dbcfb6e`). Lo construido sigue el plan salvo las desviaciones de
 abajo; las pruebas de fallo de entrega y `verify_ms_f1` se describen en
 [Validación](../desarrollo/validacion.md).
 

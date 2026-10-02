@@ -28,17 +28,16 @@ que las entidades emiten). `exceptions.py` no conoce HTTP: una excepción de dom
 
 Orquesta sin tomar decisiones de negocio. `ports/input/` declara un contrato ABC por caso de uso;
 `ports/output/` declara lo que la infraestructura debe implementar (repositorios, hasher de
-contraseñas, servicio de tokens, reloj, generador de identificadores, publicador de eventos,
-parser de ficheros). `use_cases/` implementa los puertos de entrada. `dtos/` son
-`@dataclass(frozen=True)`, nunca Pydantic. `handlers/` reacciona a eventos de dominio ya
-confirmados: notificar, despachar un webhook saliente.
+contraseñas, servicio de tokens, reloj, generador de identificadores, outbox, parser de ficheros). `use_cases/` implementa los puertos de entrada. `dtos/` son
+`@dataclass(frozen=True)`, nunca Pydantic. `handlers/` traduce un evento interno en
+notificaciones, dentro de la transacción del consumidor.
 
 ### Infraestructura
 
 Todo lo que depende de un framework o de un driver externo. `adapters/input/api/` son los routers
 FastAPI, finos: convierten HTTP en comandos y comandos en respuestas, sin lógica de negocio propia.
 `adapters/output/` implementa cada puerto de salida sobre PostgreSQL con SQL crudo (`psycopg`),
-bcrypt, PyJWT, `pandas` y un publicador de eventos en memoria. `di/container.py` es el composition
+bcrypt, PyJWT, `pandas` y las escrituras en el outbox, que entrega `backend-worker` con sus despachadores (Kafka, webhooks, RabbitMQ). `di/container.py` es el composition
 root: decide qué implementación concreta recibe cada puerto y su ciclo de vida.
 
 ## La regla de dependencia

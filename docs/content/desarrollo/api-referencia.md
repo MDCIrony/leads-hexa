@@ -474,8 +474,9 @@ queda `REJECTED` en la bandeja con el trabajo `COMPLETED` y `failed: 1`.
 ### `POST /api/v1/intake/leads/batch-upload`
 
 `MANAGER`. Recibe un archivo CSV o Excel como `multipart/form-data` (campo `file`) y responde antes
-de parsearlo: la fase de recepción sólo crea el `IntakeJob`, así que `record_ids` siempre llega
-vacío — las filas todavía no existen. El procesamiento en segundo plano parsea el fichero, crea un
+de parsearlo: la fase de recepción crea el `IntakeJob` y guarda el fichero tal cual llegó, así que
+`record_ids` siempre llega vacío — las filas todavía no existen. Un cuerpo de más de 10 MB responde
+`413` (`PAYLOAD_TOO_LARGE`). El `intake-worker` parsea el fichero guardado, crea un
 `IntakeRecord` por fila y las procesa por el mismo pipeline que la ingesta individual; la fila que
 falla no se pierde, queda como su propio registro en la bandeja.
 
@@ -614,11 +615,10 @@ un fallo imprevisto. Reinicia sus contadores y vuelve a leer sólo los registros
 `PENDING`: los que ya llegaron a un estado terminal no se tocan, así que reprocesar dos veces nunca
 duplica un lead.
 
-A diferencia de la ingesta, **no** corre en segundo plano: la comprobación de propiedad y de estado
-es síncrona, porque una vez que la respuesta ha empezado a enviarse, una excepción lanzada dentro
-de una tarea de fondo ya no puede convertirse en un `404`/`400` limpio.
-
-Responde `202 Accepted` con el trabajo ya en su estado final (`COMPLETED` o `FAILED`). Errores:
+La comprobación de propiedad y de estado es síncrona, para que un trabajo ajeno o ya terminado sea
+un `404`/`400` limpio. La ejecución no: la orden se registra en el outbox (canal `job`), la procesa el
+`intake-worker`, y la respuesta es `202 Accepted` con el trabajo `PENDING` y los contadores a cero. El
+resultado se lee después con `GET /api/v1/intake/jobs/{job_id}`. Errores:
 `404 Not Found` (`INTAKE_JOB_NOT_FOUND`); `400 Bad Request` (`INVALID_JOB_TRANSITION` si el
 trabajo ya está `COMPLETED` o `FAILED`).
 

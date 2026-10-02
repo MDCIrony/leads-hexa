@@ -176,7 +176,11 @@ contrato con terceros.
 }
 ```
 
-La clave del mensaje es el `aggregate_id` (el lead, el agente o la organización), y `event_type` y
+El `payload` depende del evento: `LeadAssigned`, `LeadReassigned` y `LeadLeftUnassigned` llevan
+`lead_id` (y `agent_id` los dos primeros, más `previous_agent_id` el segundo); `IntakeRejected`
+lleva `intake_record_id` y `reason`, y su `aggregate_id` es el `intake_record_id`.
+
+La clave del mensaje es el `aggregate_id` (el lead, el registro de ingesta, el agente o la organización), y `event_type` y
 `correlation_id` viajan también como cabeceras. `producer` es `lead-core` en todos los eventos:
 mientras sólo el monolito escribe, publica en nombre de todos los contextos.
 

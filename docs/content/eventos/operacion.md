@@ -134,7 +134,9 @@ docker compose logs backend-worker intake-worker | rg <request-id>
 
 Un mensaje de `internal.dlq.<grupo>` es el sobre original, con las cabeceras originales más `error`,
 `attempts`, `original_topic`, `original_partition` y `original_offset`. `attempts=0` significa que no
-se pudo ni interpretar como sobre.
+se pudo ni interpretar como sobre: **reinyectarlo tal cual falla otra vez** y vuelve a la DLQ sin
+reintentos. Un mensaje así sólo se recupera produciendo un sobre válido corregido a mano, o se
+descarta.
 
 **No hay reinyección automática.** Primero se corrige la causa (la cabecera `error` y el log de
 `backend-worker` la dicen), y luego a mano:

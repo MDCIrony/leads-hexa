@@ -25,7 +25,7 @@ flowchart TD
     subgraph SALIDA["Salida — infrastructure/adapters/output"]
         SQL["Repositorios PostgreSQL"]
         SEC["Seguridad: bcrypt, PyJWT"]
-        EVT["Publicador de eventos"]
+        OUTBOX["Escritura en el outbox"]
         HTTPX["Despachador de webhooks"]
         PARSER["Parser de ficheros"]
     end
@@ -39,7 +39,7 @@ flowchart TD
     UC --> POUT
     POUT -.->|implementado por| SQL
     POUT -.->|implementado por| SEC
-    POUT -.->|implementado por| EVT
+    POUT -.->|implementado por| OUTBOX
     POUT -.->|implementado por| HTTPX
     POUT -.->|implementado por| PARSER
     DI -.->|construye| UC
@@ -85,9 +85,9 @@ Cada caso de uso implementa un puerto de entrada (una clase abstracta en
 | Notificaciones | `notification_use_cases.py` | `notification_use_case_ports.py` |
 
 `application/dtos/` completa la capa: `commands.py` y `queries.py` son los `@dataclass(frozen=True)`
-que cruzan cada puerto, y `context.py` define `RequestContext`. `application/handlers/` reacciona a
-los eventos ya confirmados: `notification_handler.py` crea las notificaciones y
-`webhook_event_handler.py` despacha el webhook saliente.
+que cruzan cada puerto, y `context.py` define `RequestContext`. `application/handlers/` contiene
+`notification_handler.py`, que `NotificationConsumer` invoca dentro de su transacción para crear las
+notificaciones a partir de un evento interno.
 
 ## El dominio y sus tres motores
 
@@ -104,8 +104,9 @@ Las entidades viven en `domain/entities/`: `tenant.py`, `agent.py`, `sales_group
 `disqualification_rule.py`, `intake_record.py` (`IntakeRecord` e `IntakeError`), `intake_job.py`,
 `notification.py` y `webhook.py` (`WebhookConfig`). `domain/policies/authorization_policy.py`
 concentra `AuthorizationPolicy`. `domain/events/` declara los eventos que los casos de uso registran en el outbox:
-`lead_events.py` (los dos del canal de salida), `notification_events.py` e `intake_events.py` (los
-hechos internos de leads e ingesta), `identity_events.py` (`AgentState` y `TenantState`) y las bases
+`lead_events.py` (los dos del canal de salida), `notification_events.py` (`LeadAssigned`,
+`LeadReassigned`, `LeadLeftUnassigned` e `IntakeRejected`), `intake_events.py` (`IntakeJobRequested`, la
+orden del canal `job`), `identity_events.py` (`AgentState` y `TenantState`) y las bases
 `domain_event.py` e `internal_event.py`.
 
 ## Puertos y adaptadores de salida
