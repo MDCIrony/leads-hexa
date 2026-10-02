@@ -45,8 +45,8 @@ flowchart LR
 | `provisioned_tenants` | intake | **Nueva** (F3, todavía en `leads_db`; se mueve en F4): marca que las fuentes por defecto de un tenant ya se crearon una vez |
 | `leads`, reglas, `sales_groups`, `webhook_configs` | lead-core | `leads` gana `intake_record_id` (F4) |
 | `advisors` | lead-core | **Nueva** (F3): proyección de identidad + `group_id` propio |
-| `notifications` | notifications | |
-| `members` | notifications | **Nueva** (F2): proyección de identidad para decidir destinatarios |
+| `notifications` | notifications | Copiada en F2; `leads_db.notifications` se queda, sin crecer, hasta F5 |
+| `members` | notifications | **Nueva** (F2): proyección de identidad para decidir destinatarios; sembrada en el corte desde `agents` |
 | `outbox_events` | cada productor | Gana la columna `channel` (F1) |
 | `processed_events` | cada consumidor | **Nueva**: `PRIMARY KEY (consumer, event_id)` |
 
@@ -62,6 +62,11 @@ escribe desde una API pública y nunca es fuente de verdad.
 |---|---|---|---|---|
 | `advisors` | lead-core | `internal.identity.agents` | `agent_id`, `tenant_id`, `name`, `role`, `is_active`, `version` **+ `group_id` (propio)** | Candidatos de asignación, asignación manual, carga con nombres |
 | `members` | notifications | `internal.identity.agents` | `agent_id`, `tenant_id`, `role`, `is_active`, `version` | Managers de un tenant como destinatarios |
+
+`members` no tiene la carrera de abajo: nadie la hidrata bajo demanda. Si un lead queda sin asignar
+antes de que el manager de un tenant recién creado llegue a la proyección, ese aviso no se genera
+([Notificaciones](../modulos/notificaciones.md#la-proyeccion-members)). Ambas copias aplican el mismo
+*upsert* condicionado por `version`.
 
 `advisors` mezcla a propósito dos dueños en una fila: las columnas de identidad las escribe sólo el
 consumidor; `group_id` lo escribe sólo lead-core, a través de `PATCH /advisors/{agent_id}`. Ningún
@@ -175,6 +180,29 @@ repite aquí. Lo que añade cada servicio extraído:
 | Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que el servicio nuevo pasa sin lista base; sus `src/` y `tests/` se declaran en `scripts/verify-structure.sh`. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
 | Configuración | `Settings.from_environment()` falla al arrancar si falta un valor obligatorio, como hoy |
 
+### notifications, el servicio de referencia
+
+Primer servicio extraído (F2). Es el árbol modelo de
+[Convenciones](../desarrollo/convenciones.md#estructura-y-tamano-del-codigo) hecho código: lo que
+identity e intake copian y lo que cambia es el contenido de `domain/` y `use_cases/`.
+
+```text
+services/notifications/
+├── Dockerfile · pyproject.toml · uv.lock · migrations/ (001 notifications, 002 members, 003 processed_events)
+├── src/
+│   ├── domain/            notifications/ (Notification, NotificationKind) · members/ (Member) · policies/
+│   ├── application/       dtos/ · ports/{input,output}/ · use_cases/{notifications,members}/
+│   └── infrastructure/
+│       ├── main.py                      API: aplica las migraciones al arrancar, /health
+│       ├── worker/                      notifications-worker: un carril por grupo
+│       ├── config/ · di/
+│       └── adapters/
+│           ├── input/api/notifications/ router y esquemas
+│           ├── input/consumers/         groups.py, notification_consumer.py, member_consumer.py
+│           └── output/persistence/      repositorios y unidad de trabajo (SQL crudo)
+└── tests/                 unit/ · integration/ · e2e/ · architecture/
+```
+
 ### `libs/chassis`
 
 Una librería de **código técnico**, sin un solo tipo de dominio. Existe porque hay piezas que deben
@@ -183,12 +211,13 @@ copiara, bastaría que una copia divergiera para abrir un agujero.
 
 | Módulo | Contiene |
 |---|---|
-| `chassis.auth` | Verificación del JWT interno (firma, `iss`, `aud`, `exp`) con caché de JWKS; cliente de tokens de servicio |
+| `chassis.auth` | `TokenVerifier` del JWT interno (firma, `iss`, `aud`, `exp`, `ptype` y par `role`/`ptype` coherentes), `JwksCache` y `KeysUnavailable` ([03](03-gateway-y-autenticacion.md#el-token-interno)); cliente de tokens de servicio |
 | `chassis.persistence` | `RawSqlDatabase` (pool psycopg), `MigrationRunner` |
 | `chassis.outbox` | Relay genérico y despachadores (Kafka, RabbitMQ, webhook) filtrados por `channel` |
-| `chassis.consumer` | Bucle de consumo Kafka con `processed_events`, reintentos y DLQ; `ensure_topics()` |
+| `chassis.consumer` | `ConsumerLoop` (`processed_events`, reintentos, DLQ), `run_consumer_lane` (reconstruye el consumidor tras un fallo), `ensure_topics()` y `ensure_topics_until_ready()` |
+| `chassis.kafka_config` | `producer_config` y `consumer_config`: los ajustes de cliente que comparten todos los servicios |
 | `chassis.web` | Middleware de `X-Request-Id` y logging correlacionado |
-| `chassis.testing` | Helper del guardián AST, parametrizado por la raíz `src/` del servicio. Entra en F2, cuando un segundo servicio lo necesita |
+| `chassis.testing` | Guardianes de estructura (ADR-0037) y de capas (`layer_violations`, `stdlib_only_violations`, aislamiento de los tests de dominio), parametrizados por la raíz `src/` del servicio. Entró en F2, cuando un segundo servicio lo necesitó |
 
 Criterio de entrada: un módulo entra en `chassis` cuando lo necesitan dos servicios **y** no
 contiene ninguna regla de negocio. Lo que sólo usa uno se queda en ese servicio.

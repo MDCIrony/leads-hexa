@@ -17,8 +17,11 @@ docker compose up -d
 Levanta `db` (PostgreSQL 16), `backend` (la API, que aplica las migraciones pendientes al arrancar y
 recarga en caliente lo que cambie en `backend/src`), `gateway` (nginx, la única entrada de la API),
 `frontend` (nginx sirviendo la interfaz) y `docs` (este sitio), más `rabbitmq`, `kafka`, `kafka-ui`,
-`backend-worker` (la entrega: relay del outbox y consumidores de notificaciones) e `intake-worker`. `backend` espera a que `db` esté sano; `gateway` no espera a nadie (vuelve a resolver
-`backend` por DNS); `frontend` espera a que `gateway` esté sano.
+`backend-worker` (la entrega: los relays del outbox), `intake-worker` y el servicio de notificaciones:
+`notifications` (su API; aplica sus migraciones al arrancar) y `notifications-worker` (sus consumidores
+de Kafka). Un servicio de una sola ejecución, `db-bootstrap`, crea antes el rol y las bases de
+`notifications`. `backend` espera a que `db` esté sano; `gateway` no espera a nadie (vuelve a resolver
+`backend` y `notifications` por DNS); `frontend` espera a que `gateway` esté sano.
 
 Puertos reales en el host:
 
@@ -35,8 +38,9 @@ host. **`backend` no publica ningún puerto**: la API sólo es alcanzable por el
 `8001` ya no es el `backend` sino el gateway. Para depurar con el backend directamente hay que entrar
 en el contenedor (`docker compose exec backend …`).
 
-Los ficheros de `gateway/` (`nginx.conf`, `proxy_headers.conf`, `introspect.conf`) están montados como
-volumen. Tras editarlos no hace falta reconstruir nada, sólo recargar nginx:
+El directorio `gateway/` (`nginx.conf` y los `*.inc` que incluye: `proxy_headers.inc`,
+`introspect.inc`, `protected.inc` y `protected_optional.inc`) está montado entero como volumen. Tras
+editar cualquiera de ellos no hace falta reconstruir nada, sólo recargar nginx:
 
 ```bash
 docker compose exec gateway nginx -s reload

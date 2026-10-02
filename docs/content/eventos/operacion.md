@@ -7,13 +7,14 @@ Cómo se levanta, qué mirar cuando algo no llega, y qué no está resuelto toda
 ```bash
 docker compose up -d db backend                # la API, sin mensajería
 docker compose up -d kafka rabbitmq            # los brókeres
-docker compose up -d backend-worker            # el relay del outbox y los consumidores de notificaciones
+docker compose up -d backend-worker            # los relays del outbox
+docker compose up -d notifications notifications-worker  # la bandeja y sus tres consumidores
 docker compose up -d intake-worker             # el trabajador de ingesta
 ```
 
 **El orden no importa y la API no espera a nadie.** Ni `kafka` ni `rabbitmq` son `depends_on`
 bloqueantes del servicio `backend`, que sólo escribe en el outbox: si no están, las filas esperan y
-`backend-worker` reintenta. Está verificado — con ambos brókeres apagados, `/health` responde `200`
+`backend-worker` reintenta; `notifications-worker` lo hace con sus carriles. Está verificado — con ambos brókeres apagados, `/health` responde `200`
 y los leads se guardan; con sólo RabbitMQ apagado, una ingesta responde `202` y su trabajo queda
 `PENDING` hasta que el bróker vuelve (`verify_ms_f1`).
 
@@ -21,6 +22,11 @@ y los leads se guardan; con sólo RabbitMQ apagado, una ingesta responde `202` y
 canales independientes, así que Kafka caído no detiene los jobs ni RabbitMQ caído detiene las
 notificaciones. Al reiniciarlo no se pierde nada: una fila sin marcar se entrega otra vez, y los
 consumidores deduplican por `event_id`.
+
+`notifications-worker` espera a que `notifications` esté sano, porque la API aplica las migraciones al
+arrancar y los consumidores escriben esas tablas, pero no espera a Kafka: sus carriles reintentan
+hasta que el bróker responde. No tiene *healthcheck*: ningún servicio depende de él, los carriles se
+reparan solos y su fallo queda en el log.
 
 El único que sí espera es `intake-worker`, con `depends_on: rabbitmq: condition: service_healthy`:
 sin bróker no tiene nada que hacer, y esperar evita un ciclo de arrancar y morir. Una vez arriba,
@@ -69,7 +75,8 @@ LIMIT 20;
 Un `attempts` que crece sin parar señala un destino roto. **Nada se descarta por eso**: la entrada se
 hunde en el orden del lote para no bloquear a las nuevas, y se sigue reintentando. El `channel` dice
 qué proceso mirar: `product` es Kafka del cliente y webhooks, `internal` son los topics `internal.*`
-y `job` es RabbitMQ; los tres entregan desde `backend-worker`.
+y `job` es RabbitMQ; los tres entregan desde `backend-worker`. Lo que se entrega a `internal.*` lo
+consume `notifications-worker`.
 
 ### 2 · ¿Llegó al topic?
 
@@ -89,22 +96,26 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
 ```
 
 Si `internal.*` no aparece en la lista, `backend-worker` aún no ha podido crear sus topics: sus logs
-dicen `Kafka topics not ready` mientras reintenta.
+dicen `Kafka topics not ready` mientras reintenta. Lo mismo vale para `internal.dlq.*` y
+`notifications-worker`.
 
 ### 3 · ¿Se aplicó en el consumidor?
 
 ```bash
-docker compose logs backend-worker --tail=50
+docker compose logs notifications-worker --tail=50
 
 docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
   --bootstrap-server localhost:9092 --describe --group notifications.lead-events
 ```
 
 `LAG` creciente es un consumidor parado o lento; con `Attempt n/3 failed` en el log, un evento que no
-se aplica y acabará en la DLQ. Un evento ya aplicado figura en `processed_events`:
+se aplica y acabará en la DLQ. Los grupos son `notifications.lead-events`,
+`notifications.intake-events` y `notifications.members`. Un evento ya aplicado figura en
+`processed_events` de `notifications_db` (el grupo `notifications.members` no lo usa):
 
-```sql
-SELECT consumer, count(*) FROM processed_events GROUP BY consumer;
+```bash
+docker compose exec db psql -U postgres -d notifications_db \
+  -c "SELECT consumer, count(*) FROM processed_events GROUP BY consumer"
 ```
 
 ### 4 · ¿Se procesó el trabajo?
@@ -121,8 +132,11 @@ El `X-Request-Id` de la petición que originó el problema (el que devuelve la A
 `correlation_id` de la fila del outbox) aparece en las líneas de log de los tres procesos:
 
 ```bash
-docker compose logs backend-worker intake-worker | rg <request-id>
+docker compose logs backend-worker notifications-worker intake-worker | rg <request-id>
 ```
+
+`notifications-worker` no escribe una línea por mensaje: el `X-Request-Id` sólo aparece en sus logs si
+algo falla o se reintenta. Lo que prueba que el consumidor lo aplicó es el aviso en `notifications`.
 
 ## Las colas muertas y cómo reinyectar un mensaje
 
@@ -130,6 +144,7 @@ docker compose logs backend-worker intake-worker | rg <request-id>
 |---|---|---|
 | `internal.dlq.notifications.lead-events` | Eventos de `internal.lead-core.events` que fallaron tres veces | kafka-ui, **Topics** |
 | `internal.dlq.notifications.intake-events` | Lo mismo para `internal.intake.events` | kafka-ui, **Topics** |
+| `internal.dlq.notifications.members` | Estados de agente que no se pudieron proyectar, de `internal.identity.agents` | kafka-ui, **Topics** |
 | `intake.jobs.dlq` | Trabajos entregados tres veces sin terminar, o mensajes malformados | Consola de RabbitMQ ([localhost:15672](http://localhost:15672), **Queues**) |
 
 Un mensaje de `internal.dlq.<grupo>` es el sobre original, con las cabeceras originales más `error`,
@@ -139,7 +154,7 @@ reintentos. Un mensaje así sólo se recupera produciendo un sobre válido corre
 descarta.
 
 **No hay reinyección automática.** Primero se corrige la causa (la cabecera `error` y el log de
-`backend-worker` la dicen), y luego a mano:
+`notifications-worker` la dicen), y luego a mano:
 
 - **Evento interno.** Se vuelve a producir el mensaje en el topic de `original_topic`, con la misma
   clave y el mismo valor: en kafka-ui, **Produce Message** sobre ese topic, o `kafka-console-producer.sh`
@@ -216,6 +231,7 @@ par en par era seguridad de teatro. El ADR-0028 cierra ambas en la misma tanda.
 | Una entrada que falla no se pierde ni bloquea a las demás | Test de integración: 25 fallos seguidos y sigue en el lote, detrás de las nuevas |
 | La API arranca y sirve con ambos brókeres caídos | `/health` responde `200`; verificado a mano |
 | Con RabbitMQ caído una ingesta no se pierde | `verify_ms_f1`: `202`, el trabajo sigue `PENDING`, y al volver el bróker termina y el lead existe |
-| Una notificación llega por Kafka sin duplicarse tras reiniciar `backend-worker` | `verify_ms_f1` |
-| Los topics de identidad están compactados y las DLQ existen y están vacías | `verify_ms_f1` |
+| Una notificación llega por Kafka sin duplicarse al releer el grupo desde el principio | `verify_ms_f1` |
+| Los topics de identidad están compactados y las DLQ existen y están vacías | `verify_ms_f1` (los dos grupos de avisos) y `verify_ms_f2` (los tres) |
+| La bandeja la sirve `notifications` a través del gateway y el backend ya no la tiene | `verify_ms_f2` |
 | El recorrido completo sobre HTTP | `./scripts/verify-e2e.sh` |

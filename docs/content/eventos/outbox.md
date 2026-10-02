@@ -141,6 +141,14 @@ como definitivo.
 - **Un fallo en un ciclo no deja salir a la siguiente.** La sucesora ni siquiera se lee mientras la
   anterior esté sin publicar, así que la entrega secuencial del relay no puede adelantarla.
 - Publicada la primera, la segunda entra en el siguiente ciclo.
+- **En `product`, un webhook que falla siempre retiene los eventos posteriores de ese lead, también
+  los de Kafka.** Una fila de `product` sólo cuenta como entregada cuando la tienen **todos** sus
+  despachadores (Kafka y el webhook de la organización), y la clave es el `lead_id` para los dos. Si
+  el webhook de un cliente rechaza una fila de forma permanente, esa fila no se marca, la
+  sucesora del mismo lead no se lee y el topic `leads.{tenant_id}` no recibe nada más de ese lead
+  hasta que el webhook responda o se corrija su configuración; mientras tanto la fila se reintenta y
+  Kafka la recibe repetida en cada ciclo, con el mismo `event_id`. Es la consecuencia directa del
+  orden por clave, y los demás leads no se ven afectados.
 
 ## Qué entra en el outbox
 
@@ -169,4 +177,4 @@ cliente y lo que se queda dentro son criterios distintos, y por eso son canales 
 | El almacén que lee el relay | `infrastructure/adapters/output/persistence/outbox_store.py` |
 | Los despachadores del producto | `infrastructure/adapters/output/events/*_outbound_dispatcher.py` |
 | Qué topic recibe cada evento interno | `infrastructure/adapters/output/events/internal_topics.py` |
-| El proceso que lo ejecuta | `infrastructure/worker/`, servicio `backend-worker` |
+| El proceso que lo ejecuta | `infrastructure/worker/`, servicio `backend-worker`: sólo los relays; desde F2 ya no consume |

@@ -185,6 +185,10 @@ veces termina en `internal.dlq.<grupo>`; un job con un registro que falla vuelve
 
 ## F2 · Notifications
 
+**Estado: cerrada** (a partir de `1f4fb47`; el rango de cierre se fija al cerrar la fase). Lo construido
+sigue el plan salvo las desviaciones de abajo. El corte copió 511 notificaciones, 408 `processed_events`
+y 104 miembros, con recuentos y `md5` de ids idénticos en origen y destino.
+
 **Objetivo.** Primer servicio real, construido con la plantilla. Es el **servicio de referencia**: el
 más pequeño, nadie depende de él y aun así ejercita todo lo nuevo (esqueleto, base propia, consumidor
 con deduplicación, proyección, migración de datos y corte). Lo que salga mal se corrige aquí, una vez,
@@ -208,6 +212,26 @@ ingesta (`intake_files`, `nack`, encolado por outbox). El *corte* espera a que F
 - `backend`: se eliminan router, casos de uso, handler y repositorio de notificaciones, y
   `notifications` sale de `PostgresUnitOfWork`.
 
+**Desviaciones respecto a lo anterior**
+
+- **`members` se siembra en el corte desde `agents`**, no con un *snapshot* del topic:
+  `f2_notifications.sh` copia las filas de `agents` con `tenant_id` y, desde ahí, el topic compactado
+  `internal.identity.agents` mantiene la proyección. La puerta por `version` en SQL hace inocuo que
+  reproduzca estados más antiguos.
+- **Grupo nuevo `notifications.members`** para `internal.identity.agents`. Los otros dos conservan los
+  nombres que usaba el monolito, así que continúan desde sus offsets.
+- **Las DLQ las declara el consumidor** (`notifications`), no el backend: `internal.dlq.<grupo>` de
+  los tres grupos, con 1 partición y 7 días de retención.
+- **Sin *healthcheck* en `notifications-worker`.** Ningún servicio depende de él, los carriles se
+  reparan solos y su fallo queda en el log. Se añade cuando un orquestador reinicie por salud (07).
+- **`verify_ms_f2` prueba el enrutado con el *access log* del gateway** (`upstream=`), porque el
+  servicio no escribe una línea por petición con el `X-Request-Id`.
+- **Carrera aceptada.** Un lead que queda sin asignar en un tenant cuyo manager aún no está en
+  `members` no genera aviso: el evento de lead puede llegar antes que el estado del agente. Se
+  documenta en [Notificaciones](../modulos/notificaciones.md#la-proyeccion-members).
+- **El script rechaza ejecutarse con el gateway o los workers en marcha:** con un consumidor vivo,
+  `processed_events` quedaría incompleta; tras el corte, el truncado borraría los avisos nuevos.
+
 **`verify_ms_f2`**
 
 - Asignar un lead genera la notificación del asesor, visible a través del gateway.
@@ -215,7 +239,8 @@ ingesta (`intake_files`, `nack`, encolado por outbox). El *corte* espera a que F
 - Marcar una y todas como leídas; leer la de otro tenant → 404.
 
 **Criterio de salida.** El recuento de notificaciones por destinatario y estado es igual antes y
-después del corte. `backend` no contiene ningún módulo de notificaciones.
+después del corte. `backend` no contiene ningún módulo de notificaciones. La tabla
+`leads_db.notifications` sigue ahí hasta F5 y ya no crece.
 
 ---
 

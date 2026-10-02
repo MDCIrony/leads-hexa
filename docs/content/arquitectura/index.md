@@ -29,8 +29,8 @@ que las entidades emiten). `exceptions.py` no conoce HTTP: una excepción de dom
 Orquesta sin tomar decisiones de negocio. `ports/input/` declara un contrato ABC por caso de uso;
 `ports/output/` declara lo que la infraestructura debe implementar (repositorios, hasher de
 contraseñas, servicio de tokens, reloj, generador de identificadores, outbox, parser de ficheros). `use_cases/` implementa los puertos de entrada. `dtos/` son
-`@dataclass(frozen=True)`, nunca Pydantic. `handlers/` traduce un evento interno en
-notificaciones, dentro de la transacción del consumidor.
+`@dataclass(frozen=True)`, nunca Pydantic. El aviso a partir de un evento interno ya no se hace
+aquí: lo hace el servicio [`notifications`](../modulos/notificaciones.md).
 
 ### Infraestructura
 

@@ -2,20 +2,21 @@
 
 Esta página fija lo que existe antes del desacople, verificado contra el código, y enumera los
 acoplamientos que cada fase tiene que cortar. Es la lista de trabajo: si un acoplamiento no aparece
-aquí, el plan no lo resuelve. Las tablas reflejan el estado actual, con F0 y F1 ya implantadas; lo
+aquí, el plan no lo resuelve. Las tablas reflejan el estado actual, con F0, F1 y F2 ya implantadas; lo
 que una fase cortó lo dice su fila.
 
 ## Lo que corre hoy
 
-El gateway (F0) y la durabilidad (F1) ya están en su sitio; el resto de la tabla es el punto de
-partida que las fases F2 a F5 van cortando. `backend` no publica puerto en el host.
+El gateway (F0), la durabilidad (F1) y el servicio `notifications` (F2) ya están en su sitio; el resto
+de la tabla es el punto de partida que las fases F3 a F5 van cortando. `backend` no publica puerto en el host.
 
 | Contenedor | Qué hace | Comparte |
 |---|---|---|
 | `backend` | API completa, migraciones y casos de uso. Sólo **escribe** en el outbox: no entrega nada | Imagen, código y base con los workers |
-| `backend-worker` | Un relay del outbox por canal (`product`, `internal`, `job`) y los consumidores de notificaciones (`infrastructure/worker/`) | Imagen, código y base con `backend` |
+| `backend-worker` | Un relay del outbox por canal (`product`, `internal`, `job`) (`infrastructure/worker/`). Desde F2 ya no consume | Imagen, código y base con `backend` |
+| `notifications`, `notifications-worker` | **Servicio extraído en F2**: la bandeja (API y tres consumidores) con su base `notifications_db` | Nada: imagen propia con `libs/chassis`; sólo comparte el servidor PostgreSQL |
 | `intake-worker` | Consume `intake.jobs` y ejecuta el procesamiento del trabajo | Reutiliza el cableado de `dependencies.py` |
-| `db` | Un único `leads_db` con las tablas de todos los contextos | — |
+| `db` | `leads_db` con las tablas de los contextos aún no extraídos, y `notifications_db`, que crea `db-bootstrap` | — |
 | `rabbitmq` | `intake.jobs` (cuórum, `x-delivery-limit: 3`) y `intake.jobs.dlq` | — |
 | `kafka` | `leads.{tenant_id}`, ACL `LITERAL` por organización (ADR-0028), y los topics `internal.*` | — |
 | `gateway` | nginx: única entrada de la API en `:8001`; autentica con *phantom token* ([03](03-gateway-y-autenticacion.md)) | — |
@@ -33,7 +34,10 @@ flowchart LR
     BW -->|"product"| K["Kafka leads.{tenant_id}"]
     BW -->|"product"| WH["webhooks"]
     BW -->|"internal"| KI["Kafka internal.*"]
-    KI -->|"consumidores de notificaciones"| BW
+    KI -->|"tres grupos"| NW["notifications-worker"]
+    NW --> NDB[("notifications_db")]
+    GW --> NS["notifications<br/>API"]
+    NS --> NDB
 ```
 
 El backend ya es hexagonal y el guardián AST (`tests/architecture/test_dependency_rule.py`) lo
@@ -42,7 +46,7 @@ puerto, y separar consiste en cambiar el adaptador que hay detrás.
 
 ## Una sola unidad de trabajo para todo
 
-`PostgresUnitOfWork` expone **15 repositorios** sobre una conexión. Cualquier caso de uso puede leer
+`PostgresUnitOfWork` expone **16 repositorios** sobre una conexión. Cualquier caso de uso puede leer
 o escribir cualquier tabla dentro de la misma transacción. La tabla siguiente es el resultado de
 recorrer `application/` buscando qué repositorios usa cada caso de uso; las celdas en negrita son
 los cruces entre contextos.
@@ -52,7 +56,7 @@ los cruces entre contextos.
 | `IngestLeadUseCase` | `intake_records`, `sources`, `leads`, `rules`, `disqualification_rules`, **`agents`**, **`groups`**, `outbox` | Ingesta ↔ decisión ↔ identidad |
 | `GetLeadStatsUseCase` | `leads`, **`intake_records`** | Leads ↔ ingesta |
 | `AssignLeadUseCase` | `leads`, **`agents`**, `outbox` | Leads ↔ identidad |
-| `NotificationHandler` | `notifications`, **`agents`** (managers del tenant) | Notificaciones ↔ identidad |
+| `NotificationHandler` | `notifications`, **`agents`** (managers del tenant) | Notificaciones ↔ identidad. **Cortado en F2**: vive en `notifications` y lee su proyección `members` |
 | `SalesGroup*UseCase` | `groups`, **`agents`** (recuento y huérfanos al borrar) | Leads ↔ identidad |
 | `UpdateAgentUseCase` | `agents`, **`groups`** (valida `group_id`) | Identidad ↔ leads |
 | `CreateTenantUseCase` | `tenants`, `agents`, **`sources`** (dos fuentes por defecto) | Identidad ↔ ingesta |
@@ -94,7 +98,7 @@ solo contexto.
 
 | Hecho verificado | Dónde estaba | Estado |
 |---|---|---|
-| Las notificaciones se publicaban con un bus en memoria (`InMemoryEventPublisher`) | `di/event_wiring.py`, `application/handlers/notification_handler.py` | **Resuelto en F1.** Los eventos se registran en el outbox `internal` dentro de la transacción y `NotificationConsumer` los consume desde `internal.lead-core.events` e `internal.intake.events` |
+| Las notificaciones se publicaban con un bus en memoria (`InMemoryEventPublisher`) | `di/event_wiring.py`, `application/handlers/notification_handler.py` | **Resuelto en F1.** Los eventos se registran en el outbox `internal` dentro de la transacción y `NotificationConsumer` los consume desde `internal.lead-core.events` e `internal.intake.events`; desde F2, en `notifications-worker` |
 | El relay corría en un hilo de la API | `main.py`, `outbox_relay_thread.py` | **Resuelto en F1.** La API ya no ejecuta ningún relay; los ejecuta `backend-worker`, uno por canal |
 | Un job con un registro fallido hacía `ACK` y quedaba en `PROCESSING` | `process_intake_job_use_case.py`, `intake_worker.py` | **Resuelto en F1.** Hace `nack` con reencolado y, a la tercera entrega, pasa a `intake.jobs.dlq` |
 | Si RabbitMQ no respondía, el job se procesaba en el proceso de la API | `intake_router.py`, `process_batch_use_case.py` | **Resuelto en F1.** Se elimina el *fallback*: el job espera en el outbox |

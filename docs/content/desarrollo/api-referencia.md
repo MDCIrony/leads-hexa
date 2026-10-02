@@ -942,12 +942,14 @@ Errores: `404 Not Found` (`DISQUALIFICATION_RULE_NOT_FOUND`).
 La campana que avisa a quien debe actuar sin que tenga que ir a buscarlo. La crea
 `NotificationHandler` al
 asignarse o reasignarse un lead, al quedar uno sin asesor, o al rechazarse un registro de ingesta.
+Desde F2 estas rutas **las sirve el servicio `notifications`**, no el backend: el gateway las enruta
+a él y el contrato no cambia ([06](../microservices/06-plan-de-desacople.md#f2-notifications)).
 Los tres endpoints exigen organización propia (`MANAGER` o `AGENT`); el destinatario sale siempre
 del token, nunca de la URL. Un `ADMIN` recibe `403 Forbidden`: no pertenece a ninguna organización.
 
 ### `GET /api/v1/notifications`
 
-Acepta `unread_only` (por defecto `false`).
+Acepta `unread_only` (por defecto `false`), `limit` (de 1 a 1000; 100 por defecto) y `offset` (≥ 0).
 
 ```json
 {

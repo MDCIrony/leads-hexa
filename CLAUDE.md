@@ -46,10 +46,15 @@ Cada uno demuestra algo que los otros no:
   producto roto; esto no.
 - **`verify-structure.sh`** aplica la regla de estructura (ADR-0037) a todas las raíces Python del
   repositorio, sin Docker: `backend/src`, `backend/tests`, `libs/chassis/src`, `libs/chassis/tests`,
-  `test-consumer/`, `demo/` y `tools/`. Una raíz Python nueva se declara ahí.
+  `services/notifications/src`, `services/notifications/tests`, `test-consumer/`, `demo/` y
+  `tools/`. Una raíz Python nueva se declara ahí.
 
-Dentro de la suite viajan cuatro tests que analizan el AST y fallan si el dominio importa algo de
-fuera o la aplicación importa infraestructura. **Deben estar siempre 4/4.**
+Cada servicio extraído (hoy `services/notifications`) tiene la suya, con las mismas dos formas:
+`docker compose --profile test run --rm notifications-test` y
+`cd services/notifications && uv run pytest -m unit -q` (sin base ni variables de entorno).
+
+Dentro de la suite de cada servicio viajan cuatro tests que analizan el AST y fallan si el dominio
+importa algo de fuera o la aplicación importa infraestructura. **Deben estar siempre 4/4.**
 
 A su lado, `tests/architecture/test_structure.py` aplica la misma regla dentro de la suite, con los
 helpers de `chassis.testing`: ficheros fuente de 150 líneas como mucho; 12 ficheros `.py` por

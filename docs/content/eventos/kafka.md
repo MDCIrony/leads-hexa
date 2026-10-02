@@ -138,7 +138,7 @@ primero no debe exponer datos internos a la organización.
 |---|---|---|---|
 | `internal.lead-core.events` | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned` | 3 particiones, `delete`, 7 días | Grupo `notifications.lead-events` |
 | `internal.intake.events` | `IntakeRejected` | 3 particiones, `delete`, 7 días | Grupo `notifications.intake-events` |
-| `internal.identity.agents` | `AgentState`: el estado completo de cada agente | 3 particiones, **`compact`** | Nadie todavía |
+| `internal.identity.agents` | `AgentState`: el estado completo de cada agente | 3 particiones, **`compact`** | Grupo `notifications.members` (la proyección `members`) |
 | `internal.identity.tenants` | `TenantState`: el estado completo de cada organización | 3 particiones, **`compact`** | Nadie todavía |
 | `internal.dlq.<grupo>` | Lo que un grupo no pudo procesar | 1 partición, `delete`, 7 días | Un humano |
 
@@ -147,8 +147,11 @@ mensaje, y una copia derivada se reconstruye leyendo el topic desde el principio
 estado lleva la `version` de su fila (la sube la base en cada escritura), para que quien lo
 proyecte descarte lo que ya tiene.
 
-**Se crean al arrancar `backend-worker`**, con `ensure_topics`, idempotente y con reintentos mientras
-Kafka no responda. El productor interno lleva `allow.auto.create.topics=false`: un topic que se
+**Los `internal.*` de hechos y de estado se crean al arrancar `backend-worker`**, su productor, con
+`ensure_topics`, idempotente y con reintentos mientras Kafka no responda. **Las `internal.dlq.<grupo>`
+las crea el servicio dueño del grupo**: `notifications-worker` declara las de sus tres grupos al
+arrancar, con `ensure_topics_until_ready`. Si un topic existente difiere de lo declarado (particiones
+o configuración), `ensure_topics` no lo toca y registra un `WARNING`. El productor interno lleva `allow.auto.create.topics=false`: un topic que se
 perdiera después debe fallar a la vista, no reaparecer sin compactación por la creación automática del
 bróker. Mientras los topics no existen, el canal `internal` no entrega y sus filas esperan en el
 outbox.
@@ -186,7 +189,11 @@ mientras sólo el monolito escribe, publica en nombre de todos los contextos.
 
 ### El consumidor de notificaciones
 
-`NotificationConsumer` corre en `backend-worker`, un hilo por grupo, sobre `chassis.consumer`:
+Desde F2 corre en el servicio `notifications` (proceso `notifications-worker`), un hilo por grupo,
+sobre `chassis.consumer`; el backend ya no consume ningún topic. Los grupos son
+`notifications.lead-events` y `notifications.intake-events` (`NotificationConsumer`) y
+`notifications.members` (`MemberConsumer`, la proyección de agentes; ver
+[Notificaciones](../modulos/notificaciones.md#la-proyeccion-members)):
 
 - `processed_events (consumer, event_id)` se escribe **en la misma transacción** que las
   notificaciones: un duplicado encuentra la marca y no hace nada, y un fallo deshace ambas cosas.
@@ -197,8 +204,11 @@ mientras sólo el monolito escribe, publica en nombre de todos los contextos.
 - Si la DLQ no se puede escribir, el consumidor retrocede al offset y vuelve a intentarlo; una
   partición cuyo retroceso falla queda bloqueada hasta que ese mensaje se resuelve, para no confirmar
   por encima de él.
-- Si un consumidor muere por un fallo del cliente de Kafka, el hilo construye otro tras una espera de
-  1 s que se duplica hasta 30 s.
+- Si un consumidor muere por un fallo del cliente de Kafka, el hilo (`run_consumer_lane`) construye
+  otro tras una espera de 1 s que se duplica hasta 30 s. No se suscribe hasta que los topics existen.
+- Al perder o ceder particiones en un *rebalance*, el bucle libera las que tenía bloqueadas; al parar,
+  cierra el consumidor y vacía el productor de la DLQ.
+- `MemberConsumer` no usa `processed_events`: su *upsert* se condiciona por `version` en SQL.
 
 ## Límites de hoy
 

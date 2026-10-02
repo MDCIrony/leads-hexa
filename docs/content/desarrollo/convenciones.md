@@ -43,6 +43,7 @@ ni una carpeta por fichero salvo que el concepto lo pida. Al partir un módulo e
 │   │   └── use_cases/<contexto>/
 │   └── infrastructure/
 │       ├── adapters/input/api/<contexto>/
+│       ├── adapters/input/consumers/   # consumidores Kafka, uno por grupo, y su tabla de grupos
 │       ├── adapters/output/persistence/<contexto>/
 │       ├── main.py                     # proceso api
 │       └── worker/                     # proceso worker: producers, relays, topics, lanes, main, __main__
@@ -55,10 +56,12 @@ Un ejemplo que ya cumple es `libs/chassis/src/chassis/`:
 
 ```text
 chassis/
-├── auth/        claims.py  jwks.py  signing.py  verifier.py
-├── consumer/    envelope.py  kafka.py  loop.py  topics.py
-├── outbox/      envelope.py  kafka.py  relay.py  row.py
-├── testing/     cli.py  isolation.py  structure.py      # los guardianes de esta sección
+├── auth/         claims.py  jwks.py  signing.py  verifier.py
+├── consumer/     envelope.py  kafka.py  lane.py  loop.py  topics.py
+├── outbox/       envelope.py  kafka.py  relay.py  row.py
+├── persistence/  database.py  migrations.py
+├── testing/      cli.py  isolation.py  layers.py  structure.py   # los guardianes de esta sección
+├── kafka_config.py
 ├── rabbit.py
 └── web.py
 ```
@@ -70,9 +73,11 @@ chassis/
 ```
 
 El script recorre cada raíz Python declarada —`backend/src`, `backend/tests`, `libs/chassis/src`,
-`libs/chassis/tests`, `test-consumer/`, `demo/` y `tools/`— con su lista base; en las de tests sólo
-mide carpetas. Además, `chassis.testing` ofrece `assert_structure` (con `max_lines=None` para los
-tests) y `assert_domain_tests_isolated`, y cada servicio los llama desde
+`libs/chassis/tests`, `services/notifications/src`, `services/notifications/tests`, `test-consumer/`,
+`demo/` y `tools/`— y aplica su lista base a las heredadas; en las de tests sólo mide carpetas. Los
+servicios extraídos no tienen lista base. Además, `chassis.testing` ofrece `assert_structure` (con
+`max_lines=None` para los tests), `assert_domain_tests_isolated` y, para el guardián de capas,
+`layer_violations` y `stdlib_only_violations`, y cada servicio los llama desde
 `tests/architecture/test_structure.py`, así que la suite tampoco deja pasar un incumplimiento.
 `libs/chassis` se valida a sí mismo sin excepciones. Una raíz Python nueva se añade al script.
 

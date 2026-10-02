@@ -47,7 +47,7 @@ flowchart TD
 
 ## Adaptadores de entrada
 
-Nueve routers, todos finos: convierten el cuerpo HTTP en un comando o consulta, invocan un caso de
+Ocho routers, todos finos: convierten el cuerpo HTTP en un comando o consulta, invocan un caso de
 uso a través de su puerto y mapean la entidad de vuelta a un schema de respuesta. Ninguno decide
 una regla de negocio por su cuenta.
 
@@ -61,7 +61,6 @@ una regla de negocio por su cuenta.
 | `rule_router.py` | `/api/v1/rules` | Reglas de puntuación, asignación y descalificación |
 | `intake_router.py` | `/api/v1/intake` | Recepción de leads, bandeja de entrada, trabajos de ingesta |
 | `lead_router.py` | `/api/v1/leads` | Consulta de leads, asignación manual y descarte |
-| `notification_router.py` | `/api/v1/notifications` | Notificaciones del usuario autenticado |
 
 Tres ficheros más, compartidos por todos los routers anteriores: `dependencies.py` construye el
 `RequestContext` a partir del bearer interno verificado (el JWT de 60 s que el gateway obtiene por introspección, [ADR-0032](../decisiones/0032-gateway-y-phantom-token.md)) y define las tres guardas de autorización
@@ -82,12 +81,13 @@ Cada caso de uso implementa un puerto de entrada (una clase abstracta en
 | Reglas | `rule_use_cases.py` · `disqualification_rule_use_cases.py` | `rule_use_case_ports.py` · `disqualification_rule_use_case_ports.py` |
 | Catálogo | `agent_use_cases.py` · `sales_group_use_cases.py` · `lead_source_use_cases.py` | `agent_use_case_ports.py` · `sales_group_use_case_ports.py` · `lead_source_use_case_ports.py` |
 | Identidad y organizaciones | `auth_use_cases.py` · `tenant_use_cases.py` | `auth_use_case_port.py` · `tenant_use_case_ports.py` |
-| Notificaciones | `notification_use_cases.py` | `notification_use_case_ports.py` |
 
 `application/dtos/` completa la capa: `commands.py` y `queries.py` son los `@dataclass(frozen=True)`
-que cruzan cada puerto, y `context.py` define `RequestContext`. `application/handlers/` contiene
-`notification_handler.py`, que `NotificationConsumer` invoca dentro de su transacción para crear las
-notificaciones a partir de un evento interno.
+que cruzan cada puerto, y `context.py` define `RequestContext`.
+
+Las notificaciones ya no son de este contenedor: desde F2 las sirve y las escribe el servicio
+`notifications` ([Notificaciones](../modulos/notificaciones.md)). El backend sólo registra en el
+outbox los eventos que ese servicio consume.
 
 ## El dominio y sus tres motores
 
@@ -101,13 +101,13 @@ Ver [El recorrido de un lead](recorrido-de-un-lead.md) para lo que decide cada u
 
 Las entidades viven en `domain/entities/`: `tenant.py`, `agent.py`, `sales_group.py`,
 `lead_source.py`, `lead.py`, `rule.py` (`ScoringRule` y `AssignmentRule`),
-`disqualification_rule.py`, `intake_record.py` (`IntakeRecord` e `IntakeError`), `intake_job.py`,
-`notification.py` y `webhook.py` (`WebhookConfig`). `domain/policies/authorization_policy.py`
+`disqualification_rule.py`, `intake_record.py` (`IntakeRecord` e `IntakeError`), `intake_job.py`
+y `webhook.py` (`WebhookConfig`). `domain/policies/authorization_policy.py`
 concentra `AuthorizationPolicy`. `domain/events/` declara los eventos que los casos de uso registran en el outbox:
-`lead_events.py` (los dos del canal de salida), `notification_events.py` (`LeadAssigned`,
-`LeadReassigned`, `LeadLeftUnassigned` e `IntakeRejected`), `intake_events.py` (`IntakeJobRequested`, la
-orden del canal `job`), `identity_events.py` (`AgentState` y `TenantState`) y las bases
-`domain_event.py` e `internal_event.py`.
+`lead_events.py` (los dos del canal de salida y `LeadAssigned`, `LeadReassigned` y
+`LeadLeftUnassigned`), `intake_events.py` (`IntakeRejected` e `IntakeJobRequested`, la orden del canal
+`job`), `identity_events.py` (`AgentState` y `TenantState`) y las bases `domain_event.py` e
+`internal_event.py`.
 
 ## Puertos y adaptadores de salida
 
@@ -125,7 +125,6 @@ composition root.
 | `LeadSourceRepositoryPort` | `RawSqlLeadSourceRepository` | `persistence/raw_sql_lead_source_repository.py` |
 | `IntakeRecordRepositoryPort` | `RawSqlIntakeRecordRepository` | `persistence/raw_sql_intake_record_repository.py` |
 | `IntakeJobRepositoryPort` | `RawSqlIntakeJobRepository` | `persistence/raw_sql_intake_job_repository.py` |
-| `NotificationRepositoryPort` | `RawSqlNotificationRepository` | `persistence/raw_sql_notification_repository.py` |
 | `OutboxRepositoryPort` | `RawSqlOutboxRepository` | `persistence/raw_sql_outbox_repository.py` |
 | `ProcessedEventRepositoryPort` | `RawSqlProcessedEventRepository` | `persistence/raw_sql_processed_event_repository.py` |
 | `IntakeFileRepositoryPort` | `RawSqlIntakeFileRepository` | `persistence/raw_sql_intake_file_repository.py` |
@@ -145,9 +144,9 @@ sustituirlas: `persistence/connection.py` (`RawSqlDatabase`, el pool de conexion
 La entrega no pasa por un puerto de la aplicación: los casos de uso sólo escriben en
 `OutboxRepositoryPort`. Quien lee el outbox y entrega es `backend-worker` (ver
 [C4 · Contenedores](c4-contenedores.md)), con los despachadores de `chassis.outbox` y
-`chassis.rabbit` y los de `events/*_outbound_dispatcher.py`; el consumidor de notificaciones es
-`infrastructure/adapters/input/events/notification_consumer.py`, un adaptador de entrada como el
-router HTTP.
+`chassis.rabbit` y los de `events/*_outbound_dispatcher.py`. El consumo de los eventos internos
+no está en el backend: lo hace `notifications-worker`, con adaptadores de entrada en
+`services/notifications/src/infrastructure/adapters/input/consumers/`.
 
 ## El composition root
 

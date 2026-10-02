@@ -247,7 +247,9 @@ gestor necesita saber cuáles. `promote()` y `reject()` sólo aceptan un registr
 
 ### Notification
 
-`domain/entities/notification.py`, tabla `notifications`. El aviso interno; exige un `message` no
+`services/notifications/src/domain/notifications/notification.py`, tabla `notifications` de
+`notifications_db` (el servicio `notifications`, desde F2; la tabla de `leads_db` queda sin uso hasta
+F5, por lo que el diagrama de arriba aún la dibuja). El aviso interno; exige un `message` no
 vacío. `lead_id` e `intake_record_id` son punteros informativos sin clave foránea: sólo permiten
 que la interfaz navegue al elemento relacionado, y la notificación sobrevive aunque ese elemento
 se borre.

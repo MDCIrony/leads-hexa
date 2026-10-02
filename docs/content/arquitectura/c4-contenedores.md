@@ -9,18 +9,21 @@ El segundo nivel del modelo C4: las piezas desplegables que forman Lead Router, 
 |---|---|---|---|---|
 | `frontend` | Nginx sirviendo el build estático de React (Vite) | 80:80 | HTTP | Interfaz web; también hace de proxy inverso de `/api/v1/` hacia `gateway` |
 | `gateway` | Nginx (`nginx:1.27-alpine`) | 8001:8080 | HTTP con JSON | Única entrada de la API: enruta, autentica con el *phantom token* (introspección + JWT interno), CORS, `Origin`, `X-Request-Id` y límites. Ver [Gateway y autenticación](../microservices/03-gateway-y-autenticacion.md) |
-| `backend` | FastAPI + Uvicorn sobre Python 3.12 | — (sólo red interna, `8000`) | HTTP con JSON | La API completa: autenticación, reglas, ingesta, asignación, notificaciones; sirve también la introspección y la JWKS internas. Sólo **escribe** en el outbox: no entrega nada |
-| `backend-worker` | La imagen del `backend`, ejecutando `python -m infrastructure.worker` | — | SQL; Kafka; AMQP; HTTP (webhooks) | La entrega: un relay del outbox por canal (`product`, `internal`, `job`) y los consumidores de notificaciones (`notifications.lead-events`, `notifications.intake-events`). Crea los topics `internal.*` al arrancar |
+| `backend` | FastAPI + Uvicorn sobre Python 3.12 | — (sólo red interna, `8000`) | HTTP con JSON | La API, salvo las notificaciones: autenticación, reglas, ingesta, asignación; sirve también la introspección y la JWKS internas. Sólo **escribe** en el outbox: no entrega nada |
+| `backend-worker` | La imagen del `backend`, ejecutando `python -m infrastructure.worker` | — | SQL; Kafka; AMQP; HTTP (webhooks) | La entrega: un relay del outbox por canal (`product`, `internal`, `job`). Ya no consume ningún topic. Crea los topics `internal.*` de hechos y de estado al arrancar |
+| `notifications` | FastAPI + Uvicorn sobre Python 3.12, imagen de `services/notifications` | — (sólo red interna, `8000`) | HTTP con JSON; SQL | La bandeja: `GET /notifications`, `POST /notifications/read-all` y `POST /notifications/{id}/read`. Verifica el JWT interno con la JWKS del backend y aplica sus migraciones al arrancar. Base propia, `notifications_db` |
+| `notifications-worker` | La imagen de `notifications`, ejecutando `python -m infrastructure.worker` | — | Kafka; SQL | Los tres consumidores (`notifications.lead-events`, `notifications.intake-events`, `notifications.members`) y sus DLQ `internal.dlq.<grupo>` |
+| `db-bootstrap` | `postgres:16-alpine` | — | SQL | Una sola ejecución: crea el rol y las bases de `notifications` (`db/bootstrap.sql`) |
 | `intake-worker` | La imagen del `backend`, ejecutando `python -m infrastructure.intake_worker` | — | AMQP; SQL | Consume `intake.jobs` y ejecuta el procesamiento de cada trabajo de ingesta |
 | `kafka` | Apache Kafka (KRaft, un nodo) | 9094 | Kafka con SASL (el host); 9092 sin autenticación dentro de la red | El canal del producto `leads.{tenant_id}` y los topics internos `internal.*` |
 | `rabbitmq` | RabbitMQ con el plugin de administración | 5672 · 15672 | AMQP | La cola `intake.jobs` y su cola muerta |
-| `db` | PostgreSQL 16 (`postgres:16-alpine`) | 5433:5432 | Protocolo de PostgreSQL, vía `psycopg` | Único almacén de estado del sistema |
+| `db` | PostgreSQL 16 (`postgres:16-alpine`) | 5433:5432 | Protocolo de PostgreSQL, vía `psycopg` | Un único servidor con una base por servicio: `leads_db` (backend) y `notifications_db` |
 | `docs` | MkDocs Material | 8002:8000 | HTTP | Este sitio, servido desde `docs/content` |
 
 `kafka-ui` (consola de Kafka, 8004) es una herramienta de operación, no parte del producto. Otro
-servicio, `backend-test`, existe sólo bajo el perfil `test`: construye la misma imagen
-con destino `test` y ejecuta la suite contra una base de datos efímera. No es un contenedor de
-producto; ver [Validación](../desarrollo/validacion.md).
+servicio, `backend-test` (y `notifications-test` para el servicio de notificaciones), existe sólo bajo
+el perfil `test`: construye la misma imagen con destino `test` y ejecuta la suite contra una base de
+datos de pruebas. No es un contenedor de producto; ver [Validación](../desarrollo/validacion.md).
 
 ```mermaid
 flowchart TD
@@ -30,7 +33,9 @@ flowchart TD
         FRONTEND["frontend — Nginx + React"]
         GATEWAY["gateway — Nginx"]
         BACKEND["backend — FastAPI + Uvicorn"]
-        BW["backend-worker — relay + consumidores"]
+        BW["backend-worker — relays"]
+        NOTIF["notifications — FastAPI"]
+        NW["notifications-worker — consumidores"]
         IW["intake-worker"]
         DB[("db — PostgreSQL 16")]
         KAFKA["kafka"]
@@ -42,10 +47,14 @@ flowchart TD
     FRONTEND -->|"proxy /api/v1/, puerto 8080"| GATEWAY
     BROWSER -->|"HTTP, puerto 8001"| GATEWAY
     GATEWAY -->|"auth_request + proxy, puerto 8000"| BACKEND
+    GATEWAY -->|"/notifications, puerto 8000"| NOTIF
+    NOTIF -.->|"JWKS"| BACKEND
     BACKEND -->|"SQL vía psycopg, puerto 5432"| DB
-    BW -->|"lee el outbox, escribe notificaciones"| DB
+    NOTIF -->|"notifications_db"| DB
+    NW -->|"notifications_db"| DB
+    BW -->|"lee el outbox"| DB
     BW -->|"product e internal"| KAFKA
-    KAFKA -->|"internal.*"| BW
+    KAFKA -->|"internal.*"| NW
     BW -->|"job, con confirmación"| RMQ
     RMQ --> IW
     IW -->|SQL| DB
@@ -63,7 +72,8 @@ a que se recree.
 La API no espera a `kafka` ni a `rabbitmq` ([ADR-0026](../decisiones/0026-kafka-como-canal-del-producto.md),
 [ADR-0027](../decisiones/0027-cola-para-el-trabajo-de-fondo.md)): sólo escribe en el outbox, y la
 entrega es de `backend-worker`, que espera a `db` pero no a Kafka (reintenta sus topics y sigue
-entregando el resto de canales). `intake-worker` sí espera a que `rabbitmq` esté saludable: sin
+entregando el resto de canales). `notifications` espera a `db` y a que `db-bootstrap` haya terminado;
+`notifications-worker` espera a `notifications` (que aplica las migraciones) y no a Kafka. `intake-worker` sí espera a que `rabbitmq` esté saludable: sin
 bróker no tiene nada que hacer. Separar la entrega de la API significa que un bróker lento o un
 webhook que agota su plazo no consumen capacidad de petición, y que reiniciar la API no interrumpe la
 entrega.
@@ -73,11 +83,12 @@ leerse incluso cuando el producto no arranca, que es precisamente cuando más se
 
 ## Volúmenes y recarga
 
-`backend` y `docs` montan su código fuente como volumen de sólo lectura (`./backend/src`,
-`./backend/migrations`, `./docs/content`) en vez de copiarlo en la imagen. Un cambio en un
+`backend`, `notifications` y `docs` montan su código fuente como volumen de sólo lectura
+(`./backend/src`, `./backend/migrations`, `./services/notifications/src`,
+`./services/notifications/migrations`, `./docs/content`) en vez de copiarlo en la imagen. Un cambio en un
 fichero se sirve sin `--build` ni `restart`: Uvicorn recarga con `--reload`, MkDocs sirve en
-caliente, y `backend-worker` e `intake-worker` se reinician solos con `watchfiles` al cambiar
-`backend/src` o `libs/chassis/src`. Sólo `pgdata`, el volumen de `db`, persiste datos entre arranques; los demás contenedores
+caliente, y `backend-worker`, `notifications-worker` e `intake-worker` se reinician solos con
+`watchfiles` al cambiar su `src` o `libs/chassis/src`. Sólo `pgdata`, el volumen de `db`, persiste datos entre arranques; los demás contenedores
 son efímeros por diseño.
 
 ## Ver también

@@ -64,11 +64,29 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
 - **Creación explícita.** El *auto-create* actual (ADR-0026) crea los topics con la configuración por
   defecto, que no compacta. Los `internal.*` los declara el worker productor al arrancar con
   `chassis.consumer.ensure_topics()`: idempotente, con `cleanup.policy`, retención y tres
-  particiones. Es el mismo patrón que `declare_intake_topology` sigue con RabbitMQ.
+  particiones. Es el mismo patrón que `declare_intake_topology` sigue con RabbitMQ. Si un topic ya
+  existe con otras particiones o configuración, `ensure_topics` no lo toca y registra un `WARNING`:
+  cambiarlas con consumidores vivos es una decisión del operador.
+- **Las DLQ las declara el consumidor.** `internal.dlq.<grupo>` (1 partición, `cleanup.policy=delete`,
+  7 días) la crea el servicio dueño del grupo, con `ensure_topics_until_ready()`, que reintenta con
+  *backoff* hasta que el broker responde y sólo entonces deja arrancar los carriles. Desde F2 las de
+  los tres grupos de notifications son suyas; el backend ya no declara ninguna.
+- **Cliente.** `chassis.kafka_config` fija los ajustes de productor y consumidor de todos los
+  servicios; entre ellos, `topic.metadata.refresh.interval.ms=10000`, para que un grupo suscrito
+  antes de que el productor cree su topic lo vea en segundos y no a los 5 minutos por defecto.
 - **Aislamiento.** Las ACL de tenant son `LITERAL` sobre `leads.{tenant_id}`; un tenant no puede leer
   `internal.*`. El prefijo distinto permite, cuando se endurezca, dar ACL `PREFIXED` por servicio.
 - **Grupos.** Llevan el prefijo del servicio (`notifications.`, `lead-core.`, `intake.`). No chocan con
-  el prefijo de grupo de los tenants, que es su nombre de usuario SCRAM.
+  el prefijo de grupo de los tenants, que es su nombre de usuario SCRAM. Un grupo lo consume **un
+  solo** proceso: si otro se uniera, Kafka repartiría las particiones entre ambos.
+
+| Grupo | Topic | Consume | Estado |
+|---|---|---|---|
+| `notifications.lead-events` | `internal.lead-core.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
+| `notifications.intake-events` | `internal.intake.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
+| `notifications.members` | `internal.identity.agents` | `notifications-worker` | F2 (nuevo; mantiene `members`) |
+| `lead-core.advisors` | `internal.identity.agents` | lead-core | F3 |
+| `intake.tenants` | `internal.identity.tenants` | intake (en el monolito hasta F4) | F3 |
 
 ### Sobre de los eventos internos
 
@@ -121,8 +139,15 @@ flowchart TD
 
 - `enable.auto.commit=false` y `auto.offset.reset=earliest`: el offset se confirma después del commit
   en base. Si el proceso cae entre ambos, el mensaje se reentrega y la deduplicación lo descarta.
-- Las proyecciones de estado aplican además un *upsert* condicionado por `version`: un mensaje viejo
-  nunca pisa un estado más nuevo, aunque llegue después.
+- Las proyecciones de estado aplican además un *upsert* condicionado por `version`, **en SQL**: un
+  mensaje viejo nunca pisa un estado más nuevo, aunque llegue después o lo escriba un segundo
+  consumidor a la vez. Por eso el de `members` no usa `processed_events`.
+- Un mensaje que agota los intentos bloquea su partición hasta que está en la DLQ; el bucle libera
+  las particiones bloqueadas al perderlas o cederlas en un *rebalance*, y al parar cierra el
+  consumidor y vacía el productor de la DLQ.
+- Cada grupo corre en un **carril** (`run_consumer_lane`): si su cliente de Kafka falla, se construye
+  otro tras una espera de 1 s que se duplica hasta 30 s. Un carril no arranca hasta que los topics
+  existen, para no unirse a uno que Kafka creó solo con la configuración por defecto.
 - `internal.dlq.<grupo>` se ve en kafka-ui, igual que `intake.jobs.dlq` en la consola de RabbitMQ. Un
   mensaje aparcado se reinyecta a mano tras corregir la causa.
 

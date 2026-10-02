@@ -51,7 +51,8 @@ flowchart LR
     BW -->|"internal"| KI["Kafka<br/>internal.*"]
     BW -->|"job"| RMQ["RabbitMQ<br/>intake.jobs"]
     K --> CRM["El CRM del cliente"]
-    KI --> BW
+    KI --> NW["notifications-worker"]
+    NW -->|"su base"| NDB[("notifications_db")]
     RMQ --> W["intake-worker"]
     W -->|misma transacción| DB
 ```
@@ -62,7 +63,8 @@ flowchart LR
    escribe: entrega `backend-worker`, con un relay por canal (`product`, `internal`, `job`).
 2. **[Kafka](kafka.md)** — el canal del producto, un topic por organización con retención, que es lo
    que el cliente compra y puede volver a leer; y los topics `internal.*`, con los hechos y el estado
-   que se mueven entre procesos de este sistema (hoy, las notificaciones).
+   que se mueven entre procesos de este sistema (hoy, las notificaciones, que consume el servicio
+   `notifications` desde su propio worker).
 3. **[RabbitMQ](rabbitmq.md)** — la cola del trabajo pesado y el proceso que lo ejecuta. Es lo que
    permite que procesar un fichero grande deje de morir con el contenedor de la API.
 

@@ -50,9 +50,11 @@ la fuerza bruta de login, y la carga legítima del frontend y de `verify-e2e.sh`
 Durante la migración, un prefijo cuyo servicio todavía no existe apunta a `lead-core` (el monolito).
 Mover una capacidad es añadir un `location` más específico con su `upstream`.
 
-!!! note "En F0"
-    Todos los prefijos apuntan a `backend`, que además sirve la introspección y la JWKS. El
-    contenedor `identity` no existe todavía.
+!!! note "Hasta F2"
+    Todos los prefijos apuntan a `backend`, que además sirve la introspección y la JWKS, salvo
+    `/api/v1/notifications` (y con barra final), que ya va a `notifications` (F2). El contenedor
+    `identity` no existe todavía. El prefijo se declara en las dos formas, exacta y con barra, como
+    `/agents`: un `location` de prefijo solo mandaría la ruta sin barra al monolito.
 
 ## *Phantom token*
 
@@ -120,9 +122,27 @@ agentes vacía, y un principal de máquina en esa ruta es `401` (`get_optional_h
 - **Firma Ed25519 (`EdDSA`).** Asimétrica: identity firma con la privada y los servicios sólo tienen
   la pública. Un servicio comprometido no puede fabricar identidades. Se verifica, no se descifra: el
   contenido no es secreto, su integridad sí.
-- **JWKS** en `GET /internal/v1/jwks`. `chassis.auth` la cachea y la vuelve a pedir si llega un `kid`
-  desconocido. Rotar es publicar la clave nueva junto a la anterior, firmar con la nueva y retirar la
-  vieja pasados 60 s.
+- **JWKS** en `GET /internal/v1/jwks`. `chassis.auth.JwksCache` la cachea así:
+    - **Camino rápido:** un `kid` conocido y fresco se resuelve sin tomar el *lock*.
+    - **Edad máxima de 60 s.** Pasada, el siguiente token vuelve a pedir el documento y **sustituye
+      el conjunto entero**: una clave que ya no se publica deja de valer. Así se aplica la retirada
+      al rotar.
+    - **`kid` desconocido:** se vuelve a pedir, como mucho una vez cada 10 s (`min_refresh`), para que una
+      avalancha de tokens con `kid` inventados no se convierta en una avalancha contra la JWKS.
+    - **Reintento en frío:** si todavía no hay claves cargadas (la JWKS no respondía al arrancar), reintenta a
+      1 s en vez de 10 s.
+    - **Si la petición falla,** conserva las claves ya conocidas y registra un `WARNING`: se prefiere
+      una clave caducada a una caída. **Límite conocido:** mientras la JWKS no responde, una clave
+      retirada sigue valiendo.
+    - **Sin claves utilizables** (frío y sin respuesta, o un `kid` desconocido tras un fallo)
+      lanza `KeysUnavailable`, subclase de `TokenError`. Cada servicio la contesta `503
+      SERVICE_UNAVAILABLE`, nunca `401`: es una caída nuestra, no un token malo.
+
+  Rotar es publicar la clave nueva junto a la anterior, firmar con la nueva y retirar la vieja pasados
+  60 s; los servicios la dejan de aceptar como mucho 60 s después de que se deje de publicar.
+- **`TokenVerifier`** (el mismo código en todos los servicios) fija `ISSUER` y `AUDIENCE` como
+  constantes, rechaza un `ptype` fuera de {`human`, `integration`} y un par `role`/`ptype` incoherente
+  (`INTEGRATION` si y sólo si `integration`).
 - **`SIGNING_KEYS`** es una lista `kid=<semilla>[,kid=<semilla>…]`, donde la semilla es la semilla
   Ed25519 de 32 bytes en base64url sin relleno (no PEM). La primera firma; todas se publican en la
   JWKS. El valor de desarrollo vive en `docker-compose.yml`.
@@ -136,12 +156,23 @@ agentes vacía, y un principal de máquina en esa ruta es `401` (`get_optional_h
 `get_current_agent` desaparece de los servicios. `dependencies.py` queda así en todos:
 
 ```python
-def get_request_context(request: Request) -> RequestContext:
-    claims = verify_user_token(_bearer(request))          # chassis.auth: firma, iss, aud, exp
-    if claims.ptype != "human":
-        raise UnauthorizedException("Authentication required")
-    return build_request_context(Principal.from_claims(claims))
+def get_principal(request, container) -> Principal:
+    try:
+        claims = container.token_verifier.verify(_bearer_token(request))   # chassis.auth
+        return Principal(agent_id=UUID(claims.sub), tenant_id=..., role=claims.role, principal_type=claims.ptype)
+    except KeysUnavailable:                  # antes que TokenError: es su subclase
+        raise DomainException("Signing keys unavailable", error_code="SERVICE_UNAVAILABLE")
+    except (TokenError, ValueError):
+        raise UnauthorizedException()
+
+def get_request_context(principal = Depends(get_principal)) -> RequestContext:
+    if principal.principal_type == "integration":
+        raise UnauthorizedException()
+    return RequestContext(principal=principal, tenant_id=principal.tenant_id)
 ```
+
+El `Principal` es de cada servicio (en `application/dtos/context.py`); `chassis` entrega las
+`Claims` ya verificadas y no lo construye.
 
 Las guardas `require_platform_admin`, `require_organization_manager` y `require_organization_member`
 no cambian: siguen componiéndose sobre `get_request_context`.
@@ -161,6 +192,7 @@ código ya usa; el gateway no conoce ninguna regla de negocio.
 | Introspección `401` | `401 {"error": true, "error_code": "UNAUTHORIZED", "message": "Authentication required"}` |
 | Identity no responde (`proxy_connect_timeout 1s`, `proxy_read_timeout 2s`) | `503 {"error": true, "error_code": "SERVICE_UNAVAILABLE", "message": "Service unavailable"}` |
 | Servicio destino no responde | `503` con el mismo sobre |
+| Un servicio no puede obtener las claves de la JWKS | El servicio responde `503 SERVICE_UNAVAILABLE`; el gateway lo reenvía tal cual |
 | Escritura con `Origin` no permitido | `403 FORBIDDEN`, «Origen no permitido», antes de introspeccionar |
 | Ruta fuera de las publicadas | `404 NOT_FOUND` |
 | Cuerpo mayor de 10 MB | `413 PAYLOAD_TOO_LARGE` |
@@ -178,8 +210,8 @@ El esquema de seguridad `X-Api-Key` ya no aparece en OpenAPI, porque la valida e
 
 ### Esqueleto de la configuración
 
-Extracto de `gateway/nginx.conf`; `proxy_headers.conf` e `introspect.conf` son los `include` que
-comparten todos los `location`.
+Extracto de `gateway/nginx.conf`. Los `include` de abajo viven en el mismo directorio y comparten
+todos los `location`; ver [Includes compartidos](#includes-compartidos).
 
 ```nginx
 # Docker's embedded DNS: a recreated container (new IP) is picked up without a restart.
@@ -194,15 +226,16 @@ upstream backend {
 location = /_introspect {
     internal;
     proxy_pass http://backend/internal/v1/auth/introspect;
-    include    /etc/nginx/introspect.conf;   # no body; Cookie, X-Api-Key, X-Request-Id; 1 s / 2 s
+    include    /etc/nginx/conf.d/introspect.inc;   # no body; Cookie, X-Api-Key, X-Request-Id; 1 s / 2 s
 }
 
+# Extracted service: both forms, or the bare path would fall through to the monolith.
+location = /api/v1/notifications  { include /etc/nginx/conf.d/protected.inc; proxy_pass http://notifications; }
+location   /api/v1/notifications/ { include /etc/nginx/conf.d/protected.inc; proxy_pass http://notifications; }
+
 location /api/v1/ {
-    auth_request     /_introspect;
-    auth_request_set $internal_token $upstream_http_x_internal_token;
-    include          /etc/nginx/proxy_headers.conf;   # overwrites Authorization, drops X-Api-Key
-    proxy_set_header Cookie "";
-    proxy_pass       http://backend;
+    include    /etc/nginx/conf.d/protected.inc;   # auth_request + proxy_headers.inc + no Cookie
+    proxy_pass http://backend;
 }
 
 location /internal/ { return 404 '{"error":true,"error_code":"NOT_FOUND","message":"Not Found"}'; }
@@ -214,7 +247,7 @@ error_page 500 502 503 504 = @unavailable;
 `resolve` en un `upstream` exige nginx 1.27.3 o posterior. Con él, el gateway arranca sin que sus
 servicios existan y sobrevive a que uno se recree, por lo que **no declara `depends_on`**. Un
 `proxy_pass` con nombre estático falla al arrancar si el nombre no resuelve. Cada `location` incluye
-`proxy_headers.conf` en vez de repetir las cabeceras: nginx descarta los `proxy_set_header` del
+`proxy_headers.inc` (directa o a través de `protected.inc`) en vez de repetir las cabeceras: nginx descarta los `proxy_set_header` del
 nivel `server` en cuanto un `location` declara uno propio, y lo mismo pasa con `add_header`, que por
 eso se queda a nivel `server`.
 
@@ -224,9 +257,23 @@ un 401 o un 500 que devuelva un servicio llega al cliente tal cual, con su sobre
 `keepalive` en los `upstream` con `proxy_http_version 1.1` y `Connection ""` es obligatorio: sin eso
 cada introspección y cada petición abren una conexión TCP nueva.
 
+### Includes compartidos
+
+| Fichero | Contenido |
+|---|---|
+| `proxy_headers.inc` | Cabeceras de todo `location` proxificado: `X-Request-Id`, `Host`, `X-Forwarded-*`; vacía `X-Api-Key`; sobrescribe `Authorization` con el token interno (vacío si no hubo introspección) |
+| `introspect.inc` | Lo que usan los dos `location` de introspección: sin cuerpo, `Cookie`, `X-Api-Key` y `X-Request-Id`, con los *timeouts* de 1 s y 2 s |
+| `protected.inc` | `auth_request /_introspect`, captura el token, incluye `proxy_headers.inc` y quita `Cookie` |
+| `protected_optional.inc` | Igual, contra `/_introspect_optional`: sin credencial pasa como anónimo; una presente debe ser válida |
+
+Un `location` nuevo de `/api/v1/` toma sus líneas de autenticación de `protected.inc`, y por eso no
+puede olvidarlas. `verify_ms_f0` lo comprueba de forma estática sobre `nginx -T`: todo `location`
+bajo `/api/v1/`, salvo `/api/v1/auth/`, incluye `protected.inc` o `protected_optional.inc`.
+
 ### Operación
 
-Los tres ficheros de `gateway/` están montados como volumen. Tras editarlos:
+`gateway/` está montado como directorio en `/etc/nginx/conf.d`: tanto `nginx.conf` como los `*.inc`
+se ven al editarlos. Tras editarlos:
 
 ```bash
 docker compose exec gateway nginx -s reload

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — se implementa en las fases F0–F5 del [plan de desacople](../microservices/06-plan-de-desacople.md) |
+| **Estado** | Aceptada — primer servicio extraído: `notifications` (F2). El resto, en F3–F5 del [plan de desacople](../microservices/06-plan-de-desacople.md) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Arquitectura · Backend · Infraestructura |
 
