@@ -59,10 +59,13 @@ def configure_logging(level: str | None = None) -> None:
     for handler in logging.getLogger().handlers:
         handler.addFilter(RequestIdLogFilter())
     # uvicorn's own handlers know nothing of the request id; through the root
-    # handler its access lines carry it, which is what proves the id crossed a hop.
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    # handler its lines carry it, which is what proves the id crossed a hop.
+    # uvicorn.error has no handler of its own: it reaches the root through uvicorn.
+    for name in ("uvicorn", "uvicorn.access"):
         server_logger = logging.getLogger(name)
-        server_logger.handlers.clear()
-        server_logger.propagate = True
+        # `--no-access-log` is uvicorn leaving the logger without handlers: keep it off.
+        if server_logger.handlers:
+            server_logger.handlers.clear()
+            server_logger.propagate = True
     # Every JWKS refresh would otherwise log an INFO line.
     logging.getLogger("httpx").setLevel(logging.WARNING)

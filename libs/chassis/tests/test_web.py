@@ -100,16 +100,35 @@ def test_log_filter_injects_current_id():
     assert record.request_id == "rid-1"
 
 
+def _uvicorn_as_configured(access_log=True):
+    # What uvicorn's LOGGING_CONFIG leaves behind, and what `--no-access-log` changes.
+    for name in ("uvicorn", "uvicorn.access"):
+        logging.getLogger(name).handlers = [logging.StreamHandler()]
+        logging.getLogger(name).propagate = False
+    logging.getLogger("uvicorn.error").propagate = True
+    if not access_log:
+        logging.getLogger("uvicorn.access").handlers = []
+
+
 def test_configure_logging_routes_uvicorn_through_the_root_handler_and_quiets_httpx():
     from chassis.web import configure_logging
 
-    access = logging.getLogger("uvicorn.access")
-    access.addHandler(logging.StreamHandler())
-    access.propagate = False
+    _uvicorn_as_configured()
     configure_logging("INFO")
 
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         assert logging.getLogger(name).handlers == [] and logging.getLogger(name).propagate
+    assert logging.getLogger("uvicorn.access").hasHandlers()
     assert logging.getLogger("httpx").level == logging.WARNING
     root_filters = [f for h in logging.getLogger().handlers for f in h.filters]
     assert any(isinstance(f, RequestIdLogFilter) for f in root_filters)
+
+
+def test_configure_logging_keeps_a_disabled_access_log_off():
+    from chassis.web import configure_logging
+
+    _uvicorn_as_configured(access_log=False)
+    configure_logging("INFO")
+
+    # uvicorn decides whether to write access lines with hasHandlers().
+    assert not logging.getLogger("uvicorn.access").hasHandlers()
