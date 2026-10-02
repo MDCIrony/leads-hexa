@@ -15,20 +15,20 @@ import logging
 import os
 import sqlite3
 import threading
-import urllib.error
 import urllib.parse
-import urllib.request
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from confluent_kafka import Consumer, KafkaException
+from confluent_kafka import Consumer, KafkaError, KafkaException
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from api_client import API_BASE, call_api, logout, new_session
 
 LOGGER = logging.getLogger("inbox")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -38,7 +38,6 @@ DB_PATH = Path(os.getenv("INBOX_DB", "/data/inbox.db"))
 # network needs one that resolves here. Both point at the same broker and the
 # same per-tenant ACLs decide what either may read.
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9095")
-API_BASE = os.getenv("LEADS_API_BASE", "http://backend:8000/api/v1")
 
 WORK_STATES = ["PENDIENTE", "CONTACTADO", "PROPUESTA", "GANADO", "PERDIDO"]
 
@@ -254,6 +253,7 @@ class KafkaListener:
         self._stop = threading.Event()
         self.state = "detenido"
         self.error: Optional[str] = None
+        self.note: Optional[str] = None
         self.consumed = 0
         self.last_message_at: Optional[str] = None
 
@@ -288,18 +288,32 @@ class KafkaListener:
             # this tenant only its own group prefix, and any other name is
             # refused with GROUP_AUTHORIZATION_FAILED.
             "group.id": f"{cred['kafka_username']}-{suffix}",
-            "auto.offset.reset": "earliest" if from_beginning else "latest",
+            # Earliest also on the first start: the publish that creates the tenant
+            # topic would otherwise land before the group has a position and be skipped.
+            # Later starts resume from the committed offset either way.
+            "auto.offset.reset": "earliest",
             "enable.auto.commit": True,
+            # The tenant topic only exists after the first publish; without this
+            # a listener started before that waits the 5-minute default to see it.
+            # Topic auto-creation stays off: that belongs to the producer's ACLs.
+            "topic.metadata.refresh.interval.ms": 10000,
         }
         consumer = Consumer(config)
         try:
             consumer.subscribe([cred["kafka_topic"]])
-            self.state, self.error = "escuchando", None
+            self.state, self.error, self.note = "escuchando", None, None
             while not self._stop.is_set():
                 message = consumer.poll(1.0)
                 if message is None:
                     continue
                 if message.error():
+                    if message.error().code() == KafkaError.UNKNOWN_TOPIC_OR_PART:
+                        # Not a fault: the topic is created by the first published lead.
+                        if self.state != "esperando":
+                            LOGGER.info("kafka: waiting for the first lead, the topic does not exist yet")
+                        self.state = "esperando"
+                        self.note = "esperando el primer lead: el topic se crea con la primera publicación"
+                        continue
                     self.error = str(message.error())
                     LOGGER.warning("kafka: %s", self.error)
                     continue
@@ -313,6 +327,7 @@ class KafkaListener:
                 if store_event(payload, event_type, "kafka") != "igual":
                     self.consumed += 1
                 self.last_message_at = now()
+                self.state, self.error, self.note = "escuchando", None, None
         except KafkaException as error:
             self.state, self.error = "error", str(error)
             LOGGER.exception("el consumidor se ha caído")
@@ -326,29 +341,6 @@ listener = KafkaListener()
 
 
 # ------------------------------------------------------------------- api ---
-
-def call_api(method: str, path: str, *, opener=None, api_key=None, form=None, timeout=20):
-    url = f"{API_BASE}{path}"
-    headers, data = {}, None
-    if api_key:
-        headers["X-Api-Key"] = api_key
-    if form is not None:
-        data = urllib.parse.urlencode(form).encode()
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    try:
-        with (opener or urllib.request.build_opener()).open(request, timeout=timeout) as response:
-            raw = response.read()
-            return response.status, (json.loads(raw) if raw else None)
-    except urllib.error.HTTPError as error:
-        raw = error.read()
-        try:
-            return error.code, json.loads(raw)
-        except ValueError:
-            return error.code, {"detail": raw.decode(errors="replace")}
-    except urllib.error.URLError as error:
-        raise HTTPException(502, f"no se alcanza {url}: {error.reason}")
-
 
 app = FastAPI(title="Bandeja de Nordwind Solar", docs_url="/api/docs")
 init_db()
@@ -372,9 +364,11 @@ def register(body: Registration):
 
     Log in as the manager who authorises the integration, ask for the credential
     and log out. Only the credential is stored, never the password or the cookie."""
-    session = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
+    session = new_session()
     try:
-        status, data = call_api("POST", "/auth/login", form={"username": body.email, "password": body.password}, opener=session)
+        status, data = call_api(
+            "POST", "/auth/login", form={"username": body.email, "password": body.password}, opener=session
+        )
         if data.get("status") == "MFA_REQUIRED":
             raise HTTPException(403, "la cuenta tiene MFA activo y este cliente no lo soporta")
         if status != 200 or data.get("status") != "AUTHENTICATED":
@@ -383,7 +377,7 @@ def register(body: Registration):
         if status != 201:
             raise HTTPException(status, f"el router no emitió la credencial: {credential_data}")
     finally:
-        call_api("POST", "/auth/logout", opener=session)
+        logout(session)
     put_setting("credential", json.dumps(credential_data))
     put_setting("registered_at", now())
     listener.start()
@@ -420,6 +414,7 @@ def status():
         "api_base": API_BASE,
         "listener": listener.state,
         "listener_error": listener.error,
+        "listener_note": listener.note,
         "consumed": listener.consumed,
         "last_message_at": listener.last_message_at,
         "total": total,

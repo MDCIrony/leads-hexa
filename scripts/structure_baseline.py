@@ -4,9 +4,9 @@ Read by scripts/verify-structure.sh. Shrink-only, like the backend baselines.
 Regenerate an entry with `cd libs/chassis && uv run python -m chassis.testing measure ../../<root>`."""
 
 TEST_CONSUMER = {
-    "app.py": 556,
+    "app.py": 551,
 }
 
 DEMO = {
-    "seed.py": 347,
+    "seed.py": 297,
 }

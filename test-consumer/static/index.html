@@ -150,6 +150,7 @@ async function refreshStatus() {
   $('#conn').innerHTML = s.registered
     ? `${dot(s.listener)} <span class="chip">${s.listener}</span>
        <span class="muted" style="margin-left:8px">${s.topic || ''}</span>
+       ${s.listener_note ? `<span class="muted" style="margin-left:8px">${esc(s.listener_note)}</span>` : ''}
        ${s.listener_error ? `<span class="err" style="margin-left:8px">${s.listener_error}</span>` : ''}`
     : '<span class="muted">sin registrar</span>';
 

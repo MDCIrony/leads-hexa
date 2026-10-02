@@ -8,7 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
+COPY app.py api_client.py ./
 COPY static/ ./static/
 
 # The inbox is a volume, not part of the image: what this office has written on
