@@ -2,7 +2,6 @@ export interface AgentModel {
   id: string;
   name: string;
   email: string;
-  groupId: string | null;
   isActive: boolean;
   role: string;
 }

@@ -10,7 +10,6 @@ describe('mapAgent', () => {
       id: agentsPageFixture.items[0].id,
       name: 'Fixture Agent',
       email: agentsPageFixture.items[0].email,
-      groupId: null,
       isActive: true,
       role: 'AGENT',
     });

@@ -12,7 +12,7 @@ const createdTenant = {
   ...tenantsPageFixture.items[0],
   id: 'new-tenant-id',
   name: 'Acme',
-  manager: { id: 'mgr-1', name: 'Ana', email: 'ana@acme.test', role: 'MANAGER', is_active: true, group_id: null },
+  manager: { id: 'mgr-1', name: 'Ana', email: 'ana@acme.test', role: 'MANAGER', is_active: true },
 };
 
 async function fillAndSubmit() {

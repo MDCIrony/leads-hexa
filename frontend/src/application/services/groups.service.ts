@@ -23,7 +23,7 @@ export async function update(id: string, body: GroupUpdate): Promise<Group> {
   return data;
 }
 
-// No `get`: the API has no GET /groups/{id} — detail comes from the list, members from agents.list({groupId}).
+// No `get`: the API has no GET /groups/{id} — detail comes from the list, members from lead-core's GET /advisors?group_id=.
 export async function remove(id: string): Promise<void> {
   await apiClient.delete(`/api/v1/groups/${id}`);
 }

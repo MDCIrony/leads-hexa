@@ -4,6 +4,7 @@ import { usePaginated } from '../../application/data/use-paginated';
 import { useSession } from '../../application/session/use-session';
 import { AsyncView } from '../components/ui/AsyncView';
 import { AgentSettings } from '../components/AgentSettings';
+import { AgentForm } from '../components/AgentForm';
 import { Button } from '../components/ui/Button';
 
 /**
@@ -41,6 +42,14 @@ export function AgentsPage() {
         </label>
       </div>
 
+      {/* Outside AsyncView: an organization with only its manager renders the empty state, which would take the form with it. */}
+      <AgentForm
+        onCreate={async (body) => {
+          await agentsService.create(body);
+          paginated.refetch();
+        }}
+      />
+
       <AsyncView
         state={{ data: others, error: paginated.error, loading: paginated.loading, refetch: paginated.refetch }}
         emptyText={showInactive ? 'No hay asesores desactivados.' : 'No hay asesores activos.'}
@@ -50,10 +59,6 @@ export function AgentsPage() {
           <div className="space-y-4">
             <AgentSettings
               agents={agents}
-              onCreate={async (body) => {
-                await agentsService.create(body);
-                paginated.refetch();
-              }}
               onUpdate={async (id, body) => {
                 await agentsService.update(id, body);
                 paginated.refetch();

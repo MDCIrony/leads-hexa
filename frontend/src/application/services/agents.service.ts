@@ -2,14 +2,14 @@ import { apiClient } from '../../infrastructure/api/api-client';
 import type { components } from '../../infrastructure/api/schema';
 import type { PaginatedEnvelope } from '../data/use-paginated';
 import type { AgentModel } from '../../domain/agent.model';
-import { mapAgent } from '../mappers/agent.mapper';
+import { mapAgent, type AgentResponse } from '../mappers/agent.mapper';
 
-type AgentResponse = components['schemas']['AgentResponse'];
-export type AgentCreate = components['schemas']['AgentCreate'];
-export type AgentUpdate = components['schemas']['AgentUpdate'];
+// Omit until schema.d.ts is regenerated from identity: a group_id here is a 422 (ADR-0036).
+export type AgentCreate = Omit<components['schemas']['AgentCreate'], 'group_id'>;
+export type AgentUpdate = Omit<components['schemas']['AgentUpdate'], 'group_id'>;
 
+/** No group filter: a group's members come from lead-core's GET /advisors?group_id= (ADR-0036). */
 export interface ListAgentsFilters {
-  groupId?: string;
   /** Omitted entirely: the API only returns active agents when `is_active` is absent. */
   isActive?: boolean;
 }
@@ -20,7 +20,7 @@ export async function list(
   filters: ListAgentsFilters = {}
 ): Promise<PaginatedEnvelope<AgentModel>> {
   const { data } = await apiClient.get<components['schemas']['PaginatedAgentsResponse']>('/api/v1/agents', {
-    params: { limit, offset, group_id: filters.groupId, is_active: filters.isActive },
+    params: { limit, offset, is_active: filters.isActive },
   });
   return { ...data, items: data.items.map(mapAgent) };
 }

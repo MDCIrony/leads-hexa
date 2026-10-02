@@ -4,7 +4,6 @@
       "id": "2b2985b9-8ad9-4fbe-981e-8ca9f2916898",
       "name": "Fixture Agent",
       "email": "agent-1789001696214@fixtures.test",
-      "group_id": null,
       "is_active": true,
       "role": "AGENT",
       "tenant_id": "b7e57ed3-c2a3-4b24-b0f4-a33ad97ae043"
@@ -13,7 +12,6 @@
       "id": "05891528-e388-4a1c-9f43-02bc52259f99",
       "name": "Fixture Manager",
       "email": "mgr-1789001696214@fixtures.test",
-      "group_id": null,
       "is_active": true,
       "role": "MANAGER",
       "tenant_id": "b7e57ed3-c2a3-4b24-b0f4-a33ad97ae043"

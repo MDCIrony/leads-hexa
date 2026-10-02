@@ -88,6 +88,14 @@ describe('AgentsPage', () => {
     expect(screen.queryByText(signedInManager.name)).not.toBeInTheDocument();
   });
 
+  it('still offers the signup form when the manager is the only member of the organization', async () => {
+    mockAgents({ 'GET /api/v1/agents': { data: { ...agentsPageFixture, items: [signedInManager], total: 1 } } });
+    renderWithProviders(<AgentsPage />, { role: 'MANAGER' });
+
+    expect(await screen.findByText('No hay asesores activos.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Guardar asesor' })).toBeInTheDocument();
+  });
+
   it('denies an AGENT session on this route', async () => {
     renderWithProviders(<AppRoutes />, { role: 'AGENT', route: '/asesores' });
     expect(await screen.findByText('No tienes acceso')).toBeInTheDocument();

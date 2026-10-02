@@ -29,6 +29,15 @@ describe('agents.list', () => {
     const params = getSpy.mock.calls[0][1]?.params as Record<string, unknown> | undefined;
     expect(params).toMatchObject({ is_active: false });
   });
+
+  it('never sends group_id: identity ignores it and answers the whole organization (ADR-0036)', async () => {
+    const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue(fakeResponse(agentsPageFixture));
+
+    await list(20, 0, { isActive: false });
+
+    const params = getSpy.mock.calls.at(-1)?.[1]?.params as Record<string, unknown> | undefined;
+    expect(params).not.toHaveProperty('group_id');
+  });
 });
 
 describe('agents.update', () => {
