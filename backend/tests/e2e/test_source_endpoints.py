@@ -1,10 +1,10 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 from infrastructure.main import app
 
 
-def _bootstrap_admin_headers(client: TestClient) -> dict:
+def _bootstrap_admin_headers(client: GatewayClient) -> dict:
     """A fresh platform ADMIN, used only to create organizations."""
     bootstrap_resp = client.post(
         "/api/v1/agents",
@@ -24,7 +24,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
     return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
-def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict:
+def _create_org_manager_headers(client: GatewayClient, admin_headers: dict) -> dict:
     """Bearer headers for the manager of a freshly created organization."""
     manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
     tenant_resp = client.post(
@@ -45,7 +45,7 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
     return {"Cookie": f"leads_session={manager_login.cookies['leads_session']}"}
 
 
-def _agent_headers(client: TestClient, manager_headers: dict) -> dict:
+def _agent_headers(client: GatewayClient, manager_headers: dict) -> dict:
     """Bearer headers for a plain AGENT inside the manager's organization."""
     email = f"agent_{uuid.uuid4().hex[:6]}@test.com"
     create_resp = client.post(
@@ -63,7 +63,7 @@ def _agent_headers(client: TestClient, manager_headers: dict) -> dict:
 
 
 def test_new_organization_lists_its_two_automatic_sources():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -74,7 +74,7 @@ def test_new_organization_lists_its_two_automatic_sources():
 
 
 def test_create_source_appears_in_listing():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -93,7 +93,7 @@ def test_create_source_appears_in_listing():
 
 
 def test_create_source_rejects_duplicate_name_in_same_organization():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         name = f"Campaign {uuid.uuid4().hex[:6]}"
@@ -115,7 +115,7 @@ def test_create_source_rejects_duplicate_name_in_same_organization():
 
 
 def test_same_source_name_allowed_in_different_organization():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_a_headers = _create_org_manager_headers(client, admin_headers)
         manager_b_headers = _create_org_manager_headers(client, admin_headers)
@@ -133,7 +133,7 @@ def test_same_source_name_allowed_in_different_organization():
 
 
 def test_patch_and_delete_of_another_organizations_source_return_404():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_a_headers = _create_org_manager_headers(client, admin_headers)
         manager_b_headers = _create_org_manager_headers(client, admin_headers)
@@ -154,7 +154,7 @@ def test_patch_and_delete_of_another_organizations_source_return_404():
 
 
 def test_patch_is_active_toggles_in_both_directions():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -179,7 +179,7 @@ def test_patch_is_active_toggles_in_both_directions():
 
 
 def test_delete_source_without_leads_returns_204():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -194,7 +194,7 @@ def test_delete_source_without_leads_returns_204():
 
 
 def test_delete_source_with_a_lead_returns_source_in_use_not_500():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -223,7 +223,7 @@ def test_delete_source_with_a_lead_returns_source_in_use_not_500():
 
 
 def test_agent_role_is_forbidden_from_all_four_endpoints():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         agent_headers = _agent_headers(client, manager_headers)

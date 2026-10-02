@@ -1,12 +1,12 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from infrastructure.main import app
 from _intake_helpers import ingest_and_resolve
 
 
-def _bootstrap_admin_headers(client: TestClient) -> dict:
+def _bootstrap_admin_headers(client: GatewayClient) -> dict:
     resp = client.post(
         "/api/v1/agents",
         json={
@@ -24,7 +24,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
     return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
-def _create_org(client: TestClient, admin_headers: dict, name: str) -> dict:
+def _create_org(client: GatewayClient, admin_headers: dict, name: str) -> dict:
     manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
     resp = client.post(
         "/api/v1/tenants",
@@ -55,7 +55,7 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
     tests/unit/domain/test_assignment_engine.py and again live over curl
     (see the phase report), since it needs overlapping bands that this
     scenario's literal 70-100 / 0-69 split does not have."""
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         # 1. Bootstrap: platform admin, one organization with its manager.
         admin_headers = _bootstrap_admin_headers(client)
         org = _create_org(client, admin_headers, f"Acme {uuid.uuid4().hex[:6]}")
@@ -231,7 +231,7 @@ def test_assignment_rule_with_unknown_or_foreign_group_is_a_404_not_a_500():
     500, and a group belonging to another tenant was silently accepted
     (foreign key happy, tenant boundary not). Both POST and PATCH must
     resolve the group scoped to the caller's own tenant."""
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         org = _create_org(client, admin_headers, f"Acme {uuid.uuid4().hex[:6]}")
         headers = org["manager_headers"]

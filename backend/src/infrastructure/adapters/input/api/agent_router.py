@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, status
 
 from application.dtos.commands import CreateAgentCommand, IssueIntegrationCredentialCommand, UpdateAgentCommand
-from application.dtos.context import RequestContext
+from application.dtos.context import Principal, RequestContext
 from application.dtos.queries import GetAgentsQuery, GetAgentQuery
 from application.ports.input.agent_use_case_ports import (
     CreateAgentInputPort, DeactivateAgentInputPort, GetAgentsInputPort, GetAgentInputPort,
@@ -17,7 +17,7 @@ from domain.value_objects.enums import AgentRole
 from infrastructure.adapters.input.api.dependencies import (
     get_container, get_create_agent_use_case, get_deactivate_agent_use_case, get_get_agents_use_case,
     get_get_agent_use_case, get_issue_integration_credential_use_case, get_update_agent_use_case,
-    build_request_context, get_optional_current_agent, get_uow, principal_from_agent,
+    build_request_context, get_optional_principal, get_uow,
     require_organization_manager,
 )
 from infrastructure.adapters.input.api.schemas import (
@@ -46,7 +46,7 @@ def create_agent(
     request: AgentCreate,
     use_case: CreateAgentInputPort = Depends(get_create_agent_use_case),
     uow: UnitOfWorkPort = Depends(get_uow),
-    current_agent: Optional[Agent] = Depends(get_optional_current_agent),
+    principal: Optional[Principal] = Depends(get_optional_principal),
 ):
     with uow:
         is_bootstrap = uow.agents.count() == 0
@@ -55,9 +55,8 @@ def create_agent(
         forced_role = AgentRole.ADMIN
         tenant_id = None
     else:
-        if current_agent is None:
+        if principal is None:
             raise UnauthorizedException("Authentication required to create an agent")
-        principal = principal_from_agent(current_agent)
         AuthorizationPolicy.ensure_can_create_agent_with_role(principal, request.role)
         # The organization is always the caller's own: there is no tenant_id
         # left in the request for a Manager to target another one with.

@@ -1,11 +1,11 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from infrastructure.main import app
 
 
-def _bootstrap_admin(client: TestClient) -> str:
+def _bootstrap_admin(client: GatewayClient) -> str:
     response = client.post(
         "/api/v1/agents",
         json={
@@ -25,7 +25,7 @@ def _bootstrap_admin(client: TestClient) -> str:
     return login.cookies["leads_session"]
 
 
-def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) -> dict:
+def _create_tenant(client: GatewayClient, admin_token: str, name: str, email: str) -> dict:
     response = client.post(
         "/api/v1/tenants",
         json={
@@ -38,14 +38,14 @@ def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) 
     return response.json()
 
 
-def _login(client: TestClient, email: str, password: str) -> str:
+def _login(client: GatewayClient, email: str, password: str) -> str:
     response = client.post("/api/v1/auth/login", data={"username": email, "password": password})
     assert response.status_code == 200, response.text
     return response.cookies["leads_session"]
 
 
 def test_platform_admin_creates_organizations_but_reaches_no_data():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         admin_headers = {"Cookie": f"leads_session={admin_token}"}
 
@@ -64,7 +64,7 @@ def test_platform_admin_creates_organizations_but_reaches_no_data():
 
 
 def test_manager_works_inside_its_organization_only():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
         _create_tenant(client, admin_token, "Other Corp", "bob@other.test")
@@ -83,7 +83,7 @@ def test_manager_works_inside_its_organization_only():
 
 
 def test_sales_agent_cannot_list_agents_but_knows_who_it_is():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
         ana = {"Cookie": f"leads_session={_login(client, 'ana@acme.test', 'manager-pass-123')}"}
@@ -119,7 +119,7 @@ def test_sales_agent_cannot_read_the_whole_organization_pipeline():
     would see its colleagues' leads. Its own view is GET /leads/mine.
     Asserted here so nobody relaxes the guard back to plain authentication,
     which is exactly how the platform Admin once slipped in."""
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
         ana = {"Cookie": f"leads_session={_login(client, 'ana@acme.test', 'manager-pass-123')}"}
@@ -143,7 +143,7 @@ def test_sales_agent_cannot_read_the_whole_organization_pipeline():
 
 
 def test_identity_of_the_platform_admin_has_no_organization():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         me = client.get("/api/v1/auth/me", headers={"Cookie": f"leads_session={admin_token}"})
         assert me.status_code == 200
@@ -153,7 +153,7 @@ def test_identity_of_the_platform_admin_has_no_organization():
 
 
 def test_deactivating_an_organization_locks_its_users_out():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         admin_headers = {"Cookie": f"leads_session={admin_token}"}
         created = _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")
@@ -176,7 +176,7 @@ def test_deactivating_an_organization_locks_its_users_out():
 
 
 def test_creating_a_tenant_with_a_taken_email_leaves_nothing_behind():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         admin_headers = {"Cookie": f"leads_session={admin_token}"}
         _create_tenant(client, admin_token, "Acme Corp", "ana@acme.test")

@@ -3,9 +3,7 @@ from pathlib import Path
 from typing import AsyncGenerator
 from confluent_kafka import Producer
 from chassis.web import RequestIdMiddleware
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI
 
 from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
@@ -88,29 +86,7 @@ def health_check():
     return {"status": "ok"}
 
 
-# Read at module level, not inside lifespan: CORSMiddleware must be
-# registered while the module is imported, before the app starts serving.
-_settings = Settings.from_environment()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-@app.middleware("http")
-async def reject_untrusted_browser_origins(request: Request, call_next):
-    """SameSite protects ordinary browser navigation; Origin closes CORS gaps for writes."""
-    origin = request.headers.get("origin")
-    if request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"} and origin and origin not in _settings.cors_origins:
-        return JSONResponse(status_code=403, content={"error": True, "error_code": "FORBIDDEN", "message": "Origen no permitido"})
-    return await call_next(request)
-
-# Added last, so it is the outermost layer: every response, including the ones
-# the other middlewares short-circuit, carries the request id.
+# Every response carries the request id, including the error ones.
 app.add_middleware(RequestIdMiddleware)
 
 # Include Routers

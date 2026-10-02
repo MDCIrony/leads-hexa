@@ -1,12 +1,12 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 from infrastructure.main import app
 from domain.value_objects.enums import AgentRole
 from auth_helpers import session_headers
 
 
-def _get_auth_headers(client: TestClient) -> dict:
+def _get_auth_headers(client: GatewayClient) -> dict:
     """Return bearer headers for a real, persisted ADMIN agent.
 
     `get_current_agent` looks the bearer id up in the database, so a token
@@ -44,7 +44,7 @@ def _get_auth_headers(client: TestClient) -> dict:
     return session_headers(admin_agent)
 
 
-def _manager_auth_headers(client: TestClient) -> dict:
+def _manager_auth_headers(client: GatewayClient) -> dict:
     """`list_agents` and `get_agent` are scoped to the caller's organization
     (§7.3), so exercising them now requires a real Manager created through
     the platform plane rather than the all-reaching Admin `_get_auth_headers`
@@ -86,7 +86,7 @@ def _manager_auth_headers(client: TestClient) -> dict:
 
 
 def test_get_agent_not_found_returns_domain_error_shape():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _manager_auth_headers(client)
         response = client.get(f"/api/v1/agents/{uuid.uuid4()}", headers=headers)
         assert response.status_code == 404
@@ -97,7 +97,7 @@ def test_get_agent_not_found_returns_domain_error_shape():
 
 
 def test_create_agent_rejects_malformed_email():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _get_auth_headers(client)
         response = client.post(
             "/api/v1/agents",
@@ -108,7 +108,7 @@ def test_create_agent_rejects_malformed_email():
 
 
 def test_list_agents_returns_pagination_metadata():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _manager_auth_headers(client)
         group_resp = client.post(
             "/api/v1/groups",
@@ -143,7 +143,7 @@ def test_list_agents_returns_pagination_metadata():
 
 
 def test_create_agent_rejects_duplicate_email_in_same_tenant():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _manager_auth_headers(client)
         email = f"dup_{uuid.uuid4().hex[:6]}@example.com"
         first = client.post(
@@ -163,7 +163,7 @@ def test_create_agent_rejects_duplicate_email_in_same_tenant():
         assert data["error_code"] == "EMAIL_ALREADY_EXISTS"
 
 
-def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict:
+def _create_org_manager_headers(client: GatewayClient, admin_headers: dict) -> dict:
     """Creates a second organization under an already-bootstrapped Admin.
 
     `_manager_auth_headers` bootstraps its own Admin, which only works once
@@ -190,7 +190,7 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
 
 
 def test_reactivating_an_agent_restores_login_and_default_listing():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _manager_auth_headers(client)
         email = f"reactivate_{uuid.uuid4().hex[:6]}@example.com"
         password = "password123"
@@ -236,7 +236,7 @@ def test_reactivating_an_agent_restores_login_and_default_listing():
 
 
 def test_patch_without_is_active_leaves_activation_state_untouched():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _manager_auth_headers(client)
         create_resp = client.post(
             "/api/v1/agents",
@@ -251,7 +251,7 @@ def test_patch_without_is_active_leaves_activation_state_untouched():
 
 
 def test_reactivate_agent_of_another_organization_returns_not_found():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _get_auth_headers(client)
         first_org_headers = _create_org_manager_headers(client, admin_headers)
         second_org_headers = _create_org_manager_headers(client, admin_headers)
@@ -271,7 +271,7 @@ def test_reactivate_agent_of_another_organization_returns_not_found():
 
 
 def test_agent_role_cannot_patch_another_agent():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _manager_auth_headers(client)
         create_resp = client.post(
             "/api/v1/agents",
@@ -296,7 +296,7 @@ def test_issuing_an_integration_credential_without_kafka_fails_atomically():
     compose environment, same hermetic reasoning as RabbitMQ in ADR-0027):
     this is exactly the case the suite can exercise without a real broker —
     that a failed provisioning never leaves an orphaned agent row behind."""
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _manager_auth_headers(client)
 
         response = client.post("/api/v1/agents/integration-credential", headers=headers)
@@ -308,7 +308,7 @@ def test_issuing_an_integration_credential_without_kafka_fails_atomically():
 
 
 def test_create_agent_rejects_duplicate_email_across_tenants():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _get_auth_headers(client)
         first_org_headers = _create_org_manager_headers(client, admin_headers)
         second_org_headers = _create_org_manager_headers(client, admin_headers)

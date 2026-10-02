@@ -1,11 +1,11 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 from infrastructure.main import app
 
 
 def test_full_auth_flow_bootstrap_login_and_role_enforcement():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         # 1. Bootstrap: first agent in a fresh app instance becomes Admin, no auth needed.
         admin_email = f"admin_{uuid.uuid4().hex[:6]}@test.com"
         bootstrap_resp = client.post(

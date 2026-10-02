@@ -1,11 +1,11 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from infrastructure.main import app
 
 
-def _bootstrap_admin_headers(client: TestClient) -> dict:
+def _bootstrap_admin_headers(client: GatewayClient) -> dict:
     """A fresh platform ADMIN, used only to create organizations."""
     bootstrap_resp = client.post(
         "/api/v1/agents",
@@ -25,7 +25,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
     return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
-def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict:
+def _create_org_manager_headers(client: GatewayClient, admin_headers: dict) -> dict:
     """Bearer headers for the manager of a freshly created organization."""
     manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
     tenant_resp = client.post(
@@ -46,7 +46,7 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
     return {"Cookie": f"leads_session={manager_login.cookies['leads_session']}"}
 
 
-def _agent_headers(client: TestClient, manager_headers: dict) -> dict:
+def _agent_headers(client: GatewayClient, manager_headers: dict) -> dict:
     """Bearer headers for a plain AGENT inside the manager's organization."""
     email = f"agent_{uuid.uuid4().hex[:6]}@test.com"
     create_resp = client.post(
@@ -72,7 +72,7 @@ def _budget_rule_payload(name: str = "Presupuesto alto") -> dict:
 
 
 def test_patch_with_only_is_active_keeps_name_and_conditions():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -95,7 +95,7 @@ def test_patch_with_only_is_active_keeps_name_and_conditions():
 
 
 def test_patch_of_another_organizations_rule_returns_404_not_403():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_a_headers = _create_org_manager_headers(client, admin_headers)
         manager_b_headers = _create_org_manager_headers(client, admin_headers)
@@ -116,7 +116,7 @@ def test_patch_of_another_organizations_rule_returns_404_not_403():
 
 
 def test_delete_removes_rule_from_listing():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -134,7 +134,7 @@ def test_delete_removes_rule_from_listing():
 
 
 def test_delete_of_another_organizations_rule_returns_404():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_a_headers = _create_org_manager_headers(client, admin_headers)
         manager_b_headers = _create_org_manager_headers(client, admin_headers)
@@ -151,7 +151,7 @@ def test_delete_of_another_organizations_rule_returns_404():
 
 
 def test_list_returns_the_paginated_envelope_and_has_more_with_a_tight_limit():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -178,7 +178,7 @@ def test_list_returns_the_paginated_envelope_and_has_more_with_a_tight_limit():
 
 
 def test_agent_role_is_forbidden_on_patch_delete_and_create():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         agent_headers = _agent_headers(client, manager_headers)

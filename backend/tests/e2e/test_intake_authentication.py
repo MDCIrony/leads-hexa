@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 from infrastructure.main import app
 from domain.value_objects.enums import AgentRole
 
@@ -42,7 +42,7 @@ def _agent_auth_headers(tenant_id: str) -> dict:
 def test_ingest_without_credential_is_rejected():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         response = client.post("/api/v1/intake/leads/ingest", json=_PAYLOAD)
         assert response.status_code == 401
@@ -51,7 +51,7 @@ def test_ingest_without_credential_is_rejected():
 def test_ingest_with_agent_token_is_forbidden():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _agent_auth_headers(tenant_id)
         response = client.post("/api/v1/intake/leads/ingest", json=_PAYLOAD, headers=headers)
@@ -61,7 +61,7 @@ def test_ingest_with_agent_token_is_forbidden():
 def test_ingest_with_manager_token_lands_in_their_own_organization():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         record = ingest_and_resolve(client, headers, _PAYLOAD)
@@ -76,7 +76,7 @@ def test_ingest_ignores_a_tenant_id_in_the_body_and_uses_the_token_instead():
     tenant_a = str(uuid.uuid4())
     tenant_b = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_a)
         _seed_tenant_with_sources(tenant_b)
         headers_a = _manager_auth_headers(tenant_a)
@@ -98,7 +98,7 @@ def test_ingest_with_a_malformed_email_is_accepted_and_rejected_in_the_tray():
     tray instead of losing it."""
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         record = ingest_and_resolve(client, headers, {**_PAYLOAD, "email": "not-an-email"})

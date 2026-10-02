@@ -1,14 +1,14 @@
 import uuid
 from typing import Tuple
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 from infrastructure.main import app
 
 from _intake_helpers import ingest_and_resolve
 from auth_helpers import session_headers
 
 
-def _bootstrap_admin_headers(client: TestClient) -> dict:
+def _bootstrap_admin_headers(client: GatewayClient) -> dict:
     """The agents table is empty at the start of every e2e test (see
     clean_tables), so the first unauthenticated POST always rides the
     bootstrap rule and becomes Admin."""
@@ -28,7 +28,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
     return session_headers(admin)
 
 
-def _create_tenant_and_manager_headers(client: TestClient, admin_headers: dict) -> Tuple[str, dict]:
+def _create_tenant_and_manager_headers(client: GatewayClient, admin_headers: dict) -> Tuple[str, dict]:
     """Rules and lead listing scope to the caller's own tenant (from the
     token), so driving a tenant's routing flow now requires a real
     organization created through the platform plane, with a Manager
@@ -64,7 +64,7 @@ def test_full_system_lead_routing_flow_e2e():
     4. Ingesta un Lead con budget 15000.
     5. Verifica que el lead resulte ASSIGNED con score 35 y asignado al agente.
     """
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         _, headers = _create_tenant_and_manager_headers(client, admin_headers)
 

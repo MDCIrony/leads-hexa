@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from infrastructure.main import app
 from test_lead_endpoints import _manager_auth_headers, _seed_tenant_with_sources
@@ -9,7 +9,7 @@ _REQUIRED_KEYS = {"error", "error_code", "message"}
 
 
 def test_validation_errors_use_the_common_envelope():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         response = client.post("/api/v1/auth/login", data={"username": "only-this"})
     assert response.status_code == 422
     body = response.json()
@@ -19,7 +19,7 @@ def test_validation_errors_use_the_common_envelope():
 
 
 def test_missing_credentials_use_the_common_envelope():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         response = client.get("/api/v1/agents")
     assert response.status_code == 401
     body = response.json()
@@ -28,15 +28,17 @@ def test_missing_credentials_use_the_common_envelope():
 
 
 def test_unknown_route_uses_the_common_envelope():
-    with TestClient(app) as client:
-        response = client.get("/api/v1/does-not-exist")
+    # Authenticated: the gateway answers 401 before the app could say 404.
+    with GatewayClient(app) as client:
+        headers = _manager_auth_headers(str(uuid.uuid4()))
+        response = client.get("/api/v1/does-not-exist", headers=headers)
     assert response.status_code == 404
     assert _REQUIRED_KEYS <= set(response.json())
 
 
 def test_negative_limit_is_a_validation_error_not_a_500():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -49,7 +51,7 @@ def test_negative_limit_is_a_validation_error_not_a_500():
 
 def test_negative_offset_is_a_validation_error_not_a_500():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -62,7 +64,7 @@ def test_negative_offset_is_a_validation_error_not_a_500():
 
 def test_limit_above_the_ceiling_is_a_validation_error():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -73,7 +75,7 @@ def test_limit_above_the_ceiling_is_a_validation_error():
 
 def test_valid_pagination_still_works():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 

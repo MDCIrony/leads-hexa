@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 from infrastructure.main import app
 from domain.value_objects.enums import AgentRole, LeadSourceKind
 
@@ -117,7 +117,7 @@ def test_ingest_lead_endpoint_success():
         "phone": "+525551234567"
     }
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         # The connection pool only exists inside the TestClient lifespan
         # (opened on FastAPI startup, closed on shutdown), so seeding must
         # happen after entering this block, not before it.
@@ -148,7 +148,7 @@ def test_ingest_lead_endpoint_invalid_email_is_accepted_and_rejected_in_the_tray
         "industry": "Technology"
     }
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         record = ingest_and_resolve(client, headers, payload)
@@ -165,7 +165,7 @@ def test_batch_upload_endpoint():
 
     files = {"file": ("leads.csv", csv_content, "text/csv")}
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
@@ -190,7 +190,7 @@ def test_batch_upload_reports_failed_rows_without_losing_the_valid_ones():
 
     files = {"file": ("leads.csv", csv_content, "text/csv")}
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         response = client.post("/api/v1/intake/leads/batch-upload", files=files, headers=headers)
@@ -233,7 +233,7 @@ def test_list_leads_by_tenant_endpoint():
         "industry": "Design"
     }
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         client.post("/api/v1/intake/leads/ingest", json=payload, headers=headers)
@@ -257,7 +257,7 @@ def test_list_leads_pagination_has_more_flag():
         "industry": "Design",
     }
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         for i in range(3):
@@ -296,7 +296,7 @@ def test_ingest_lead_endpoint_negative_budget_is_accepted_and_rejected_in_the_tr
         "industry": "Tech",
     }
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         record = ingest_and_resolve(client, headers, payload)
@@ -313,7 +313,7 @@ def test_list_leads_filters_by_status_and_total_reflects_the_filter():
     # The central assertion of the filters task: total/has_more must come
     # from the filtered count, not the tenant's whole pipeline.
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         agent_headers, agent_id = _agent_auth_headers(tenant_id)
@@ -350,7 +350,7 @@ def test_list_leads_filters_by_status_and_total_reflects_the_filter():
 
 def test_list_leads_invalid_status_returns_400():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -361,7 +361,7 @@ def test_list_leads_invalid_status_returns_400():
 
 def test_list_leads_search_finds_by_company_and_excludes_others():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -384,7 +384,7 @@ def test_list_leads_search_finds_by_company_and_excludes_others():
 
 def test_list_leads_filters_by_group_id_covers_every_agent_in_the_group():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         group_id = _create_group(tenant_id)
@@ -411,7 +411,7 @@ def test_list_leads_filters_by_group_id_covers_every_agent_in_the_group():
 
 def test_list_leads_combines_two_filters_with_and():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -438,7 +438,7 @@ def test_list_leads_combines_two_filters_with_and():
 
 def test_list_my_leads_filters_by_status_and_stays_scoped_to_the_caller():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         agent_headers, agent_id = _agent_auth_headers(tenant_id)
@@ -470,7 +470,7 @@ def test_list_my_leads_filters_by_status_and_stays_scoped_to_the_caller():
 def test_list_leads_filters_respect_tenant_isolation():
     tenant_a = str(uuid.uuid4())
     tenant_b = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_a)
         _seed_tenant_with_sources(tenant_b)
         headers_a = _manager_auth_headers(tenant_a)
@@ -491,7 +491,7 @@ def test_lead_stats_is_not_swallowed_by_the_parametric_lead_id_route():
     after /{lead_id}, this request would 422 as an invalid UUID instead of
     reaching the stats endpoint."""
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -503,7 +503,7 @@ def test_lead_stats_is_not_swallowed_by_the_parametric_lead_id_route():
 
 def test_lead_stats_returns_the_five_adr_keys_and_stays_internally_consistent():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
         group_id = _create_group(tenant_id)
@@ -537,7 +537,7 @@ def test_lead_stats_returns_the_five_adr_keys_and_stays_internally_consistent():
 def test_lead_stats_excludes_leads_from_other_organizations():
     tenant_a = str(uuid.uuid4())
     tenant_b = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_a)
         _seed_tenant_with_sources(tenant_b)
         headers_a = _manager_auth_headers(tenant_a)
@@ -556,7 +556,7 @@ def test_lead_stats_excludes_leads_from_other_organizations():
 
 def test_lead_stats_forbidden_for_agent_and_platform_admin():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         agent_headers, _ = _agent_auth_headers(tenant_id)
         admin_headers = _admin_auth_headers()
@@ -567,7 +567,7 @@ def test_lead_stats_forbidden_for_agent_and_platform_admin():
 
 def test_lead_stats_rejects_a_from_later_than_to():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 

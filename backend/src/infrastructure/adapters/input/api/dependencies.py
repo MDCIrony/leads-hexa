@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from uuid import UUID
 from fastapi import Request, Depends
-from fastapi.security import APIKeyHeader
+from chassis.auth import TokenError
 from application.dtos.context import Principal, RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.ports.output.job_queue_port import JobQueuePort
@@ -337,12 +337,6 @@ def get_mark_all_notifications_read_use_case(
     return MarkAllNotificationsReadUseCase(uow=uow)
 
 
-# Its own header, deliberately not a second scheme sniffed out of
-# Authorization: Bearer — that would make the two authentication paths
-# depend on parsing one shared header instead of staying visibly separate.
-_api_key_scheme = APIKeyHeader(name="X-Api-Key", auto_error=False)
-
-
 def resolve_current_agent(token: str, uow: UnitOfWorkPort) -> Agent:
     """Pure function so it can be tested without FastAPI's dependency machinery."""
     with uow:
@@ -364,19 +358,6 @@ def get_current_agent(
     return resolve_current_agent(token=token, uow=uow)
 
 
-def get_optional_current_agent(
-    request: Request,
-    uow: UnitOfWorkPort = Depends(get_uow),
-) -> Optional[Agent]:
-    token = request.cookies.get("leads_session")
-    if not token:
-        return None
-    try:
-        return resolve_current_agent(token=token, uow=uow)
-    except UnauthorizedException:
-        return None
-
-
 def principal_from_agent(agent: Agent) -> Principal:
     return Principal(
         id=agent.id.value,
@@ -392,8 +373,51 @@ def build_request_context(principal: Principal) -> RequestContext:
     return RequestContext(principal=principal, tenant_id=principal.tenant_id)
 
 
-def get_request_context(current_agent: Agent = Depends(get_current_agent)) -> RequestContext:
-    return build_request_context(principal_from_agent(current_agent))
+def _bearer_token(request: Request) -> Optional[str]:
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer":
+        raise UnauthorizedException("Authentication required")
+    return token.strip() or None
+
+
+def _principal_from_token(token: str, container: Container) -> Principal:
+    try:
+        claims = container.token_verifier.verify(token)
+        return Principal(
+            id=UUID(claims.sub),
+            tenant_id=UUID(claims.tid) if claims.tid else None,
+            role=AgentRole(claims.role),
+            principal_type=claims.ptype,
+        )
+    except (TokenError, ValueError) as error:
+        raise UnauthorizedException("Authentication required") from error
+
+
+def get_principal(request: Request, container: Container = Depends(get_container)) -> Principal:
+    """The bearer is the gateway's, never the client's: nginx overwrites it."""
+    token = _bearer_token(request)
+    if token is None:
+        raise UnauthorizedException("Authentication required")
+    return _principal_from_token(token, container)
+
+
+def get_optional_principal(
+    request: Request, container: Container = Depends(get_container)
+) -> Optional[Principal]:
+    """None only when no bearer arrives; a bearer that fails verification is 401."""
+    token = _bearer_token(request)
+    return None if token is None else _principal_from_token(token, container)
+
+
+def get_request_context(principal: Principal = Depends(get_principal)) -> RequestContext:
+    """Rejects ptype=integration: a machine credential reaches only the route
+    that composes require_manager_or_integration."""
+    if principal.principal_type == "integration":
+        raise UnauthorizedException("Authentication required")
+    return build_request_context(principal)
 
 
 def require_organization_manager(
@@ -446,29 +470,14 @@ def resolve_integration_agent(
     return agent
 
 
-def resolve_integration_context(
-    api_key: str, uow: UnitOfWorkPort, password_hasher: PasswordHasherPort
-) -> RequestContext:
-    return build_request_context(principal_from_agent(resolve_integration_agent(api_key, uow, password_hasher)))
-
-
-def require_manager_or_integration(
-    api_key: Optional[str] = Depends(_api_key_scheme),
-    current_agent: Optional[Agent] = Depends(get_optional_current_agent),
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> RequestContext:
+def require_manager_or_integration(principal: Principal = Depends(get_principal)) -> RequestContext:
     """Composes the two authentication paths at exactly one route (GET
     /leads) instead of branching inside a shared handler — authorization by
     routing, the same shape require_organization_member vs.
     require_organization_manager already use."""
-    if api_key:
-        return resolve_integration_context(api_key, uow, container.password_hasher)
-    if current_agent is not None:
-        context = build_request_context(principal_from_agent(current_agent))
-        AuthorizationPolicy.ensure_can_manage_organization(context.principal)
-        return context
-    raise UnauthorizedException("Authentication required")
+    if principal.principal_type != "integration":
+        AuthorizationPolicy.ensure_can_manage_organization(principal)
+    return build_request_context(principal)
 
 
 def get_messaging_credential_provisioner(

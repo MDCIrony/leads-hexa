@@ -1,11 +1,11 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from infrastructure.main import app
 
 
-def _bootstrap_admin(client: TestClient) -> str:
+def _bootstrap_admin(client: GatewayClient) -> str:
     response = client.post(
         "/api/v1/agents",
         json={
@@ -25,7 +25,7 @@ def _bootstrap_admin(client: TestClient) -> str:
     return login.cookies["leads_session"]
 
 
-def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) -> dict:
+def _create_tenant(client: GatewayClient, admin_token: str, name: str, email: str) -> dict:
     response = client.post(
         "/api/v1/tenants",
         json={
@@ -38,13 +38,13 @@ def _create_tenant(client: TestClient, admin_token: str, name: str, email: str) 
     return response.json()
 
 
-def _login(client: TestClient, email: str, password: str) -> str:
+def _login(client: GatewayClient, email: str, password: str) -> str:
     response = client.post("/api/v1/auth/login", data={"username": email, "password": password})
     assert response.status_code == 200, response.text
     return response.cookies["leads_session"]
 
 
-def _manager_token(client: TestClient) -> str:
+def _manager_token(client: GatewayClient) -> str:
     admin_token = _bootstrap_admin(client)
     email = f"manager_{uuid.uuid4().hex[:6]}@acme.test"
     _create_tenant(client, admin_token, "Acme Corp", email)
@@ -53,7 +53,7 @@ def _manager_token(client: TestClient) -> str:
 
 def test_a_list_valued_rule_survives_the_round_trip(test_db):
     """The IN operator never fired because value was coerced to str."""
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         manager_token = _manager_token(client)
         created = client.post(
             "/api/v1/rules/scoring",
@@ -74,7 +74,7 @@ def test_a_list_valued_rule_survives_the_round_trip(test_db):
 
 
 def test_a_numeric_rule_keeps_its_number(test_db):
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         manager_token = _manager_token(client)
         created = client.post(
             "/api/v1/rules/scoring",
@@ -90,7 +90,7 @@ def test_a_numeric_rule_keeps_its_number(test_db):
 
 
 def test_a_field_outside_the_allow_list_is_refused(test_db):
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         manager_token = _manager_token(client)
         refused = client.post(
             "/api/v1/rules/scoring",

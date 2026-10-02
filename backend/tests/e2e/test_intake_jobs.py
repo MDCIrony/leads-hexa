@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 from infrastructure.main import app
 
 from _intake_helpers import ingest_and_resolve
@@ -19,7 +19,7 @@ _VALID_PAYLOAD = {
 def test_ingest_a_lead_and_query_its_job():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -39,7 +39,7 @@ def test_ingest_a_lead_and_query_its_job():
 def test_list_jobs_filtered_by_status():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -62,7 +62,7 @@ def test_list_jobs_filtered_by_status():
 def test_list_jobs_with_unknown_status_is_a_domain_error_not_a_500():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -75,7 +75,7 @@ def test_get_job_from_another_organization_is_404():
     tenant_a = str(uuid.uuid4())
     tenant_b = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_a)
         _seed_tenant_with_sources(tenant_b)
         headers_a = _manager_auth_headers(tenant_a)
@@ -93,7 +93,7 @@ def test_reprocess_job_from_another_organization_is_404():
     tenant_a = str(uuid.uuid4())
     tenant_b = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_a)
         _seed_tenant_with_sources(tenant_b)
         headers_a = _manager_auth_headers(tenant_a)
@@ -110,7 +110,7 @@ def test_reprocess_job_from_another_organization_is_404():
 def test_reprocess_an_already_completed_job_is_refused():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -125,7 +125,7 @@ def test_reprocess_an_already_completed_job_is_refused():
 def test_agent_role_is_forbidden_from_all_three_job_endpoints():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         manager_headers = _manager_auth_headers(tenant_id)
         agent_headers = _agent_auth_headers(tenant_id)
@@ -152,7 +152,7 @@ def test_reprocessing_a_stalled_job_resolves_its_pending_records_without_duplica
     """
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 

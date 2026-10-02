@@ -2,7 +2,7 @@ import uuid
 from hashlib import sha256
 
 import pyotp
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from domain.entities.agent import Agent
 from domain.value_objects.enums import AgentRole
@@ -29,7 +29,7 @@ def _login(client, agent):
 
 
 def test_mfa_enrollment_login_and_cookie_contract():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _agent(client)
         initial = _login(client, agent)
         initial_session = initial.cookies["leads_session"]
@@ -69,7 +69,7 @@ def test_mfa_enrollment_login_and_cookie_contract():
 
 
 def test_mfa_factor_failure_is_generic_and_fifth_attempt_exhausts_challenge():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _agent(client)
         _login(client, agent)
         secret = client.post("/api/v1/auth/mfa/setup", json={"password": _PASSWORD}).json()["secret"]

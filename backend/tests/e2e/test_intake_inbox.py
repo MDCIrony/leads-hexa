@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 from infrastructure.main import app
 
 from test_intake_authentication import _agent_auth_headers
@@ -22,7 +22,7 @@ def test_rejected_payload_can_be_corrected_and_promoted_through_the_inbox():
     retry reuses the same row, and a second promotion attempt is refused."""
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -76,7 +76,7 @@ def test_rejected_payload_can_be_corrected_and_promoted_through_the_inbox():
 def test_promote_with_a_still_invalid_payload_stays_rejected_with_new_errors():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -100,7 +100,7 @@ def test_promote_with_a_still_invalid_payload_stays_rejected_with_new_errors():
 def test_discard_a_rejected_record():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -117,7 +117,7 @@ def test_discard_a_rejected_record():
 def test_discard_an_already_promoted_record_fails():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -137,7 +137,7 @@ def test_mixed_batch_upload_leaves_one_promoted_and_one_rejected_in_the_inbox():
     ).encode("utf-8")
     files = {"file": ("leads.csv", csv_content, "text/csv")}
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -159,7 +159,7 @@ def test_batch_upload_with_an_unreadable_file_fails_the_job_without_a_500():
     tenant_id = str(uuid.uuid4())
     files = {"file": ("leads.xlsx", b"not a real spreadsheet", "application/octet-stream")}
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -183,7 +183,7 @@ def test_batch_upload_with_only_a_header_completes_with_zero_items():
     csv_content = "first_name,last_name,email,company,budget,industry\n".encode("utf-8")
     files = {"file": ("leads.csv", csv_content, "text/csv")}
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -207,7 +207,7 @@ def test_cross_organization_access_to_intake_records_is_rejected():
     tenant_a = str(uuid.uuid4())
     tenant_b = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_a)
         _seed_tenant_with_sources(tenant_b)
         headers_a = _manager_auth_headers(tenant_a)
@@ -235,7 +235,7 @@ def test_cross_organization_access_to_intake_records_is_rejected():
 def test_agent_role_is_forbidden_from_all_three_inbox_endpoints():
     tenant_id = str(uuid.uuid4())
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         manager_headers = _manager_auth_headers(tenant_id)
         agent_headers = _agent_auth_headers(tenant_id)

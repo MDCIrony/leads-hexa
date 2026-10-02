@@ -20,7 +20,7 @@ entry is exactly how the fifth case gets back in.
 """
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from infrastructure.main import app
 from domain.value_objects.enums import AgentRole, AssignmentStrategy, LeadSourceKind, Operator
@@ -151,7 +151,7 @@ def assert_no_credentials_leaked(response) -> None:
 
 def test_lead_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -182,7 +182,7 @@ def test_lead_round_trip_and_schema_contract():
 
 def test_lead_assigned_agent_id_and_assigned_at_get_filled_when_assigned():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -210,7 +210,7 @@ def test_lead_assigned_agent_id_and_assigned_at_get_filled_when_assigned():
 
 def test_lead_discard_reason_gets_filled_when_discarded():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -228,7 +228,7 @@ def test_lead_discard_reason_gets_filled_when_discarded():
 
 def test_lead_disqualification_reason_gets_filled_when_a_rule_disqualifies_it():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -260,7 +260,7 @@ def test_lead_disqualification_reason_gets_filled_when_a_rule_disqualifies_it():
 
 def test_intake_record_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -291,7 +291,7 @@ def test_intake_record_round_trip_and_schema_contract():
 
 def test_intake_job_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -320,7 +320,7 @@ def test_intake_job_round_trip_and_schema_contract():
 
 def test_agent_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -363,7 +363,7 @@ def test_agent_round_trip_and_schema_contract():
 
 def test_group_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -394,7 +394,7 @@ def test_group_round_trip_and_schema_contract():
 
 def test_source_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -419,7 +419,7 @@ def test_source_round_trip_and_schema_contract():
 # --- Tenant ---
 
 def test_tenant_round_trip_and_schema_contract():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         headers = _admin_auth_headers()
 
         manager_email = f"manager_{uuid.uuid4().hex[:6]}@tenant-contract.test"
@@ -452,7 +452,7 @@ def test_tenant_round_trip_and_schema_contract():
 
 def test_assignment_rule_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -502,7 +502,7 @@ def test_assignment_rule_round_trip_and_schema_contract():
 
 def test_scoring_rule_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -534,7 +534,7 @@ def test_scoring_rule_round_trip_and_schema_contract():
 
 def test_disqualification_rule_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -564,7 +564,7 @@ def test_disqualification_rule_round_trip_and_schema_contract():
 
 def test_notification_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
@@ -603,7 +603,7 @@ def test_notification_round_trip_and_schema_contract():
 
 def test_lead_stats_schema_contract():
     tenant_id = str(uuid.uuid4())
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 

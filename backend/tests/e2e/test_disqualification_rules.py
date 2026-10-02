@@ -1,12 +1,12 @@
 import uuid
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from infrastructure.main import app
 from _intake_helpers import ingest_and_resolve
 
 
-def _bootstrap_admin_headers(client: TestClient) -> dict:
+def _bootstrap_admin_headers(client: GatewayClient) -> dict:
     """A fresh platform ADMIN, used only to create organizations."""
     bootstrap_resp = client.post(
         "/api/v1/agents",
@@ -26,7 +26,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
     return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
-def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict:
+def _create_org_manager_headers(client: GatewayClient, admin_headers: dict) -> dict:
     """Bearer headers for the manager of a freshly created organization."""
     manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
     tenant_resp = client.post(
@@ -47,7 +47,7 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
     return {"Cookie": f"leads_session={manager_login.cookies['leads_session']}"}
 
 
-def _agent_headers(client: TestClient, manager_headers: dict) -> dict:
+def _agent_headers(client: GatewayClient, manager_headers: dict) -> dict:
     """Bearer headers for a plain AGENT inside the manager's organization."""
     email = f"agent_{uuid.uuid4().hex[:6]}@test.com"
     create_resp = client.post(
@@ -76,7 +76,7 @@ def _no_contact_payload(name: str = "Sin forma de contactar") -> dict:
 
 
 def test_create_list_update_and_delete_cycle():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -110,7 +110,7 @@ def test_create_list_update_and_delete_cycle():
 
 
 def test_create_with_no_conditions_is_rejected():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -127,7 +127,7 @@ def test_create_with_no_conditions_is_rejected():
 def test_patch_and_delete_of_another_organizations_rule_return_404():
     # No single-rule GET exists (list is the only read), so only PATCH and
     # DELETE — the two endpoints that take a rule_id — can 404 on it.
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_a_headers = _create_org_manager_headers(client, admin_headers)
         manager_b_headers = _create_org_manager_headers(client, admin_headers)
@@ -154,7 +154,7 @@ def test_patch_and_delete_of_another_organizations_rule_return_404():
 
 
 def test_agent_role_is_forbidden_from_all_four_endpoints():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         agent_headers = _agent_headers(client, manager_headers)
@@ -179,7 +179,7 @@ def test_agent_role_is_forbidden_from_all_four_endpoints():
 
 def test_a_lead_with_neither_phone_nor_email_is_disqualified_by_name_with_no_score():
     """Acceptance criteria 1 and 2 of the phase, end to end over HTTP."""
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         rule_name = "Sin forma de contactar"

@@ -1,13 +1,13 @@
 import uuid
 from typing import Optional
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from infrastructure.main import app
 from _intake_helpers import ingest_and_resolve
 
 
-def _bootstrap_admin_headers(client: TestClient) -> dict:
+def _bootstrap_admin_headers(client: GatewayClient) -> dict:
     resp = client.post(
         "/api/v1/agents",
         json={
@@ -25,7 +25,7 @@ def _bootstrap_admin_headers(client: TestClient) -> dict:
     return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
-def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict:
+def _create_org_manager_headers(client: GatewayClient, admin_headers: dict) -> dict:
     manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
     tenant_resp = client.post(
         "/api/v1/tenants",
@@ -44,7 +44,7 @@ def _create_org_manager_headers(client: TestClient, admin_headers: dict) -> dict
     return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
-def _create_agent(client: TestClient, manager_headers: dict, group_id: Optional[str] = None) -> tuple[str, dict]:
+def _create_agent(client: GatewayClient, manager_headers: dict, group_id: Optional[str] = None) -> tuple[str, dict]:
     email = f"agent_{uuid.uuid4().hex[:6]}@test.com"
     payload = {"name": "Agent", "email": email, "password": "agent-pass-123"}
     if group_id:
@@ -57,7 +57,7 @@ def _create_agent(client: TestClient, manager_headers: dict, group_id: Optional[
     return agent_id, {"Cookie": f"leads_session={login.cookies['leads_session']}"}
 
 
-def _route_everything_to(client: TestClient, manager_headers: dict, agent_id: str) -> None:
+def _route_everything_to(client: GatewayClient, manager_headers: dict, agent_id: str) -> None:
     """A single catch-all assignment rule: every qualified lead in this
     organization lands on this agent instead of staying UNASSIGNED."""
     resp = client.post(
@@ -82,7 +82,7 @@ def _lead_payload(**overrides) -> dict:
 
 
 def test_agent_with_assigned_lead_sees_one_unread_notification_with_lead_id():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         agent_id, agent_headers = _create_agent(client, manager_headers)
@@ -105,7 +105,7 @@ def test_unread_count_reflects_reads_and_the_page_filter():
     """Four notices, one marked read: unread_count must drop by one, stay the
     recipient's total (not the page's) with no filter, and unread_only=true
     must return only the three still-unread ones."""
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         agent_id, agent_headers = _create_agent(client, manager_headers)
@@ -134,7 +134,7 @@ def test_unread_count_reflects_reads_and_the_page_filter():
 
 
 def test_mark_all_notifications_read_zeroes_the_counter_and_is_idempotent():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         agent_id, agent_headers = _create_agent(client, manager_headers)
@@ -153,7 +153,7 @@ def test_mark_all_notifications_read_zeroes_the_counter_and_is_idempotent():
 
 
 def test_agent_only_sees_their_own_notifications():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -186,7 +186,7 @@ def test_agent_only_sees_their_own_notifications():
 
 
 def test_marking_another_agents_notification_returns_404_not_403():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         agent_id, headers_owner = _create_agent(client, manager_headers)
@@ -202,7 +202,7 @@ def test_marking_another_agents_notification_returns_404_not_403():
 
 
 def test_manager_is_notified_of_unassigned_lead_and_rejected_intake():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
 
@@ -231,14 +231,14 @@ def test_manager_is_notified_of_unassigned_lead_and_rejected_intake():
 
 
 def test_platform_admin_cannot_call_get_notifications():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         response = client.get("/api/v1/notifications", headers=admin_headers)
         assert response.status_code == 403, response.text
 
 
 def test_pagination_has_more_flag_and_unread_count_ignores_the_page():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         admin_headers = _bootstrap_admin_headers(client)
         manager_headers = _create_org_manager_headers(client, admin_headers)
         agent_id, agent_headers = _create_agent(client, manager_headers)

@@ -1,7 +1,7 @@
 import uuid
 from urllib.parse import parse_qs, urlsplit
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from application.ports.output.oauth_identity_provider_port import OAuthIdentity
 from domain.entities.agent import Agent
@@ -21,7 +21,7 @@ class _GoogleProvider:
         return OAuthIdentity("google-subject", self.email, True, "OAuth HTTP")
 
 
-def _seed_agent(client: TestClient) -> Agent:
+def _seed_agent(client: GatewayClient) -> Agent:
     agent = Agent.create(
         "OAuth HTTP", f"oauth_{uuid.uuid4().hex[:8]}@test.com", role=AgentRole.MANAGER,
         tenant_id=uuid.uuid4(),
@@ -32,7 +32,7 @@ def _seed_agent(client: TestClient) -> Agent:
 
 
 def test_oauth_callback_consumes_browser_challenge_before_creating_an_opaque_session(monkeypatch):
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         container = client.app.state.container
         provider = _GoogleProvider(agent.email)

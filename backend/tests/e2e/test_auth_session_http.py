@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 
-from fastapi.testclient import TestClient
+from gateway_client import GatewayClient
 
 from domain.entities.agent import Agent
 from domain.entities.auth_session import AuthSession
@@ -48,7 +48,7 @@ def _headers_for(token):
 
 
 def test_login_body_is_exactly_the_authenticated_status():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         response = _login(client, agent.email)
     assert response.status_code == 200
@@ -56,7 +56,7 @@ def test_login_body_is_exactly_the_authenticated_status():
 
 
 def test_login_sets_the_session_cookie_with_browser_flags():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         response = _login(client, agent.email)
     raw = response.headers.get("set-cookie", "")
@@ -68,7 +68,7 @@ def test_login_sets_the_session_cookie_with_browser_flags():
 
 
 def test_login_response_carries_no_token():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         response = _login(client, agent.email)
     token = response.cookies.get("leads_session")
@@ -84,7 +84,7 @@ def test_secure_flag_follows_configuration(monkeypatch):
     reads that switch from the container settings on every login."""
     from infrastructure.config.settings import Settings
 
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         current = client.app.state.container._settings
         monkeypatch.setattr(
@@ -106,7 +106,7 @@ def test_login_failures_are_indistinguishable():
     """Unknown account, wrong password, inactive account and the machine role
     all answer the same 401, so no response leaks whether an account exists."""
     unknown = f"nobody_{uuid.uuid4().hex[:8]}@test.com"
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         active = _seed_agent(client)
         inactive = _seed_agent(client, is_active=False)
         integration = _seed_agent(client, role=AgentRole.INTEGRATION)
@@ -123,7 +123,7 @@ def test_login_failures_are_indistinguishable():
 
 
 def test_valid_cookie_reaches_me_and_a_protected_route():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         token = _login(client, agent.email).cookies["leads_session"]
         headers = _headers_for(token)
@@ -135,7 +135,7 @@ def test_valid_cookie_reaches_me_and_a_protected_route():
 
 
 def test_missing_tampered_and_unknown_cookies_are_unauthorized():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         token = _login(client, agent.email).cookies["leads_session"]
         client.cookies.clear()
@@ -151,7 +151,7 @@ def test_missing_tampered_and_unknown_cookies_are_unauthorized():
 def test_expired_session_is_unauthorized_even_with_an_active_agent():
     """Expired rows are inserted directly: the suite has no controllable clock
     in the router, and waiting eight hours is not a test strategy."""
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         token = "expired-session-value"
         now = datetime.now(timezone.utc)
@@ -165,7 +165,7 @@ def test_expired_session_is_unauthorized_even_with_an_active_agent():
 
 
 def test_deactivated_agent_loses_access_without_touching_the_session():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         token = _login(client, agent.email).cookies["leads_session"]
         with PostgresUnitOfWork(client.app.state.container.database) as uow:
@@ -177,7 +177,7 @@ def test_deactivated_agent_loses_access_without_touching_the_session():
 
 
 def test_identity_and_tenant_are_reloaded_from_the_database():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         token = _login(client, agent.email).cookies["leads_session"]
         me = client.get("/api/v1/auth/me", headers=_headers_for(token))
@@ -185,7 +185,7 @@ def test_identity_and_tenant_are_reloaded_from_the_database():
 
 
 def test_logout_revokes_and_is_idempotent():
-    with TestClient(app) as client:
+    with GatewayClient(app) as client:
         agent = _seed_agent(client)
         token = _login(client, agent.email).cookies["leads_session"]
         headers = _headers_for(token)
