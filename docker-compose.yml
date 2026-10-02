@@ -245,6 +245,9 @@ services:
         condition: service_healthy
       # No condition on backend: a lead-core outage interrupts a job (nack and
       # redelivery), it does not stop the worker.
+    # On stop the worker finishes the job in hand before closing; a 10k-record
+    # job takes minutes, and Docker's default 10 s would kill it mid-run.
+    stop_grace_period: 5m
     restart: on-failure
 
   backend-worker:
