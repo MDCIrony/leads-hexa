@@ -171,3 +171,21 @@ def test_a_missing_required_text_field_is_rejected_before_the_database():
         ("first_name", "MISSING_REQUIRED_FIELD"), ("industry", "MISSING_REQUIRED_FIELD")]
     assert uow.leads.leads == {}
     assert uow.outbox._entries == {}
+
+
+@pytest.mark.parametrize("budget", ["1000000000000", "999999999999.995"])
+def test_a_budget_the_column_cannot_hold_is_rejected_before_the_database(budget):
+    uow = InMemoryUnitOfWork()
+
+    result = AdmitLeadUseCase(uow).execute(_request(budget=budget))
+
+    assert result.outcome == "REJECTED"
+    assert [(e.field, e.error_code) for e in result.errors] == [("budget", "AMOUNT_OUT_OF_RANGE")]
+    assert uow.leads.leads == {}
+    assert uow.outbox._entries == {}
+
+
+def test_the_largest_budget_the_column_holds_is_admitted():
+    result = AdmitLeadUseCase(InMemoryUnitOfWork()).execute(_request(budget="999999999999.99"))
+
+    assert result.outcome == "ADMITTED"

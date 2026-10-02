@@ -28,6 +28,9 @@ _FIELD_BY_ERROR_CODE = {
 # NOT NULL in leads: a null here must be a deterministic REJECTED, not a
 # database error the caller would retry forever.
 _REQUIRED_TEXT = ("first_name", "last_name", "company", "industry")
+# leads.budget is NUMERIC(14, 2). Money accepts larger figures, and the overflow
+# at the insert is as deterministic as any validation: REJECTED, never a retry.
+_BUDGET_CEILING = 10 ** 12
 
 
 class AdmitLeadUseCase(AdmitLeadInputPort):
@@ -60,6 +63,10 @@ class AdmitLeadUseCase(AdmitLeadInputPort):
                     field = _FIELD_BY_ERROR_CODE.get(exc.error_code, "_record")
                     return AdmissionResult(outcome="REJECTED", errors=(
                         AdmissionError(field=field, message=str(exc), error_code=exc.error_code),))
+                if round(lead.budget.amount, 2) >= _BUDGET_CEILING:
+                    return AdmissionResult(outcome="REJECTED", errors=(AdmissionError(
+                        field="budget", message="El importe excede el máximo admitido",
+                        error_code="AMOUNT_OUT_OF_RANGE"),))
                 return _admitted(self._decide(lead))
         except DuplicateAdmission:
             # The losing transaction is gone, cursor advance included; the
