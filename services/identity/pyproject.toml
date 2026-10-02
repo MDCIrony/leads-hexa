@@ -25,6 +25,7 @@ chassis = { path = "../../libs/chassis", editable = true }
 dev = [
     "pytest>=8.2.0",
     "chassis[contracts]",
+    "httpx2>=2.13.1",
 ]
 
 [tool.pytest.ini_options]
