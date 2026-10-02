@@ -18,15 +18,15 @@ services:
       retries: 5
 
   db-bootstrap:
-    # One-shot: creates the notifications role and databases the db image's
-    # single POSTGRES_DB cannot (ADR-0031). Idempotent, so it may run on every `up`.
+    # One-shot: creates each extracted service's role and databases, which the
+    # db image's single POSTGRES_DB cannot (ADR-0031). Idempotent, so it may run on every `up`.
     image: postgres:16-alpine
     environment:
       - PGPASSWORD=postgrespassword
     volumes:
       # A directory, not a file, for the same reason as the gateway config.
       - ./db:/bootstrap:ro
-    command: ["psql", "-h", "db", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "notifications_password=notificationspassword", "-f", "/bootstrap/bootstrap.sql"]
+    command: ["psql", "-h", "db", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "notifications_password=notificationspassword", "-v", "identity_password=identitypassword", "-f", "/bootstrap/bootstrap.sql"]
     depends_on:
       db:
         condition: service_healthy
@@ -409,6 +409,9 @@ services:
       - ./backend/tests:/app/tests:ro
       - ./backend/migrations:/app/migrations:ro
       - ./libs/chassis/src:/libs/chassis/src:ro
+      # Contract fixtures both sides of an interface test against; found by
+      # walking up from the tests, so any ancestor mount point works.
+      - ./contracts:/contracts:ro
     depends_on:
       db:
         condition: service_healthy
@@ -440,6 +443,7 @@ services:
       - ./services/notifications/tests:/srv/services/notifications/tests:ro
       - ./services/notifications/migrations:/srv/services/notifications/migrations:ro
       - ./libs/chassis/src:/srv/libs/chassis/src:ro
+      - ./contracts:/srv/contracts:ro
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
@@ -447,6 +451,30 @@ services:
     environment:
       - DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_test
       - TEST_DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_test
+      - PYTHONDONTWRITEBYTECODE=1
+    command: ["pytest", "-q"]
+
+  identity-test:
+    profiles: ["test"]
+    build:
+      context: ./services/identity
+      dockerfile: Dockerfile
+      additional_contexts:
+        chassis: ./libs/chassis
+      target: test
+    volumes:
+      - ./services/identity/src:/srv/services/identity/src:ro
+      - ./services/identity/tests:/srv/services/identity/tests:ro
+      - ./services/identity/migrations:/srv/services/identity/migrations:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
+      - ./contracts:/srv/contracts:ro
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    # The role has no CREATEDB: identity_test already exists, made by db-bootstrap.
+    environment:
+      - DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_test
+      - TEST_DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_test
       - PYTHONDONTWRITEBYTECODE=1
     command: ["pytest", "-q"]
 
