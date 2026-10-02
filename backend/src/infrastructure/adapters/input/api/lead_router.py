@@ -182,7 +182,6 @@ def get_lead_stats(
         total=result.total,
         by_status=result.by_status,
         unassigned=result.unassigned,
-        pending_intake=result.pending_intake,
         load_by_agent=[
             AgentLoadResponse(agent_id=str(a.agent_id), name=a.name, active_leads=a.active_leads)
             for a in result.load_by_agent

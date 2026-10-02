@@ -3,7 +3,7 @@ from application.dtos.commands import AgentLoad, LeadStatsResult
 from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInputPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.exceptions import DomainException
-from domain.value_objects.enums import IntakeRecordStatus, LeadStatus
+from domain.value_objects.enums import LeadStatus
 
 
 class GetLeadStatsUseCase(GetLeadStatsInputPort):
@@ -20,17 +20,11 @@ class GetLeadStatsUseCase(GetLeadStatsInputPort):
                 "'from' must not be later than 'to'", error_code="INVALID_DATE_RANGE"
             )
 
-        # One transaction for the four reads: a manager's panel is a single
-        # snapshot, not four moments stitched together.
+        # One transaction for both reads: a manager's panel is a single
+        # snapshot, not two moments stitched together.
         with self.uow:
             by_status = self.uow.leads.count_by_status(
                 query.tenant_id, date_from=query.date_from, date_to=query.date_to
-            )
-            pending = self.uow.intake_records.count_by_tenant(
-                query.tenant_id, status=IntakeRecordStatus.PENDING
-            )
-            rejected = self.uow.intake_records.count_by_tenant(
-                query.tenant_id, status=IntakeRecordStatus.REJECTED
             )
             load_rows = self.uow.leads.active_load_by_agent_with_names(query.tenant_id)
 
@@ -38,7 +32,6 @@ class GetLeadStatsUseCase(GetLeadStatsInputPort):
             total=sum(by_status.values()),
             by_status=by_status,
             unassigned=by_status[LeadStatus.UNASSIGNED.value],
-            pending_intake=pending + rejected,
             load_by_agent=[
                 AgentLoad(agent_id=agent_id, name=name, active_leads=load)
                 for agent_id, name, load in load_rows

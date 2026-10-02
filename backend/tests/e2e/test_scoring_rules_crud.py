@@ -10,7 +10,7 @@ def _bootstrap_admin_headers(client: GatewayClient) -> dict:
 
 
 def _create_org_manager_headers(client: GatewayClient, admin_headers: dict) -> dict:
-    """The manager of a fresh organization that already has its default sources."""
+    """The manager of a fresh organization."""
     return seed_org_manager()
 
 

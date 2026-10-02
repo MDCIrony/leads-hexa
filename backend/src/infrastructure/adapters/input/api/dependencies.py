@@ -4,9 +4,6 @@ from fastapi import Request, Depends
 from chassis.auth import KeysUnavailable, TokenError
 from application.dtos.context import Principal, RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
-from application.ports.input.intake_phase_use_case_ports import ProcessIntakeJobInputPort, ReceiveIntakeInputPort
-from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
 from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInputPort
 from application.ports.input.rule_use_case_ports import (
@@ -22,23 +19,9 @@ from application.ports.input.sales_group_use_case_ports import (
     CreateSalesGroupInputPort, DeleteSalesGroupInputPort, GetSalesGroupsInputPort,
     UpdateSalesGroupInputPort,
 )
-from application.ports.input.lead_source_use_case_ports import (
-    CreateLeadSourceInputPort, DeleteLeadSourceInputPort, GetLeadSourcesInputPort,
-    UpdateLeadSourceInputPort,
-)
 from application.ports.input.lead_lifecycle_use_case_ports import (
     AssignLeadInputPort, DiscardLeadInputPort, GetLeadInputPort, GetMyLeadsInputPort,
 )
-from application.ports.input.intake_record_use_case_ports import (
-    DiscardIntakeRecordInputPort, GetIntakeRecordsInputPort, PromoteIntakeRecordInputPort,
-)
-from application.ports.input.intake_job_use_case_ports import (
-    GetIntakeJobInputPort, GetIntakeJobsInputPort, ReprocessIntakeJobInputPort,
-)
-from application.use_cases.ingest_lead_use_case import IngestLeadUseCase
-from application.use_cases.process_batch_use_case import ProcessBatchUseCase
-from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUseCase
-from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
 from application.use_cases.get_lead_stats_use_case import GetLeadStatsUseCase
 from application.use_cases.rule_use_cases import (
@@ -53,17 +36,8 @@ from application.use_cases.disqualification_rule_use_cases import (
 from application.use_cases.sales_group_use_cases import (
     CreateSalesGroupUseCase, DeleteSalesGroupUseCase, GetSalesGroupsUseCase, UpdateSalesGroupUseCase,
 )
-from application.use_cases.lead_source_use_cases import (
-    CreateLeadSourceUseCase, DeleteLeadSourceUseCase, GetLeadSourcesUseCase, UpdateLeadSourceUseCase,
-)
 from application.use_cases.lead_lifecycle_use_cases import (
     AssignLeadUseCase, DiscardLeadUseCase, GetLeadUseCase, GetMyLeadsUseCase,
-)
-from application.use_cases.intake_record_use_cases import (
-    DiscardIntakeRecordUseCase, GetIntakeRecordsUseCase, PromoteIntakeRecordUseCase,
-)
-from application.use_cases.intake_job_use_cases import (
-    GetIntakeJobUseCase, GetIntakeJobsUseCase, ReprocessIntakeJobUseCase,
 )
 from domain.exceptions import DomainException, UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
@@ -75,48 +49,6 @@ def get_container(request: Request) -> Container:
 
 def get_uow(container: Container = Depends(get_container)) -> UnitOfWorkPort:
     return container.unit_of_work()
-
-def get_ingest_lead_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> IngestLeadInputPort:
-    return IngestLeadUseCase(uow=uow, admission=container.lead_admission)
-
-def get_get_intake_records_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeRecordsInputPort:
-    return GetIntakeRecordsUseCase(uow=uow)
-
-def get_receive_intake_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> ReceiveIntakeInputPort:
-    return ReceiveIntakeUseCase(uow=uow)
-
-def get_process_intake_job_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    ingest: IngestLeadInputPort = Depends(get_ingest_lead_use_case),
-) -> ProcessIntakeJobInputPort:
-    return ProcessIntakeJobUseCase(uow=uow, ingest=ingest)
-
-def get_process_batch_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> ProcessBatchInputPort:
-    return ProcessBatchUseCase(uow=uow, file_parser=container.file_parser)
-
-def get_promote_intake_record_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    ingest: IngestLeadInputPort = Depends(get_ingest_lead_use_case),
-) -> PromoteIntakeRecordInputPort:
-    return PromoteIntakeRecordUseCase(uow=uow, ingest=ingest)
-
-def get_discard_intake_record_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DiscardIntakeRecordInputPort:
-    return DiscardIntakeRecordUseCase(uow=uow)
-
-def get_get_intake_jobs_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeJobsInputPort:
-    return GetIntakeJobsUseCase(uow=uow)
-
-def get_get_intake_job_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetIntakeJobInputPort:
-    return GetIntakeJobUseCase(uow=uow)
-
-def get_reprocess_intake_job_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> ReprocessIntakeJobInputPort:
-    return ReprocessIntakeJobUseCase(uow=uow)
 
 def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsInputPort:
     return GetLeadsUseCase(uow=uow)
@@ -179,18 +111,6 @@ def get_update_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> U
 
 def get_delete_sales_group_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteSalesGroupInputPort:
     return DeleteSalesGroupUseCase(uow=uow)
-
-def get_create_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateLeadSourceInputPort:
-    return CreateLeadSourceUseCase(uow=uow)
-
-def get_get_lead_sources_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadSourcesInputPort:
-    return GetLeadSourcesUseCase(uow=uow)
-
-def get_update_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateLeadSourceInputPort:
-    return UpdateLeadSourceUseCase(uow=uow)
-
-def get_delete_lead_source_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> DeleteLeadSourceInputPort:
-    return DeleteLeadSourceUseCase(uow=uow)
 
 def get_assign_lead_use_case(
     uow: UnitOfWorkPort = Depends(get_uow), container: Container = Depends(get_container),

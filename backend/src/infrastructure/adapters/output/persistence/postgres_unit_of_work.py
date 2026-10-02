@@ -13,18 +13,11 @@ from infrastructure.adapters.output.persistence.raw_sql_disqualification_rule_re
     RawSqlDisqualificationRuleRepository,
 )
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
-from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import RawSqlLeadSourceRepository
-from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import RawSqlIntakeRecordRepository
-from infrastructure.adapters.output.persistence.raw_sql_intake_job_repository import RawSqlIntakeJobRepository
 from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
 from infrastructure.adapters.output.persistence.raw_sql_processed_event_repository import (
     RawSqlProcessedEventRepository,
 )
-from infrastructure.adapters.output.persistence.raw_sql_intake_file_repository import RawSqlIntakeFileRepository
 from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
-from infrastructure.adapters.output.persistence.intake.raw_sql_provisioned_tenant_repository import (
-    RawSqlProvisionedTenantRepository,
-)
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):
@@ -47,14 +40,9 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.rules = RawSqlRuleRepository(self.connection)
         self.disqualification_rules = RawSqlDisqualificationRuleRepository(self.connection)
         self.groups = RawSqlSalesGroupRepository(self.connection)
-        self.sources = RawSqlLeadSourceRepository(self.connection)
-        self.intake_records = RawSqlIntakeRecordRepository(self.connection)
-        self.intake_jobs = RawSqlIntakeJobRepository(self.connection)
         self.outbox = RawSqlOutboxRepository(self.connection)
         self.processed_events = RawSqlProcessedEventRepository(self.connection)
-        self.intake_files = RawSqlIntakeFileRepository(self.connection)
         self.advisors = RawSqlAdvisorRepository(self.connection)
-        self.provisioned_tenants = RawSqlProvisionedTenantRepository(self.connection)
         return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:

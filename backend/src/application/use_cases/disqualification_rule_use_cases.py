@@ -65,7 +65,7 @@ class UpdateDisqualificationRuleUseCase(UpdateDisqualificationRuleInputPort):
     def execute(self, command: UpdateDisqualificationRuleCommand) -> DisqualificationRule:
         with self.uow:
             rule = _get_owned_rule(self.uow, command.tenant_id, command.rule_id)
-            # This entity has no field-level setters (unlike LeadSource), so a
+            # This entity has no field-level setters, so a
             # PATCH goes back through create(): that is what stops it from
             # producing a rule create() itself would refuse, e.g. an emptied
             # name or an emptied condition list (R3).

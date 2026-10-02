@@ -3,14 +3,14 @@ from typing import Tuple
 from gateway_client import GatewayClient, tenant_of
 from infrastructure.main import app
 
-from _intake_helpers import ingest_and_resolve
+from _admission_helpers import admit_lead
 from auth_helpers import agent_of, seed_org_manager
 
 
 def _create_tenant_and_manager_headers(client: GatewayClient) -> Tuple[str, dict]:
     """Rules and lead listing scope to the caller's own tenant (from the
     token), so driving a tenant's routing flow requires a Manager of a real
-    organization, with its default sources, rather than a made-up tenant_id."""
+    organization rather than a made-up tenant_id."""
     headers = seed_org_manager("Org Manager")
     return tenant_of(headers), headers
 
@@ -57,7 +57,7 @@ def test_full_system_lead_routing_flow_e2e():
 
 
         # 4. Ingestar Lead
-        record = ingest_and_resolve(
+        record = admit_lead(
             client,
             headers,
             {

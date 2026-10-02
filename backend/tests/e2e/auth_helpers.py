@@ -5,10 +5,7 @@ needs no row. A person work can be given to is also seeded as an advisor,
 the projection lead-core routes over."""
 from uuid import uuid4
 
-from domain.intake.default_sources import default_sources
 from domain.value_objects.enums import AgentRole
-from domain.value_objects.tenant_id import TenantId
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.main import app
 from tests.advisors_sync import seed_advisor
 from tests.e2e.gateway_client import as_principal, tenant_of
@@ -16,15 +13,6 @@ from tests.e2e.gateway_client import as_principal, tenant_of
 
 def _database():
     return app.state.container.database
-
-
-def seed_organization(tenant_id=None) -> str:
-    """An organization with its default sources, as the intake.tenants consumer leaves it."""
-    tenant_id = str(tenant_id or uuid4())
-    with PostgresUnitOfWork(_database()) as uow:
-        for source in default_sources(TenantId(tenant_id)):
-            uow.sources.save(source)
-    return tenant_id
 
 
 def principal_of(advisor) -> dict:
@@ -46,8 +34,8 @@ def seed_agent(tenant_id, name: str = "Agent", group_id=None, is_active: bool = 
 
 
 def seed_org_manager(name: str = "Manager") -> dict:
-    """What creating an organization used to hand back: its manager's session."""
-    return seed_manager(seed_organization(), name)
+    """The manager of a fresh organization (an id is all one takes)."""
+    return seed_manager(uuid4(), name)
 
 
 def agent_of(manager: dict, name: str = "Agent", group_id=None) -> tuple[dict, str]:

@@ -23,28 +23,16 @@ import uuid
 from gateway_client import GatewayClient
 
 from infrastructure.main import app
-from domain.value_objects.enums import LeadSourceKind
 from infrastructure.adapters.input.api import schemas
 
-from _intake_helpers import ingest_and_resolve
+from _admission_helpers import admit_lead
 from auth_helpers import manager_headers, seed_agent
 
 
-# --- Auth / seeding helpers, same shortcuts as test_lead_endpoints.py ---
+# --- Auth helper, same shortcut as test_lead_endpoints.py ---
 
 def _manager_auth_headers(tenant_id: str) -> dict:
     return manager_headers(tenant_id)
-
-
-def _seed_tenant_with_sources(tenant_id: str) -> None:
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.lead_source import LeadSource
-
-    uow = PostgresUnitOfWork(app.state.container.database)
-    with uow:
-        uow.sources.save(
-            LeadSource.create(tenant_id=tenant_id, name="Formulario manual", kind=LeadSourceKind.MANUAL_FORM)
-        )
 
 
 # --- Comprobación 1: nothing sent comes back empty ---
@@ -68,19 +56,13 @@ def assert_round_trip(sent: dict, received: dict, *, aliases: dict[str, str] | N
 NULLABLE_BY_DESIGN: dict[str, set[str]] = {
     "LeadDetailResponse": {
         # Mutually exclusive lifecycle states of a single lead: a freshly
-        # ingested lead is none of these yet. Each is exercised directly
+        # admitted lead is none of these yet. Each is exercised directly
         # against its own transition below (assign / discard / disqualify)
         # rather than all at once, which no single lead can be.
         "assigned_agent_id",
         "assigned_at",
         "discard_reason",
         "disqualification_reason",
-    },
-    "IntakeRecordResponse": {
-        # Only a PROMOTED record produced a lead; the REJECTED record this
-        # test creates never did (ADR-driven: rejection keeps the payload
-        # visible in the tray instead of silently discarding it).
-        "lead_id",
     },
 }
 
@@ -111,7 +93,6 @@ def assert_no_credentials_leaked(response) -> None:
 def test_lead_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
         payload = {
@@ -124,8 +105,8 @@ def test_lead_round_trip_and_schema_contract():
             "custom_attributes": {"employee_count": 150},
             "phone": "+525551234567",
         }
-        record = ingest_and_resolve(client, headers, payload)
-        assert record["status"] in ("PROMOTED",), record
+        record = admit_lead(client, headers, payload)
+        assert record["outcome"] == "ADMITTED", record
 
         resp = client.get(f"/api/v1/leads/{record['lead_id']}", headers=headers)
         assert resp.status_code == 200, resp.text
@@ -142,12 +123,11 @@ def test_lead_round_trip_and_schema_contract():
 def test_lead_assigned_agent_id_and_assigned_at_get_filled_when_assigned():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
         _, agent_id = seed_agent(tenant_id, "Agent")
 
-        record = ingest_and_resolve(client, headers, {
+        record = admit_lead(client, headers, {
             "first_name": "Ana", "last_name": "Soto", "email": "ana@assign.test",
             "company": "AssignCo", "budget": 1000.0, "industry": "Tech",
         })
@@ -163,10 +143,9 @@ def test_lead_assigned_agent_id_and_assigned_at_get_filled_when_assigned():
 def test_lead_discard_reason_gets_filled_when_discarded():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
-        record = ingest_and_resolve(client, headers, {
+        record = admit_lead(client, headers, {
             "first_name": "Bea", "last_name": "Ruiz", "email": "bea@discard.test",
             "company": "DiscardCo", "budget": 1000.0, "industry": "Tech",
         })
@@ -181,7 +160,6 @@ def test_lead_discard_reason_gets_filled_when_discarded():
 def test_lead_disqualification_reason_gets_filled_when_a_rule_disqualifies_it():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
         rule_resp = client.post(
@@ -196,11 +174,11 @@ def test_lead_disqualification_reason_gets_filled_when_a_rule_disqualifies_it():
         )
         assert rule_resp.status_code == 201, rule_resp.text
 
-        record = ingest_and_resolve(client, headers, {
+        record = admit_lead(client, headers, {
             "first_name": "Cid", "last_name": "Vera", "email": "cid@disqualify.test",
             "company": "DisqualifyCo", "budget": 1000.0, "industry": "Disqualified",
         })
-        assert record["status"] == "PROMOTED"
+        assert record["outcome"] == "ADMITTED"
 
         resp = client.get(f"/api/v1/leads/{record['lead_id']}", headers=headers)
         data = resp.json()
@@ -208,72 +186,11 @@ def test_lead_disqualification_reason_gets_filled_when_a_rule_disqualifies_it():
         assert data["disqualification_reason"] is not None
 
 
-# --- Intake record: created REJECTED, so its per-field error tray is exercised ---
-
-def test_intake_record_round_trip_and_schema_contract():
-    tenant_id = str(uuid.uuid4())
-    with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
-        headers = _manager_auth_headers(tenant_id)
-
-        bad_payload = {
-            "first_name": "Mal", "last_name": "Formado", "email": "sin-arroba",
-            "company": "BadCo", "budget": 1000.0, "industry": "Tech",
-        }
-        accepted = client.post("/api/v1/intake/leads/ingest", json=bad_payload, headers=headers)
-        assert accepted.status_code == 202, accepted.text
-        job_id = accepted.json()["job_id"]
-
-        resp = client.get(f"/api/v1/intake/records?job_id={job_id}", headers=headers)
-        assert resp.status_code == 200, resp.text
-        assert_no_credentials_leaked(resp)
-        items = resp.json()["items"]
-        assert len(items) == 1
-        data = items[0]
-
-        assert data["status"] == "REJECTED"
-        # The stored payload carries the request's defaults too
-        # (custom_attributes, phone), not just what the test sent.
-        assert data["payload"].items() >= bad_payload.items()
-        assert data["errors"], "un registro rechazado debe traer al menos un error"
-        assert_schema_fields_filled(schemas.IntakeRecordResponse, data)
-
-
-# --- Intake job ---
-
-def test_intake_job_round_trip_and_schema_contract():
-    tenant_id = str(uuid.uuid4())
-    with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
-        headers = _manager_auth_headers(tenant_id)
-
-        accepted = client.post(
-            "/api/v1/intake/leads/ingest",
-            json={
-                "first_name": "Dan", "last_name": "Solis", "email": "dan@job.test",
-                "company": "JobCo", "budget": 1000.0, "industry": "Tech",
-            },
-            headers=headers,
-        )
-        assert accepted.status_code == 202, accepted.text
-        job_id = accepted.json()["job_id"]
-
-        resp = client.get(f"/api/v1/intake/jobs/{job_id}", headers=headers)
-        assert resp.status_code == 200, resp.text
-        assert_no_credentials_leaked(resp)
-        data = resp.json()
-
-        assert data["id"] == job_id
-        assert data["status"] == "COMPLETED"
-        assert_schema_fields_filled(schemas.IntakeJobResponse, data)
-
-
 # --- Sales group ---
 
 def test_group_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
         payload = {
@@ -299,38 +216,11 @@ def test_group_round_trip_and_schema_contract():
         assert_schema_fields_filled(schemas.SalesGroupResponse, data)
 
 
-# --- Lead source ---
-
-def test_source_round_trip_and_schema_contract():
-    tenant_id = str(uuid.uuid4())
-    with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
-        headers = _manager_auth_headers(tenant_id)
-
-        payload = {
-            "name": "Formulario web",
-            "kind": "MANUAL_FORM",
-            "field_mapping": {"nombre": "first_name", "correo": "email"},
-        }
-        create_resp = client.post("/api/v1/sources", json=payload, headers=headers)
-        assert create_resp.status_code == 201, create_resp.text
-        source_id = create_resp.json()["id"]
-
-        resp = client.get("/api/v1/sources", headers=headers)
-        assert resp.status_code == 200, resp.text
-        data = next(item for item in resp.json()["items"] if item["id"] == source_id)
-
-        assert_round_trip({"name": payload["name"], "field_mapping": payload["field_mapping"]}, data)
-        assert data["kind"] == payload["kind"]
-        assert_schema_fields_filled(schemas.LeadSourceResponse, data)
-
-
 # --- Assignment rule ---
 
 def test_assignment_rule_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
         group_resp = client.post("/api/v1/groups", json={"name": "Target Group"}, headers=headers)
@@ -373,7 +263,6 @@ def test_assignment_rule_round_trip_and_schema_contract():
 def test_scoring_rule_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
         payload = {
@@ -405,7 +294,6 @@ def test_scoring_rule_round_trip_and_schema_contract():
 def test_disqualification_rule_round_trip_and_schema_contract():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
         payload = {
@@ -435,10 +323,9 @@ def test_disqualification_rule_round_trip_and_schema_contract():
 def test_lead_stats_schema_contract():
     tenant_id = str(uuid.uuid4())
     with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
-        ingest_and_resolve(client, headers, {
+        admit_lead(client, headers, {
             "first_name": "Fay", "last_name": "Ortiz", "email": "fay@stats.test",
             "company": "StatsCo", "budget": 1000.0, "industry": "Tech",
         })

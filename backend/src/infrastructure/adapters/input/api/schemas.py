@@ -1,43 +1,12 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 from domain.value_objects.enums import (
-    AgentMatchMode, Operator, AssignmentStrategy, LeadSourceKind,
+    AgentMatchMode, Operator, AssignmentStrategy,
 )
 
 
 # --- Lead Schemas ---
-class IngestLeadRequest(BaseModel):
-    # V1: no format validation here on purpose. It used to duplicate
-    # EmailAddress with a looser rule and produce a 422 that discarded the
-    # payload before anything was persisted — a malformed email now reaches
-    # the domain, which rejects it while keeping the record in the tray.
-    first_name: str
-    last_name: str
-    email: Optional[str] = None
-    company: str
-    budget: float
-    industry: str
-    custom_attributes: Dict[str, Any] = Field(default_factory=dict)
-    phone: Optional[str] = None
-
-class IntakeAcceptedResponse(BaseModel):
-    job_id: str
-    record_ids: List[str]
-    status: str
-
-class LeadProcessedResponse(BaseModel):
-    lead_id: str
-    status: str
-    score: int
-    assigned_agent_id: Optional[str] = None
-    applied_rules_count: int = 0
-    error: Optional[str] = None
-    error_code: Optional[str] = None
-    # The payload this lead came from. Answers "what did the client actually
-    # send?" for a lead whose data looks wrong after the fact.
-    intake_record_id: str = ""
 
 class LeadResponse(BaseModel):
     id: str
@@ -102,7 +71,6 @@ class LeadStatsResponse(BaseModel):
     total: int
     by_status: Dict[str, int]
     unassigned: int
-    pending_intake: int
     load_by_agent: List[AgentLoadResponse]
 
 class AssignLeadRequest(BaseModel):
@@ -112,26 +80,6 @@ class DiscardLeadRequest(BaseModel):
     # Empty-means-missing is validated by Lead.discard itself (DISCARD_WITHOUT_REASON),
     # so an omitted field and an explicit "" reach the same domain error.
     reason: str = ""
-
-class FailedRowResponse(BaseModel):
-    row_number: int
-    # Optional since T2: a missing email is valid data, not a parse failure,
-    # and a row can fail for an unrelated reason while missing one. A bare
-    # `str` here raised pydantic.ValidationError on such a row, turning a
-    # legitimate partial-success batch response into an HTTP 500.
-    email: Optional[str] = None
-    error: str
-    error_code: Optional[str] = None
-    # Without this the manager can see WHICH rows failed but not WHERE they
-    # were stored, and has to pair a 500-row upload against the inbox by
-    # matching contents — ambiguous the moment two rows look alike.
-    intake_record_id: str = ""
-
-class BatchProcessResponse(BaseModel):
-    job_id: str
-    total_rows: int
-    successful_ingestions: int
-    failed_rows: List[FailedRowResponse]
 
 # --- Rule Schemas ---
 class CriterionSchema(BaseModel):
@@ -273,75 +221,3 @@ class PaginatedGroupsResponse(BaseModel):
     offset: int
     has_more: bool
 
-# --- Lead Source Schemas ---
-class LeadSourceCreate(BaseModel):
-    name: str
-    kind: LeadSourceKind
-    field_mapping: Optional[Dict[str, str]] = None
-
-class LeadSourceUpdate(BaseModel):
-    name: Optional[str] = None
-    field_mapping: Optional[Dict[str, str]] = None
-    is_active: Optional[bool] = None
-
-class LeadSourceResponse(BaseModel):
-    id: str
-    name: str
-    kind: str
-    field_mapping: Dict[str, str]
-    is_active: bool
-    created_at: datetime
-
-class PaginatedSourcesResponse(BaseModel):
-    items: List[LeadSourceResponse]
-    total: int
-    limit: int
-    offset: int
-    has_more: bool
-
-# --- Intake Record Schemas ---
-class IntakeErrorResponse(BaseModel):
-    field: str
-    message: str
-    received_value: Optional[str] = None
-    error_code: Optional[str] = None
-
-class IntakeRecordResponse(BaseModel):
-    id: str
-    source_id: str
-    status: str
-    payload: Dict[str, Any]
-    errors: List[IntakeErrorResponse]
-    received_at: datetime
-    processed_at: Optional[datetime] = None
-    lead_id: Optional[str] = None
-
-class IntakeRecordsPageResponse(BaseModel):
-    items: List[IntakeRecordResponse]
-    total: int
-    limit: int
-    offset: int
-    has_more: bool
-
-class PromoteIntakeRecordRequest(BaseModel):
-    payload: Dict[str, Any]
-
-class IntakeJobResponse(BaseModel):
-    id: str
-    source_id: str
-    kind: str
-    status: str
-    # Null until the file is parsed: in a batch upload the total is not known
-    # when the request is accepted.
-    total_items: Optional[int] = None
-    succeeded: int
-    failed: int
-    created_at: datetime
-    completed_at: Optional[datetime] = None
-
-class IntakeJobsPageResponse(BaseModel):
-    items: List[IntakeJobResponse]
-    total: int
-    limit: int
-    offset: int
-    has_more: bool

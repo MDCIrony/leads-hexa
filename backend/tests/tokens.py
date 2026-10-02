@@ -25,3 +25,10 @@ def mint_token(
         "tid": str(tenant_id) if tenant_id else None,
         "role": role, "ptype": ptype, "iat": now, "exp": now + 60, "jti": uuid4().hex,
     })
+
+
+def mint_service_token(sub: str = "intake", audience: str = "lead-core") -> str:
+    """What identity signs for a service calling another (/internal/v1/*)."""
+    now = int(time.time())
+    return SIGNER.sign({"iss": ISSUER, "aud": audience, "sub": sub, "ptype": "service",
+                        "iat": now, "exp": now + 60, "jti": uuid4().hex})

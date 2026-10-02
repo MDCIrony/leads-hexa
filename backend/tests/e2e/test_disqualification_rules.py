@@ -2,7 +2,7 @@ from auth_helpers import admin_headers, agent_of, seed_org_manager
 from gateway_client import GatewayClient
 
 from infrastructure.main import app
-from _intake_helpers import ingest_and_resolve
+from _admission_helpers import admit_lead
 
 
 def _bootstrap_admin_headers(client: GatewayClient) -> dict:
@@ -11,7 +11,7 @@ def _bootstrap_admin_headers(client: GatewayClient) -> dict:
 
 
 def _create_org_manager_headers(client: GatewayClient, admin_headers: dict) -> dict:
-    """The manager of a fresh organization that already has its default sources."""
+    """The manager of a fresh organization."""
     return seed_org_manager()
 
 
@@ -146,7 +146,7 @@ def test_a_lead_with_neither_phone_nor_email_is_disqualified_by_name_with_no_sco
         )
         assert created.status_code == 201, created.text
 
-        record = ingest_and_resolve(
+        record = admit_lead(
             client,
             manager_headers,
             {

@@ -6,7 +6,6 @@ import psycopg
 from chassis.consumer import ConsumerLoop, dlq_topic, ensure_topics_until_ready, run_consumer_lane
 from chassis.kafka_config import consumer_config, producer_config
 from chassis.outbox import KafkaEventDispatcher, run_relay
-from chassis.rabbit import RabbitJobDispatcher
 from confluent_kafka import Consumer, Producer
 from confluent_kafka.admin import AdminClient
 
@@ -17,8 +16,6 @@ from infrastructure.adapters.output.events.webhook_outbound_dispatcher import We
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import PooledWebhookRepository
-from infrastructure.adapters.output.queue.intake_queue_topology import QUEUE_NAME, declare_intake_topology
-from infrastructure.adapters.output.queue.job_message import job_message
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
 from infrastructure.logging_config import configure_logging
@@ -39,8 +36,7 @@ def _consumer_loop(container: Container, bootstrap: str, group: str, topic: str)
         [topic],
         handler_for(group, container.unit_of_work),
         # A database outage is waited out: dead-lettering a state event would
-        # leave the advisors projection diverged, or a tenant without its
-        # default sources, silently and for good.
+        # leave the advisors projection diverged, silently and for good.
         retryable=lambda exc: isinstance(exc, psycopg.OperationalError),
     )
 
@@ -61,10 +57,7 @@ def main() -> int:
         ),
         KafkaOutboundDispatcher(producer=Producer(producer_config(bootstrap))),
     ]
-    dispatchers = build_dispatchers(
-        product_dispatchers,
-        [RabbitJobDispatcher(settings.rabbitmq_url, QUEUE_NAME, declare_intake_topology, job_message)],
-    )
+    dispatchers = build_dispatchers(product_dispatchers)
     internal_dispatcher = KafkaEventDispatcher(
         Producer(producer_config(bootstrap, auto_create_topics=False)), PRODUCER_NAME, topic_for,
     )

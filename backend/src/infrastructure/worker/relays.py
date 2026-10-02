@@ -3,15 +3,13 @@ from typing import Callable, Sequence
 from chassis.outbox import Dispatcher, OutboxRelay
 
 
-def build_dispatchers(
-    product: Sequence[Dispatcher], job: Sequence[Dispatcher],
-) -> dict[str, list[Dispatcher]]:
+def build_dispatchers(product: Sequence[Dispatcher]) -> dict[str, list[Dispatcher]]:
     """Dispatchers by outbox channel.
 
     `internal` starts empty and is filled once its topics exist: the relay skips
     a channel with no dispatcher, so rows wait instead of reaching a topic that
     Kafka would auto-create without compaction."""
-    return {"product": list(product), "internal": [], "job": list(job)}
+    return {"product": list(product), "internal": []}
 
 
 def build_relays(
