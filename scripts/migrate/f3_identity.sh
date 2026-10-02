@@ -38,6 +38,14 @@ if [ "$pending" != 0 ]; then
   exit 1
 fi
 
+# Any outbox row in identity_db is a write identity made after a previous cut:
+# truncating now would delete it, so a stopped stack is not enough to proceed.
+written=$(sql identity_db "SELECT count(*) FROM outbox_events")
+if [ "$written" != 0 ]; then
+  printf 'Refusing to copy: identity_db already has %s outbox row(s), so the cut is done.\n' "$written"
+  exit 1
+fi
+
 # copy <select on leads_db> <table(columns) in identity_db>
 copy() {
   sql leads_db "COPY ($1) TO STDOUT" | sql identity_db "COPY $2 FROM STDIN"
