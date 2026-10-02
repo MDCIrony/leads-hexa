@@ -1316,11 +1316,15 @@ verify_ms_f1() {
   check "intake.jobs.dlq está vacía" 0 "$(printf '%s\n' "$queues" | awk '$1=="intake.jobs.dlq" {print $2}')"
 
   section "Microservicios F1 · correlación"
-  logs=$(docker compose logs backend-worker intake-worker 2>&1)
-  check "el X-Request-Id de la ingesta aparece en backend-worker" True \
-    "$(printf '%s' "$logs" | grep 'backend-worker' | grep -q "\[$rid\]" && printf True || printf False)"
-  check "y en intake-worker" True \
+  # Since F4 the job runs in intake-worker and the decision in lead-core, reached
+  # by the admission call that carries the same X-Request-Id (04 §Correlación).
+  logs=$(docker compose logs intake-worker backend 2>&1)
+  check "el X-Request-Id de la ingesta aparece en intake-worker" True \
     "$(printf '%s' "$logs" | grep 'intake-worker' | grep -q "\[$rid\]" && printf True || printf False)"
+  check "y en la admisión de lead-core" True \
+    "$(printf '%s' "$logs" | grep 'backend-1' | grep "\[$rid\]" | grep -q '/internal/v1/admissions' && printf True || printf False)"
+  check "y en el outbox de lead-core" True \
+    "$(docker compose exec -T db psql -U postgres -d leads_db -tAc "SELECT count(*) > 0 FROM outbox_events WHERE correlation_id = '$rid'" | grep -q t && printf True || printf False)"
 }
 
 
