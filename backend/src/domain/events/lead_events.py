@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from domain.entities.lead import Lead
 from domain.events.domain_event import DomainEvent
+from domain.events.internal_event import InternalEvent
 from domain.value_objects.enums import LeadStatus
 
 
@@ -85,3 +86,35 @@ class LeadDisqualified(OutboundEvent):
 
     source_id: str
     reason: str
+
+
+# Identifiers travel as str, same as LeadProcessedEvent: an event is a
+# message, not a reference to a live object.
+@dataclass(kw_only=True)
+class _LeadEvent(InternalEvent):
+    tenant_id: str
+    lead_id: str
+
+    @property
+    def partition_key(self) -> str:
+        return self.lead_id
+
+
+@dataclass(kw_only=True)
+class LeadAssigned(_LeadEvent):
+    """Emitted when the routing engine finds an agent for a lead."""
+
+    agent_id: str
+
+
+@dataclass(kw_only=True)
+class LeadReassigned(_LeadEvent):
+    """Emitted when a manager hands an already-assigned lead to another agent."""
+
+    agent_id: str
+    previous_agent_id: Optional[str] = None
+
+
+@dataclass(kw_only=True)
+class LeadLeftUnassigned(_LeadEvent):
+    """Emitted when a qualified lead finds no eligible agent and needs a manager."""

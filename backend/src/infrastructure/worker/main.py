@@ -16,9 +16,9 @@ from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWe
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
 from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import PooledWebhookRepository
 from infrastructure.adapters.output.queue.intake_queue_topology import QUEUE_NAME, declare_intake_topology
+from infrastructure.adapters.output.queue.job_message import job_message
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
-from infrastructure.intake_worker.messages import job_message
 from infrastructure.logging_config import configure_logging
 from infrastructure.worker.producers import PRODUCER_NAME
 from infrastructure.worker.relays import build_dispatchers, build_relays

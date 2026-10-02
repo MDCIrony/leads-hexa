@@ -113,9 +113,8 @@ def test_an_api_key_is_refused_on_a_route_that_is_not_the_integration_one():
             "name": "X", "email": f"x_{uuid.uuid4().hex[:6]}@test.com", "password": "x-pass-12345",
         })
         mine = client.get("/api/v1/leads/mine", headers=key)
-        notifications = client.get("/api/v1/notifications", headers=key)
 
-    for response in (created, mine, notifications):
+    for response in (created, mine):
         assert response.status_code == 401
         assert response.json()["error_code"] == "UNAUTHORIZED"
 

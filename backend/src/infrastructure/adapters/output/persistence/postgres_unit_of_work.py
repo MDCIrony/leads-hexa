@@ -18,9 +18,6 @@ from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import RawSqlLeadSourceRepository
 from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import RawSqlIntakeRecordRepository
 from infrastructure.adapters.output.persistence.raw_sql_intake_job_repository import RawSqlIntakeJobRepository
-from infrastructure.adapters.output.persistence.raw_sql_notification_repository import (
-    RawSqlNotificationRepository,
-)
 from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
 from infrastructure.adapters.output.persistence.raw_sql_auth_session_repository import RawSqlAuthSessionRepository
 from infrastructure.adapters.output.persistence.raw_sql_auth_challenge_repository import RawSqlAuthChallengeRepository
@@ -57,7 +54,6 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.sources = RawSqlLeadSourceRepository(self.connection)
         self.intake_records = RawSqlIntakeRecordRepository(self.connection)
         self.intake_jobs = RawSqlIntakeJobRepository(self.connection)
-        self.notifications = RawSqlNotificationRepository(self.connection)
         self.outbox = RawSqlOutboxRepository(self.connection)
         self.sessions = RawSqlAuthSessionRepository(self.connection)
         self.challenges = RawSqlAuthChallengeRepository(self.connection)

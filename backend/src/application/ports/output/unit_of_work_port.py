@@ -11,7 +11,6 @@ from application.ports.output.tenant_repository_port import TenantRepositoryPort
 from application.ports.output.lead_source_repository_port import LeadSourceRepositoryPort
 from application.ports.output.intake_record_repository_port import IntakeRecordRepositoryPort
 from application.ports.output.intake_job_repository_port import IntakeJobRepositoryPort
-from application.ports.output.notification_repository_port import NotificationRepositoryPort
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from application.ports.output.auth_session_repository_port import AuthSessionRepositoryPort
 from application.ports.output.auth_challenge_repository_port import AuthChallengeRepositoryPort
@@ -30,7 +29,6 @@ class UnitOfWorkPort(abc.ABC):
     sources: LeadSourceRepositoryPort
     intake_records: IntakeRecordRepositoryPort
     intake_jobs: IntakeJobRepositoryPort
-    notifications: NotificationRepositoryPort
     outbox: OutboxRepositoryPort
     sessions: AuthSessionRepositoryPort
     challenges: AuthChallengeRepositoryPort

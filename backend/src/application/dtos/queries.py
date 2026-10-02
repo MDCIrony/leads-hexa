@@ -113,11 +113,3 @@ class GetLeadStatsQuery:
     tenant_id: UUID
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
-
-
-@dataclass(frozen=True)
-class GetNotificationsQuery:
-    recipient_id: UUID
-    unread_only: bool = False
-    limit: int = 100
-    offset: int = 0

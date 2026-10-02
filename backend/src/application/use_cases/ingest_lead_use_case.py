@@ -15,8 +15,8 @@ from domain.services.assignment_engine import AssignmentEngine
 from domain.services.scoring_engine import ScoringEngine
 from domain.services.viability_engine import ViabilityEngine
 from domain.exceptions import DomainException
-from domain.events.lead_events import LeadDisqualified, LeadProcessedEvent
-from domain.events.notification_events import IntakeRejected, LeadAssigned, LeadLeftUnassigned
+from domain.events.intake_events import IntakeRejected
+from domain.events.lead_events import LeadAssigned, LeadDisqualified, LeadLeftUnassigned, LeadProcessedEvent
 
 # Verified against domain/exceptions.py: these are the codes the entity's
 # value objects actually raise. Do not invent new ones.

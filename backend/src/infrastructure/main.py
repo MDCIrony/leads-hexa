@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from infrastructure.adapters.output.persistence.migration_runner import MigrationRunner
 from infrastructure.adapters.input.api.lead_router import router as lead_router
 from infrastructure.adapters.input.api.intake_router import router as intake_router
-from infrastructure.adapters.input.api.notification_router import router as notification_router
 from infrastructure.adapters.input.api.rule_router import router as rule_router
 from infrastructure.adapters.input.api.agent_router import router as agent_router
 from infrastructure.adapters.input.api.sales_group_router import router as sales_group_router
@@ -28,7 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
     MigrationRunner(container.database, migrations_dir).apply_pending()
 
-    # Delivery (outbox relay, webhooks, notification consumers) runs in the
+    # Delivery (outbox relay, webhooks) runs in the
     # backend-worker process, so the API owns nothing but request handling.
     app.state.container = container
     yield
@@ -60,5 +59,4 @@ app.include_router(sales_group_router, prefix="/api/v1/groups", tags=["Groups"])
 app.include_router(source_router, prefix="/api/v1/sources", tags=["Sources"])
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(tenant_router, prefix="/api/v1/tenants", tags=["Platform"])
-app.include_router(notification_router, prefix="/api/v1/notifications", tags=["Notifications"])
 app.include_router(internal_router, prefix="/internal/v1")

@@ -16,3 +16,16 @@ class IntakeJobRequested(InternalEvent):
     @property
     def partition_key(self) -> str:
         return self.job_id
+
+
+@dataclass(kw_only=True)
+class IntakeRejected(InternalEvent):
+    """Emitted when an incoming payload fails validation and cannot become a lead."""
+
+    tenant_id: str
+    intake_record_id: str
+    reason: str
+
+    @property
+    def partition_key(self) -> str:
+        return self.intake_record_id

@@ -1,12 +1,11 @@
-"""What an `intake.jobs` message is, and what handling one means.
+"""What handling an `intake.jobs` message means.
 
-Shared by the relay that publishes it, the intake worker that consumes it and
-the test gateway that does both in process, so the three cannot drift apart."""
+Shared by the intake worker that consumes it and the test gateway that does
+it in process, so the two cannot drift apart."""
 import logging
 from typing import Literal
 from uuid import UUID
 
-from chassis.outbox import OutboxRow
 from chassis.web import request_id_var
 
 from domain.exceptions import DomainException
@@ -19,17 +18,6 @@ from infrastructure.adapters.input.api.dependencies import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def job_message(row: OutboxRow) -> dict:
-    _LOGGER.info("Publishing intake job %s", row.payload["job_id"])
-    return {
-        "message_id": str(row.id),
-        "schema_version": 1,
-        "tenant_id": row.payload["tenant_id"],
-        "job_id": row.payload["job_id"],
-        "correlation_id": row.correlation_id,
-    }
 
 
 def process_job_message(container, message: dict) -> Literal["ack", "nack"]:

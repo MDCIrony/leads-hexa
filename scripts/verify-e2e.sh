@@ -1364,6 +1364,16 @@ verify_ms_f2() {
     check "$topic existe y está vacía" 0 "$sum_offsets"
   done
   check "leads_db.notifications ya no crece" "$before" "$(leads_db_notices)"
+
+  section "Microservicios F2 · el backend ya no tiene el módulo"
+  check "el backend no sirve /api/v1/notifications (404)" 404 "$(docker compose exec -T backend python -c \
+    "import urllib.request, urllib.error
+try:
+    print(urllib.request.urlopen('http://localhost:8000/api/v1/notifications').status)
+except urllib.error.HTTPError as e:
+    print(e.code)")"
+  # --include: stale .pyc of removed modules would otherwise match.
+  check "backend/src no menciona notificaciones" "" "$(grep -rli --include='*.py' notification "$(dirname "$0")/../backend/src")"
   rm -f "$mgr_c"
 }
 

@@ -12,7 +12,8 @@ from domain.entities.lead_source import LeadSource
 from domain.services.assignment_engine import AssignmentEngine
 from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus, IntakeRecordStatus, LeadSourceKind
 from infrastructure.intake_worker import messages as job_messages
-from infrastructure.intake_worker.messages import job_message, process_job_message
+from infrastructure.adapters.output.queue.job_message import job_message
+from infrastructure.intake_worker.messages import process_job_message
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 _PAYLOAD = {

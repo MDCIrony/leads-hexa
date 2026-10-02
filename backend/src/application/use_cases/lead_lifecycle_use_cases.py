@@ -12,7 +12,7 @@ from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.entities.agent import Agent
 from domain.entities.lead import Lead
 from domain.events.lead_events import LeadProcessedEvent
-from domain.events.notification_events import LeadAssigned, LeadReassigned
+from domain.events.lead_events import LeadAssigned, LeadReassigned
 from domain.exceptions import DomainException
 from domain.value_objects.enums import LeadStatus
 

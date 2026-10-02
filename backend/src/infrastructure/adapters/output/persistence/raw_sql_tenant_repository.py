@@ -45,7 +45,7 @@ class RawSqlTenantRepository(TenantRepositoryPort):
         return self._to_tenant(row) if row else None
 
     def list_all(self, limit: int = 100, offset: int = 0) -> List[Tenant]:
-        # Newest organization first, matching GET /leads and GET /notifications.
+        # Newest organization first, matching GET /leads.
         # Ordering by id as a tiebreaker keeps pages stable when two rows share
         # a creation timestamp.
         rows = self.connection.execute(

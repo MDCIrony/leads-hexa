@@ -117,12 +117,6 @@ NULLABLE_BY_DESIGN: dict[str, set[str]] = {
         # the just-created response, verified separately below.
         "manager",
     },
-    "NotificationResponse": {
-        # lead_id and intake_record_id are mutually exclusive: this test
-        # exercises a LEAD_ASSIGNED notification, which never carries an
-        # intake_record_id (that one is INTAKE_REJECTED's job).
-        "intake_record_id",
-    },
 }
 
 
@@ -558,45 +552,6 @@ def test_disqualification_rule_round_trip_and_schema_contract():
         )
         assert data["conditions"]
         assert_schema_fields_filled(schemas.DisqualificationRuleResponse, data)
-
-
-# --- Notification: triggered by an assignment ---
-
-def test_notification_round_trip_and_schema_contract():
-    tenant_id = str(uuid.uuid4())
-    with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
-        headers = _manager_auth_headers(tenant_id)
-
-        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-        from domain.entities.agent import Agent
-
-        uow = PostgresUnitOfWork(app.state.container.database)
-        agent = Agent.create(name="Notif Agent", email=f"notif_{uuid.uuid4().hex[:6]}@test.com",
-                              role=AgentRole.AGENT, tenant_id=tenant_id)
-        with uow:
-            uow.agents.save(agent)
-        agent_headers = _token_headers(agent)
-
-        record = ingest_and_resolve(client, headers, {
-            "first_name": "Eve", "last_name": "Marin", "email": "eve@notify.test",
-            "company": "NotifyCo", "budget": 1000.0, "industry": "Tech",
-        })
-        assign_resp = client.post(
-            f"/api/v1/leads/{record['lead_id']}/assign", json={"agent_id": str(agent.id)}, headers=headers,
-        )
-        assert assign_resp.status_code == 200, assign_resp.text
-
-        resp = client.get("/api/v1/notifications", headers=agent_headers)
-        assert resp.status_code == 200, resp.text
-        assert_no_credentials_leaked(resp)
-        items = resp.json()["items"]
-        assert items, "el asesor asignado debe tener al menos una notificación"
-        data = items[0]
-
-        assert data["kind"] == "LEAD_ASSIGNED"
-        assert data["lead_id"] == record["lead_id"]
-        assert_schema_fields_filled(schemas.NotificationResponse, data)
 
 
 # --- Lead stats: not an entity, but its own contract worth pinning down ---

@@ -1,26 +1,22 @@
-"""What the delivery chain promises when a hop fails: a duplicate creates no second
-effect, a poison event is parked instead of blocking, a failing job is retried
-by the broker and bounded by its delivery limit. Real database, doubles for the brokers."""
-import json
+"""What the delivery chain promises when a hop fails: a relay that dies after
+delivering re-delivers and publishes once, a failing job is retried by the
+broker and bounded by its delivery limit. Real database, doubles for the brokers."""
 from contextlib import contextmanager
 from uuid import UUID, uuid4
 
 import pytest
-from chassis.consumer import ConsumerLoop, Envelope, dlq_topic
-from chassis.outbox import OutboxRelay, envelope
+from chassis.outbox import OutboxRelay
 
 from application.dtos.commands import ReceiveIntakeCommand
-from application.handlers.notification_handler import NotificationHandler
 from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from domain.entities.agent import Agent
 from domain.entities.lead_source import LeadSource
 from domain.entities.tenant import Tenant
-from domain.events.notification_events import LeadAssigned
+from domain.events.lead_events import LeadAssigned
 from domain.services.assignment_engine import AssignmentEngine
 from domain.value_objects.enums import (
     AgentRole, IntakeJobStatus, IntakeRecordStatus, LeadSourceKind,
 )
-from infrastructure.adapters.input.events.notification_consumer import NotificationConsumer
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.adapters.output.queue.intake_queue_topology import (
@@ -29,9 +25,6 @@ from infrastructure.adapters.output.queue.intake_queue_topology import (
 from infrastructure.intake_worker import messages as job_messages
 from infrastructure.intake_worker.messages import process_job_message
 
-_GROUP = "notifications.lead-events"
-_TOPIC = "internal.lead-core.events"
-
 
 def _count(test_db, sql: str, params: tuple = ()) -> int:
     with test_db.get_connection(autocommit=True) as conn:
@@ -39,7 +32,7 @@ def _count(test_db, sql: str, params: tuple = ()) -> int:
 
 
 def _seed_assigned_event(test_db) -> LeadAssigned:
-    """An agent (notifications reference it) and a LeadAssigned in the internal channel."""
+    """An agent and a LeadAssigned in the internal channel."""
     with PostgresUnitOfWork(test_db) as uow:
         tenant = uow.tenants.save(Tenant.create(name=f"Org {uuid4()}"))
         agent = uow.agents.save(
@@ -77,7 +70,7 @@ class _MarkDiesStore:
         self._store.mark_failed(row_id, error)
 
 
-def test_a_row_delivered_twice_after_a_relay_crash_notifies_once(test_db):
+def test_a_row_delivered_twice_after_a_relay_crash_is_published_once(test_db):
     event = _seed_assigned_event(test_db)
     dispatcher = _CapturingDispatcher()
 
@@ -92,79 +85,8 @@ def test_a_row_delivered_twice_after_a_relay_crash_notifies_once(test_db):
     assert OutboxRelay(lambda: open_outbox_store(test_db), {"internal": [dispatcher]}).drain("internal") == 1
 
     assert [row.id for row in dispatcher.delivered] == [event.event_id, event.event_id]
-    consumer = NotificationConsumer(lambda: PostgresUnitOfWork(test_db), _GROUP)
-    for row in dispatcher.delivered:
-        consumer(Envelope.from_bytes(json.dumps(envelope(row, "lead-core")).encode()))
 
-    assert _count(test_db, "SELECT COUNT(*) AS n FROM notifications WHERE lead_id = %s",
-                  (UUID(event.lead_id),)) == 1
     assert _count(test_db, "SELECT COUNT(*) AS n FROM outbox_events WHERE published_at IS NOT NULL") == 1
-
-
-class _Message:
-    def __init__(self, value: bytes) -> None:
-        self._value = value
-
-    def value(self): return self._value
-    def key(self): return b"lead"
-    def topic(self): return _TOPIC
-    def partition(self): return 1
-    def offset(self): return 7
-    def headers(self): return [("event_type", b"LeadAssigned")]
-
-
-class _Consumer:
-    def __init__(self) -> None:
-        self.commits = []
-
-    def commit(self, **kwargs):
-        self.commits.append(kwargs)
-
-
-class _Producer:
-    def __init__(self) -> None:
-        self.produced = []
-
-    def produce(self, **kwargs):
-        self.produced.append(kwargs)
-        kwargs["on_delivery"](None, None)
-
-    def flush(self, timeout):
-        return 0
-
-
-def test_an_event_whose_effect_always_fails_is_dead_lettered_and_committed(test_db, monkeypatch):
-    event = _seed_assigned_event(test_db)
-    with open_outbox_store(test_db) as store:
-        (row,) = store.fetch("internal", 10)
-    message = _Message(json.dumps(envelope(row, "lead-core")).encode())
-
-    attempts = []
-
-    def _boom(self, *args):
-        attempts.append(args)
-        raise RuntimeError("effect failed")
-
-    monkeypatch.setattr(NotificationHandler, "apply", _boom)
-    consumer, producer = _Consumer(), _Producer()
-    loop = ConsumerLoop(
-        consumer, producer, _GROUP, [_TOPIC],
-        NotificationConsumer(lambda: PostgresUnitOfWork(test_db), _GROUP),
-        sleep=lambda _: None,
-    )
-
-    assert loop.process(message) == "dead-lettered"
-
-    assert len(attempts) == 3
-    (sent,) = producer.produced
-    assert sent["topic"] == dlq_topic(_GROUP) == "internal.dlq.notifications.lead-events"
-    assert dict(sent["headers"])["attempts"] == b"3"
-    assert sent["value"] == message.value()
-    # Committed, so the partition moves on instead of replaying the poison message.
-    assert consumer.commits == [{"message": message, "asynchronous": False}]
-    assert _count(test_db, "SELECT COUNT(*) AS n FROM notifications") == 0
-    assert _count(test_db, "SELECT COUNT(*) AS n FROM processed_events WHERE event_id = %s",
-                  (event.event_id,)) == 0
 
 
 class _Container:

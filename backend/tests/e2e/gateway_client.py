@@ -5,20 +5,18 @@ introspection endpoint and forwards only the resulting bearer, so e2e tests
 exercise the same trust boundary the stack runs with. Tests that deliberately
 talk to the app without a gateway (test_internal_auth) keep a plain TestClient.
 
-It also stands in for the outbox worker and the intake worker (F1): after every
-forwarded request it drains the internal channel into the notification
-consumers and the job channel through process_job_message, in process."""
+It also stands in for the outbox worker and the intake worker: after every
+forwarded request it drains the job channel through process_job_message, in
+process. The internal channel is not drained; its rows stay unpublished."""
 import dataclasses
 import json
 
 import httpx
-from chassis.consumer import Envelope
-from chassis.outbox import OutboxRow, envelope
+from chassis.outbox import OutboxRow
 from fastapi.testclient import TestClient
 
-from infrastructure.adapters.input.events.notification_consumer import NotificationConsumer
-from infrastructure.adapters.output.events.internal_topics import topic_for
-from infrastructure.intake_worker.messages import job_message, process_job_message
+from infrastructure.adapters.output.queue.job_message import job_message
+from infrastructure.intake_worker.messages import process_job_message
 
 _INTROSPECT = "/internal/v1/auth/introspect"
 _PUBLIC_PREFIX = "/api/v1/auth/"
@@ -28,12 +26,6 @@ _UNAUTHORIZED = {"error": True, "error_code": "UNAUTHORIZED", "message": "Authen
 _NOT_FOUND = {"error": True, "error_code": "NOT_FOUND", "message": "Not Found"}
 # RabbitMQ's delivery limit on intake.jobs; past it the real message goes to the DLQ.
 _MAX_JOB_DELIVERIES = 3
-# A local copy: in the stack these groups now belong to notifications-worker,
-# but the suite still drains them in process until Task 9 removes the backend's inbox.
-_NOTIFICATION_GROUPS = {
-    "notifications.lead-events": "internal.lead-core.events",
-    "notifications.intake-events": "internal.intake.events",
-}
 
 
 class GatewayClient(TestClient):
@@ -77,10 +69,7 @@ class GatewayClient(TestClient):
 
     def _forward(self, method, url, **kwargs):
         response = super().request(method, url, **kwargs)
-        self._drain_internal()
-        # Processing a job writes internal events of its own, hence the second pass.
-        if self._drain_jobs():
-            self._drain_internal()
+        self._drain_jobs()
         return response
 
     def _drain_jobs(self) -> bool:
@@ -105,28 +94,3 @@ class GatewayClient(TestClient):
                 with container.unit_of_work() as uow:
                     uow.outbox.mark_published(entry.id)
                 ran = True
-
-    def _drain_internal(self) -> None:
-        """What the relay plus the Kafka consumers will do, minus the broker.
-
-        The envelope goes through bytes and back, the same path a real message
-        takes. Identity state has no consumer in F1, so it is only marked."""
-        container = getattr(self.app.state, "container", None)
-        if container is None:
-            return
-        consumers = {
-            topic: NotificationConsumer(container.unit_of_work, group)
-            for group, topic in _NOTIFICATION_GROUPS.items()
-        }
-        while True:
-            with container.unit_of_work() as uow:
-                entries = uow.outbox.list_unpublished("internal", 100)
-            if not entries:
-                return
-            for entry in entries:
-                row = OutboxRow(**dataclasses.asdict(entry))
-                consumer = consumers.get(topic_for(row))
-                if consumer is not None:
-                    consumer(Envelope.from_bytes(json.dumps(envelope(row, "lead-core")).encode()))
-                with container.unit_of_work() as uow:
-                    uow.outbox.mark_published(entry.id)
