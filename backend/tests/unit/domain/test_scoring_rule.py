@@ -9,7 +9,6 @@ from domain.entities.rule import ScoringRule
 from domain.exceptions import DomainException
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator
-from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 
 _TENANT = uuid.uuid4()
 
@@ -118,21 +117,3 @@ class TestMultipleConditions:
     def test_an_empty_condition_list_always_applies(self):
         rule = ScoringRule.create(tenant_id=_TENANT, name="R", score_delta=10, conditions=[])
         assert rule.matches(_lead()) is True
-
-
-class TestInMemoryRepository:
-    def test_saving_the_same_rule_twice_keeps_only_the_latest(self):
-        repo = InMemoryRuleRepository()
-        rule = _rule("industry", Operator.EQUALS, "tech")
-        repo.save_scoring_rule(_TENANT, rule)
-
-        updated = ScoringRule.create(
-            tenant_id=_TENANT, name="R", score_delta=20,
-            conditions=[Criterion.create(field="industry", operator=Operator.EQUALS, value="tech")],
-            rule_id=rule.id,
-        )
-        repo.save_scoring_rule(_TENANT, updated)
-
-        stored = repo.get_scoring_rules_by_tenant(_TENANT)
-        assert len(stored) == 1
-        assert stored[0].score_delta == 20

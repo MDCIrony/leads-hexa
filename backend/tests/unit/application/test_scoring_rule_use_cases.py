@@ -10,7 +10,10 @@ from application.use_cases.rule_use_cases import (
     GetScoringRulesUseCase,
     UpdateScoringRuleUseCase,
 )
+from domain.entities.rule import ScoringRule
 from domain.exceptions import DomainException
+from domain.value_objects.criterion import Criterion
+from domain.value_objects.enums import Operator
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
@@ -100,3 +103,21 @@ class TestDeleteScoringRule:
             DeleteScoringRuleUseCase(uow=uow).execute(tenant_id=other_tenant, rule_id=rule.id)
 
         assert exc_info.value.error_code == "SCORING_RULE_NOT_FOUND"
+
+
+class TestInMemoryRepository:
+    def test_saving_the_same_rule_twice_keeps_only_the_latest(self):
+        tenant = uuid.uuid4()
+        repo = InMemoryRuleRepository()
+        conditions = [Criterion.create(field="industry", operator=Operator.EQUALS, value="tech")]
+        rule = ScoringRule.create(tenant_id=tenant, name="R", score_delta=10, conditions=conditions)
+        repo.save_scoring_rule(tenant, rule)
+
+        updated = ScoringRule.create(
+            tenant_id=tenant, name="R", score_delta=20, conditions=conditions, rule_id=rule.id,
+        )
+        repo.save_scoring_rule(tenant, updated)
+
+        stored = repo.get_scoring_rules_by_tenant(tenant)
+        assert len(stored) == 1
+        assert stored[0].score_delta == 20
