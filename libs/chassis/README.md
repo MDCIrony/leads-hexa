@@ -12,8 +12,9 @@ token interno (Ed25519, ADR-0032) y correlación de peticiones por `X-Request-ID
   `enable.auto.commit=false` y `auto.offset.reset=earliest`.
 - `chassis.rabbit`: `RabbitJobDispatcher` (publica con *confirms*, `mandatory` y persistente).
 - `chassis.testing`: `assert_structure` y `assert_domain_tests_isolated`, los guardianes de estructura
-  (ADR-0037) que cada servicio llama desde `tests/architecture/`. `python -m chassis.testing src` imprime
-  la lista base de un árbol.
+  (ADR-0037) que cada servicio llama desde `tests/architecture/`. `python -m chassis.testing measure <raíz>`
+  imprime la lista base de un árbol y `check <raíz>` la aplica; `scripts/verify-structure.sh` la usa
+  para todo el repositorio.
 
 ## Extras
 

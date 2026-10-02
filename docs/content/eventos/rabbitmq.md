@@ -123,8 +123,8 @@ Un `NackError` o un mensaje no enrutable no se reintentan por reconexión: la fi
 
 | Pieza | Fichero |
 |---|---|
-| El mensaje y su procesamiento | `infrastructure/workers/job_messages.py` |
-| El trabajador | `infrastructure/workers/intake_worker.py` |
+| El mensaje y su procesamiento | `infrastructure/intake_worker/messages.py` |
+| El trabajador | `infrastructure/intake_worker/` (`consumer.py`, `main.py`), `python -m infrastructure.intake_worker` |
 | La topología de la cola | `infrastructure/adapters/output/queue/intake_queue_topology.py` |
 | El despachador que publica | `libs/chassis/src/chassis/rabbit.py` (`RabbitJobDispatcher`), cableado en `infrastructure/worker/` |
 | El fichero guardado | `infrastructure/adapters/output/persistence/raw_sql_intake_file_repository.py` |

@@ -148,38 +148,23 @@ hace dos lecturas. Los tipos se regeneran desde los OpenAPI de cada servicio.
 
 ## Patrón de construcción
 
-Todos los servicios Python comparten este esqueleto. La regla: **si dos servicios resuelven lo mismo,
-lo resuelven en el mismo sitio y con el mismo nombre**. Lo único que diverge es el contenido de
+Todos los servicios Python comparten el mismo esqueleto. La regla: **si dos servicios resuelven lo
+mismo, lo resuelven en el mismo sitio y con el mismo nombre**. Lo único que diverge es el contenido de
 `domain/`, `application/use_cases/` y los adaptadores concretos.
 
-```text
-services/<svc>/
-├── pyproject.toml              # proyecto uv propio; depende de libs/chassis por ruta
-├── uv.lock
-├── Dockerfile                  # etapas runner / dev / test, iguales en todos
-├── migrations/NNN_*.sql        # sólo tablas propias, idempotentes
-├── src/
-│   ├── domain/
-│   │   ├── entities/  value_objects/  events/  services/  policies/
-│   │   └── exceptions.py
-│   ├── application/
-│   │   ├── dtos/               # incluye context.py: RequestContext(principal, tenant_id)
-│   │   ├── ports/input/  ports/output/
-│   │   └── use_cases/
-│   └── infrastructure/
-│       ├── adapters/input/api/         # routers públicos, dependencies.py, schemas.py, exception_handlers.py
-│       ├── adapters/input/internal/    # routers /internal/v1/*
-│       ├── adapters/input/consumers/   # consumidores Kafka y RabbitMQ
-│       ├── adapters/output/            # persistence/, http/, events/, queue/...
-│       ├── config/settings.py
-│       ├── di/container.py
-│       ├── main.py                     # proceso api
-│       └── worker/                     # proceso worker: relay + consumidores
-└── tests/
-    ├── architecture/                          # capas y estructura, con los helpers de chassis.testing
-    ├── unit/  integration/  e2e/
-    └── conftest.py
-```
+El árbol de `src/` y `tests/` —`servicio → capa → contexto`, con sus límites de tamaño— es el
+[árbol modelo de Convenciones](../desarrollo/convenciones.md#estructura-y-tamano-del-codigo) y no se
+repite aquí. Lo que añade cada servicio extraído:
+
+| Ruta, bajo `services/<svc>/` | Contiene |
+|---|---|
+| `pyproject.toml`, `uv.lock` | Proyecto uv propio; depende de `libs/chassis` por ruta |
+| `Dockerfile` | Etapas `runner`, `dev` y `test`, iguales en todos |
+| `migrations/NNN_*.sql` | Sólo las tablas propias, idempotentes |
+| `src/application/dtos/context.py` | `RequestContext(principal, tenant_id)` |
+| `src/infrastructure/adapters/input/internal/` | Routers `/internal/v1/*` |
+| `src/infrastructure/adapters/input/consumers/` | Consumidores Kafka y RabbitMQ |
+| `src/infrastructure/config/settings.py`, `di/container.py` | Configuración y cableado |
 
 | Pieza | Regla |
 |---|---|
@@ -187,7 +172,7 @@ services/<svc>/
 | `RequestContext` | `RequestContext(principal, tenant_id)` en `application/dtos/context.py`. `Principal` es un dataclass del propio servicio: `agent_id`, `tenant_id`, `role`, `principal_type`. Sustituye a la entidad `Agent` que hoy viaja en el contexto |
 | `AuthorizationPolicy` | Misma lógica que hoy, sobre `Principal`. Vive en `domain/policies` de cada servicio que la necesita |
 | Errores | Mismo sobre `{error, error_code, message}` y misma tabla `STATUS_BY_ERROR_CODE` por servicio |
-| Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que el servicio nuevo pasa sin lista base. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
+| Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que el servicio nuevo pasa sin lista base; sus `src/` y `tests/` se declaran en `scripts/verify-structure.sh`. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
 | Configuración | `Settings.from_environment()` falla al arrancar si falta un valor obligatorio, como hoy |
 
 ### `libs/chassis`

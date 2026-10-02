@@ -22,10 +22,10 @@ límites lo sostienen:
 
 | Regla | Límite |
 |---|---|
-| Líneas por fichero `.py` fuente | 150, contando líneas en blanco y comentarios. Los tests no tienen límite |
-| Ficheros `.py` por carpeta | 12, sin contar `__init__.py` ni las subcarpetas |
+| Líneas por fichero `.py` fuente | 150, contando líneas en blanco y comentarios. Los tests no tienen límite de líneas |
+| Ficheros `.py` por carpeta | 12, sin contar `__init__.py` ni las subcarpetas. Vale para fuentes **y para tests** |
 | Anidamiento | `servicio → capa → contexto o responsabilidad`; los tests siguen el mismo árbol |
-| Tests de dominio | `tests/unit/domain/**` sólo importa el dominio, la stdlib, `pytest` y sus propios helpers |
+| Tests de dominio | `tests/unit/domain/**` sólo importa el dominio, la stdlib, `pytest` y sus propios helpers; un import relativo que sale de esa carpeta también falla |
 
 Se agrupa por concepto en subcarpetas: ni una carpeta con decenas de ficheros de conceptos mezclados,
 ni una carpeta por fichero salvo que el concepto lo pida. Al partir un módulo en un paquete, su
@@ -45,7 +45,7 @@ ni una carpeta por fichero salvo que el concepto lo pida. Al partir un módulo e
 │       ├── adapters/input/api/<contexto>/
 │       ├── adapters/output/persistence/<contexto>/
 │       ├── main.py                     # proceso api
-│       └── worker/                     # proceso worker: config, relays, lanes, main, __main__
+│       └── worker/                     # proceso worker: producers, relays, topics, lanes, main, __main__
 └── tests/
     ├── architecture/                   # guardián de capas, de estructura y su lista base
     └── unit/{domain,application,infrastructure}/<contexto>/
@@ -57,24 +57,41 @@ Un ejemplo que ya cumple es `libs/chassis/src/chassis/`:
 chassis/
 ├── auth/        claims.py  jwks.py  signing.py  verifier.py
 ├── consumer/    envelope.py  kafka.py  loop.py  topics.py
-├── outbox/      envelope.py  kafka.py  relay.py
-├── testing/     isolation.py  structure.py      # los guardianes de esta sección
+├── outbox/      envelope.py  kafka.py  relay.py  row.py
+├── testing/     cli.py  isolation.py  structure.py      # los guardianes de esta sección
 ├── rabbit.py
 └── web.py
 ```
 
-**Cómo se comprueba.** `chassis.testing` ofrece `assert_structure` y `assert_domain_tests_isolated`;
-cada servicio los llama desde `tests/architecture/test_structure.py`, y `libs/chassis` se valida a sí
-mismo sin excepciones.
-
-**El backend heredado.** Lo que ya incumplía al llegar la regla está en
-`backend/tests/architecture/structure_baseline.py`, con lo que medía cada fichero y cada carpeta. La
-lista sólo encoge: falla si una entrada crece, si queda por encima de lo que mide el árbol y si ya
-cumple el límite. Quien adelgaza un fichero heredado actualiza la lista en el mismo commit; los
-valores se imprimen con:
+**Cómo se comprueba.** Desde la raíz, para todo el repositorio y sin Docker:
 
 ```bash
-cd backend && uv run python -m chassis.testing src
+./scripts/verify-structure.sh
+```
+
+El script recorre cada raíz Python declarada —`backend/src`, `backend/tests`, `libs/chassis/src`,
+`libs/chassis/tests`, `test-consumer/`, `demo/` y `tools/`— con su lista base; en las de tests sólo
+mide carpetas. Además, `chassis.testing` ofrece `assert_structure` (con `max_lines=None` para los
+tests) y `assert_domain_tests_isolated`, y cada servicio los llama desde
+`tests/architecture/test_structure.py`, así que la suite tampoco deja pasar un incumplimiento.
+`libs/chassis` se valida a sí mismo sin excepciones. Una raíz Python nueva se añade al script.
+
+**Lo heredado.** Lo que ya incumplía al llegar la regla está en tres listas base, con lo que medía
+cada fichero y cada carpeta:
+
+| Lista | Raíz |
+|---|---|
+| `backend/tests/architecture/structure_baseline.py` | `backend/src` |
+| `backend/tests/architecture/tests_structure_baseline.py` | `backend/tests`, sólo carpetas |
+| `scripts/structure_baseline.py` | `test-consumer/` y `demo/` |
+
+Las listas sólo encogen: fallan si una entrada crece, si queda por encima de lo que mide el árbol y si
+ya cumple el límite. Quien adelgaza algo heredado actualiza su lista en el mismo commit; los valores
+se imprimen con:
+
+```bash
+cd libs/chassis && uv run python -m chassis.testing measure ../../backend/src
+cd libs/chassis && uv run python -m chassis.testing measure ../../backend/tests --no-line-limit
 ```
 
 El código nuevo cumple sin entrar en la lista. El porqué y las alternativas están en

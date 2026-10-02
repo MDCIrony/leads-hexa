@@ -45,12 +45,13 @@ lead— está en la guía de [puesta en marcha](docs/content/desarrollo/puesta-e
 
 ## Validación
 
-Tres comandos, cada uno demuestra algo que los otros no:
+Cinco comandos, cada uno demuestra algo que los otros no:
 
 ```bash
 docker compose --profile test run --rm backend-test    # suite completa, todas las capas
 cd backend && uv run pytest -m unit -q                 # dominio aislado, sin base de datos
 ./scripts/verify-e2e.sh                                # el negocio sobre HTTP real
+./scripts/verify-structure.sh                          # tamaño de ficheros y carpetas, todo el repo
 cd frontend && npm run test                            # la interfaz, sin backend levantado
 ```
 

@@ -10,15 +10,19 @@ entienda sin abrir el diff.
 
 ## Antes de abrir una propuesta de cambio
 
-Los tres comandos de [Validación](validacion.md) sobre el cambio completo:
+Los cuatro comandos de [Validación](validacion.md) sobre el cambio completo:
 
 ```bash
 docker compose --profile test run --rm backend-test
 cd backend && uv run pytest -m unit -q
 ./scripts/verify-e2e.sh
+./scripts/verify-structure.sh
 ```
 
-Los cuatro tests de arquitectura deben seguir en 4/4. Si el cambio toca `scripts/verify-e2e.sh`, se
+Los cuatro tests de arquitectura deben seguir en 4/4, y los guardianes de estructura
+(`tests/architecture/test_structure.py` y `verify-structure.sh`, [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md))
+en verde: un fichero fuente de más de 150 líneas, una carpeta de más de 12 ficheros —también de
+tests— o una entrada de lista base que crece hacen fallar el cambio. Si el cambio toca `scripts/verify-e2e.sh`, se
 amplía —una función `verify_fN` nueva, llamada desde `main`— y no se reescribe: las comprobaciones
 anteriores son la prueba de que lo que ya funcionaba sigue funcionando.
 
@@ -89,5 +93,5 @@ Es la misma comprobación que conviene tener en integración continua.
 ## Para quien llega de fuera
 
 El flujo es el habitual de un proyecto abierto: bifurcar el repositorio, trabajar en una rama
-propia y abrir una propuesta de cambio contra `main` cuando los tres comandos de validación pasan.
+propia y abrir una propuesta de cambio contra `main` cuando los cuatro comandos de validación pasan.
 La revisión sigue los mismos criterios que para el equipo interno.

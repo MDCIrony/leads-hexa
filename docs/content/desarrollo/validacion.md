@@ -1,12 +1,13 @@
 # Validación
 
-Tres comandos, cada uno demuestra algo que los otros dos no. Ninguno necesita `--build` ni
+Cuatro comandos, cada uno demuestra algo que los otros no. Ninguno necesita `--build` ni
 `restart` para reflejar un cambio.
 
 ```bash
 docker compose --profile test run --rm backend-test    # suite completa     ~4 min
 cd backend && uv run pytest -m unit -q                 # dominio aislado    ~1 s
 ./scripts/verify-e2e.sh                                # negocio sobre HTTP ~3 s
+./scripts/verify-structure.sh                          # estructura, todo el repo ~1 s
 ```
 
 ## Por qué no hace falta reconstruir
@@ -174,6 +175,16 @@ determinista y sin red para el callback. Verifica start/PKCE/cookie, el primer e
 repetido, el rechazo de correo no verificado, la transición a MFA y el replay. El modo rechaza cualquier
 entorno que no sea `test`, no usa credenciales de proveedor y el contenedor temporal se elimina al final.
 
+### La estructura del código
+
+`./scripts/verify-structure.sh` aplica la regla de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md)
+a cada raíz Python del repositorio —`backend/src`, `backend/tests`, `libs/chassis/src`,
+`libs/chassis/tests`, `test-consumer/`, `demo/` y `tools/`— con `python -m chassis.testing check`, sobre
+el entorno de `libs/chassis` y sin Docker. Las fuentes no pasan de 150 líneas por fichero; fuentes y
+tests, de 12 ficheros `.py` por carpeta. Lo heredado se compara con su lista base, que sólo encoge;
+imprime `ok` por raíz, o lo que falla y por qué, y sale con código distinto de cero si alguna falla.
+Ver [Convenciones](convenciones.md#estructura-y-tamano-del-codigo).
+
 ## Los cuatro tests de arquitectura
 
 Dentro de la suite completa, `backend/tests/architecture/test_dependency_rule.py` analiza el árbol
@@ -191,6 +202,16 @@ que no le corresponde:
 Deben estar siempre 4/4. Si uno falla, algo cruzó una frontera que la arquitectura hexagonal existe
 para impedir — ver [Arquitectura](../arquitectura/index.md) y
 [ADR-0001](../decisiones/0001-arquitectura-hexagonal.md).
+
+A su lado, `backend/tests/architecture/test_structure.py` lleva los guardianes de estructura a la
+propia suite, con los helpers de `chassis.testing`:
+
+- `test_source_files_and_folders_stay_within_the_limits_or_their_baseline` — `backend/src` contra
+  `structure_baseline.py`.
+- `test_test_folders_stay_within_the_folder_limit_or_their_baseline` — `backend/tests`, sin límite de
+  líneas, contra `tests_structure_baseline.py`.
+- `test_domain_tests_import_only_the_domain` — `tests/unit/domain/` sólo importa dominio, stdlib,
+  `pytest` y sus propios helpers; un import relativo que sale de la carpeta también falla.
 
 ## El test de contrato de serialización
 
@@ -230,8 +251,10 @@ Añade además una garantía transversal: ningún cuerpo de respuesta contiene `
 `libs/chassis` tiene su propia suite, independiente del backend y sin base de datos:
 
 ```bash
-cd libs/chassis && uv run pytest -q
+cd libs/chassis && uv run pytest -q -W error
 ```
+
+Incluye `test_structure.py`: chassis cumple la regla de estructura sin lista base.
 
 ## La colección de Bruno
 

@@ -119,7 +119,7 @@ está en la [referencia de la API](../desarrollo/api-referencia.md).
 | `ProcessIntakeJobUseCase` | Recorre los registros `PENDING` de un trabajo y los interpreta |
 | `IngestLeadUseCase` | Interpreta el payload: viabilidad, puntuación y asignación |
 | `ProcessBatchUseCase` | Parsea el fichero guardado, una sola vez, y materializa un `IntakeRecord` por fila |
-| `intake_worker.py`, `job_messages.py` | Consumen `intake.jobs` y ejecutan el trabajo; `ack`, `nack` o dead-letter según el resultado |
+| `intake_worker/` (`consumer.py`, `messages.py`, `main.py`) | Consumen `intake.jobs` y ejecutan el trabajo; `ack`, `nack` o dead-letter según el resultado |
 | `intake_router.py` | Endpoints de ingesta, bandeja de revisión y reproceso |
 
 ## Decisiones que lo explican
@@ -139,6 +139,5 @@ está en la [referencia de la API](../desarrollo/api-referencia.md).
 - `backend/src/application/use_cases/process_batch_use_case.py`
 - `backend/src/application/use_cases/intake_job_use_cases.py`
 - `backend/src/application/use_cases/intake_record_use_cases.py`
-- `backend/src/infrastructure/workers/intake_worker.py`
-- `backend/src/infrastructure/workers/job_messages.py`
+- `backend/src/infrastructure/intake_worker/`
 - `backend/src/infrastructure/adapters/input/api/intake_router.py`
