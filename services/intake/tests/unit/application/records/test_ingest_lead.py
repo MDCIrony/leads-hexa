@@ -10,8 +10,8 @@ from application.use_cases.records.ingest_lead import IngestLeadUseCase
 from application.use_cases.reception.payloads import command_from_record
 from domain.exceptions import DomainException
 from domain.records.intake_record import IntakeRecord
-from domain.value_objects.lead_id import LeadId
 from domain.value_objects.enums import IntakeRecordStatus
+from domain.value_objects.lead_id import LeadId
 from tests.unit.application.doubles.admissions import FakeLeadAdmission, admitted, rejected, unavailable
 from tests.unit.application.doubles.uow import InMemoryUnitOfWork
 

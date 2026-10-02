@@ -123,3 +123,22 @@ def test_counters_are_recovered_from_the_records_after_a_run_that_died_before_sa
 
     job = uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
     assert (job.succeeded, job.failed) == (2, 0)
+
+
+def test_a_record_discarded_mid_batch_is_skipped_and_does_not_interrupt_the_job():
+    uow, tenant_id, job_id, records = _received([_VALID, dict(_VALID, email="second@techcorp.com")])
+    real = IngestLeadUseCase(uow, FakeLeadAdmission(uow))
+
+    class _DiscardedMeanwhile(IngestLeadInputPort):
+        def execute(self, command, existing_record) -> LeadProcessedResult:
+            if command.email == _VALID["email"]:
+                discarded = uow.intake_records.get_by_id_and_tenant(existing_record.id.value, tenant_id)
+                discarded.discard()
+                uow.intake_records.save(discarded)
+            return real.execute(command, existing_record)
+
+    interrupted = ProcessIntakeJobUseCase(uow, _DiscardedMeanwhile()).execute(tenant_id, job_id)
+
+    job = uow.intake_jobs.get_by_id_and_tenant(job_id, tenant_id)
+    assert (interrupted, job.status, job.succeeded, job.failed) == (False, IntakeJobStatus.COMPLETED, 1, 0)
+    assert {_status(uow, tenant_id, r) for r in records} == {IntakeRecordStatus.DISCARDED, IntakeRecordStatus.PROMOTED}

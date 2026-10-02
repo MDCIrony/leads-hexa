@@ -31,7 +31,11 @@ class ProcessIntakeJobUseCase(ProcessIntakeJobInputPort):
         for record in pending:
             try:
                 self.ingest.execute(command_from_record(record), existing_record=record)
-            except Exception:
+            except Exception as error:
+                # A record closed by someone else mid-batch (a manager discarded it) is
+                # skipped: redelivering cannot change that, so it must not hold the job open.
+                if isinstance(error, DomainException) and error.error_code == "INVALID_INTAKE_TRANSITION":
+                    continue
                 # Includes AdmissionUnavailable. The record stays PENDING on
                 # purpose: it is the only state reprocessing reads, so the
                 # failure is recoverable. It is not counted as failed either,
