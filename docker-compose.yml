@@ -80,11 +80,8 @@ services:
       - ./gateway/introspect.conf:/etc/nginx/introspect.conf:ro
     ports:
       - "8001:8080"
-    depends_on:
-      # nginx resolves upstream names at startup and refuses to start if one
-      # does not exist yet on the network; started is enough, healthy is not needed.
-      backend:
-        condition: service_started
+    # No depends_on: the upstream is re-resolved at runtime (`resolve`), so the
+    # gateway starts, and survives a backend recreate, without ordering.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s

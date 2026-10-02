@@ -1014,6 +1014,7 @@ verify_ms_f0() {
   r=$(req "$API/leads" -H "Authorization: Bearer not-a-jwt")
   check "bearer basura sin cookie → 401" 401 "$(code "$r")"
   check "401 con el sobre de siempre" UNAUTHORIZED "$(body "$r" | f 'd["error_code"] if d.get("error") is True else ""')"
+  check "401 con el mensaje del gateway" "Authentication required" "$(body "$r" | f 'd["message"]')"
 
   mgr_a_id=$(body "$(req "$API/auth/me" -H "Authorization: Bearer $MGR_A")" | f 'd["id"]')
   forged=$(docker compose exec -T backend python -c '
@@ -1024,6 +1025,8 @@ now = int(time.time())
 print(Ed25519Signer("dev-1", Ed25519PrivateKey.generate()).sign({"iss": "identity", "aud": "lead-router",
     "sub": sys.argv[1], "tid": sys.argv[2], "role": "MANAGER", "ptype": "human",
     "iat": now, "exp": now + 60, "jti": str(uuid.uuid4())}))' "$mgr_a_id" "$TENANT_A")
+  # An empty $forged (the exec failed) would let the three checks below pass for the wrong reason.
+  check "JWT forjado generado" 3 "$(printf '%s' "$forged" | awk -F. '{print NF}')"
   r=$(req "$API/leads" -H "Authorization: Bearer $forged")
   check "JWT de otra clave por el gateway → 401" 401 "$(code "$r")"
   status=$(docker compose exec -T backend python -c '
@@ -1046,6 +1049,8 @@ except urllib.error.HTTPError as e:
   check "X-Request-Id se genera si falta" True "$(awk 'tolower($1)=="x-request-id:"{print $2}' "$headers" | tr -d '\r' | grep -qE '^[A-Za-z0-9]{16,}$' && printf True || printf False)"
   curl -s -o /dev/null -D "$headers" -H "X-Request-Id: no vale;$STAMP" "$API/auth/me"
   check "X-Request-Id hostil se sustituye" False "$(grep -qi "no vale" "$headers" && printf True || printf False)"
+  curl -s -o /dev/null -D "$headers" -H "X-Request-Id: $(head -c 129 /dev/zero | tr '\0' a)" "$API/auth/me"
+  check "X-Request-Id de 129 caracteres se sustituye" False "$(grep -qE '^[Xx]-[Rr]equest-[Ii]d: a{129}' "$headers" && printf True || printf False)"
   check "el access log del gateway lleva el id" True "$(docker compose logs --since 2m gateway | grep -q "rid=e2e-$STAMP" && printf True || printf False)"
 
   r=$(curl -s -o /dev/null -D "$headers" -w '%{http_code}' -X OPTIONS "$API/auth/login" \
