@@ -1332,8 +1332,10 @@ verify_ms_f1() {
 # The inbox in its own service (ADR-0031): the gateway routes /notifications
 # to it, notifications-worker is the only consumer of its three groups, and
 # leads_db stops receiving notices. Runs before verify_ms_f1, which rewinds a group.
-leads_db_notices() {
-  docker compose exec -T db psql -U postgres -d leads_db -tAc "SELECT count(*) FROM notifications"
+# Since F5 (migration 019) leads_db no longer has the table at all: the copy F2
+# left frozen is gone, which is the stronger form of "it no longer grows".
+leads_db_has_notices() {
+  docker compose exec -T db psql -U postgres -d leads_db -tAc "SELECT to_regclass('public.notifications') IS NOT NULL"
 }
 
 verify_ms_f2() {
@@ -1341,7 +1343,6 @@ verify_ms_f2() {
   local kafka_bin=/opt/kafka/bin
   rid="f2-$STAMP"
   section "Microservicios F2 · la bandeja en su propio servicio"
-  before=$(leads_db_notices)
 
   r=$(req "$API/notifications" -H "Authorization: Bearer $MGR_A" -H "X-Request-Id: $rid")
   check "GET /notifications por el gateway" 200 "$(code "$r")"
@@ -1422,7 +1423,7 @@ verify_ms_f2() {
     if [ "$end" = missing ] || [ "$begin" = missing ]; then sum_offsets=missing; else sum_offsets=$((end - begin)); fi
     check "$topic existe y está vacía" 0 "$sum_offsets"
   done
-  check "leads_db.notifications ya no crece" "$before" "$(leads_db_notices)"
+  check "leads_db ya no tiene la tabla notifications" f "$(leads_db_has_notices)"
 
   section "Microservicios F2 · el backend ya no tiene el módulo"
   check "el backend no sirve /api/v1/notifications (404)" 404 "$(docker compose exec -T backend python -c \
