@@ -1,0 +1,8 @@
+from enum import Enum
+
+
+class NotificationKind(str, Enum):
+    LEAD_ASSIGNED = "LEAD_ASSIGNED"
+    LEAD_REASSIGNED = "LEAD_REASSIGNED"
+    LEAD_LEFT_UNASSIGNED = "LEAD_LEFT_UNASSIGNED"
+    INTAKE_REJECTED = "INTAKE_REJECTED"

@@ -1,0 +1,34 @@
+[project]
+name = "notifications"
+version = "0.1.0"
+description = "Notifications service: turns internal events into notices for the people who must act"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "pydantic>=2.8.0",
+    "psycopg[binary]>=3.1",
+    "psycopg-pool>=3.2",
+    "confluent-kafka>=2.5.0",
+    "chassis[kafka,postgres]",
+]
+
+[tool.uv.sources]
+chassis = { path = "../../libs/chassis", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2.0",
+    "httpx>=0.27.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "unit: no database, no network, no environment variables",
+    "integration: requires a live PostgreSQL test database",
+    "e2e: full HTTP stack against a live PostgreSQL test database",
+    "architecture: static analysis of the dependency rule",
+]

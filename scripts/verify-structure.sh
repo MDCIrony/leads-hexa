@@ -23,6 +23,8 @@ check "$REPO/backend/src"       --baseline "$REPO/backend/tests/architecture/str
 check "$REPO/backend/tests"     --no-line-limit --baseline "$REPO/backend/tests/architecture/tests_structure_baseline.py"
 check "$REPO/libs/chassis/src"
 check "$REPO/libs/chassis/tests" --no-line-limit
+check "$REPO/services/notifications/src"
+check "$REPO/services/notifications/tests" --no-line-limit
 check "$REPO/test-consumer"     --baseline "$REPO/scripts/structure_baseline.py:TEST_CONSUMER"
 check "$REPO/demo"              --baseline "$REPO/scripts/structure_baseline.py:DEMO"
 check "$REPO/tools"
