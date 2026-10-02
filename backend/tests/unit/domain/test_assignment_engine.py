@@ -3,13 +3,16 @@ from typing import Dict, List, Optional
 
 import pytest
 
-from domain.entities.agent import Agent
+from domain.advisors.advisor import Advisor
 from domain.entities.lead import Lead
 from domain.entities.rule import AssignmentRule
 from domain.entities.sales_group import SalesGroup
 from domain.services.assignment_engine import AssignmentEngine
 from domain.value_objects.criterion import Criterion
-from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy, LeadStatus, Operator
+from domain.value_objects.agent_id import AgentId
+from domain.value_objects.enums import AgentMatchMode, AgentRole, AssignmentStrategy, LeadStatus, Operator
+from domain.value_objects.group_id import GroupId
+from domain.value_objects.tenant_id import TenantId
 
 _TENANT = uuid.uuid4()
 
@@ -33,10 +36,10 @@ def _lead(score: int) -> Lead:
     )
 
 
-def _agent(name: str, group_id: Optional[uuid.UUID] = None, active: bool = True) -> Agent:
-    return Agent.create(
-        name=name, email=f"{name.lower()}@a.test", tenant_id=_TENANT,
-        group_id=group_id, is_active=active,
+def _agent(name: str, group_id: Optional[uuid.UUID] = None, active: bool = True) -> Advisor:
+    return Advisor(
+        AgentId(), TenantId(_TENANT), name, AgentRole.AGENT, active, 1,
+        GroupId(group_id) if group_id else None,
     )
 
 

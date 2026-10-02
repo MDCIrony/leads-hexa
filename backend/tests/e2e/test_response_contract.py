@@ -23,43 +23,17 @@ import uuid
 from gateway_client import GatewayClient
 
 from infrastructure.main import app
-from domain.value_objects.enums import AgentRole, AssignmentStrategy, LeadSourceKind, Operator
+from domain.value_objects.enums import LeadSourceKind
 from infrastructure.adapters.input.api import schemas
 
 from _intake_helpers import ingest_and_resolve
-from auth_helpers import session_headers
-from tests.advisors_sync import project_agents_of
+from auth_helpers import manager_headers, seed_agent
 
 
 # --- Auth / seeding helpers, same shortcuts as test_lead_endpoints.py ---
 
-def _token_headers(agent) -> dict:
-    return session_headers(agent)
-
-
 def _manager_auth_headers(tenant_id: str) -> dict:
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.agent import Agent
-
-    uow = PostgresUnitOfWork(app.state.container.database)
-    manager = Agent.create(
-        name="Manager", email=f"manager_{uuid.uuid4().hex[:6]}@test.com",
-        role=AgentRole.MANAGER, tenant_id=tenant_id,
-    )
-    with uow:
-        uow.agents.save(manager)
-    return _token_headers(manager)
-
-
-def _admin_auth_headers() -> dict:
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.agent import Agent
-
-    uow = PostgresUnitOfWork(app.state.container.database)
-    admin = Agent.create(name="Platform Admin", email=f"admin_{uuid.uuid4().hex[:6]}@test.com", role=AgentRole.ADMIN)
-    with uow:
-        uow.agents.save(admin)
-    return _token_headers(admin)
+    return manager_headers(tenant_id)
 
 
 def _seed_tenant_with_sources(tenant_id: str) -> None:
@@ -68,10 +42,6 @@ def _seed_tenant_with_sources(tenant_id: str) -> None:
 
     uow = PostgresUnitOfWork(app.state.container.database)
     with uow:
-        uow.connection.execute(
-            "INSERT INTO tenants (id, name, slug, created_at) VALUES (%s, %s, %s, now())",
-            (tenant_id, "Acme", f"acme-{tenant_id}"),
-        )
         uow.sources.save(
             LeadSource.create(tenant_id=tenant_id, name="Formulario manual", kind=LeadSourceKind.MANUAL_FORM)
         )
@@ -111,12 +81,6 @@ NULLABLE_BY_DESIGN: dict[str, set[str]] = {
         # test creates never did (ADR-driven: rejection keeps the payload
         # visible in the tray instead of silently discarding it).
         "lead_id",
-    },
-    "TenantResponse": {
-        # The list view aggregates an agent_count without identities on
-        # purpose (schemas.py docstring); the manager is only echoed back on
-        # the just-created response, verified separately below.
-        "manager",
     },
 }
 
@@ -181,26 +145,18 @@ def test_lead_assigned_agent_id_and_assigned_at_get_filled_when_assigned():
         _seed_tenant_with_sources(tenant_id)
         headers = _manager_auth_headers(tenant_id)
 
-        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-        from domain.entities.agent import Agent
-
-        uow = PostgresUnitOfWork(app.state.container.database)
-        agent = Agent.create(name="Agent", email=f"agent_{uuid.uuid4().hex[:6]}@test.com",
-                              role=AgentRole.AGENT, tenant_id=tenant_id)
-        with uow:
-            uow.agents.save(agent)
-        project_agents_of(app.state.container.database)
+        _, agent_id = seed_agent(tenant_id, "Agent")
 
         record = ingest_and_resolve(client, headers, {
             "first_name": "Ana", "last_name": "Soto", "email": "ana@assign.test",
             "company": "AssignCo", "budget": 1000.0, "industry": "Tech",
         })
         resp = client.post(
-            f"/api/v1/leads/{record['lead_id']}/assign", json={"agent_id": str(agent.id)}, headers=headers,
+            f"/api/v1/leads/{record['lead_id']}/assign", json={"agent_id": agent_id}, headers=headers,
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
-        assert data["assigned_agent_id"] == str(agent.id)
+        assert data["assigned_agent_id"] == agent_id
         assert data["assigned_at"] is not None
 
 
@@ -312,49 +268,6 @@ def test_intake_job_round_trip_and_schema_contract():
         assert_schema_fields_filled(schemas.IntakeJobResponse, data)
 
 
-# --- Agent ---
-
-def test_agent_round_trip_and_schema_contract():
-    tenant_id = str(uuid.uuid4())
-    with GatewayClient(app) as client:
-        _seed_tenant_with_sources(tenant_id)
-        headers = _manager_auth_headers(tenant_id)
-
-        group_resp = client.post(
-            "/api/v1/groups",
-            json={"name": "Group A", "description": "desc", "capacity_per_agent": 5},
-            headers=headers,
-        )
-        assert group_resp.status_code == 201, group_resp.text
-        group_id = group_resp.json()["id"]
-
-        payload = {
-            "name": "New Agent",
-            "email": f"newagent_{uuid.uuid4().hex[:6]}@test.com",
-            "group_id": group_id,
-            "is_active": True,
-            "password": "Secret123",
-            "role": "AGENT",
-        }
-        create_resp = client.post("/api/v1/agents", json=payload, headers=headers)
-        assert create_resp.status_code == 201, create_resp.text
-        assert_no_credentials_leaked(create_resp)
-        agent_id = create_resp.json()["id"]
-
-        resp = client.get(f"/api/v1/agents/{agent_id}", headers=headers)
-        assert resp.status_code == 200, resp.text
-        assert_no_credentials_leaked(resp)
-        data = resp.json()
-
-        assert_round_trip(
-            {"name": payload["name"], "email": payload["email"], "group_id": payload["group_id"],
-             "is_active": payload["is_active"], "role": payload["role"]},
-            data,
-        )
-        assert data["tenant_id"] == tenant_id
-        assert_schema_fields_filled(schemas.AgentResponse, data)
-
-
 # --- Sales group ---
 
 def test_group_round_trip_and_schema_contract():
@@ -412,38 +325,6 @@ def test_source_round_trip_and_schema_contract():
         assert_schema_fields_filled(schemas.LeadSourceResponse, data)
 
 
-# --- Tenant ---
-
-def test_tenant_round_trip_and_schema_contract():
-    with GatewayClient(app) as client:
-        headers = _admin_auth_headers()
-
-        manager_email = f"manager_{uuid.uuid4().hex[:6]}@tenant-contract.test"
-        payload = {
-            "name": "Contract Tenant",
-            "manager": {"name": "Founding Manager", "email": manager_email, "password": "Secret123"},
-        }
-        create_resp = client.post("/api/v1/tenants", json=payload, headers=headers)
-        assert create_resp.status_code == 201, create_resp.text
-        assert_no_credentials_leaked(create_resp)
-        created = create_resp.json()
-        tenant_id = created["id"]
-
-        # The manager is only echoed back on the create response (see
-        # NULLABLE_BY_DESIGN["TenantResponse"]); verified here rather than
-        # skipped, so the router's fill-on-create path stays proven.
-        assert created["manager"]["email"] == manager_email
-        assert created["manager"]["name"] == payload["manager"]["name"]
-
-        resp = client.get("/api/v1/tenants", headers=headers)
-        assert resp.status_code == 200, resp.text
-        assert_no_credentials_leaked(resp)
-        data = next(item for item in resp.json()["items"] if item["id"] == tenant_id)
-
-        assert_round_trip({"name": payload["name"]}, data)
-        assert_schema_fields_filled(schemas.TenantResponse, data)
-
-
 # --- Assignment rule ---
 
 def test_assignment_rule_round_trip_and_schema_contract():
@@ -455,21 +336,14 @@ def test_assignment_rule_round_trip_and_schema_contract():
         group_resp = client.post("/api/v1/groups", json={"name": "Target Group"}, headers=headers)
         group_id = group_resp.json()["id"]
 
-        from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-        from domain.entities.agent import Agent
-
-        uow = PostgresUnitOfWork(app.state.container.database)
-        agent = Agent.create(name="Target Agent", email=f"target_{uuid.uuid4().hex[:6]}@test.com",
-                              role=AgentRole.AGENT, tenant_id=tenant_id, group_id=group_id)
-        with uow:
-            uow.agents.save(agent)
+        _, agent_id = seed_agent(tenant_id, "Target Agent", group_id)
 
         payload = {
             "name": "High score to group",
             "min_score": 10,
             "max_score": 100,
             "target_group_id": group_id,
-            "target_agent_ids": [str(agent.id)],
+            "target_agent_ids": [agent_id],
             "agent_match_mode": "ANY",
             "strategy": "LOWEST_LOAD",
             "priority": 1,

@@ -46,13 +46,8 @@ def _event_for(lead_id: str) -> LeadDisqualified:
 
 
 def _seed_source(conn, tenant_id: uuid.UUID) -> uuid.UUID:
-    """intake_records.tenant_id and .source_id are real foreign keys
-    (migration 005): a full ingestion needs a persisted organization and
-    source, unlike outbox_events itself."""
-    conn.execute(
-        "INSERT INTO tenants (id, name, slug, created_at) VALUES (%s, %s, %s, now())",
-        (tenant_id, "Acme", f"acme-{tenant_id}"),
-    )
+    """intake_records.source_id is a real foreign key (migration 005): a full
+    ingestion needs a persisted source, unlike outbox_events itself."""
     source = RawSqlLeadSourceRepository(conn).save(
         LeadSource.create(tenant_id=tenant_id, name="Formulario", kind=LeadSourceKind.MANUAL_FORM)
     )

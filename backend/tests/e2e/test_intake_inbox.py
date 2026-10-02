@@ -257,21 +257,14 @@ def test_a_file_over_10_mb_is_refused_by_the_endpoint_itself():
     """Straight to the app, no gateway: the backend must not rely on nginx
     for the limit, nor read the whole body before refusing it."""
     from fastapi.testclient import TestClient
-    from domain.entities.agent import Agent
-    from domain.value_objects.enums import AgentRole
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+    from tests.tokens import mint_token
 
     tenant_id = str(uuid.uuid4())
     files = {"file": ("big.csv", b"x" * (10 * 1024 * 1024 + 1), "text/csv")}
 
     with TestClient(app) as client:
         _seed_tenant_with_sources(tenant_id)
-        manager = Agent.create(
-            name="Manager", email=f"m_{uuid.uuid4().hex[:6]}@test.com", role=AgentRole.MANAGER, tenant_id=tenant_id,
-        )
-        with PostgresUnitOfWork(app.state.container.database) as uow:
-            uow.agents.save(manager)
-        bearer = app.state.container.token_issuer.issue(manager, "human")
+        bearer = mint_token(uuid.uuid4(), tenant_id, "MANAGER")
 
         response = client.post(
             "/api/v1/intake/leads/batch-upload", files=files, headers={"Authorization": f"Bearer {bearer}"},

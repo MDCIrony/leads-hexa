@@ -1,10 +1,10 @@
 from infrastructure.config.settings import Settings
 from infrastructure.di.container import Container
+from tests.tokens import jwks, mint_token
 
 _SETTINGS = Settings(
     database_url="postgresql://u:p@host:5432/db",
-    mfa_encryption_key="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
-    signing_keys="unit-1=We6wZYLn41lq5z4FdSgMD7Jmla3wUOhIe8MBaNQiuuk",
+    jwks_url="http://jwks.invalid/internal/v1/jwks",
 )
 
 
@@ -16,7 +16,7 @@ def test_stateless_adapters_are_shared_across_the_container_lifetime():
     container = Container(_SETTINGS)
 
     assert container.assignment_engine is container.assignment_engine
-    assert container.password_hasher is container.password_hasher
+    assert container.token_verifier is container.token_verifier
 
 
 def test_unit_of_work_is_built_fresh_on_every_call():
@@ -27,18 +27,20 @@ def test_unit_of_work_is_built_fresh_on_every_call():
     assert container.unit_of_work() is not container.unit_of_work()
 
 
-def test_issued_tokens_verify_against_the_published_keys():
-    """F0 wiring: the verifier reads the container's own JWKS, so a token it
-    issues must verify and the published keys must be public-only."""
-    from domain.entities.agent import Agent
-    from domain.value_objects.enums import AgentRole
+def test_bearers_verify_against_the_keys_identity_publishes():
+    """The verifier reads whatever the JWKS fetch returns: identity's endpoint
+    in the stack, the test keys here. Building the container fetches nothing."""
+    fetched = []
 
-    container = Container(_SETTINGS)
-    token = container.token_issuer.issue(Agent.create("A", "a@a.invalid", role=AgentRole.ADMIN), "human")
+    def fetch() -> dict:
+        fetched.append(True)
+        return jwks()
 
-    assert container.token_verifier.verify(token).role == "ADMIN"
-    assert [key["kid"] for key in container.jwks["keys"]] == ["unit-1"]
-    assert all("d" not in key for key in container.jwks["keys"])
+    container = Container(_SETTINGS, jwks_fetch=fetch)
+    assert fetched == []
+
+    assert container.token_verifier.verify(mint_token(role="ADMIN")).role == "ADMIN"
+    assert fetched == [True]
 
 
 def test_the_advisor_directory_asks_identity_for_a_token_meant_for_identity():

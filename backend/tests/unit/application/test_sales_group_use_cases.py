@@ -11,13 +11,12 @@ from application.use_cases.sales_group_use_cases import (
     UpdateSalesGroupUseCase,
 )
 from domain.advisors.advisor import Advisor
-from domain.entities.agent import Agent
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentRole
 from domain.value_objects.group_id import GroupId
 from domain.value_objects.tenant_id import TenantId
 from domain.exceptions import DomainException
-from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
+from tests.unit.mocks.in_memory_advisor_repo import make_advisor
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
@@ -28,7 +27,6 @@ def _uow() -> InMemoryUnitOfWork:
     return InMemoryUnitOfWork(
         InMemoryLeadRepository(),
         InMemoryRuleRepository(),
-        InMemoryAgentRepository(),
         groups=InMemorySalesGroupRepository(),
     )
 
@@ -100,9 +98,9 @@ class TestUpdateSalesGroup:
         uow = _uow()
         tenant = uuid.uuid4()
         group = CreateSalesGroupUseCase(uow=uow).execute(_command(tenant))
-        agent = uow.agents.save(
-            Agent.create(
-                name="Ana", email="ana@acme.test", group_id=group.id.value, tenant_id=tenant
+        agent = uow.advisors.seed(
+            make_advisor(
+                name="Ana", group_id=group.id.value, tenant_id=tenant
             )
         )
 
@@ -111,7 +109,7 @@ class TestUpdateSalesGroup:
         )
 
         assert uow.groups.get_by_id(group.id.value).is_active is False
-        assert uow.agents.get_by_id(agent.id.value).is_active is True
+        assert uow.advisors.get_any(agent.id.value).is_active is True
 
     def test_updating_a_group_of_another_organization_is_rejected(self):
         uow = _uow()

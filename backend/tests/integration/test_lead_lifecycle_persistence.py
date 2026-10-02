@@ -15,13 +15,8 @@ _TENANT = uuid.uuid4()
 
 
 def _seed_source(conn, tenant_id: uuid.UUID) -> uuid.UUID:
-    """leads.tenant_id and leads.source_id are real foreign keys (migration
-    005): an invented UUID is rejected, so every test needs a persisted
-    organization and source of its own."""
-    conn.execute(
-        "INSERT INTO tenants (id, name, slug, created_at) VALUES (%s, %s, %s, now())",
-        (tenant_id, "Acme", f"acme-{tenant_id}"),
-    )
+    """leads.source_id is a real foreign key (migration 005): an invented
+    UUID is rejected, so every test needs a persisted source of its own."""
     source = RawSqlLeadSourceRepository(conn).save(
         LeadSource.create(tenant_id=tenant_id, name="Formulario", kind=LeadSourceKind.MANUAL_FORM)
     )

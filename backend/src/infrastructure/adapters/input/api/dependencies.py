@@ -1,22 +1,14 @@
 from typing import Optional
-from datetime import datetime, timezone
-from hashlib import sha256
 from uuid import UUID
 from fastapi import Request, Depends
 from chassis.auth import KeysUnavailable, TokenError
 from application.dtos.context import Principal, RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.ports.output.messaging_credential_provisioner_port import MessagingCredentialProvisionerPort
-from application.ports.output.password_hasher_port import PasswordHasherPort
 from application.ports.input.ingest_lead_use_case_port import IngestLeadInputPort
 from application.ports.input.intake_phase_use_case_ports import ProcessIntakeJobInputPort, ReceiveIntakeInputPort
 from application.ports.input.process_batch_use_case_port import ProcessBatchInputPort
 from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
 from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInputPort
-from application.ports.input.agent_use_case_ports import (
-    CreateAgentInputPort, DeactivateAgentInputPort, GetAgentsInputPort, GetAgentInputPort,
-    IssueIntegrationCredentialInputPort, UpdateAgentInputPort,
-)
 from application.ports.input.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
     DeleteScoringRuleInputPort, GetAssignmentRulesInputPort, GetScoringRulesInputPort,
@@ -49,10 +41,6 @@ from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUs
 from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
 from application.use_cases.get_leads_use_case import GetLeadsUseCase
 from application.use_cases.get_lead_stats_use_case import GetLeadStatsUseCase
-from application.use_cases.agent_use_cases import (
-    CreateAgentUseCase, DeactivateAgentUseCase, GetAgentsUseCase, GetAgentUseCase,
-    IssueIntegrationCredentialUseCase, UpdateAgentUseCase,
-)
 from application.use_cases.rule_use_cases import (
     CreateAssignmentRuleUseCase, CreateScoringRuleUseCase, DeleteAssignmentRuleUseCase,
     DeleteScoringRuleUseCase, GetAssignmentRulesUseCase, GetScoringRulesUseCase,
@@ -77,13 +65,6 @@ from application.use_cases.intake_record_use_cases import (
 from application.use_cases.intake_job_use_cases import (
     GetIntakeJobUseCase, GetIntakeJobsUseCase, ReprocessIntakeJobUseCase,
 )
-from application.ports.input.auth_use_case_port import LoginInputPort
-from application.use_cases.auth_use_cases import (
-    LoginUseCase, MfaUseCase, OAuthChallengeUseCase, SocialLoginUseCase,
-)
-from application.ports.input.tenant_use_case_ports import CreateTenantInputPort, GetTenantsInputPort, UpdateTenantInputPort
-from application.use_cases.tenant_use_cases import CreateTenantUseCase, GetTenantsUseCase, UpdateTenantUseCase
-from domain.entities.agent import Agent
 from domain.exceptions import DomainException, UnauthorizedException
 from domain.policies.authorization_policy import AuthorizationPolicy
 from domain.value_objects.enums import AgentRole
@@ -145,27 +126,6 @@ def get_get_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadsIn
 
 def get_get_lead_stats_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadStatsInputPort:
     return GetLeadStatsUseCase(uow=uow)
-
-def get_create_agent_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> CreateAgentInputPort:
-    return CreateAgentUseCase(uow=uow, password_hasher=container.password_hasher)
-
-def get_get_agents_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetAgentsInputPort:
-    return GetAgentsUseCase(uow=uow)
-
-def get_get_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetAgentInputPort:
-    return GetAgentUseCase(uow=uow)
-
-def get_update_agent_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateAgentInputPort:
-    return UpdateAgentUseCase(uow=uow)
-
-def get_deactivate_agent_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> DeactivateAgentInputPort:
-    return DeactivateAgentUseCase(uow=uow, messaging_provisioner=container.messaging_credential_provisioner)
 
 def get_create_scoring_rule_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> CreateScoringRuleInputPort:
     return CreateScoringRuleUseCase(uow=uow)
@@ -249,72 +209,6 @@ def get_get_my_leads_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetMyLe
 def get_get_lead_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetLeadInputPort:
     return GetLeadUseCase(uow=uow)
 
-def get_login_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> LoginInputPort:
-    return LoginUseCase(
-        uow=uow,
-        password_hasher=container.password_hasher,
-        session_hours=container.settings.session_hours,
-    )
-
-def get_mfa_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> MfaUseCase:
-    return MfaUseCase(
-        uow=uow,
-        password_hasher=container.password_hasher,
-        crypto=container.mfa_crypto,
-        session_hours=container.settings.session_hours,
-    )
-
-def get_oauth_challenge_use_case(
-    container: Container = Depends(get_container),
-) -> OAuthChallengeUseCase:
-    return OAuthChallengeUseCase(uow=container.unit_of_work())
-
-def get_social_login_use_case(
-    container: Container = Depends(get_container),
-) -> SocialLoginUseCase:
-    return SocialLoginUseCase(
-        uow=container.unit_of_work(), session_hours=container.settings.session_hours,
-    )
-
-def get_create_tenant_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> CreateTenantInputPort:
-    return CreateTenantUseCase(uow=uow, password_hasher=container.password_hasher)
-
-def get_get_tenants_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> GetTenantsInputPort:
-    return GetTenantsUseCase(uow=uow)
-
-def get_update_tenant_use_case(uow: UnitOfWorkPort = Depends(get_uow)) -> UpdateTenantInputPort:
-    return UpdateTenantUseCase(uow=uow)
-
-
-def resolve_current_agent(token: str, uow: UnitOfWorkPort) -> Agent:
-    """Pure function so it can be tested without FastAPI's dependency machinery."""
-    with uow:
-        session = uow.sessions.get_active(sha256(token.encode()).hexdigest(), datetime.now(timezone.utc))
-        agent = uow.agents.get_by_id(session.agent_id) if session else None
-
-    if not agent or not agent.is_active:
-        raise UnauthorizedException("Agent no longer exists or is inactive")
-    return agent
-
-
-def get_current_agent(
-    request: Request,
-    uow: UnitOfWorkPort = Depends(get_uow),
-) -> Agent:
-    token = request.cookies.get("leads_session")
-    if not token:
-        raise UnauthorizedException("Authentication required")
-    return resolve_current_agent(token=token, uow=uow)
-
 
 def build_request_context(principal: Principal) -> RequestContext:
     """The organization always comes from the verified identity, never from the
@@ -355,24 +249,6 @@ def get_principal(request: Request, container: Container = Depends(get_container
     return _principal_from_token(token, container)
 
 
-def get_optional_principal(
-    request: Request, container: Container = Depends(get_container)
-) -> Optional[Principal]:
-    """None only when no bearer arrives; a bearer that fails verification is 401."""
-    token = _bearer_token(request)
-    return None if token is None else _principal_from_token(token, container)
-
-
-def get_optional_human_principal(
-    principal: Optional[Principal] = Depends(get_optional_principal),
-) -> Optional[Principal]:
-    """Same barrier as get_request_context for routes that also accept anonymous
-    callers: a machine credential never stands in for a person."""
-    if principal is not None and principal.principal_type == "integration":
-        raise UnauthorizedException("Authentication required")
-    return principal
-
-
 def get_request_context(principal: Principal = Depends(get_principal)) -> RequestContext:
     """Rejects ptype=integration: a machine credential reaches only the route
     that composes require_manager_or_integration."""
@@ -388,13 +264,6 @@ def require_organization_manager(
     return context
 
 
-def require_platform_admin(
-    context: RequestContext = Depends(get_request_context),
-) -> RequestContext:
-    AuthorizationPolicy.ensure_can_manage_platform(context.principal)
-    return context
-
-
 def require_organization_member(
     context: RequestContext = Depends(get_request_context),
 ) -> RequestContext:
@@ -406,31 +275,6 @@ def require_organization_member(
     return context
 
 
-def resolve_integration_agent(
-    api_key: str, uow: UnitOfWorkPort, password_hasher: PasswordHasherPort
-) -> Agent:
-    """Pure function, same shape as resolve_current_agent: testable without
-    FastAPI's dependency machinery."""
-    try:
-        agent_id_str, secret = api_key.split(".", 1)
-        agent_id = UUID(agent_id_str)
-    except ValueError as error:
-        raise UnauthorizedException("Malformed API key") from error
-
-    with uow:
-        agent = uow.agents.get_by_id(agent_id)
-
-    if (
-        not agent
-        or not agent.is_active
-        or agent.role != AgentRole.INTEGRATION
-        or not agent.hashed_password
-        or not password_hasher.verify(secret, agent.hashed_password)
-    ):
-        raise UnauthorizedException("Invalid API key")
-    return agent
-
-
 def require_manager_or_integration(principal: Principal = Depends(get_principal)) -> RequestContext:
     """Composes the two authentication paths at exactly one route (GET
     /leads) instead of branching inside a shared handler — authorization by
@@ -439,20 +283,3 @@ def require_manager_or_integration(principal: Principal = Depends(get_principal)
     if principal.principal_type != "integration":
         AuthorizationPolicy.ensure_can_manage_organization(principal)
     return build_request_context(principal)
-
-
-def get_messaging_credential_provisioner(
-    container: Container = Depends(get_container),
-) -> MessagingCredentialProvisionerPort:
-    return container.messaging_credential_provisioner
-
-
-def get_issue_integration_credential_use_case(
-    uow: UnitOfWorkPort = Depends(get_uow),
-    container: Container = Depends(get_container),
-) -> IssueIntegrationCredentialInputPort:
-    return IssueIntegrationCredentialUseCase(
-        uow=uow,
-        password_hasher=container.password_hasher,
-        messaging_provisioner=container.messaging_credential_provisioner,
-    )

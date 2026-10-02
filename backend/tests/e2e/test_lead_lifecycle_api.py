@@ -1,53 +1,22 @@
 import uuid
 
-from gateway_client import GatewayClient
+from auth_helpers import admin_headers, agent_of, seed_org_manager
+from gateway_client import GatewayClient, subject_of, tenant_of
 
 from infrastructure.main import app
 from _intake_helpers import ingest_and_resolve
-from tests.advisors_sync import project_agents_of
 
 
-def _bootstrap_admin(client: GatewayClient) -> str:
-    response = client.post(
-        "/api/v1/agents",
-        json={
-            "name": "Platform Admin",
-            "email": f"admin_{uuid.uuid4().hex[:6]}@platform.test",
-            "team": "HQ",
-            "password": "admin-pass-123",
-        },
-    )
-    assert response.status_code == 201, response.text
-    assert response.json()["role"] == "ADMIN"
-    login = client.post(
-        "/api/v1/auth/login",
-        data={"username": response.json()["email"], "password": "admin-pass-123"},
-    )
-    assert login.status_code == 200, login.text
-    return login.cookies["leads_session"]
+def _bootstrap_admin(client: GatewayClient) -> dict:
+    return admin_headers()
 
 
-def _create_org(client: GatewayClient, admin_token: str) -> tuple[str, str]:
-    """Tenant, manager login, and a baseline scoring rule so a lead ingested
+def _create_org(client: GatewayClient, admin: dict) -> tuple[dict, str]:
+    """Tenant, manager session, and a baseline scoring rule so a lead ingested
     with industry="tech" always reaches an assignable status (QUALIFIED, then
     UNASSIGNED once the engine finds no routing rule) instead of NEW."""
-    email = f"manager_{uuid.uuid4().hex[:6]}@acme.test"
-    created = client.post(
-        "/api/v1/tenants",
-        json={
-            "name": f"Acme {uuid.uuid4().hex[:6]}",
-            "manager": {"name": "Manager", "email": email, "password": "manager-pass-123"},
-        },
-        headers={"Cookie": f"leads_session={admin_token}"},
-    )
-    assert created.status_code == 201, created.text
-    tenant_id = created.json()["id"]
-
-    login = client.post(
-        "/api/v1/auth/login", data={"username": email, "password": "manager-pass-123"}
-    )
-    assert login.status_code == 200, login.text
-    manager_token = login.cookies["leads_session"]
+    manager_token = seed_org_manager()
+    tenant_id = tenant_of(manager_token)
 
     rule = client.post(
         "/api/v1/rules/scoring",
@@ -56,32 +25,19 @@ def _create_org(client: GatewayClient, admin_token: str) -> tuple[str, str]:
             "conditions": [{"field": "industry", "operator": "EQUALS", "value": "tech"}],
             "score_delta": 50,
         },
-        headers={"Cookie": f"leads_session={manager_token}"},
+        headers=manager_token,
     )
     assert rule.status_code == 201, rule.text
 
     return manager_token, tenant_id
 
 
-def _create_agent(client: GatewayClient, manager_token: str) -> tuple[str, str]:
-    email = f"agent_{uuid.uuid4().hex[:6]}@acme.test"
-    created = client.post(
-        "/api/v1/agents",
-        json={"name": "Sales Agent", "email": email, "password": "agent-pass-123", "role": "AGENT"},
-        headers={"Cookie": f"leads_session={manager_token}"},
-    )
-    assert created.status_code == 201, created.text
-    login = client.post(
-        "/api/v1/auth/login", data={"username": email, "password": "agent-pass-123"}
-    )
-    assert login.status_code == 200, login.text
-    return login.cookies["leads_session"], created.json()["id"]
+def _create_agent(client: GatewayClient, manager_token: dict) -> tuple[dict, str]:
+    return agent_of(manager_token, "Sales Agent")
 
 
-def _ingest_qualified_lead(client: GatewayClient, manager_token: str, tenant_id: str) -> str:
-    # The agents created so far must be advisors before anyone assigns to them.
-    project_agents_of(app.state.container.database)
-    headers = {"Cookie": f"leads_session={manager_token}"}
+def _ingest_qualified_lead(client: GatewayClient, manager_token: dict, tenant_id: str) -> str:
+    headers = manager_token
     record = ingest_and_resolve(
         client,
         headers,
@@ -102,12 +58,12 @@ def _ingest_qualified_lead(client: GatewayClient, manager_token: str, tenant_id:
     return lead_id
 
 
-def _ingest_and_assign(client: GatewayClient, manager_token: str, tenant_id: str, agent_id: str) -> str:
+def _ingest_and_assign(client: GatewayClient, manager_token: dict, tenant_id: str, agent_id: str) -> str:
     lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
     assigned = client.post(
         f"/api/v1/leads/{lead_id}/assign",
         json={"agent_id": agent_id},
-        headers={"Cookie": f"leads_session={manager_token}"},
+        headers=manager_token,
     )
     assert assigned.status_code == 200, assigned.text
     return lead_id
@@ -122,7 +78,7 @@ def test_an_agent_sees_only_their_own_leads_on_mine(test_db):
         mine_id = _ingest_and_assign(client, manager_token, tenant_id, agent_id)
         _ingest_and_assign(client, manager_token, tenant_id, _create_agent(client, manager_token)[1])
 
-        mine = client.get("/api/v1/leads/mine", headers={"Cookie": f"leads_session={agent_token}"})
+        mine = client.get("/api/v1/leads/mine", headers=agent_token)
 
         assert mine.status_code == 200, mine.text
         assert [item["id"] for item in mine.json()["items"]] == [mine_id]
@@ -134,7 +90,7 @@ def test_the_platform_admin_is_refused_on_mine(test_db):
         admin_token = _bootstrap_admin(client)
 
         refused = client.get(
-            "/api/v1/leads/mine", headers={"Cookie": f"leads_session={admin_token}"}
+            "/api/v1/leads/mine", headers=admin_token
         )
 
         assert refused.status_code == 403, refused.text
@@ -144,8 +100,8 @@ def test_a_manager_can_also_call_mine_and_gets_their_own(test_db):
     with GatewayClient(app) as client:
         admin_token = _bootstrap_admin(client)
         manager_token, tenant_id = _create_org(client, admin_token)
-        manager_headers = {"Cookie": f"leads_session={manager_token}"}
-        manager_id = client.get("/api/v1/auth/me", headers=manager_headers).json()["id"]
+        manager_headers = manager_token
+        manager_id = subject_of(manager_headers)
         mine_id = _ingest_and_assign(client, manager_token, tenant_id, manager_id)
 
         mine = client.get("/api/v1/leads/mine", headers=manager_headers)
@@ -165,7 +121,7 @@ def test_an_agent_cannot_read_a_colleagues_lead_detail(test_db):
 
         response = client.get(
             f"/api/v1/leads/{colleagues_lead_id}",
-            headers={"Cookie": f"leads_session={agent_a_token}"},
+            headers=agent_a_token,
         )
 
         assert response.status_code == 404, response.text
@@ -181,7 +137,7 @@ def test_a_manager_assigns_a_lead_by_hand(test_db):
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
             json={"agent_id": agent_id},
-            headers={"Cookie": f"leads_session={manager_token}"},
+            headers=manager_token,
         )
 
         assert response.status_code == 200, response.text
@@ -203,7 +159,7 @@ def test_assigning_an_agent_of_another_organization_fails(test_db):
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
             json={"agent_id": foreign_agent_id},
-            headers={"Cookie": f"leads_session={manager_a}"},
+            headers=manager_a,
         )
 
         assert response.status_code == 404, response.text
@@ -220,7 +176,7 @@ def test_an_agent_cannot_assign(test_db):
         response = client.post(
             f"/api/v1/leads/{lead_id}/assign",
             json={"agent_id": agent_id},
-            headers={"Cookie": f"leads_session={agent_token}"},
+            headers=agent_token,
         )
 
         assert response.status_code == 403, response.text
@@ -235,7 +191,7 @@ def test_a_manager_discards_with_a_reason(test_db):
         response = client.post(
             f"/api/v1/leads/{lead_id}/discard",
             json={"reason": "Presupuesto insuficiente"},
-            headers={"Cookie": f"leads_session={manager_token}"},
+            headers=manager_token,
         )
 
         assert response.status_code == 200, response.text
@@ -252,7 +208,7 @@ def test_discarding_without_a_reason_is_refused(test_db):
         response = client.post(
             f"/api/v1/leads/{lead_id}/discard",
             json={"reason": ""},
-            headers={"Cookie": f"leads_session={manager_token}"},
+            headers=manager_token,
         )
 
         assert response.status_code == 400, response.text
@@ -266,7 +222,7 @@ def test_the_lead_detail_carries_the_applied_rule_breakdown(test_db):
         lead_id = _ingest_qualified_lead(client, manager_token, tenant_id)
 
         detail = client.get(
-            f"/api/v1/leads/{lead_id}", headers={"Cookie": f"leads_session={manager_token}"}
+            f"/api/v1/leads/{lead_id}", headers=manager_token
         )
 
         assert detail.status_code == 200, detail.text

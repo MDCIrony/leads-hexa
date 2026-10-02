@@ -45,28 +45,6 @@ class LeadRoutingException(DomainException):
         super().__init__(message, error_code="ROUTING_FAILED")
 
 
-class AgentNotFoundException(DomainException):
-    """Raised when a requested agent id does not exist."""
-
-    def __init__(self, message: str = "Agent not found"):
-        super().__init__(message, error_code="AGENT_NOT_FOUND")
-
-
-class InvalidCredentialsException(DomainException):
-    """Raised when an email/password pair does not match an active account."""
-
-    def __init__(self, message: str = "Invalid email or password"):
-        super().__init__(message, error_code="INVALID_CREDENTIALS")
-
-
-class InvalidMfaFactorException(InvalidCredentialsException):
-    """Generic factor failure, with cookie cleanup metadata for the HTTP adapter."""
-
-    def __init__(self, terminal: bool):
-        super().__init__("Invalid authentication factor")
-        self.terminal = terminal
-
-
 class UnauthorizedException(DomainException):
     """Raised when a request carries no valid identity."""
 
@@ -79,15 +57,3 @@ class ForbiddenException(DomainException):
 
     def __init__(self, message: str = "You do not have permission to perform this action"):
         super().__init__(message, error_code="FORBIDDEN")
-
-
-class InvalidAuthChallengeException(DomainException):
-    """Raised when an auth challenge is created outside its contract."""
-
-    def __init__(self, message: str = "Auth challenge is invalid"):
-        super().__init__(message, error_code="INVALID_CHALLENGE")
-
-
-class InvalidSocialIdentityException(DomainException):
-    def __init__(self, message: str = "Social identity is invalid"):
-        super().__init__(message, error_code="INVALID_SOCIAL_IDENTITY")

@@ -1,9 +1,11 @@
-"""TestClient that behaves like the gateway in front of the API (ADR-0032).
+"""TestClient that stands in for the gateway and identity in front of the API (ADR-0032).
 
-Mirrors gateway/nginx.conf: it authenticates through the internal
-introspection endpoint and forwards only the resulting bearer, so e2e tests
-exercise the same trust boundary the stack runs with. Tests that deliberately
-talk to the app without a gateway (test_internal_auth) keep a plain TestClient.
+A test names who is calling with `as_principal(...)`, which is what a session
+cookie or an integration key resolves to once identity has introspected it.
+The client mints the internal bearer from it with the test signer and forwards
+nothing else of the caller's: a client-supplied bearer, key or cookie never
+reaches the service, as with nginx. No principal means no bearer, so the app
+answers 401 the way it does behind a gateway that found no session.
 
 It also stands in for the outbox worker and the intake worker: after every
 forwarded request it drains the job channel through process_job_message, in
@@ -17,15 +19,29 @@ from fastapi.testclient import TestClient
 
 from infrastructure.adapters.output.queue.job_message import job_message
 from infrastructure.intake_worker.messages import process_job_message
+from tests.tokens import mint_token
 
-_INTROSPECT = "/internal/v1/auth/introspect"
-_PUBLIC_PREFIX = "/api/v1/auth/"
+_PRINCIPAL = "x-test-principal"
+_CLIENT_CREDENTIALS = ("authorization", "x-api-key", "cookie", _PRINCIPAL)
 _PUBLIC_EXACT = ("/health", "/openapi.json", "/docs")
-_OPTIONAL_PATHS = ("/api/v1/agents", "/api/v1/agents/")
-_UNAUTHORIZED = {"error": True, "error_code": "UNAUTHORIZED", "message": "Authentication required"}
 _NOT_FOUND = {"error": True, "error_code": "NOT_FOUND", "message": "Not Found"}
 # RabbitMQ's delivery limit on intake.jobs; past it the real message goes to the DLQ.
 _MAX_JOB_DELIVERIES = 3
+
+
+def as_principal(agent_id, tenant_id, role: str = "MANAGER", ptype: str = "human") -> dict:
+    """Headers that make the next request arrive as this principal."""
+    return {_PRINCIPAL: json.dumps([str(agent_id), str(tenant_id) if tenant_id else None, role, ptype])}
+
+
+def tenant_of(headers: dict) -> str:
+    """The organization of the principal `as_principal` put in these headers."""
+    return json.loads(headers[_PRINCIPAL])[1]
+
+
+def subject_of(headers: dict) -> str:
+    """The agent id of that principal: what GET /auth/me answers in the stack."""
+    return json.loads(headers[_PRINCIPAL])[0]
 
 
 class GatewayClient(TestClient):
@@ -34,35 +50,16 @@ class GatewayClient(TestClient):
         path = merged.path
         headers = httpx.Headers(kwargs.pop("headers", None))
 
-        is_public = path.startswith(_PUBLIC_PREFIX) or path in _PUBLIC_EXACT
-        if not is_public and not path.startswith("/api/v1/"):
+        if path not in _PUBLIC_EXACT and not path.startswith("/api/v1/"):
             return httpx.Response(404, json=_NOT_FOUND, request=httpx.Request(method, merged))
 
-        if is_public:
-            # Public routes see everything but a client-supplied bearer or key.
-            for name in ("authorization", "x-api-key"):
-                headers.pop(name, None)
-            return self._forward(method, url, headers=headers, **kwargs)
-
-        introspection_headers = {
-            name: headers[name] for name in ("cookie", "x-api-key") if name in headers
-        }
-        introspection = super().request(
-            "GET", _INTROSPECT,
-            params={"optional": "true"} if path in _OPTIONAL_PATHS else None,
-            headers=introspection_headers, cookies=kwargs.get("cookies"),
-        )
-        if introspection.status_code == 401:
-            return httpx.Response(401, json=_UNAUTHORIZED, request=httpx.Request(method, merged))
-        if introspection.status_code not in (200, 204):
-            return introspection
-
-        for name in ("authorization", "x-api-key"):
+        principal = headers.get(_PRINCIPAL)
+        for name in _CLIENT_CREDENTIALS:
             headers.pop(name, None)
-        if introspection.status_code == 200:
-            headers["Authorization"] = f"Bearer {introspection.headers['X-Internal-Token']}"
-        # An empty Cookie header stops httpx from adding the client's jar: the
-        # service must never see the session cookie.
+        if principal and path not in _PUBLIC_EXACT:
+            agent_id, tenant_id, role, ptype = json.loads(principal)
+            headers["Authorization"] = f"Bearer {mint_token(agent_id, tenant_id, role, ptype)}"
+        # An empty Cookie header stops httpx from adding the client's jar.
         headers["Cookie"] = ""
         kwargs.pop("cookies", None)
         return self._forward(method, url, headers=headers, **kwargs)

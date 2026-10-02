@@ -1,16 +1,10 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 from domain.value_objects.enums import (
-    AgentMatchMode, Operator, AssignmentStrategy, AgentRole, LeadSourceKind,
+    AgentMatchMode, Operator, AssignmentStrategy, LeadSourceKind,
 )
-
-
-def _validate_email_format(value: str) -> str:
-    if "@" not in value or "." not in value.split("@")[-1]:
-        raise ValueError("Formato de email inválido")
-    return value
 
 
 # --- Lead Schemas ---
@@ -305,95 +299,6 @@ class PaginatedSourcesResponse(BaseModel):
     offset: int
     has_more: bool
 
-# --- Agent Schemas ---
-class AgentCreate(BaseModel):
-    name: str
-    email: str
-    group_id: Optional[UUID] = None
-    is_active: bool = True
-    password: str
-    role: AgentRole = AgentRole.AGENT
-    # No tenant_id: the organization is always the caller's own, taken from
-    # the authenticated context, never from the request body.
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        return _validate_email_format(v)
-
-class AgentUpdate(BaseModel):
-    name: Optional[str] = None
-    group_id: Optional[UUID] = None
-    # None-means-unchanged, same convention as elsewhere; True reactivates,
-    # False deactivates (same effect as DELETE /agents/{agent_id}).
-    is_active: Optional[bool] = None
-
-class AgentResponse(BaseModel):
-    id: str
-    name: str
-    email: str
-    group_id: Optional[str] = None
-    is_active: bool
-    role: str
-    tenant_id: Optional[str] = None
-
-class PaginatedAgentsResponse(BaseModel):
-    items: List[AgentResponse]
-    total: int
-    limit: int
-    offset: int
-    has_more: bool
-
-class IntegrationCredentialResponse(BaseModel):
-    """Deliberately not AgentResponse plus a field: the secrets here must
-    never be echoed back by GET /agents/{agent_id}, so the two shapes stay
-    separate on purpose."""
-    agent_id: str
-    tenant_id: str
-    api_key: str
-    kafka_username: str
-    kafka_password: str
-    kafka_bootstrap_servers: str
-    kafka_topic: str
-
-# --- Tenant Schemas ---
-class TenantManagerCreate(BaseModel):
-    name: str
-    email: str
-    password: str
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: str) -> str:
-        return _validate_email_format(v)
-
-class TenantCreate(BaseModel):
-    name: str
-    manager: TenantManagerCreate
-
-class TenantUpdate(BaseModel):
-    name: Optional[str] = None
-    is_active: Optional[bool] = None
-
-class TenantResponse(BaseModel):
-    id: str
-    name: str
-    slug: str
-    is_active: bool
-    created_at: str
-    # Both are absent on some responses by design: the list view aggregates
-    # a count without identities (no manager), the create view has no
-    # meaningful count yet for a just-created organization.
-    agent_count: Optional[int] = None
-    manager: Optional[AgentResponse] = None
-
-class PaginatedTenantsResponse(BaseModel):
-    items: List[TenantResponse]
-    total: int
-    limit: int
-    offset: int
-    has_more: bool
-
 # --- Intake Record Schemas ---
 class IntakeErrorResponse(BaseModel):
     field: str
@@ -440,37 +345,3 @@ class IntakeJobsPageResponse(BaseModel):
     limit: int
     offset: int
     has_more: bool
-
-# --- Auth Schemas ---
-class LoginResponse(BaseModel):
-    status: str
-
-class OAuthProvidersResponse(BaseModel):
-    providers: List[str]
-
-class CurrentUserResponse(BaseModel):
-    id: str
-    name: str
-    email: str
-    role: str
-    tenant_id: Optional[str] = None
-    tenant_name: Optional[str] = None
-    mfa_enabled: bool
-    linked_oauth_providers: List[str] = Field(default_factory=list)
-
-class MfaPasswordRequest(BaseModel):
-    password: str
-
-class MfaCodeRequest(BaseModel):
-    code: str
-
-class MfaFactorRequest(BaseModel):
-    password: str
-    code: str
-
-class MfaSetupResponse(BaseModel):
-    secret: str
-    otpauth_uri: str
-
-class MfaRecoveryCodesResponse(BaseModel):
-    recovery_codes: List[str]

@@ -10,7 +10,8 @@ _REQUIRED_KEYS = {"error", "error_code", "message"}
 
 def test_validation_errors_use_the_common_envelope():
     with GatewayClient(app) as client:
-        response = client.post("/api/v1/auth/login", data={"username": "only-this"})
+        headers = _manager_auth_headers(str(uuid.uuid4()))
+        response = client.post("/api/v1/groups", json={}, headers=headers)
     assert response.status_code == 422
     body = response.json()
     assert _REQUIRED_KEYS <= set(body)
@@ -20,7 +21,7 @@ def test_validation_errors_use_the_common_envelope():
 
 def test_missing_credentials_use_the_common_envelope():
     with GatewayClient(app) as client:
-        response = client.get("/api/v1/agents")
+        response = client.get("/api/v1/leads")
     assert response.status_code == 401
     body = response.json()
     assert _REQUIRED_KEYS <= set(body)
@@ -28,7 +29,7 @@ def test_missing_credentials_use_the_common_envelope():
 
 
 def test_unknown_route_uses_the_common_envelope():
-    # Authenticated: the gateway answers 401 before the app could say 404.
+    # Authenticated, as the gateway only forwards a session it resolved.
     with GatewayClient(app) as client:
         headers = _manager_auth_headers(str(uuid.uuid4()))
         response = client.get("/api/v1/does-not-exist", headers=headers)

@@ -1,6 +1,6 @@
 import uuid
 import pytest
-from domain.entities import Lead, Agent, ScoringRule, WebhookConfig
+from domain.entities import Lead, ScoringRule, WebhookConfig
 from domain.exceptions import InvalidEmailException
 from domain.value_objects import (
     LeadId,
@@ -11,7 +11,6 @@ from domain.value_objects import (
     WebhookEventType,
 )
 from domain.value_objects.criterion import Criterion
-from domain.value_objects.enums import AgentRole
 
 def test_lead_entity_lifecycle():
     lead = Lead.create(
@@ -58,61 +57,6 @@ def test_qualify_moves_a_low_score_lead_to_qualified_not_new():
 
     assert lead.status == LeadStatus.QUALIFIED
 
-def test_agent_entity_creation():
-    agent = Agent.create(
-        name="Carlos Lopez",
-        email="clopez@sales.com",
-    )
-    assert agent.is_active is True
-    assert agent.name == "Carlos Lopez"
-    assert isinstance(agent.id, AgentId)
-
-    # Test agent_id passing str, UUID, AgentId
-    raw_uuid = uuid.uuid4()
-    str_uuid = str(raw_uuid)
-    vo_agent_id = AgentId(raw_uuid)
-
-    agent_from_str = Agent.create("A", "a@test.com", agent_id=str_uuid)
-    assert agent_from_str.id.value == raw_uuid
-
-    agent_from_uuid = Agent.create("B", "b@test.com", agent_id=raw_uuid)
-    assert agent_from_uuid.id.value == raw_uuid
-
-    agent_from_vo = Agent.create("C", "c@test.com", agent_id=vo_agent_id)
-    assert agent_from_vo.id == vo_agent_id
-
-
-def test_agent_create_defaults_role_to_agent_and_has_no_password_or_tenant():
-    agent = Agent.create("A", "a@test.com")
-    assert agent.role == AgentRole.AGENT
-    assert agent.hashed_password is None
-    assert agent.tenant_id is None
-
-
-def test_agent_create_accepts_role_password_and_tenant():
-    tenant_uuid = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
-    agent = Agent.create(
-        "B",
-        "b@test.com",
-        role=AgentRole.MANAGER,
-        hashed_password="$2b$hash",
-        tenant_id=tenant_uuid,
-    )
-    assert agent.role == AgentRole.MANAGER
-    assert agent.hashed_password == "$2b$hash"
-    assert str(agent.tenant_id) == tenant_uuid
-
-
-def test_agent_create_positional_call_still_works():
-    # Guards against breaking the existing calling convention used elsewhere in the suite:
-    # group_id is now the third positional slot that team used to occupy.
-    group_id = uuid.uuid4()
-    agent = Agent.create("C", "c@test.com", group_id, agent_id="11111111-1111-1111-1111-111111111111")
-    assert str(agent.id) == "11111111-1111-1111-1111-111111111111"
-    assert agent.role == AgentRole.AGENT
-    assert agent.group_id.value == group_id
-
-
 def test_scoring_rule_entity_creation():
     rule = ScoringRule.create(
         tenant_id=uuid.uuid4(),
@@ -139,24 +83,6 @@ def test_webhook_config_entity_creation():
     assert webhook.target_url == "https://example.com/webhook"
     assert webhook.secret_token == "secret123"
     assert isinstance(webhook.id, uuid.UUID)
-
-
-class TestAgentGroupMembership:
-    def test_an_agent_starts_without_a_group(self):
-        """Belonging to a group is a decision the manager makes later."""
-        agent = Agent.create(name="Ana", email="ana@a.test")
-        assert agent.group_id is None
-
-    def test_an_agent_can_be_created_inside_a_group(self):
-        group_id = uuid.uuid4()
-        agent = Agent.create(name="Ana", email="ana@a.test", group_id=group_id)
-        assert agent.group_id is not None
-        assert agent.group_id.value == group_id
-
-    def test_the_group_can_be_given_as_a_string(self):
-        group_id = uuid.uuid4()
-        agent = Agent.create(name="Ana", email="ana@a.test", group_id=str(group_id))
-        assert agent.group_id.value == group_id
 
 
 class TestLeadLifecycleFields:
@@ -192,5 +118,3 @@ class TestLeadOptionalEmail:
     def test_a_malformed_email_still_raises(self):
         with pytest.raises(InvalidEmailException):
             Lead.create(**self._base_kwargs(), email="no-es-correo")
-
-

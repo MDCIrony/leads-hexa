@@ -1,59 +1,18 @@
-import uuid
 from typing import Tuple
 
-from gateway_client import GatewayClient
+from gateway_client import GatewayClient, tenant_of
 from infrastructure.main import app
 
 from _intake_helpers import ingest_and_resolve
-from auth_helpers import session_headers
-from tests.advisors_sync import project_agents_of
+from auth_helpers import agent_of, seed_org_manager
 
 
-def _bootstrap_admin_headers(client: GatewayClient) -> dict:
-    """The agents table is empty at the start of every e2e test (see
-    clean_tables), so the first unauthenticated POST always rides the
-    bootstrap rule and becomes Admin."""
-    resp = client.post(
-        "/api/v1/agents",
-        json={
-            "name": "Bootstrap Admin",
-            "email": f"admin_{uuid.uuid4().hex[:6]}@test.com",
-            "team": "HQ",
-            "password": "bootstrap-pass-123",
-        },
-    )
-    assert resp.status_code == 201
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    with PostgresUnitOfWork(app.state.container.database) as uow:
-        admin = uow.agents.get_by_id(uuid.UUID(resp.json()["id"]))
-    return session_headers(admin)
-
-
-def _create_tenant_and_manager_headers(client: GatewayClient, admin_headers: dict) -> Tuple[str, dict]:
+def _create_tenant_and_manager_headers(client: GatewayClient) -> Tuple[str, dict]:
     """Rules and lead listing scope to the caller's own tenant (from the
-    token), so driving a tenant's routing flow now requires a real
-    organization created through the platform plane, with a Manager
-    persisted for it, rather than a made-up tenant_id and the tenant-less
-    bootstrap Admin."""
-    manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
-    resp = client.post(
-        "/api/v1/tenants",
-        json={
-            "name": f"Org {uuid.uuid4().hex[:6]}",
-            "manager": {"name": "Org Manager", "email": manager_email, "password": "manager-pass-123"},
-        },
-        headers=admin_headers,
-    )
-    assert resp.status_code == 201
-    tenant_id = resp.json()["id"]
-
-    login_resp = client.post(
-        "/api/v1/auth/login",
-        data={"username": manager_email, "password": "manager-pass-123"},
-    )
-    assert login_resp.status_code == 200
-    headers = {"Cookie": f"leads_session={login_resp.cookies['leads_session']}"}
-    return tenant_id, headers
+    token), so driving a tenant's routing flow requires a Manager of a real
+    organization, with its default sources, rather than a made-up tenant_id."""
+    headers = seed_org_manager("Org Manager")
+    return tenant_of(headers), headers
 
 
 def test_full_system_lead_routing_flow_e2e():
@@ -66,21 +25,10 @@ def test_full_system_lead_routing_flow_e2e():
     5. Verifica que el lead resulte ASSIGNED con score 35 y asignado al agente.
     """
     with GatewayClient(app) as client:
-        admin_headers = _bootstrap_admin_headers(client)
-        _, headers = _create_tenant_and_manager_headers(client, admin_headers)
+        _, headers = _create_tenant_and_manager_headers(client)
 
-        # 1. Crear agente
-        agent_payload = {
-            "name": "Carlos Lopez",
-            "email": "clopez@sales.com",
-            "is_active": True,
-            "password": "test-password-123",
-        }
-        agent_resp = client.post("/api/v1/agents", json=agent_payload, headers=headers)
-        assert agent_resp.status_code == 201
-        agent_data = agent_resp.json()
-        agent_id = agent_data["id"]
-        project_agents_of(app.state.container.database)
+        # 1. Crear agente (identity lo publica; lead-core lo proyecta como asesor)
+        _, agent_id = agent_of(headers, "Carlos Lopez")
 
         # 2. Crear regla de scoring
         scoring_resp = client.post(
@@ -131,8 +79,7 @@ def test_full_system_lead_routing_flow_e2e():
         assert result["score"] == 35
         assert result["assigned_agent_id"] == agent_id
 
-        # 6. El agente sigue existiendo y activo; su carga ya no se expone en
-        # el propio agente (active_leads_count desapareció), se deriva de sus
-        # leads asignados — cubierto por la aserción anterior.
-        updated_agent = client.get(f"/api/v1/agents/{agent_id}", headers=headers).json()
+        # 6. El asesor sigue activo y su carga refleja el lead asignado.
+        advisors = client.get("/api/v1/advisors", headers=headers).json()["items"]
+        updated_agent = next(item for item in advisors if item["agent_id"] == agent_id)
         assert updated_agent["is_active"] is True

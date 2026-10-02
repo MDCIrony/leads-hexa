@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 """What the delivery chain promises when a hop fails: a relay that dies after
 delivering re-delivers and publishes once, a failing job is retried by the
 broker and bounded by its delivery limit. Real database, doubles for the brokers."""
@@ -9,8 +10,8 @@ from chassis.outbox import OutboxRelay
 
 from application.dtos.commands import ReceiveIntakeCommand
 from application.use_cases.receive_intake_use_case import ReceiveIntakeUseCase
+from domain.value_objects.tenant_id import TenantId
 from domain.entities.lead_source import LeadSource
-from domain.entities.tenant import Tenant
 from domain.events.lead_events import LeadAssigned
 from domain.services.assignment_engine import AssignmentEngine
 from domain.value_objects.enums import (
@@ -101,7 +102,7 @@ def test_a_job_with_a_failing_record_is_nacked_and_stays_unfinished(test_db, mon
     payload = {"first_name": "Maria", "last_name": "Gomez", "company": "TechCorp",
                "budget": 5000, "industry": "Tech", "email": "mgomez@techcorp.com"}
     with PostgresUnitOfWork(test_db) as uow:
-        tenant = uow.tenants.save(Tenant.create(name=f"Org {uuid4()}"))
+        tenant = SimpleNamespace(id=TenantId())
         tenant_id = tenant.id.value
         uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="Form", kind=LeadSourceKind.MANUAL_FORM))
         uow.sources.save(LeadSource.create(tenant_id=tenant_id, name="Upload", kind=LeadSourceKind.FILE_UPLOAD))

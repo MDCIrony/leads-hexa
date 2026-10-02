@@ -12,17 +12,11 @@ from infrastructure.adapters.output.persistence.raw_sql_rule_repository import R
 from infrastructure.adapters.output.persistence.raw_sql_disqualification_rule_repository import (
     RawSqlDisqualificationRuleRepository,
 )
-from infrastructure.adapters.output.persistence.raw_sql_agent_repository import RawSqlAgentRepository
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
-from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import RawSqlTenantRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import RawSqlLeadSourceRepository
 from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import RawSqlIntakeRecordRepository
 from infrastructure.adapters.output.persistence.raw_sql_intake_job_repository import RawSqlIntakeJobRepository
 from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
-from infrastructure.adapters.output.persistence.raw_sql_auth_session_repository import RawSqlAuthSessionRepository
-from infrastructure.adapters.output.persistence.raw_sql_auth_challenge_repository import RawSqlAuthChallengeRepository
-from infrastructure.adapters.output.persistence.raw_sql_agent_mfa_repository import RawSqlAgentMfaRepository
-from infrastructure.adapters.output.persistence.raw_sql_social_identity_repository import RawSqlSocialIdentityRepository
 from infrastructure.adapters.output.persistence.raw_sql_processed_event_repository import (
     RawSqlProcessedEventRepository,
 )
@@ -52,17 +46,11 @@ class PostgresUnitOfWork(UnitOfWorkPort):
         self.leads = RawSqlLeadRepository(self.connection)
         self.rules = RawSqlRuleRepository(self.connection)
         self.disqualification_rules = RawSqlDisqualificationRuleRepository(self.connection)
-        self.agents = RawSqlAgentRepository(self.connection)
-        self.tenants = RawSqlTenantRepository(self.connection)
         self.groups = RawSqlSalesGroupRepository(self.connection)
         self.sources = RawSqlLeadSourceRepository(self.connection)
         self.intake_records = RawSqlIntakeRecordRepository(self.connection)
         self.intake_jobs = RawSqlIntakeJobRepository(self.connection)
         self.outbox = RawSqlOutboxRepository(self.connection)
-        self.sessions = RawSqlAuthSessionRepository(self.connection)
-        self.challenges = RawSqlAuthChallengeRepository(self.connection)
-        self.mfa = RawSqlAgentMfaRepository(self.connection)
-        self.social_identities = RawSqlSocialIdentityRepository(self.connection)
         self.processed_events = RawSqlProcessedEventRepository(self.connection)
         self.intake_files = RawSqlIntakeFileRepository(self.connection)
         self.advisors = RawSqlAdvisorRepository(self.connection)

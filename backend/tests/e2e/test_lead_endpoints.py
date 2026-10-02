@@ -2,73 +2,26 @@ import uuid
 
 from gateway_client import GatewayClient
 from infrastructure.main import app
-from domain.value_objects.enums import AgentRole, LeadSourceKind
 
 from _intake_helpers import ingest_and_resolve
-from auth_helpers import session_headers
-from tests.advisors_sync import project_agents_of
+from auth_helpers import admin_headers, manager_headers, seed_agent, seed_organization
 
 
 def _manager_auth_headers(tenant_id: str) -> dict:
-    """`list_leads` now scopes to the caller's own tenant, taken from the
-    verified token, so listing a given tenant's leads requires a Manager
-    persisted for that tenant rather than a tenant-less Admin."""
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.agent import Agent
-
-    db = app.state.container.database
-    uow = PostgresUnitOfWork(db)
-    manager = Agent.create(
-        name="Manager",
-        email=f"manager_{uuid.uuid4().hex[:6]}@test.com",
-        role=AgentRole.MANAGER,
-        tenant_id=tenant_id,
-    )
-    with uow:
-        uow.agents.save(manager)
-
-    return session_headers(manager)
+    """`list_leads` scopes to the caller's own tenant, taken from the verified
+    token, so listing a given tenant's leads requires a Manager of that tenant
+    rather than a tenant-less Admin."""
+    return manager_headers(tenant_id)
 
 
-def _agent_auth_headers(tenant_id: str, group_id: str = None) -> dict:
-    """Same shortcut as _manager_auth_headers, but for an AGENT: persists the
-    agent directly and mints its token, skipping the registration endpoint."""
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.agent import Agent
-
-    db = app.state.container.database
-    uow = PostgresUnitOfWork(db)
-    agent = Agent.create(
-        name="Agent",
-        email=f"agent_{uuid.uuid4().hex[:6]}@test.com",
-        role=AgentRole.AGENT,
-        tenant_id=tenant_id,
-        group_id=group_id,
-    )
-    with uow:
-        uow.agents.save(agent)
-    project_agents_of(db)
-
-    return session_headers(agent), str(agent.id)
+def _agent_auth_headers(tenant_id: str, group_id: str = None) -> tuple[dict, str]:
+    """An AGENT of the tenant, already in the advisors projection."""
+    return seed_agent(tenant_id, "Agent", group_id)
 
 
 def _admin_auth_headers() -> dict:
-    """Same shortcut as _manager_auth_headers, but for the platform ADMIN,
-    which has no tenant."""
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.agent import Agent
-
-    db = app.state.container.database
-    uow = PostgresUnitOfWork(db)
-    admin = Agent.create(
-        name="Platform Admin",
-        email=f"admin_{uuid.uuid4().hex[:6]}@test.com",
-        role=AgentRole.ADMIN,
-    )
-    with uow:
-        uow.agents.save(admin)
-
-    return session_headers(admin)
+    """The platform ADMIN, which has no tenant."""
+    return admin_headers()
 
 
 def _create_group(tenant_id: str) -> str:
@@ -84,26 +37,9 @@ def _create_group(tenant_id: str) -> str:
 
 
 def _seed_tenant_with_sources(tenant_id: str) -> None:
-    """leads.tenant_id and leads.source_id are now real foreign keys, and the
-    intake router resolves the source itself (migration 005), so every ingest
-    test needs a persisted tenant with its two default sources instead of a
-    bare UUID that merely looks like one."""
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.lead_source import LeadSource
-
-    db = app.state.container.database
-    uow = PostgresUnitOfWork(db)
-    with uow:
-        uow.connection.execute(
-            "INSERT INTO tenants (id, name, slug, created_at) VALUES (%s, %s, %s, now())",
-            (tenant_id, "Acme", f"acme-{tenant_id}"),
-        )
-        uow.sources.save(
-            LeadSource.create(tenant_id=tenant_id, name="Formulario manual", kind=LeadSourceKind.MANUAL_FORM)
-        )
-        uow.sources.save(
-            LeadSource.create(tenant_id=tenant_id, name="Carga de fichero", kind=LeadSourceKind.FILE_UPLOAD)
-        )
+    """The intake router resolves the source itself (migration 005), so every
+    ingest test needs the tenant's two default sources."""
+    seed_organization(tenant_id)
 
 
 def test_ingest_lead_endpoint_success():

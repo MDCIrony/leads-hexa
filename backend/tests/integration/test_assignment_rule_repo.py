@@ -1,19 +1,17 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
 import psycopg
 
+from domain.value_objects.tenant_id import TenantId
 from domain.entities.rule import AssignmentRule
 from domain.entities.sales_group import SalesGroup
-from domain.entities.tenant import Tenant
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 from infrastructure.adapters.output.persistence.raw_sql_rule_repository import (
     RawSqlRuleRepository,
 )
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
     RawSqlSalesGroupRepository,
-)
-from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import (
-    RawSqlTenantRepository,
 )
 
 
@@ -23,10 +21,9 @@ def _repo(test_db):
     return RawSqlRuleRepository(conn), conn, ctx
 
 
-def _tenant(conn: psycopg.Connection) -> Tenant:
-    # A real row is required: assignment_rules.tenant_id has a foreign key
-    # to tenants (migration 003).
-    return RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+def _tenant(conn: psycopg.Connection) -> SimpleNamespace:
+    # No row: since migration 017 nothing in leads_db references tenants.
+    return SimpleNamespace(id=TenantId())
 
 
 def test_saves_and_reads_back_every_field(test_db):

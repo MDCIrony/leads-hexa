@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from infrastructure.adapters.output.persistence.raw_sql_agent_repository import RawSqlAgentRepository
+from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
     RawSqlLeadSourceRepository,
@@ -8,23 +8,27 @@ from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository i
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
     RawSqlSalesGroupRepository,
 )
-from domain.entities.agent import Agent
+from domain.advisors.advisor import Advisor
 from domain.entities.lead import Lead
 from domain.entities.lead_source import LeadSource
 from domain.entities.sales_group import SalesGroup
 from domain.value_objects import LeadStatus
 from domain.value_objects.enums import AgentRole, LeadSourceKind
-from tests.advisors_sync import project_agents
+from domain.value_objects.agent_id import AgentId
+from domain.value_objects.tenant_id import TenantId
+
+
+def _seed_advisor(connection, name: str, group_id: uuid.UUID, tenant_id: uuid.UUID) -> Advisor:
+    advisor = Advisor(AgentId(), TenantId(tenant_id), name, AgentRole.AGENT, True, 1)
+    repo = RawSqlAdvisorRepository(connection)
+    repo.upsert_identity(advisor)
+    repo.set_group(advisor.agent_id.value, tenant_id, group_id)
+    return advisor
 
 
 def _seed_source(connection, tenant_id: uuid.UUID) -> uuid.UUID:
-    """leads.tenant_id and leads.source_id are real foreign keys (migration
-    005): an invented UUID is rejected, so every test needs a persisted
-    organization and source of its own."""
-    connection.execute(
-        "INSERT INTO tenants (id, name, slug, created_at) VALUES (%s, %s, %s, now())",
-        (tenant_id, "Acme", f"acme-{tenant_id}"),
-    )
+    """leads.source_id is a real foreign key (migration 005): an invented
+    UUID is rejected, so every test needs a persisted source of its own."""
     source = RawSqlLeadSourceRepository(connection).save(
         LeadSource.create(tenant_id=tenant_id, name="Formulario", kind=LeadSourceKind.MANUAL_FORM)
     )
@@ -238,13 +242,7 @@ def test_group_id_filter_scopes_agents_to_the_tenant(test_db):
         group = RawSqlSalesGroupRepository(connection).save(
             SalesGroup.create(tenant_id=tenant_id, name="Sales")
         )
-        agent = RawSqlAgentRepository(connection).save(
-            Agent.create(
-                "Ana", "ana@example.com", group.id.value, role=AgentRole.AGENT, tenant_id=tenant_id
-            )
-        )
-
-        project_agents(connection)
+        agent = _seed_advisor(connection, "Ana", group.id.value, tenant_id)
 
         lead = _seed_lead(connection, tenant_id, source_id, status=LeadStatus.QUALIFIED)
         lead.assign_to(agent.id.value, lead.tenant_id)
@@ -392,13 +390,8 @@ def test_active_load_by_agent_with_names_only_counts_assigned_and_orders_by_load
         group = RawSqlSalesGroupRepository(connection).save(
             SalesGroup.create(tenant_id=tenant_id, name="Sales")
         )
-        ana = RawSqlAgentRepository(connection).save(
-            Agent.create("Ana Ruiz", "ana@example.com", group.id.value, role=AgentRole.AGENT, tenant_id=tenant_id)
-        )
-        beto = RawSqlAgentRepository(connection).save(
-            Agent.create("Beto Cruz", "beto@example.com", group.id.value, role=AgentRole.AGENT, tenant_id=tenant_id)
-        )
-        project_agents(connection)
+        ana = _seed_advisor(connection, "Ana Ruiz", group.id.value, tenant_id)
+        beto = _seed_advisor(connection, "Beto Cruz", group.id.value, tenant_id)
 
         for i in range(2):
             lead = _lead_for_load_test(tenant_id, source_id, f"ana{i}@example.com")

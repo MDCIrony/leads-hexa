@@ -1,63 +1,20 @@
-import uuid
-
+from auth_helpers import seed_org_manager
 from gateway_client import GatewayClient
 
 from infrastructure.main import app
 
 
-def _bootstrap_admin(client: GatewayClient) -> str:
-    response = client.post(
-        "/api/v1/agents",
-        json={
-            "name": "Platform Admin",
-            "email": f"admin_{uuid.uuid4().hex[:6]}@platform.test",
-            "team": "HQ",
-            "password": "admin-pass-123",
-        },
-    )
-    assert response.status_code == 201, response.text
-    assert response.json()["role"] == "ADMIN"
-    login = client.post(
-        "/api/v1/auth/login",
-        data={"username": response.json()["email"], "password": "admin-pass-123"},
-    )
-    assert login.status_code == 200, login.text
-    return login.cookies["leads_session"]
-
-
-def _create_tenant(client: GatewayClient, admin_token: str, name: str, email: str) -> dict:
-    response = client.post(
-        "/api/v1/tenants",
-        json={
-            "name": name,
-            "manager": {"name": "Manager", "email": email, "password": "manager-pass-123"},
-        },
-        headers={"Cookie": f"leads_session={admin_token}"},
-    )
-    assert response.status_code == 201, response.text
-    return response.json()
-
-
-def _login(client: GatewayClient, email: str, password: str) -> str:
-    response = client.post("/api/v1/auth/login", data={"username": email, "password": password})
-    assert response.status_code == 200, response.text
-    return response.cookies["leads_session"]
-
-
-def _manager_token(client: GatewayClient) -> str:
-    admin_token = _bootstrap_admin(client)
-    email = f"manager_{uuid.uuid4().hex[:6]}@acme.test"
-    _create_tenant(client, admin_token, "Acme Corp", email)
-    return _login(client, email, "manager-pass-123")
+def _manager(client: GatewayClient) -> dict:
+    return seed_org_manager()
 
 
 def test_a_list_valued_rule_survives_the_round_trip(test_db):
     """The IN operator never fired because value was coerced to str."""
     with GatewayClient(app) as client:
-        manager_token = _manager_token(client)
+        manager = _manager(client)
         created = client.post(
             "/api/v1/rules/scoring",
-            headers={"Cookie": f"leads_session={manager_token}"},
+            headers=manager,
             json={
                 "name": "Sectores objetivo",
                 "conditions": [{"field": "industry", "operator": "IN", "value": ["tech", "finance"]}],
@@ -67,7 +24,7 @@ def test_a_list_valued_rule_survives_the_round_trip(test_db):
         assert created.status_code == 201
 
         listed = client.get(
-            "/api/v1/rules/scoring", headers={"Cookie": f"leads_session={manager_token}"}
+            "/api/v1/rules/scoring", headers=manager
         )
         rule = next(r for r in listed.json()["items"] if r["name"] == "Sectores objetivo")
         assert rule["conditions"][0]["value"] == ["tech", "finance"]
@@ -75,10 +32,10 @@ def test_a_list_valued_rule_survives_the_round_trip(test_db):
 
 def test_a_numeric_rule_keeps_its_number(test_db):
     with GatewayClient(app) as client:
-        manager_token = _manager_token(client)
+        manager = _manager(client)
         created = client.post(
             "/api/v1/rules/scoring",
-            headers={"Cookie": f"leads_session={manager_token}"},
+            headers=manager,
             json={
                 "name": "Presupuesto alto",
                 "conditions": [{"field": "budget", "operator": "GREATER_THAN", "value": 5000}],
@@ -91,10 +48,10 @@ def test_a_numeric_rule_keeps_its_number(test_db):
 
 def test_a_field_outside_the_allow_list_is_refused(test_db):
     with GatewayClient(app) as client:
-        manager_token = _manager_token(client)
+        manager = _manager(client)
         refused = client.post(
             "/api/v1/rules/scoring",
-            headers={"Cookie": f"leads_session={manager_token}"},
+            headers=manager,
             json={
                 "name": "Fuga",
                 "conditions": [{"field": "tenant_id", "operator": "EQUALS", "value": "x"}],

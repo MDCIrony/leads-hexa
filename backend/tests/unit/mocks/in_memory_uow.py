@@ -2,7 +2,6 @@ from dataclasses import replace
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from application.ports.output.agent_repository_port import AgentRepositoryPort
 from application.ports.output.disqualification_rule_repository_port import (
     DisqualificationRuleRepositoryPort,
 )
@@ -16,7 +15,6 @@ from application.ports.output.intake.provisioned_tenant_repository_port import P
 from application.ports.output.intake_file_repository_port import IntakeFileRepositoryPort
 from application.ports.output.rule_repository_port import RuleRepositoryPort
 from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
-from application.ports.output.tenant_repository_port import TenantRepositoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from application.dtos.commands import OutboxEntry, StoredIntakeFile
 from domain.entities.disqualification_rule import DisqualificationRule
@@ -27,169 +25,11 @@ from domain.events.lead_events import OutboundEvent
 from domain.value_objects.enums import IntakeJobStatus, IntakeRecordStatus
 from infrastructure.adapters.output.persistence.correlation import current_correlation_id
 from tests.unit.mocks.in_memory_advisor_repo import InMemoryAdvisorRepository
-from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_lead_source_repo import InMemoryLeadSourceRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
-from tests.unit.mocks.in_memory_tenant_repo import InMemoryTenantRepository
-from application.ports.output.auth_session_repository_port import AuthSessionRepositoryPort
-from application.ports.output.auth_challenge_repository_port import AuthChallengeRepositoryPort
-from application.ports.output.agent_mfa_repository_port import AgentMfaRepositoryPort
-from domain.entities.auth_session import AuthSession
-from domain.entities.auth_challenge import AuthChallenge
-from domain.entities.agent_mfa import AgentMfa
-from domain.entities.social_identity import SocialIdentity
-from application.ports.output.social_identity_repository_port import SocialIdentityRepositoryPort
 from datetime import datetime, timezone
-
-
-class InMemoryAuthSessionRepository(AuthSessionRepositoryPort):
-    def __init__(self) -> None:
-        self.items: Dict[str, AuthSession] = {}
-
-    def save(self, session: AuthSession) -> None:
-        self.items[session.token_hash] = session
-
-    def get_active(self, token_hash: str, now: datetime) -> Optional[AuthSession]:
-        session = self.items.get(token_hash)
-        return session if session and session.revoked_at is None and session.expires_at > now else None
-
-    def revoke(self, token_hash: str, now: datetime) -> None:
-        session = self.items.get(token_hash)
-        if session and session.revoked_at is None:
-            self.items[token_hash] = AuthSession(**{**session.__dict__, "revoked_at": now})
-
-    def revoke_for_agent_except(self, agent_id: object, token_hash: str, now: datetime) -> None:
-        for item_hash, session in list(self.items.items()):
-            if session.agent_id == agent_id and item_hash != token_hash and session.revoked_at is None:
-                self.items[item_hash] = AuthSession(**{**session.__dict__, "revoked_at": now})
-
-
-class InMemoryAuthChallengeRepository(AuthChallengeRepositoryPort):
-    def __init__(self) -> None:
-        self.items: Dict[str, AuthChallenge] = {}
-
-    def save(self, challenge: AuthChallenge) -> None:
-        self.items[challenge.token_hash] = challenge
-
-    def resolve_active(self, token_hash: str, now: datetime) -> Optional[AuthChallenge]:
-        challenge = self.items.get(token_hash)
-        return challenge if challenge and challenge.consumed_at is None and challenge.expires_at > now else None
-
-    def increment_attempts(self, token_hash: str, now: datetime) -> bool:
-        challenge = self.resolve_active(token_hash, now)
-        if not challenge:
-            return False
-        self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "attempts": challenge.attempts + 1})
-        return True
-
-    def reserve_attempt(self, token_hash: str, purpose: str, now: datetime, maximum: int) -> bool:
-        challenge = self.resolve_active(token_hash, now)
-        if not challenge or challenge.purpose != purpose or challenge.agent_id is None or challenge.attempts >= maximum:
-            return False
-        self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "attempts": challenge.attempts + 1})
-        return True
-
-    def consume(self, token_hash: str, now: datetime) -> bool:
-        challenge = self.resolve_active(token_hash, now)
-        if not challenge:
-            return False
-        self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "consumed_at": now})
-        return True
-
-    def consume_oauth(self, token_hash: str, provider: str, state_hash: str, now: datetime) -> Optional[AuthChallenge]:
-        challenge = self.resolve_active(token_hash, now)
-        if not challenge or not challenge.matches_oauth(provider, state_hash):
-            return None
-        self.items[token_hash] = AuthChallenge(**{**challenge.__dict__, "consumed_at": now})
-        return self.items[token_hash]
-
-    def invalidate_active_for_agent(self, agent_id: object, purpose: str, now: datetime) -> Optional[AuthChallenge]:
-        active = [
-            challenge for token_hash, challenge in self.items.items()
-            if challenge.agent_id == agent_id and challenge.purpose == purpose and self.resolve_active(token_hash, now)
-        ]
-        for challenge in active:
-            self.items[challenge.token_hash] = AuthChallenge(**{**challenge.__dict__, "consumed_at": now})
-        return max(active, key=lambda challenge: challenge.attempts, default=None)
-
-
-class InMemoryAgentMfaRepository(AgentMfaRepositoryPort):
-    def __init__(self) -> None:
-        self.items: Dict[UUID, AgentMfa] = {}
-        self.recovery_codes: Dict[tuple[UUID, str], datetime | None] = {}
-
-    def get(self, agent_id: UUID) -> Optional[AgentMfa]:
-        return self.items.get(agent_id)
-
-    def save_pending(self, enrollment: AgentMfa) -> None:
-        self.items[enrollment.agent_id] = AgentMfa(enrollment.agent_id, enrollment.secret_ciphertext)
-
-    def confirm(self, agent_id: UUID, step: int, now: datetime) -> bool:
-        enrollment = self.items.get(agent_id)
-        if not enrollment or enrollment.enabled_at is not None:
-            return False
-        self.items[agent_id] = AgentMfa(agent_id, enrollment.secret_ciphertext, now, step)
-        return True
-
-    def claim_totp_step(self, agent_id: UUID, step: int) -> bool:
-        enrollment = self.items.get(agent_id)
-        if not enrollment or enrollment.enabled_at is None or (enrollment.last_used_step is not None and enrollment.last_used_step >= step):
-            return False
-        self.items[agent_id] = AgentMfa(agent_id, enrollment.secret_ciphertext, enrollment.enabled_at, step)
-        return True
-
-    def replace_recovery_codes(self, agent_id: UUID, code_hashes, now: datetime) -> None:
-        self.recovery_codes = {key: value for key, value in self.recovery_codes.items() if key[0] != agent_id}
-        self.recovery_codes.update({(agent_id, code_hash): None for code_hash in code_hashes})
-
-    def consume_recovery_code(self, agent_id: UUID, code_hash: str, now: datetime) -> bool:
-        key = (agent_id, code_hash)
-        if key not in self.recovery_codes or self.recovery_codes[key] is not None:
-            return False
-        self.recovery_codes[key] = now
-        return True
-
-    def delete(self, agent_id: UUID) -> None:
-        self.items.pop(agent_id, None)
-        self.recovery_codes = {key: value for key, value in self.recovery_codes.items() if key[0] != agent_id}
-
-
-class InMemorySocialIdentityRepository(SocialIdentityRepositoryPort):
-    def __init__(self) -> None:
-        self.items: Dict[UUID, SocialIdentity] = {}
-
-    def get_by_provider_subject(self, provider: str, provider_subject: str) -> Optional[SocialIdentity]:
-        return next(
-            (
-                identity for identity in self.items.values()
-                if identity.provider == provider and identity.provider_subject == provider_subject
-            ),
-            None,
-        )
-
-    def list_by_agent(self, agent_id: UUID) -> list[SocialIdentity]:
-        return sorted(
-            (identity for identity in self.items.values() if identity.agent_id == agent_id),
-            key=lambda identity: identity.provider,
-        )
-
-    def save(self, identity: SocialIdentity) -> bool:
-        if self.get_by_provider_subject(identity.provider, identity.provider_subject) or any(
-            item.agent_id == identity.agent_id and item.provider == identity.provider
-            for item in self.items.values()
-        ):
-            return False
-        self.items[identity.id] = identity
-        return True
-
-    def touch_last_login(self, identity_id: UUID, now: datetime) -> bool:
-        identity = self.items.get(identity_id)
-        if not identity:
-            return False
-        self.items[identity_id] = SocialIdentity(**{**identity.__dict__, "last_login_at": now})
-        return True
 
 
 class InMemoryIntakeRecordRepository(IntakeRecordRepositoryPort):
@@ -406,11 +246,8 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self,
         lead_repo: Optional[LeadRepositoryPort] = None,
         rule_repo: Optional[RuleRepositoryPort] = None,
-        agent_repo: Optional[AgentRepositoryPort] = None,
         leads: Optional[LeadRepositoryPort] = None,
         rules: Optional[RuleRepositoryPort] = None,
-        agents: Optional[AgentRepositoryPort] = None,
-        tenants: Optional[TenantRepositoryPort] = None,
         groups: Optional[SalesGroupRepositoryPort] = None,
         sources: Optional[LeadSourceRepositoryPort] = None,
         intake_records: Optional[IntakeRecordRepositoryPort] = None,
@@ -420,16 +257,14 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         advisors: Optional[InMemoryAdvisorRepository] = None,
     ) -> None:
         # Defaulting to a fresh in-memory repo (instead of None) is what lets
-        # a test that only cares about leads and agents write
+        # a test that only cares about leads and rules write
         # InMemoryUnitOfWork() and go, instead of wiring up every repo by hand.
         self.leads = leads if leads is not None else (lead_repo or InMemoryLeadRepository())
         self.rules = rules if rules is not None else (rule_repo or InMemoryRuleRepository())
-        self.agents = agents if agents is not None else (agent_repo or InMemoryAgentRepository())
         self.advisors = advisors or InMemoryAdvisorRepository()
         # group_id filtering on leads needs each lead's assigned advisor.
         if isinstance(self.leads, InMemoryLeadRepository):
             self.leads.advisor_repo = self.advisors
-        self.tenants = tenants or InMemoryTenantRepository()
         self.groups = groups or InMemorySalesGroupRepository()
         if isinstance(self.groups, InMemorySalesGroupRepository):
             self.groups.advisor_repo = self.advisors
@@ -438,10 +273,6 @@ class InMemoryUnitOfWork(UnitOfWorkPort):
         self.intake_jobs = intake_jobs or InMemoryIntakeJobRepository()
         self.disqualification_rules = disqualification_rules or InMemoryDisqualificationRuleRepository()
         self.outbox = outbox or InMemoryOutboxRepository()
-        self.sessions = InMemoryAuthSessionRepository()
-        self.challenges = InMemoryAuthChallengeRepository()
-        self.mfa = InMemoryAgentMfaRepository()
-        self.social_identities = InMemorySocialIdentityRepository()
         self.processed_events = InMemoryProcessedEventRepository()
         self.intake_files = InMemoryIntakeFileRepository()
         self.provisioned_tenants = InMemoryProvisionedTenantRepository()

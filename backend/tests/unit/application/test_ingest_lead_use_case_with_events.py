@@ -4,13 +4,12 @@ import pytest
 
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
 from application.dtos.commands import IngestLeadCommand
-from domain.entities import Agent, AssignmentRule
+from domain.entities import AssignmentRule
 from domain.entities.disqualification_rule import DisqualificationRule
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator
-from tests.unit.mocks.in_memory_advisor_repo import advisor_of
-from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
+from tests.unit.mocks.in_memory_advisor_repo import make_advisor
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
@@ -21,7 +20,6 @@ def _uow() -> InMemoryUnitOfWork:
     return InMemoryUnitOfWork(
         InMemoryLeadRepository(),
         InMemoryRuleRepository(),
-        InMemoryAgentRepository(),
         groups=InMemorySalesGroupRepository(),
     )
 
@@ -57,8 +55,7 @@ def _internal(uow: InMemoryUnitOfWork):
 def test_an_assigned_lead_records_one_lead_assigned_next_to_the_product_event() -> None:
     uow = _uow()
     tenant_id = uuid.uuid4()
-    agent = uow.agents.save(Agent.create(name="Carlos", email="carlos@x.test", tenant_id=tenant_id))
-    uow.advisors.seed(advisor_of(agent))
+    agent = uow.advisors.seed(make_advisor(name="Carlos", tenant_id=tenant_id))
     uow.rules.save_assignment_rule(
         tenant_id,
         AssignmentRule.create(tenant_id=tenant_id, name="Catch-all", target_agent_ids=[agent.id.value]),
@@ -121,7 +118,7 @@ def test_a_rolled_back_ingestion_records_nothing() -> None:
             self.rollback()
             raise RuntimeError("commit refused")
 
-    uow = _CommitFails(InMemoryLeadRepository(), InMemoryRuleRepository(), InMemoryAgentRepository())
+    uow = _CommitFails(InMemoryLeadRepository(), InMemoryRuleRepository())
 
     with pytest.raises(RuntimeError):
         _ingest(uow, _command(uuid.uuid4()))

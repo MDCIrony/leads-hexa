@@ -46,10 +46,6 @@ def concurrent_db(dsn_of_test_db):
 
 
 def _seed_tenant(conn, tenant_id: uuid.UUID) -> uuid.UUID:
-    conn.execute(
-        "INSERT INTO tenants (id, name, slug, created_at) VALUES (%s, %s, %s, now())",
-        (tenant_id, "Concurrencia", f"conc-{tenant_id}"),
-    )
     source = RawSqlLeadSourceRepository(conn).save(
         LeadSource.create(tenant_id=tenant_id, name="Formulario", kind=LeadSourceKind.MANUAL_FORM)
     )

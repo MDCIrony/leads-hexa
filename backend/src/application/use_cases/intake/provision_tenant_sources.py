@@ -23,9 +23,9 @@ class ProvisionTenantSourcesUseCase(ProvisionTenantSourcesInputPort):
         # replay must stay a no-op for this tenant either way.
         if not is_active:
             return False
-        # Until the cut, CreateTenantUseCase still creates these sources for a
-        # tenant born in the monolith, and only the migration seeded the marks.
-        # Finding any of them means it is already provisioned.
+        # A tenant born in the monolith before the cut got these sources there,
+        # and only the migration seeded the marks. Finding any of them means it
+        # is already provisioned.
         if any(uow.sources.get_by_kind(tenant_id.value, kind) for _, kind in DEFAULT_SOURCES):
             return False
         for source in default_sources(tenant_id):

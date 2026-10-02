@@ -20,31 +20,8 @@ class GetLeadsQuery:
 
 
 @dataclass(frozen=True)
-class GetAgentsQuery:
-    tenant_id: UUID
-    group_id: Optional[UUID] = None
-    # True (the default) keeps today's listing behavior: only active agents.
-    # False lists the deactivated ones, None lists both.
-    is_active: Optional[bool] = True
-    limit: int = 100
-    offset: int = 0
-
-
-@dataclass(frozen=True)
-class GetAgentQuery:
-    tenant_id: UUID
-    agent_id: UUID
-
-
-@dataclass(frozen=True)
 class GetRulesQuery:
     tenant_id: UUID
-    limit: int = 100
-    offset: int = 0
-
-
-@dataclass(frozen=True)
-class GetTenantsQuery:
     limit: int = 100
     offset: int = 0
 

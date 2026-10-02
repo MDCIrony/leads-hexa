@@ -1,10 +1,11 @@
 import json
 import uuid
+from dataclasses import dataclass
 
 from chassis.outbox import OutboxRow
 
-from domain.events.identity_events import TenantState
-from domain.events.lead_events import LeadDisqualified
+from domain.events.internal_event import InternalEvent
+from domain.events.lead_events import LeadAssigned, LeadDisqualified
 from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 
@@ -16,10 +17,19 @@ def _product_event() -> LeadDisqualified:
     )
 
 
-def _internal_event() -> TenantState:
-    return TenantState(
-        tenant_id=str(uuid.uuid4()), name="Acme", slug="acme", is_active=True, version=3,
-    )
+def _internal_event() -> LeadAssigned:
+    return LeadAssigned(tenant_id=str(uuid.uuid4()), lead_id=str(uuid.uuid4()), agent_id=str(uuid.uuid4()))
+
+
+@dataclass(kw_only=True)
+class _TenantlessState(InternalEvent):
+    """The channel admits state that belongs to no organization."""
+
+    subject_id: str
+
+    @property
+    def partition_key(self) -> str:
+        return self.subject_id
 
 
 def _record(test_db, event, channel: str) -> None:
@@ -48,8 +58,8 @@ def test_a_row_carries_what_the_chassis_dispatchers_need(test_db):
 
     assert isinstance(row, OutboxRow)
     assert row.tenant_id == event.tenant_id and isinstance(row.tenant_id, str)
-    assert row.partition_key == event.tenant_id
-    assert row.event_type == "TenantState"
+    assert row.partition_key == event.lead_id
+    assert row.event_type == "LeadAssigned"
     # timezone-aware, or the envelope's occurred_at would carry no offset.
     assert row.occurred_on.utcoffset() is not None
     assert row.occurred_on == event.occurred_on
@@ -58,12 +68,7 @@ def test_a_row_carries_what_the_chassis_dispatchers_need(test_db):
 
 
 def test_a_tenantless_row_has_a_none_tenant_id(test_db):
-    from domain.events.identity_events import AgentState
-
-    event = AgentState(
-        tenant_id=None, agent_id=str(uuid.uuid4()), name="Root", role="ADMIN",
-        is_active=True, version=1,
-    )
+    event = _TenantlessState(tenant_id=None, subject_id=str(uuid.uuid4()))
     _record(test_db, event, "internal")
 
     with open_outbox_store(test_db) as store:

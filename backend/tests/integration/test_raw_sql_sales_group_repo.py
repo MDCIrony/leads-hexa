@@ -1,20 +1,13 @@
-from uuid import uuid4
+from types import SimpleNamespace
 
 import psycopg
 import pytest
 
-from domain.entities.agent import Agent
 from domain.entities.sales_group import SalesGroup
-from domain.entities.tenant import Tenant
-from domain.value_objects.enums import AgentRole, AssignmentStrategy
-from infrastructure.adapters.output.persistence.raw_sql_agent_repository import (
-    RawSqlAgentRepository,
-)
+from domain.value_objects.enums import AssignmentStrategy
+from domain.value_objects.tenant_id import TenantId
 from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
     RawSqlSalesGroupRepository,
-)
-from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import (
-    RawSqlTenantRepository,
 )
 
 
@@ -24,10 +17,9 @@ def _repo(test_db):
     return RawSqlSalesGroupRepository(conn), conn, ctx
 
 
-def _tenant(conn: psycopg.Connection) -> Tenant:
-    # A real row is required: sales_groups.tenant_id has a foreign key to
-    # tenants (migration 003), unlike the looser agents.tenant_id.
-    return RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+def _tenant(conn: psycopg.Connection) -> SimpleNamespace:
+    # No row: since migration 017 nothing in leads_db references tenants.
+    return SimpleNamespace(id=TenantId())
 
 
 def test_saves_and_reads_back_every_field(test_db):
@@ -98,31 +90,5 @@ def test_the_same_name_is_allowed_in_two_different_organizations(test_db):
 
         assert repo.count_by_tenant(tenant_a.id.value) == 1
         assert repo.count_by_tenant(tenant_b.id.value) == 1
-    finally:
-        ctx.__exit__(None, None, None)
-
-
-def test_deleting_a_group_orphans_its_agents_instead_of_deleting_them(test_db):
-    repo, conn, ctx = _repo(test_db)
-    try:
-        tenant = _tenant(conn)
-        group = repo.save(SalesGroup.create(tenant_id=tenant.id.value, name="Ventas"))
-        agent_repo = RawSqlAgentRepository(conn)
-        agent = agent_repo.save(
-            Agent.create(
-                name="Ana",
-                email="ana@a.test",
-                group_id=group.id.value,
-                role=AgentRole.AGENT,
-                tenant_id=tenant.id.value,
-            )
-        )
-
-        repo.delete(group.id.value)
-
-        assert repo.get_by_id(group.id.value) is None
-        survivor = agent_repo.get_by_id(agent.id.value)
-        assert survivor is not None
-        assert survivor.group_id is None
     finally:
         ctx.__exit__(None, None, None)

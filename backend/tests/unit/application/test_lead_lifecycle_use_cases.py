@@ -9,11 +9,10 @@ from application.use_cases.lead_lifecycle_use_cases import (
     DiscardLeadUseCase,
     GetMyLeadsUseCase,
 )
-from domain.entities.agent import Agent
 from domain.entities.lead import Lead
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole, LeadStatus
-from tests.unit.mocks.in_memory_advisor_repo import ProjectionOnlyDirectory, advisor_of
+from tests.unit.mocks.in_memory_advisor_repo import ProjectionOnlyDirectory, make_advisor
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 _TENANT = uuid.uuid4()
@@ -27,9 +26,9 @@ def _lead(tenant_id: uuid.UUID = _TENANT, status: LeadStatus = LeadStatus.UNASSI
     )
 
 
-def _agent(tenant_id: uuid.UUID = _TENANT) -> Agent:
-    return Agent.create(
-        "Sales One", f"{uuid.uuid4()}@x.test", role=AgentRole.AGENT, tenant_id=tenant_id
+def _agent(tenant_id: uuid.UUID = _TENANT):
+    return make_advisor(
+        "Sales One", role=AgentRole.AGENT, tenant_id=tenant_id
     )
 
 
@@ -37,7 +36,7 @@ def test_assigning_moves_the_lead_to_the_agent():
     uow = InMemoryUnitOfWork()
     lead, agent = _lead(), _agent()
     uow.leads.save(lead)
-    uow.advisors.seed(advisor_of(agent))
+    uow.advisors.seed(agent)
 
     result = AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=agent.id.value)
@@ -54,7 +53,7 @@ def test_assigning_a_lead_of_another_organization_is_not_found():
     uow = InMemoryUnitOfWork()
     lead, agent = _lead(tenant_id=_OTHER), _agent()
     uow.leads.save(lead)
-    uow.advisors.seed(advisor_of(agent))
+    uow.advisors.seed(agent)
 
     with pytest.raises(DomainException) as exc:
         AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
@@ -71,7 +70,7 @@ def test_assigning_an_agent_of_another_organization_is_refused():
     uow = InMemoryUnitOfWork()
     lead, agent = _lead(), _agent(tenant_id=_OTHER)
     uow.leads.save(lead)
-    uow.advisors.seed(advisor_of(agent))
+    uow.advisors.seed(agent)
 
     with pytest.raises(DomainException) as exc:
         AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
@@ -86,8 +85,8 @@ def test_reassigning_an_already_assigned_lead_lands_on_the_new_agent():
     first_agent, second_agent = _agent(), _agent()
     lead.assign_to(first_agent.id, first_agent.tenant_id)
     uow.leads.save(lead)
-    uow.advisors.seed(advisor_of(first_agent))
-    uow.advisors.seed(advisor_of(second_agent))
+    uow.advisors.seed(first_agent)
+    uow.advisors.seed(second_agent)
 
     result = AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=second_agent.id.value)
@@ -107,7 +106,7 @@ def test_assigning_by_hand_republishes_the_lead_to_the_customer():
     uow = InMemoryUnitOfWork()
     lead, agent = _lead(), _agent()
     uow.leads.save(lead)
-    uow.advisors.seed(advisor_of(agent))
+    uow.advisors.seed(agent)
 
     AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=agent.id.value)
@@ -133,8 +132,8 @@ def test_reassigning_records_lead_reassigned_with_the_previous_agent():
     lead = _lead()
     lead.assign_to(first_agent.id, first_agent.tenant_id)
     uow.leads.save(lead)
-    uow.advisors.seed(advisor_of(first_agent))
-    uow.advisors.seed(advisor_of(second_agent))
+    uow.advisors.seed(first_agent)
+    uow.advisors.seed(second_agent)
 
     AssignLeadUseCase(uow, ProjectionOnlyDirectory(uow)).execute(
         AssignLeadCommand(tenant_id=_TENANT, lead_id=lead.id.value, agent_id=second_agent.id.value)
@@ -182,8 +181,8 @@ def test_my_leads_only_returns_the_requesting_agent_leads():
     lead_two.assign_to(agent_two.id, agent_two.tenant_id)
     uow.leads.save(lead_one)
     uow.leads.save(lead_two)
-    uow.advisors.seed(advisor_of(agent_one))
-    uow.advisors.seed(advisor_of(agent_two))
+    uow.advisors.seed(agent_one)
+    uow.advisors.seed(agent_two)
 
     result = GetMyLeadsUseCase(uow).execute(
         GetMyLeadsQuery(tenant_id=_TENANT, agent_id=agent_one.id.value)

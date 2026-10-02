@@ -1,11 +1,9 @@
 import pytest
 
 from domain.exceptions import (
-    AgentNotFoundException,
     DomainException,
     ForbiddenException,
     InvalidBudgetException,
-    InvalidCredentialsException,
     InvalidEmailException,
     UnauthorizedException,
 )
@@ -28,8 +26,6 @@ def test_domain_exceptions_do_not_expose_transport_details():
         DomainException,
         InvalidEmailException,
         InvalidBudgetException,
-        AgentNotFoundException,
-        InvalidCredentialsException,
         UnauthorizedException,
         ForbiddenException,
     ):
@@ -44,8 +40,6 @@ def test_domain_exceptions_do_not_expose_transport_details():
     [
         (InvalidEmailException, "INVALID_EMAIL"),
         (InvalidBudgetException, "INVALID_BUDGET"),
-        (AgentNotFoundException, "AGENT_NOT_FOUND"),
-        (InvalidCredentialsException, "INVALID_CREDENTIALS"),
         (UnauthorizedException, "UNAUTHORIZED"),
         (ForbiddenException, "FORBIDDEN"),
     ],

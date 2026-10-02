@@ -3,40 +3,23 @@ import uuid
 
 from domain.exceptions import DomainException
 from infrastructure.main import app
-from tests.advisors_sync import project_agents_of
+from tests.advisors_sync import project_identity, seed_advisor
+from tests.e2e.auth_helpers import admin_headers, principal_of, seed_org_manager
 from tests.e2e._intake_helpers import ingest_and_resolve
-from tests.e2e.gateway_client import GatewayClient
-
-
-def _login(client, email: str, password: str) -> dict:
-    login = client.post("/api/v1/auth/login", data={"username": email, "password": password})
-    assert login.status_code == 200, login.text
-    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
+from tests.e2e.gateway_client import GatewayClient, tenant_of
 
 
 def _admin(client) -> dict:
-    email = f"admin_{uuid.uuid4().hex[:6]}@test.com"
-    created = client.post("/api/v1/agents", json={"name": "Admin", "email": email, "password": "admin-pass-123"})
-    assert created.status_code == 201, created.text
-    return _login(client, email, "admin-pass-123")
+    return admin_headers()
 
 
 def _org(client, admin: dict) -> dict:
-    email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
-    created = client.post("/api/v1/tenants", headers=admin, json={
-        "name": f"Org {uuid.uuid4().hex[:6]}",
-        "manager": {"name": "Manager", "email": email, "password": "manager-pass-123"},
-    })
-    assert created.status_code == 201, created.text
-    return _login(client, email, "manager-pass-123")
+    return seed_org_manager()
 
 
 def _agent(client, manager: dict, name: str) -> str:
-    created = client.post("/api/v1/agents", headers=manager, json={
-        "name": name, "email": f"{uuid.uuid4().hex[:8]}@test.com", "password": "agent-pass-123", "role": "AGENT",
-    })
-    assert created.status_code == 201, created.text
-    return created.json()["id"]
+    """Known to identity but not projected yet: its event has not arrived."""
+    return str(seed_advisor(app.state.container.database, tenant_of(manager), name=name, projected=False).agent_id)
 
 
 def _group(client, manager: dict) -> str:
@@ -70,7 +53,7 @@ def test_the_manager_lists_advisors_with_their_group_and_active_load(test_db):
     with GatewayClient(app) as client:
         manager = _org(client, _admin(client))
         ana, bea = _agent(client, manager, "Ana"), _agent(client, manager, "Bea")
-        project_agents_of(app.state.container.database)
+        project_identity(app.state.container.database)
         _assigned_lead(client, manager, ana)
 
         page = client.get("/api/v1/advisors", headers=manager, params={"limit": 2, "offset": 0}).json()
@@ -90,7 +73,7 @@ def test_patch_sets_the_group_and_the_list_filters_by_it(test_db):
     with GatewayClient(app) as client:
         manager = _org(client, _admin(client))
         ana, bea, group = _agent(client, manager, "Ana"), _agent(client, manager, "Bea"), _group(client, manager)
-        project_agents_of(app.state.container.database)
+        project_identity(app.state.container.database)
 
         patched = client.patch(f"/api/v1/advisors/{ana}", headers=manager, json={"group_id": group})
 
@@ -122,7 +105,7 @@ def test_another_organizations_agent_or_group_is_a_404(test_db):
         manager_a, manager_b = _org(client, admin), _org(client, admin)
         mine, foreign_agent = _agent(client, manager_a, "Ana"), _agent(client, manager_b, "Bea")
         foreign_group = _group(client, manager_b)
-        project_agents_of(app.state.container.database)
+        project_identity(app.state.container.database)
 
         agent = client.patch(f"/api/v1/advisors/{foreign_agent}", headers=manager_a, json={"group_id": None})
         group = client.patch(f"/api/v1/advisors/{mine}", headers=manager_a, json={"group_id": foreign_group})
@@ -148,13 +131,11 @@ def test_the_body_is_validated_strictly(test_db):
 def test_only_the_organization_manager_reaches_advisors(test_db):
     with GatewayClient(app) as client:
         manager = _org(client, _admin(client))
-        email = f"{uuid.uuid4().hex[:8]}@test.com"
-        client.post("/api/v1/agents", headers=manager, json={
-            "name": "Ana", "email": email, "password": "agent-pass-123", "role": "AGENT"})
+        ana = seed_advisor(app.state.container.database, tenant_of(manager), name="Ana")
 
-        agent = _login(client, email, "agent-pass-123")
+        agent = principal_of(ana)
         assert client.get("/api/v1/advisors", headers=agent).status_code == 403
-        own_id = client.get("/api/v1/agents", headers=manager).json()["items"][0]["id"]
+        own_id = str(ana.agent_id)
         assert client.patch(f"/api/v1/advisors/{own_id}", headers=agent, json={"group_id": None}).status_code == 403
 
 

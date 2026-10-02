@@ -1,13 +1,14 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
 import psycopg
 import pytest
 
 from application.use_cases.ingest_lead_use_case import command_from_record, payload_of
+from domain.value_objects.tenant_id import TenantId
 from domain.entities.intake_record import IntakeRecord
 from domain.entities.lead import Lead
 from domain.entities.lead_source import LeadSource
-from domain.entities.tenant import Tenant
 from domain.exceptions import InvalidBudgetException
 from domain.value_objects.enums import LeadSourceKind
 from infrastructure.adapters.output.parsers.pandas_file_parser import PandasFileParser
@@ -17,19 +18,15 @@ from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
     RawSqlLeadSourceRepository,
 )
-from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import (
-    RawSqlTenantRepository,
-)
 
 _CSV_WITH_A_BLANK_BUDGET = b"""first_name,last_name,email,company,budget,industry
 Juan,Perez,jperez@smallbiz.es,SmallBiz Local,,Retail
 """
 
 
-def _tenant(conn: psycopg.Connection) -> Tenant:
-    # A real row is required: intake_records.tenant_id has a foreign key to
-    # tenants (migration 005).
-    return RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+def _tenant(conn: psycopg.Connection) -> SimpleNamespace:
+    # No row: since migration 017 nothing in leads_db references tenants.
+    return SimpleNamespace(id=TenantId())
 
 
 def _source(conn: psycopg.Connection, tenant_id) -> LeadSource:

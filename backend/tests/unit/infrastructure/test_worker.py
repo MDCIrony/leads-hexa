@@ -10,7 +10,7 @@ from infrastructure.worker.relays import build_dispatchers, build_relays
 def _row(channel: str) -> OutboxRow:
     return OutboxRow(
         id=uuid.uuid4(), channel=channel, tenant_id=None, partition_key="k",
-        event_type="TenantState", payload={}, occurred_on=datetime.now(timezone.utc),
+        event_type="LeadAssigned", payload={}, occurred_on=datetime.now(timezone.utc),
         correlation_id=None,
     )
 

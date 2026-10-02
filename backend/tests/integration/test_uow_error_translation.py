@@ -1,24 +1,22 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
 import psycopg
 import pytest
 
-from domain.entities.agent import Agent
 from domain.entities.rule import AssignmentRule
-from domain.entities.tenant import Tenant
+from domain.entities.sales_group import SalesGroup
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
+from domain.value_objects.tenant_id import TenantId
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import (
     PostgresUnitOfWork,
 )
-from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import (
-    RawSqlTenantRepository,
-)
 
 
-def _tenant(test_db) -> Tenant:
-    with test_db.get_connection(autocommit=True) as conn:
-        return RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+def _tenant(test_db) -> SimpleNamespace:
+    # No row: since migration 017 nothing in leads_db references tenants.
+    return SimpleNamespace(id=TenantId())
 
 
 def test_unique_violation_is_translated_to_already_exists(test_db):
@@ -30,8 +28,8 @@ def test_unique_violation_is_translated_to_already_exists(test_db):
 
     with pytest.raises(DomainException) as exc_info:
         with uow:
-            uow.agents.save(Agent.create(name="A", email="dup@a.test", tenant_id=tenant.id.value))
-            uow.agents.save(Agent.create(name="B", email="dup@a.test", tenant_id=tenant.id.value))
+            uow.groups.save(SalesGroup.create(tenant_id=tenant.id.value, name="Dup"))
+            uow.groups.save(SalesGroup.create(tenant_id=tenant.id.value, name="Dup"))
 
     assert exc_info.value.error_code == "ALREADY_EXISTS"
     assert not isinstance(exc_info.value, psycopg.errors.UniqueViolation)
@@ -69,15 +67,15 @@ def test_not_null_violation_is_translated_to_missing_required_field(test_db):
     and this one fails identically on every redelivery — it belongs in the
     dead-letter queue, not back in the queue."""
     tenant = _tenant(test_db)
-    agent = Agent.create(name="A", email=f"{uuid4()}@a.test", tenant_id=tenant.id.value)
+    group = SalesGroup.create(tenant_id=tenant.id.value, name="A")
     uow = PostgresUnitOfWork(test_db)
     with uow:
-        uow.agents.save(agent)
+        uow.groups.save(group)
 
     with pytest.raises(DomainException) as exc_info:
         with uow:
             uow.connection.execute(
-                "UPDATE agents SET name = NULL WHERE id = %s", (agent.id.value,)
+                "UPDATE sales_groups SET name = NULL WHERE id = %s", (group.id.value,)
             )
 
     assert exc_info.value.error_code == "MISSING_REQUIRED_FIELD"
@@ -93,17 +91,17 @@ def test_connection_returns_to_the_pool_after_a_translated_error(test_db):
 
     with pytest.raises(DomainException):
         with uow:
-            uow.agents.save(Agent.create(name="A", email="dup2@a.test", tenant_id=tenant.id.value))
-            uow.agents.save(Agent.create(name="B", email="dup2@a.test", tenant_id=tenant.id.value))
+            uow.groups.save(SalesGroup.create(tenant_id=tenant.id.value, name="Dup2"))
+            uow.groups.save(SalesGroup.create(tenant_id=tenant.id.value, name="Dup2"))
 
     with uow:
-        uow.agents.save(Agent.create(name="C", email="ok@a.test", tenant_id=tenant.id.value))
+        uow.groups.save(SalesGroup.create(tenant_id=tenant.id.value, name="Ok"))
 
     with test_db.get_connection(autocommit=True) as conn:
         row = conn.execute(
-            "SELECT email FROM agents WHERE tenant_id = %s", (tenant.id.value,)
+            "SELECT name FROM sales_groups WHERE tenant_id = %s", (tenant.id.value,)
         ).fetchall()
-    assert {r["email"] for r in row} == {"ok@a.test"}
+    assert {r["name"] for r in row} == {"Ok"}
 
 
 def test_a_budget_beyond_the_column_is_a_domain_error_not_a_500(test_db):

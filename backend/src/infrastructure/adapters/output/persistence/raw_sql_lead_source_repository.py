@@ -48,8 +48,8 @@ class RawSqlLeadSourceRepository(LeadSourceRepositoryPort):
         return self._row_to_source(row) if row else None
 
     def get_by_kind(self, tenant_id: UUID, kind: LeadSourceKind) -> Optional[LeadSource]:
-        # Oldest first: the automatic source CreateTenantUseCase provisions at
-        # tenant creation is the one the unified intake pipeline resolves to.
+        # Oldest first: the default source provisioned with the tenant is the
+        # one the unified intake pipeline resolves to.
         row = self.connection.execute(
             "SELECT * FROM lead_sources WHERE tenant_id = %s AND kind = %s ORDER BY created_at LIMIT 1",
             (tenant_id, kind.value),

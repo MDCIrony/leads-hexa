@@ -1,14 +1,11 @@
-from uuid import uuid4
+from types import SimpleNamespace
 
 import psycopg
 
+from domain.value_objects.tenant_id import TenantId
 from domain.entities.rule import ScoringRule
-from domain.entities.tenant import Tenant
 from infrastructure.adapters.output.persistence.raw_sql_rule_repository import (
     RawSqlRuleRepository,
-)
-from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import (
-    RawSqlTenantRepository,
 )
 
 
@@ -18,8 +15,9 @@ def _repo(test_db):
     return RawSqlRuleRepository(conn), conn, ctx
 
 
-def _tenant(conn: psycopg.Connection) -> Tenant:
-    return RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+def _tenant(conn: psycopg.Connection) -> SimpleNamespace:
+    # No row: since migration 017 nothing in leads_db references tenants.
+    return SimpleNamespace(id=TenantId())
 
 
 def test_lists_paginated_and_reads_back_by_id_scoped_to_tenant(test_db):

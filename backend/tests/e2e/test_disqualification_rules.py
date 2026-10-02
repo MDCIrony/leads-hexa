@@ -1,5 +1,4 @@
-import uuid
-
+from auth_helpers import admin_headers, agent_of, seed_org_manager
 from gateway_client import GatewayClient
 
 from infrastructure.main import app
@@ -7,61 +6,18 @@ from _intake_helpers import ingest_and_resolve
 
 
 def _bootstrap_admin_headers(client: GatewayClient) -> dict:
-    """A fresh platform ADMIN, used only to create organizations."""
-    bootstrap_resp = client.post(
-        "/api/v1/agents",
-        json={
-            "name": "Platform Admin",
-            "email": f"admin_{uuid.uuid4().hex[:6]}@test.com",
-            "team": "HQ",
-            "password": "admin-pass-123",
-        },
-    )
-    assert bootstrap_resp.status_code == 201
-    login = client.post(
-        "/api/v1/auth/login",
-        data={"username": bootstrap_resp.json()["email"], "password": "admin-pass-123"},
-    )
-    assert login.status_code == 200
-    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
+    """The platform ADMIN; organizations are identity's, so it only names the caller now."""
+    return admin_headers()
 
 
 def _create_org_manager_headers(client: GatewayClient, admin_headers: dict) -> dict:
-    """Bearer headers for the manager of a freshly created organization."""
-    manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
-    tenant_resp = client.post(
-        "/api/v1/tenants",
-        json={
-            "name": f"Org {uuid.uuid4().hex[:6]}",
-            "manager": {"name": "Manager", "email": manager_email, "password": "manager-pass-123"},
-        },
-        headers=admin_headers,
-    )
-    assert tenant_resp.status_code == 201
-
-    manager_login = client.post(
-        "/api/v1/auth/login",
-        data={"username": manager_email, "password": "manager-pass-123"},
-    )
-    assert manager_login.status_code == 200
-    return {"Cookie": f"leads_session={manager_login.cookies['leads_session']}"}
+    """The manager of a fresh organization that already has its default sources."""
+    return seed_org_manager()
 
 
 def _agent_headers(client: GatewayClient, manager_headers: dict) -> dict:
-    """Bearer headers for a plain AGENT inside the manager's organization."""
-    email = f"agent_{uuid.uuid4().hex[:6]}@test.com"
-    create_resp = client.post(
-        "/api/v1/agents",
-        json={"name": "Agent", "email": email, "password": "agent-pass-123"},
-        headers=manager_headers,
-    )
-    assert create_resp.status_code == 201
-    login = client.post(
-        "/api/v1/auth/login",
-        data={"username": email, "password": "agent-pass-123"},
-    )
-    assert login.status_code == 200
-    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
+    """A plain AGENT inside the manager's organization."""
+    return agent_of(manager_headers)[0]
 
 
 def _no_contact_payload(name: str = "Sin forma de contactar") -> dict:

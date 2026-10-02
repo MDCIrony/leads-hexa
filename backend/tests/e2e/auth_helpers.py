@@ -1,18 +1,63 @@
-from datetime import datetime, timedelta, timezone
-from hashlib import sha256
-import secrets
+"""Organizations and principals as identity would hand them to lead-core.
 
-from domain.entities.auth_session import AuthSession
+The token alone authenticates a caller here, so a manager or an integration
+needs no row. A person work can be given to is also seeded as an advisor,
+the projection lead-core routes over."""
+from uuid import uuid4
+
+from domain.intake.default_sources import default_sources
+from domain.value_objects.enums import AgentRole
+from domain.value_objects.tenant_id import TenantId
 from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
 from infrastructure.main import app
+from tests.advisors_sync import seed_advisor
+from tests.e2e.gateway_client import as_principal, tenant_of
 
 
-def session_headers(agent) -> dict[str, str]:
-    """Persist a browser-equivalent opaque session for API tests that seed agents directly."""
-    token = secrets.token_urlsafe(32)
-    with PostgresUnitOfWork(app.state.container.database) as uow:
-        uow.sessions.save(AuthSession(
-            token_hash=sha256(token.encode()).hexdigest(), agent_id=agent.id.value,
-            created_at=datetime.now(timezone.utc), expires_at=datetime.now(timezone.utc) + timedelta(hours=8),
-        ))
-    return {"Cookie": f"leads_session={token}"}
+def _database():
+    return app.state.container.database
+
+
+def seed_organization(tenant_id=None) -> str:
+    """An organization with its default sources, as the intake.tenants consumer leaves it."""
+    tenant_id = str(tenant_id or uuid4())
+    with PostgresUnitOfWork(_database()) as uow:
+        for source in default_sources(TenantId(tenant_id)):
+            uow.sources.save(source)
+    return tenant_id
+
+
+def principal_of(advisor) -> dict:
+    return as_principal(advisor.agent_id, advisor.tenant_id, advisor.role.value)
+
+
+def manager_headers(tenant_id) -> dict:
+    return as_principal(uuid4(), tenant_id, "MANAGER")
+
+
+def seed_manager(tenant_id, name: str = "Manager") -> dict:
+    """A manager that is also in the projection: identity publishes managers too."""
+    return principal_of(seed_advisor(_database(), tenant_id, AgentRole.MANAGER, name))
+
+
+def seed_agent(tenant_id, name: str = "Agent", group_id=None, is_active: bool = True) -> tuple[dict, str]:
+    advisor = seed_advisor(_database(), tenant_id, AgentRole.AGENT, name, group_id, is_active)
+    return principal_of(advisor), str(advisor.agent_id)
+
+
+def seed_org_manager(name: str = "Manager") -> dict:
+    """What creating an organization used to hand back: its manager's session."""
+    return seed_manager(seed_organization(), name)
+
+
+def agent_of(manager: dict, name: str = "Agent", group_id=None) -> tuple[dict, str]:
+    """An agent of the same organization as `manager`."""
+    return seed_agent(tenant_of(manager), name, group_id)
+
+
+def admin_headers() -> dict:
+    return as_principal(uuid4(), None, "ADMIN")
+
+
+def integration_headers(tenant_id) -> dict:
+    return as_principal(uuid4(), tenant_id, "INTEGRATION", "integration")

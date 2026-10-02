@@ -1,8 +1,9 @@
+from types import SimpleNamespace
 from uuid import uuid4
 
+from domain.value_objects.tenant_id import TenantId
 from domain.entities.intake_job import IntakeJob
 from domain.entities.lead_source import LeadSource
-from domain.entities.tenant import Tenant
 from domain.value_objects.enums import IntakeJobKind, LeadSourceKind
 from infrastructure.adapters.output.persistence.raw_sql_intake_file_repository import (
     RawSqlIntakeFileRepository,
@@ -13,15 +14,12 @@ from infrastructure.adapters.output.persistence.raw_sql_intake_job_repository im
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
     RawSqlLeadSourceRepository,
 )
-from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import (
-    RawSqlTenantRepository,
-)
 
 
 def _seed_job(conn):
     # intake_files.job_id is a foreign key to intake_jobs, which in turn needs
     # a persisted tenant and source.
-    tenant = RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+    tenant = SimpleNamespace(id=TenantId())
     source = RawSqlLeadSourceRepository(conn).save(
         LeadSource.create(tenant_id=tenant.id.value, name="Fuente", kind=LeadSourceKind.MANUAL_FORM)
     )

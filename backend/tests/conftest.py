@@ -30,9 +30,8 @@ def _test_dsn() -> str:
 # used to carry its own, which meant a file without one passed only when
 # another had already been imported first.
 os.environ.setdefault("DATABASE_URL", _test_dsn())
-os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-production")
-os.environ.setdefault("MFA_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
-os.environ.setdefault("SIGNING_KEYS", "test-1=We6wZYLn41lq5z4FdSgMD7Jmla3wUOhIe8MBaNQiuuk")
+# Never fetched: the e2e fixture below hands the app's Container the test keys.
+os.environ.setdefault("JWKS_URL", "http://jwks.invalid/internal/v1/jwks")
 os.environ.setdefault("SERVICE_CLIENT_SECRET", "test-service-secret-do-not-use")
 
 
@@ -110,13 +109,21 @@ def clean_tables(request):
 @pytest.fixture(autouse=True)
 def identity_double(request, monkeypatch):
     """No identity runs next to the e2e suite: the Container the app builds
-    asks the monolith's own agents table instead, through the same port."""
+    verifies bearers against the test keys and asks an in-memory identity,
+    through the same ports."""
+    from tests.advisors_sync import IDENTITY
+
+    IDENTITY.clear()
     if "e2e" not in request.node.keywords:
         return
-    from tests.advisors_sync import IdentityFromAgentsTable
+    from functools import partial
 
-    monkeypatch.setattr(IdentityFromAgentsTable, "dsn", _test_dsn())
-    monkeypatch.setattr("infrastructure.di.container.HttpIdentityAgents", IdentityFromAgentsTable)
+    from infrastructure.di.container import Container
+    from tests.advisors_sync import IdentityDouble
+    from tests.tokens import jwks
+
+    monkeypatch.setattr("infrastructure.di.container.HttpIdentityAgents", IdentityDouble)
+    monkeypatch.setattr("infrastructure.main.Container", partial(Container, jwks_fetch=jwks))
 
 
 @pytest.fixture

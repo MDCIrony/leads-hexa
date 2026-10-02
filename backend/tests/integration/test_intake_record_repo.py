@@ -1,20 +1,18 @@
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import psycopg
 
+from domain.value_objects.tenant_id import TenantId
 from domain.entities.intake_record import IntakeError, IntakeRecord
 from domain.entities.lead_source import LeadSource
-from domain.entities.tenant import Tenant
 from domain.value_objects.enums import IntakeRecordStatus, LeadSourceKind
 from infrastructure.adapters.output.persistence.raw_sql_intake_record_repository import (
     RawSqlIntakeRecordRepository,
 )
 from infrastructure.adapters.output.persistence.raw_sql_lead_source_repository import (
     RawSqlLeadSourceRepository,
-)
-from infrastructure.adapters.output.persistence.raw_sql_tenant_repository import (
-    RawSqlTenantRepository,
 )
 
 
@@ -24,10 +22,9 @@ def _repo(test_db):
     return RawSqlIntakeRecordRepository(conn), conn, ctx
 
 
-def _tenant(conn: psycopg.Connection) -> Tenant:
-    # A real row is required: intake_records.tenant_id has a foreign key to
-    # tenants (migration 005).
-    return RawSqlTenantRepository(conn).save(Tenant.create(name=f"Org {uuid4()}"))
+def _tenant(conn: psycopg.Connection) -> SimpleNamespace:
+    # No row: since migration 017 nothing in leads_db references tenants.
+    return SimpleNamespace(id=TenantId())
 
 
 def _source(conn: psycopg.Connection, tenant_id) -> LeadSource:

@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
 if TYPE_CHECKING:
-    from domain.entities.agent import Agent
     from domain.entities.disqualification_rule import DisqualificationRule
     from domain.entities.intake_job import IntakeJob
     from domain.entities.intake_record import IntakeRecord
@@ -12,7 +11,6 @@ if TYPE_CHECKING:
     from domain.entities.lead_source import LeadSource
     from domain.entities.rule import ScoringRule
     from domain.entities.sales_group import SalesGroup
-    from domain.entities.tenant import Tenant
 
 
 @dataclass(frozen=True)
@@ -27,29 +25,6 @@ class IngestLeadCommand:
     custom_attributes: Dict[str, Any] = field(default_factory=dict)
     phone: Optional[str] = None
     email: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class CreateAgentCommand:
-    name: str
-    email: str
-    password: str
-    group_id: Optional[UUID] = None
-    is_active: bool = True
-    role: str = "AGENT"
-    tenant_id: Optional[UUID] = None
-
-
-@dataclass(frozen=True)
-class UpdateAgentCommand:
-    tenant_id: UUID
-    agent_id: UUID
-    name: Optional[str] = None
-    # None means "leave unchanged", matching every other PATCH command in
-    # this module; clearing an agent's group entirely is not a use case any
-    # brief asks for yet.
-    group_id: Optional[UUID] = None
-    is_active: Optional[bool] = None
 
 
 @dataclass(frozen=True)
@@ -96,7 +71,7 @@ class UpdateSalesGroupCommand:
     tenant_id: UUID
     group_id: UUID
     # Every field below is None-means-unchanged (same convention as
-    # UpdateTenantCommand). That makes capacity_per_agent unable to be
+    # UpdateLeadSourceCommand). That makes capacity_per_agent unable to be
     # PATCHed back to "uncapped" without a sentinel value; no brief exercises
     # that case, so it is not worth the extra machinery yet.
     name: Optional[str] = None
@@ -226,59 +201,6 @@ class DiscardLeadCommand:
     tenant_id: UUID
     lead_id: UUID
     reason: str
-
-
-@dataclass(frozen=True)
-class AgentsPageResult:
-    items: List["Agent"]
-    total: int
-
-
-@dataclass(frozen=True)
-class IssueIntegrationCredentialCommand:
-    tenant_id: UUID
-
-
-@dataclass(frozen=True)
-class IntegrationCredentialResult:
-    agent: "Agent"
-    api_key: str
-    kafka_username: str
-    kafka_password: str
-    kafka_topic: str
-
-
-@dataclass(frozen=True)
-class CreateTenantCommand:
-    name: str
-    manager_name: str
-    manager_email: str
-    manager_password: str
-
-
-@dataclass(frozen=True)
-class UpdateTenantCommand:
-    tenant_id: UUID
-    name: Optional[str] = None
-    is_active: Optional[bool] = None
-
-
-@dataclass(frozen=True)
-class TenantWithManagerResult:
-    tenant: "Tenant"
-    manager: "Agent"
-
-
-@dataclass(frozen=True)
-class TenantSummary:
-    tenant: "Tenant"
-    agent_count: int
-
-
-@dataclass(frozen=True)
-class TenantsPageResult:
-    items: List[TenantSummary]
-    total: int
 
 
 @dataclass(frozen=True)

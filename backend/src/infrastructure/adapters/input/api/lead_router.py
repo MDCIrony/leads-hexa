@@ -118,8 +118,8 @@ def list_leads(
     # endpoint returns the whole organization's pipeline, so a sales agent
     # reaching it would read its colleagues' leads. The agent's own view is
     # GET /leads/mine, a separate endpoint rather than a role branch in here.
-    # A machine credential is the other door in (ADR-0028): the gateway
-    # introspects the X-Api-Key and this service sees ptype=integration. It is
+    # A machine credential is the other door in (ADR-0028): identity
+    # introspects the integration key and this service sees ptype=integration. It is
     # the only endpoint that opens for it, since a reobtaining integration is
     # the one use case the encargo asks for, not a second kind of human session.
     context: RequestContext = Depends(require_manager_or_integration),

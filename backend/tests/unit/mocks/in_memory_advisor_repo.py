@@ -5,15 +5,25 @@ from uuid import UUID
 from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.advisors.advisor_repository_port import AdvisorRepositoryPort
 from domain.advisors.advisor import Advisor
-from domain.entities.agent import Agent
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole
+from domain.value_objects.agent_id import AgentId
 from domain.value_objects.group_id import GroupId
+from domain.value_objects.tenant_id import TenantId
 
 
-def advisor_of(agent: Agent) -> Advisor:
-    """The advisor the projection holds for `agent`, group included."""
-    return Advisor(agent.id, agent.tenant_id, agent.name, agent.role, agent.is_active, agent.version, agent.group_id)
+def make_advisor(
+    name: str = "Agent",
+    tenant_id=None,
+    group_id=None,
+    is_active: bool = True,
+    role: AgentRole = AgentRole.AGENT,
+    agent_id=None,
+    version: int = 1,
+) -> Advisor:
+    """An advisor as the projection holds it, group included."""
+    return Advisor(AgentId(agent_id), TenantId(tenant_id), name, role, is_active, version,
+                   GroupId(group_id) if group_id else None)
 
 
 class InMemoryAdvisorRepository(AdvisorRepositoryPort):

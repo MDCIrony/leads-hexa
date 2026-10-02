@@ -1,50 +1,19 @@
 import uuid
 
-from gateway_client import GatewayClient
+from auth_helpers import admin_headers, agent_of, seed_org_manager
+from gateway_client import GatewayClient, tenant_of
 
 from infrastructure.main import app
 from _intake_helpers import ingest_and_resolve
-from tests.advisors_sync import project_agents_of
 
 
 def _bootstrap_admin_headers(client: GatewayClient) -> dict:
-    resp = client.post(
-        "/api/v1/agents",
-        json={
-            "name": "Bootstrap Admin",
-            "email": f"admin_{uuid.uuid4().hex[:6]}@test.com",
-            "password": "bootstrap-pass-123",
-        },
-    )
-    assert resp.status_code == 201, resp.text
-    login = client.post(
-        "/api/v1/auth/login",
-        data={"username": resp.json()["email"], "password": "bootstrap-pass-123"},
-    )
-    assert login.status_code == 200, login.text
-    return {"Cookie": f"leads_session={login.cookies['leads_session']}"}
+    return admin_headers()
 
 
-def _create_org(client: GatewayClient, admin_headers: dict, name: str) -> dict:
-    manager_email = f"manager_{uuid.uuid4().hex[:6]}@test.com"
-    resp = client.post(
-        "/api/v1/tenants",
-        json={
-            "name": name,
-            "manager": {"name": "Manager", "email": manager_email, "password": "manager-pass-123"},
-        },
-        headers=admin_headers,
-    )
-    assert resp.status_code == 201, resp.text
-    login = client.post(
-        "/api/v1/auth/login",
-        data={"username": manager_email, "password": "manager-pass-123"},
-    )
-    assert login.status_code == 200, login.text
-    return {
-        "tenant_id": resp.json()["id"],
-        "manager_headers": {"Cookie": f"leads_session={login.cookies['leads_session']}"},
-    }
+def _create_org(client: GatewayClient, admin: dict, name: str) -> dict:
+    manager = seed_org_manager()
+    return {"tenant_id": tenant_of(manager), "manager_headers": manager}
 
 
 def test_assignment_flow_covers_the_phase_acceptance_criteria():
@@ -57,7 +26,7 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
     (see the phase report), since it needs overlapping bands that this
     scenario's literal 70-100 / 0-69 split does not have."""
     with GatewayClient(app) as client:
-        # 1. Bootstrap: platform admin, one organization with its manager.
+        # 1. One organization with its manager.
         admin_headers = _bootstrap_admin_headers(client)
         org = _create_org(client, admin_headers, f"Acme {uuid.uuid4().hex[:6]}")
         headers = org["manager_headers"]
@@ -77,23 +46,10 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
         # high-score lead has somewhere deterministic to land once the first
         # agent is full), one in PYME.
         def _create_agent(group_id: str) -> str:
-            resp = client.post(
-                "/api/v1/agents",
-                json={
-                    "name": f"Agent {uuid.uuid4().hex[:6]}",
-                    "email": f"agent_{uuid.uuid4().hex[:6]}@acme.test",
-                    "group_id": group_id,
-                    "password": "agent-pass-123",
-                },
-                headers=headers,
-            )
-            assert resp.status_code == 201, resp.text
-            return resp.json()["id"]
+            return agent_of(headers, f"Agent {uuid.uuid4().hex[:6]}", group_id)[1]
 
         enterprise_agent_ids = {_create_agent(enterprise_id), _create_agent(enterprise_id)}
         pyme_agent_id = _create_agent(pyme_id)
-        # No worker runs here to project them, and nothing writes an advisor's group before C2.
-        project_agents_of(app.state.container.database)
 
         # 4. Two assignment rules: high scores to Enterprise (priority 10),
         # the rest to PYME (priority 1).
@@ -186,40 +142,13 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
         other_headers = other_org["manager_headers"]
         other_group = client.post("/api/v1/groups", json={"name": "Enterprise"}, headers=other_headers)
         assert other_group.status_code == 201, other_group.text
-        other_agent = client.post(
-            "/api/v1/agents",
-            json={
-                "name": "Other Agent",
-                "email": f"other_{uuid.uuid4().hex[:6]}@other.test",
-                "group_id": other_group.json()["id"],
-                "password": "agent-pass-123",
-            },
-            headers=other_headers,
-        )
-        assert other_agent.status_code == 201, other_agent.text
-        other_agent_id = other_agent.json()["id"]
+        _, other_agent_id = agent_of(other_headers, "Other Agent", other_group.json()["id"])
 
         for result in (first, second, third):
             assert result["assigned_agent_id"] != other_agent_id
 
         # An AGENT is forbidden from administering groups and rules.
-        plain_agent = client.post(
-            "/api/v1/agents",
-            json={
-                "name": "Plain Agent",
-                "email": f"plain_{uuid.uuid4().hex[:6]}@acme.test",
-                "password": "plain-pass-123",
-                "role": "AGENT",
-            },
-            headers=headers,
-        )
-        assert plain_agent.status_code == 201, plain_agent.text
-        plain_login = client.post(
-            "/api/v1/auth/login",
-            data={"username": plain_agent.json()["email"], "password": "plain-pass-123"},
-        )
-        assert plain_login.status_code == 200, plain_login.text
-        plain_headers = {"Cookie": f"leads_session={plain_login.cookies['leads_session']}"}
+        plain_headers, _ = agent_of(headers, "Plain Agent")
 
         assert client.post("/api/v1/groups", json={"name": "Nope"}, headers=plain_headers).status_code == 403
         assert (
@@ -250,18 +179,7 @@ def test_assignment_rule_with_unknown_or_foreign_group_is_a_404_not_a_500():
 
         own_group = client.post("/api/v1/groups", json={"name": "Own"}, headers=headers)
         assert own_group.status_code == 201, own_group.text
-        own_agent = client.post(
-            "/api/v1/agents",
-            json={
-                "name": "Own Agent",
-                "email": f"own_{uuid.uuid4().hex[:6]}@acme.test",
-                "group_id": own_group.json()["id"],
-                "password": "agent-pass-123",
-            },
-            headers=headers,
-        )
-        assert own_agent.status_code == 201, own_agent.text
-        own_agent_id = own_agent.json()["id"]
+        _, own_agent_id = agent_of(headers, "Own Agent", own_group.json()["id"])
 
         def _create_payload(target_group_id: str) -> dict:
             return {

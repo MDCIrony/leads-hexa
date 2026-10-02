@@ -10,9 +10,8 @@ from application.use_cases.rule_use_cases import (
     GetAssignmentRulesUseCase,
     UpdateAssignmentRuleUseCase,
 )
-from domain.entities.agent import Agent
 from domain.exceptions import DomainException
-from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
+from tests.unit.mocks.in_memory_advisor_repo import make_advisor
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
@@ -23,7 +22,6 @@ def _uow() -> InMemoryUnitOfWork:
     return InMemoryUnitOfWork(
         InMemoryLeadRepository(),
         InMemoryRuleRepository(),
-        InMemoryAgentRepository(),
         groups=InMemorySalesGroupRepository(),
     )
 
@@ -89,7 +87,7 @@ class TestDeleteAssignmentRule:
     def test_deleting_a_rule_does_not_touch_its_agents(self):
         uow = _uow()
         tenant = uuid.uuid4()
-        agent = uow.agents.save(Agent.create(name="Ana", email="ana@acme.test", tenant_id=tenant))
+        agent = uow.advisors.seed(make_advisor(name="Ana", tenant_id=tenant))
         rule = CreateAssignmentRuleUseCase(uow=uow).execute(
             CreateAssignmentRuleCommand(
                 tenant_id=tenant, name="R", target_agent_ids=[agent.id.value]
@@ -99,7 +97,7 @@ class TestDeleteAssignmentRule:
         DeleteAssignmentRuleUseCase(uow=uow).execute(tenant_id=tenant, rule_id=rule.id)
 
         assert uow.rules.get_assignment_rules_by_tenant(tenant) == []
-        survivor = uow.agents.get_by_id(agent.id.value)
+        survivor = uow.advisors.get_any(agent.id.value)
         assert survivor is not None
         assert survivor.is_active is True
 

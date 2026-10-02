@@ -8,7 +8,6 @@ from application.use_cases.process_intake_job_use_case import ProcessIntakeJobUs
 from domain.entities.intake_job import IntakeJob
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects.enums import IntakeJobKind, IntakeJobStatus, IntakeRecordStatus
-from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
@@ -34,7 +33,6 @@ def _new_uow() -> InMemoryUnitOfWork:
     return InMemoryUnitOfWork(
         InMemoryLeadRepository(),
         InMemoryRuleRepository(),
-        InMemoryAgentRepository(),
         groups=InMemorySalesGroupRepository(),
     )
 

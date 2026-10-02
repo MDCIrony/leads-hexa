@@ -43,8 +43,8 @@ class IngestLeadUseCase(IngestLeadInputPort):
 
     def resolve_source_id(self, tenant_id: UUID, kind: LeadSourceKind) -> UUID:
         """Looks up the tenant's active source for this channel. Every tenant
-        gets a MANUAL_FORM and a FILE_UPLOAD source at creation time
-        (CreateTenantUseCase), so a miss here means the catalog is missing an
+        gets a MANUAL_FORM and a FILE_UPLOAD source when it is provisioned
+        (ProvisionTenantSourcesUseCase), so a miss here means the catalog is missing an
         entry, not that the caller sent a bad request."""
         with self.uow:
             source = self.uow.sources.get_by_kind(tenant_id, kind)

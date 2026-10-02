@@ -4,15 +4,14 @@ from uuid import uuid4
 
 from application.dtos.commands import IngestLeadCommand
 from application.use_cases.ingest_lead_use_case import IngestLeadUseCase, payload_of
-from domain.entities import Agent, AssignmentRule, ScoringRule, SalesGroup
+from domain.entities import AssignmentRule, ScoringRule, SalesGroup
 from domain.entities.intake_record import IntakeRecord
 from domain.value_objects import Operator, AssignmentStrategy
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import IntakeRecordStatus
 from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
-from tests.unit.mocks.in_memory_advisor_repo import advisor_of
-from tests.unit.mocks.in_memory_agent_repo import InMemoryAgentRepository
+from tests.unit.mocks.in_memory_advisor_repo import make_advisor
 from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 import pytest
@@ -22,7 +21,6 @@ def test_ingest_lead_use_case_successful_flow():
     tenant_id = uuid.uuid4()
     lead_repo = InMemoryLeadRepository()
     rule_repo = InMemoryRuleRepository()
-    agent_repo = InMemoryAgentRepository()
     group_repo = InMemorySalesGroupRepository()
 
     # Pre-cargar regla de scoring (+35 pts)
@@ -38,13 +36,11 @@ def test_ingest_lead_use_case_successful_flow():
 
     # Pre-cargar grupo y agente disponible
     group = group_repo.save(SalesGroup.create(tenant_id=tenant_id, name="Sales"))
-    agent = Agent.create(
+    agent = make_advisor(
         name="Carlos Lopez",
-        email="clopez@sales.com",
         group_id=group.id.value,
         tenant_id=tenant_id,
     )
-    agent_repo.save(agent)
 
     # Pre-cargar regla de asignación
     rule_repo.save_assignment_rule(
@@ -58,8 +54,8 @@ def test_ingest_lead_use_case_successful_flow():
         ),
     )
 
-    uow = InMemoryUnitOfWork(lead_repo, rule_repo, agent_repo, groups=group_repo)
-    uow.advisors.seed(advisor_of(agent))
+    uow = InMemoryUnitOfWork(lead_repo, rule_repo, groups=group_repo)
+    uow.advisors.seed(agent)
     use_case = IngestLeadUseCase(uow=uow)
 
     cmd = IngestLeadCommand(
@@ -92,7 +88,7 @@ def test_ingest_lead_use_case_successful_flow():
 def test_ingest_lead_use_case_invalid_email_error():
     tenant_id = uuid.uuid4()
     uow = InMemoryUnitOfWork(
-        InMemoryLeadRepository(), InMemoryRuleRepository(), InMemoryAgentRepository()
+        InMemoryLeadRepository(), InMemoryRuleRepository()
     )
     use_case = IngestLeadUseCase(
         uow=uow,
@@ -197,7 +193,7 @@ def test_ingest_lead_use_case_rejects_a_non_finite_budget():
     PostgreSQL entirely."""
     tenant_id = uuid.uuid4()
     uow = InMemoryUnitOfWork(
-        InMemoryLeadRepository(), InMemoryRuleRepository(), InMemoryAgentRepository()
+        InMemoryLeadRepository(), InMemoryRuleRepository()
     )
     use_case = IngestLeadUseCase(
         uow=uow,

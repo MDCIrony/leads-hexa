@@ -2,11 +2,10 @@ import uuid
 
 from gateway_client import GatewayClient
 from infrastructure.main import app
-from domain.value_objects.enums import AgentRole
 
 from test_lead_endpoints import _manager_auth_headers, _seed_tenant_with_sources
 from _intake_helpers import ingest_and_resolve
-from auth_helpers import session_headers
+from auth_helpers import seed_agent
 
 _PAYLOAD = {
     "first_name": "Ana",
@@ -22,21 +21,7 @@ def _agent_auth_headers(tenant_id: str) -> dict:
     """Same shape as _manager_auth_headers, but for a plain sales AGENT — needed
     to prove the intake endpoint refuses a valid-but-unauthorized credential,
     not just an absent one."""
-    from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-    from domain.entities.agent import Agent
-
-    db = app.state.container.database
-    uow = PostgresUnitOfWork(db)
-    agent = Agent.create(
-        name="Sales Agent",
-        email=f"agent_{uuid.uuid4().hex[:6]}@test.com",
-        role=AgentRole.AGENT,
-        tenant_id=tenant_id,
-    )
-    with uow:
-        uow.agents.save(agent)
-
-    return session_headers(agent)
+    return seed_agent(tenant_id, "Sales Agent")[0]
 
 
 def test_ingest_without_credential_is_rejected():
