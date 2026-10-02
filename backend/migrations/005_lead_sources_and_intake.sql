@@ -57,11 +57,12 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS source_id UUID NOT NULL REFERENCES le
 -- PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS, and test_migration_runner.py
 -- re-applies every file against a schema that already has it (tracking table
 -- reset, tables intact), so the guard is done by hand via pg_constraint.
+-- Never once advisors exists: 017 drops this key, and later leads hold tenants born in identity_db.
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'fk_leads_tenant'
-    ) THEN
+    ) AND to_regclass('advisors') IS NULL THEN
         ALTER TABLE leads ADD CONSTRAINT fk_leads_tenant
             FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE;
     END IF;

@@ -34,8 +34,8 @@ ON CONFLICT DO NOTHING;
 -- After the cut new organizations are born in identity_db, and a source or a
 -- group of theirs would violate a foreign key to this frozen table. Looked up
 -- by target rather than by name: several were declared inline, auto-named.
--- Trap until F5: reapplying 005 by hand on a post-cut leads_db re-adds
--- fk_leads_tenant, and its validation fails on leads of identity-born tenants.
+-- 005 no longer re-adds fk_leads_tenant once advisors exists, so the chain
+-- re-runs over leads of identity-born tenants; 019 drops tenants afterwards.
 DO $$
 DECLARE
     fk record;
