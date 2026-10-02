@@ -21,7 +21,7 @@ def test_full_system_lead_routing_flow_e2e():
     1. Crea un agente disponible.
     2. Configura regla de scoring (+35 pts por budget > 10000).
     3. Configura regla de asignación (min_score: 30 -> apunta directo al agente).
-    4. Ingesta un Lead con budget 15000.
+    4. Admite un Lead con budget 15000.
     5. Verifica que el lead resulte ASSIGNED con score 35 y asignado al agente.
     """
     with GatewayClient(app) as client:
@@ -56,7 +56,7 @@ def test_full_system_lead_routing_flow_e2e():
         assert assignment_resp.status_code == 201
 
 
-        # 4. Ingestar Lead
+        # 4. Admitir Lead
         record = admit_lead(
             client,
             headers,

@@ -36,7 +36,7 @@ def test_money_invalid_negative():
 def test_money_rejects_non_finite_values(raw):
     """A blank budget cell in a CSV arrives here as NaN. Before this guard,
     NaN raised decimal.InvalidOperation — which is not a DomainException, so
-    no caller could translate it into a rejected intake record."""
+    no caller could translate it into a rejected admission."""
     with pytest.raises(InvalidBudgetException):
         Money(raw)
 

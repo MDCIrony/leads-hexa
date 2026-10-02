@@ -98,7 +98,7 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
             scoring_resp = client.post("/api/v1/rules/scoring", json=scoring_rule, headers=headers)
             assert scoring_resp.status_code == 201, scoring_resp.text
 
-        def _ingest(budget: float) -> dict:
+        def _admit(budget: float) -> dict:
             record = admit_lead(
                 client,
                 headers,
@@ -116,21 +116,21 @@ def test_assignment_flow_covers_the_phase_acceptance_criteria():
             return lead.json()
 
         # 5. A high-score lead lands on an Enterprise agent.
-        first = _ingest(100000.0)
+        first = _admit(100000.0)
         assert first["score"] == 80
         assert first["assigned_agent_id"] in enterprise_agent_ids
 
         # 6. A second high-score lead finds that agent at capacity (1) and
         # falls to the other Enterprise agent — the "agent at capacity is
         # skipped, the lead goes to the next candidate" behaviour.
-        second = _ingest(100000.0)
+        second = _admit(100000.0)
         assert second["score"] == 80
         assert second["assigned_agent_id"] in enterprise_agent_ids
         assert second["assigned_agent_id"] != first["assigned_agent_id"]
 
         # 7. A low-score lead (below the Enterprise band, above the
         # qualification floor) lands in PYME directly.
-        third = _ingest(5000.0)
+        third = _admit(5000.0)
         assert third["score"] == 40
         assert third["assigned_agent_id"] == pyme_agent_id
 

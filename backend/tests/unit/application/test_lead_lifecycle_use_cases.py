@@ -99,7 +99,7 @@ def test_reassigning_an_already_assigned_lead_lands_on_the_new_agent():
 
 
 def test_assigning_by_hand_republishes_the_lead_to_the_customer():
-    """Ingestion published it as UNASSIGNED because routing found nobody. The
+    """Admission published it as UNASSIGNED because routing found nobody. The
     customer's copy stays frozen there unless the manual assignment records
     the contract again, this time with an owner — through the outbox
     (ADR-0025)."""
