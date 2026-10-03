@@ -6,8 +6,7 @@ services:
       POSTGRES_PASSWORD: postgrespassword
       POSTGRES_DB: leads_db
     ports:
-      # 5433 on the host: 5432 is commonly taken by a local PostgreSQL or by
-      # another project's container. Inside the compose network it is still 5432.
+      # 5433 on the host: 5432 is often taken by a local PostgreSQL.
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -18,13 +17,10 @@ services:
       retries: 5
 
   db-bootstrap:
-    # One-shot: creates each extracted service's role and databases, which the
-    # db image's single POSTGRES_DB cannot (ADR-0031). Idempotent, so it may run on every `up`.
     image: postgres:16-alpine
     environment:
       - PGPASSWORD=postgrespassword
     volumes:
-      # A directory, not a file, for the same reason as the gateway config.
       - ./db:/bootstrap:ro
     command: ["psql", "-h", "db", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-v", "notifications_password=notificationspassword", "-v", "identity_password=identitypassword", "-v", "intake_password=intakepassword", "-v", "lead_core_password=leadcorepassword", "-f", "/bootstrap/bootstrap.sql"]
     depends_on:
@@ -33,28 +29,12 @@ services:
     restart: "no"
 
   lead-core:
-    # Leads, rules, routing, groups and the advisors projection (ADR-0031, F5):
-    # what is left of the original application, now one service among four.
-    # The layout mirrors the repository (/srv/services/..., /srv/libs/...) because
-    # uv.lock records chassis as ../../libs/chassis. Not published: the gateway
-    # is the only way in.
     build:
       context: ./services/lead-core
       dockerfile: Dockerfile
-      # Named context: the image needs libs/chassis without widening the build
-      # context to the whole repository.
       additional_contexts:
         chassis: ./libs/chassis
-      # Explicit: without it, `docker build` targets the last stage in the
-      # Dockerfile, and this service would silently run pytest instead of
-      # serving the API. `dev` is `runner` plus a file watcher.
       target: dev
-    # Source mounted read-only and restarted on change: a code change needs
-    # neither `--build` nor `restart`. Without it the container would keep
-    # serving whatever it loaded at startup, and verify-e2e.sh would pass
-    # against the previous version — a green run that proves nothing.
-    # Only src/ and migrations/: mounting the service root would shadow the
-    # virtualenv the image builds there and nothing would import.
     volumes:
       - ./services/lead-core/src:/srv/services/lead-core/src:ro
       - ./services/lead-core/migrations:/srv/services/lead-core/migrations:ro
@@ -62,7 +42,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_db
       - JWKS_URL=http://identity:8000/internal/v1/jwks
-      # Service credentials for identity's internal agent lookup (AdvisorDirectory).
       - IDENTITY_URL=http://identity:8000
       - SERVICE_CLIENT_ID=lead-core
       - SERVICE_CLIENT_SECRET=lead-core-dev-secret-0c7f2a9e4b1d
@@ -70,12 +49,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # With --reset the role must exist before the first connection.
       db-bootstrap:
         condition: service_completed_successfully
-      # No condition on kafka (ADR-0026): the API only records to the outbox and
-      # lead-core-worker delivers, so it must come up and keep serving leads
-      # whether or not the broker is reachable yet.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -84,18 +59,11 @@ services:
       start_period: 10s
 
   gateway:
-    # The only container that publishes the API (ADR-0032). 8001 on the host is
-    # the port the API published before the gateway, so every client keeps its URL.
     image: nginx:1.27-alpine
     volumes:
-      # A directory, not three files: a single-file bind mount pins the inode, so
-      # an editor that replaces the file leaves the container on the old config.
-      # Only *.conf is loaded by the image; the *.inc files are includes.
       - ./gateway:/etc/nginx/conf.d:ro
     ports:
       - "8001:8080"
-    # No depends_on: the upstream is re-resolved at runtime (`resolve`), so the
-    # gateway starts, and survives a service recreate, without ordering.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -105,95 +73,45 @@ services:
   kafka:
     image: apache/kafka:3.7.0
     environment:
-      # Single-node KRaft: one process is both broker and controller, so no
-      # ZooKeeper to run or keep in sync (ADR-0026).
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094,SASL_INTERNAL://0.0.0.0:9095
-      # Three audiences, three advertised addresses: compose services reach
-      # this by service name, the host only through the mapped port, and an
-      # authenticated client on this network by service name again — an
-      # address must resolve the same way for whoever is dialling it.
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094,SASL_INTERNAL://kafka:9095
-      # PLAINTEXT_HOST is the only listener mapped to the host (ADR-0028): it
-      # is where "anyone with network access" used to reach in without a
-      # credential. PLAINTEXT stays open on purpose — it never leaves the
-      # compose network, the same trust perimeter Postgres already assumes —
-      # and it is also how identity provisions credentials without
-      # needing one of its own.
-      # SASL_INTERNAL exists because PLAINTEXT_HOST cannot serve both
-      # audiences: it advertises `localhost`, which inside another container
-      # resolves to that container. A consumer running on this network needs
-      # an address that resolves here AND a credential, and the ACLs are
-      # per-principal, so it enforces exactly the same isolation.
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:SASL_PLAINTEXT,SASL_INTERNAL:SASL_PLAINTEXT
       KAFKA_SASL_ENABLED_MECHANISMS: SCRAM-SHA-256
       KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
-      # User:ANONYMOUS is the principal of any connection without SASL — that
-      # is everything coming in through the internal PLAINTEXT listener.
-      # Declaring it a super.user is what lets credentials be provisioned
-      # without a bootstrap account of its own (see kafka_credential_provisioner.py).
       KAFKA_SUPER_USERS: User:ANONYMOUS
       KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      # MVP decision with an expiry date (ADR-0026): a tenant's topic appears
-      # on first publish instead of needing a provisioning step this MVP has
-      # nowhere to hang yet.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      # Verified against a real startup (ADR-0028): a mounted server.properties
-      # snippet is never merged by this image's entrypoint, so the per-listener
-      # `sasl.jaas.config` property never reached the broker and it refused to
-      # bind PLAINTEXT_HOST. The launch script itself requires KAFKA_OPTS to be
-      # set once any SASL_* listener is present — this is the JVM-standard way
-      # a broker's SASL side reads its JAAS login module.
       KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/jaas/kafka_server_jaas.conf
-      # Verified by inspecting a running broker: this image defaults log.dirs
-      # to /tmp/kafka-logs, which lives in the container's writable layer and
-      # NOT in the volume the image declares at /var/lib/kafka/data — that one
-      # stays empty. Every `docker compose up` that recreated this container
-      # therefore threw away every topic, every retained message, and the SCRAM
-      # credentials and ACLs, which live in __cluster_metadata alongside them.
-      # A week of replayable history (ADR-0026) cannot survive on scratch space.
       KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
       - ./kafka/kafka_server_jaas.conf:/etc/kafka/jaas/kafka_server_jaas.conf:ro
       - kafkadata:/var/lib/kafka/data
     ports:
-      # 9094 on the host, for the test consumer and any other host tooling.
-      # 9092 is the listener other compose services use.
       - "9094:9094"
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     environment:
-      # Not "guest"/"guest": RabbitMQ refuses that account outside loopback,
-      # and intake-worker reaches this over the compose network, not
-      # localhost. Any other username sidesteps the restriction.
       RABBITMQ_DEFAULT_USER: leads
       RABBITMQ_DEFAULT_PASS: leadspassword
     ports:
-      # 5672 on the host, for local tooling. Other compose services reach
-      # this by service name on the compose network.
       - "5672:5672"
-      # 15672: the management plugin's web console — queue depth, the DLQ, and
-      # message rates, which is what an operator actually looks at.
       - "15672:15672"
     healthcheck:
-      # `ping` only proves that the Erlang node is alive; it can succeed before
-      # AMQP starts listening and release the worker into a failed cold start.
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   kafka-ui:
-    # Reads the broker over the internal listener, where no credential is
-    # needed: this console is for whoever operates the stack, not for a tenant.
     image: provectuslabs/kafka-ui:latest
     environment:
       KAFKA_CLUSTERS_0_NAME: leads
@@ -205,10 +123,6 @@ services:
       - kafka
 
   intake-worker:
-    # Same image as `intake` (ADR-0027, F4): one process that differs only in
-    # its command. Relays intake's outbox (`job` to RabbitMQ, `internal` to
-    # Kafka), consumes intake.jobs and intake.tenants, and admits each record
-    # through lead-core's internal API; it never opens leads_db.
     build:
       context: ./services/intake
       dockerfile: Dockerfile
@@ -228,36 +142,19 @@ services:
       - SERVICE_CLIENT_ID=intake
       - SERVICE_CLIENT_SECRET=intake-dev-secret-a91b68b5a560
       - LOG_LEVEL=INFO
-    # Reloaded on change, like the API is. Without this the worker keeps
-    # running whatever it imported at startup while src/ says otherwise, and
-    # the symptom is a job stuck in PROCESSING with nothing failing anywhere.
-    # Restarting mid-message is safe by design: RabbitMQ redelivers, start()
-    # accepts PROCESSING, only PENDING records are read, lead-core's admission
-    # is idempotent per record, and the counters are derived from the records.
     command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/intake/src", "/srv/libs/chassis/src"]
     depends_on:
       db:
         condition: service_healthy
-      # Blocking here, unlike on the APIs: this process has nothing to do
-      # without a broker, so waiting for it removes a connect-crash-restart
-      # cycle at cold start instead of degrading to it.
       rabbitmq:
         condition: service_healthy
-      # The API applies the migrations at startup; the relay and the consumers
-      # read the tables they create.
       intake:
         condition: service_healthy
-      # No condition on lead-core: a lead-core outage interrupts a job (nack and
-      # redelivery), it does not stop the worker.
-    # On stop the worker finishes the job in hand before closing; a 10k-record
-    # job takes minutes, and Docker's default 10 s would kill it mid-run.
+    # Lets an in-flight intake job (minutes for 10k records) finish before the container stops.
     stop_grace_period: 5m
     restart: on-failure
 
   lead-core-worker:
-    # Same image and target as `lead-core`: delivery (outbox relay, webhooks) and
-    # the advisors projection live here so the API owns only request handling.
-    # Needs none of the API's credentials.
     build:
       context: ./services/lead-core
       dockerfile: Dockerfile
@@ -272,23 +169,13 @@ services:
       - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_db
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - LOG_LEVEL=INFO
-    # Reloaded on change, like the API. Stopping mid-pass is safe by design: an
-    # unmarked outbox row is delivered again and consumers deduplicate by event id.
     command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/lead-core/src", "/srv/libs/chassis/src"]
     depends_on:
-      # The API applies the migrations at startup; the relay reads columns
-      # and indexes they create (channel, correlation_id, key order).
       lead-core:
         condition: service_healthy
-      # No condition on kafka (ADR-0026): the worker retries its topics and
-      # keeps relaying the rest while the broker is away.
     restart: on-failure
 
   identity:
-    # Who you are and what you may do (ADR-0031, F3): sessions, MFA, OAuth,
-    # organizations, agents and the internal token. The only holder of the
-    # signing key and of the MFA and OAuth secrets. Not published: the gateway
-    # is the only way in.
     build:
       context: ./services/identity
       dockerfile: Dockerfile
@@ -302,9 +189,8 @@ services:
     environment:
       - DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_db
       - MFA_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
-      # Development-only Ed25519 seed: never reuse outside this stack.
+      # Development-only keys and secrets in this file: never reuse them outside this stack.
       - SIGNING_KEYS=dev-1=_tS3Kljdu1EaOrOFVqdVQ2G1VaP7q5pWZKmqPb9W-mU
-      # client:audience:sha256(secret). The secret itself lives only with its caller.
       - SERVICE_CLIENTS=lead-core:identity:21c1a510ed8f851deccca537c6c7d35aed463034a5c938518a607bdfa9eaf93d,intake:lead-core:a565768fddaddf20edac7326fb55c2b0eb222509797d76a16e0823a87bfe9c63
       - CORS_ORIGINS=http://localhost:5173,http://localhost,http://localhost:80
       - FRONTEND_ORIGIN=http://localhost
@@ -330,8 +216,6 @@ services:
       start_period: 10s
 
   identity-worker:
-    # Same image: relays identity's outbox to internal.identity.*, the only
-    # producer of those topics. Needs none of the API's secrets.
     build:
       context: ./services/identity
       dockerfile: Dockerfile
@@ -348,17 +232,11 @@ services:
       - LOG_LEVEL=INFO
     command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/identity/src", "/srv/libs/chassis/src"]
     depends_on:
-      # The API applies the migrations at startup; the relay reads the outbox they create.
       identity:
         condition: service_healthy
-      # No condition on kafka (ADR-0026): the relay retries until the broker answers.
     restart: on-failure
 
   intake:
-    # Reception (ADR-0031, F4): sources, intake jobs, records, errors and files.
-    # The decision stays in lead-core behind POST /internal/v1/admissions, which
-    # this service calls with its own service token (sub=intake, aud=lead-core).
-    # Not published: the gateway is the only way in.
     build:
       context: ./services/intake
       dockerfile: Dockerfile
@@ -372,7 +250,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_db
       - JWKS_URL=http://identity:8000/internal/v1/jwks
-      # Manual promotion admits in line, so the API needs lead-core and a token too.
       - LEAD_CORE_URL=http://lead-core:8000
       - IDENTITY_URL=http://identity:8000
       - SERVICE_CLIENT_ID=intake
@@ -381,7 +258,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # The role and the database are db-bootstrap's; the service only migrates its tables.
       db-bootstrap:
         condition: service_completed_successfully
     healthcheck:
@@ -392,9 +268,6 @@ services:
       start_period: 10s
 
   notifications:
-    # The inbox, cut over from lead-core in F2 (ADR-0031). The layout mirrors
-    # the repository (/srv/services/..., /srv/libs/...) because uv.lock records
-    # chassis as ../../libs/chassis. Not published: the gateway is the only way in.
     build:
       context: ./services/notifications
       dockerfile: Dockerfile
@@ -413,7 +286,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      # The role and the database are db-bootstrap's; the service only migrates its tables.
       db-bootstrap:
         condition: service_completed_successfully
     healthcheck:
@@ -424,8 +296,6 @@ services:
       start_period: 10s
 
   notifications-worker:
-    # Same image: the only consumer of the notifications.* groups. It must never
-    # share a group with another process, or Kafka splits the partitions between them.
     build:
       context: ./services/notifications
       dockerfile: Dockerfile
@@ -443,10 +313,8 @@ services:
       - LOG_LEVEL=INFO
     command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/notifications/src", "/srv/libs/chassis/src"]
     depends_on:
-      # The API applies the migrations at startup; the consumers write those tables.
       notifications:
         condition: service_healthy
-      # No condition on kafka (ADR-0026): the lanes retry until the broker answers.
     restart: on-failure
 
   frontend:
@@ -463,22 +331,12 @@ services:
     build:
       context: ./docs
       dockerfile: Dockerfile
-    # Content mounted, config baked in: writing a page shows up on save without
-    # rebuilding. Read-only because the site generator must never write back
-    # into the working tree.
     volumes:
       - ./docs/content:/docs/content:ro
     ports:
-      # 8002: 8000 is every service's container port and 8001 the gateway's host port.
       - "8002:8000"
-    # No dependency on db or any service: documentation must be readable when the
-    # product does not start, which is exactly when it is needed most.
 
   test-consumer:
-    # The customer's own system, kept behind a profile so the product's stack
-    # comes up without it: `docker compose --profile demo up -d test-consumer`.
-    # Its own build context and Dockerfile, sharing nothing with services/ —
-    # if it needed the product's source it would not be proving the contract.
     profiles: ["demo"]
     build:
       context: ./test-consumer
@@ -486,8 +344,6 @@ services:
     ports:
       - "8003:8000"
     environment:
-      # kafka:9095 and not the localhost:9094 the credential reports: that
-      # address is for clients on the host. Same broker, same per-tenant ACLs.
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9095
       - LEADS_API_BASE=http://gateway:8080/api/v1
     volumes:
@@ -504,8 +360,6 @@ services:
       additional_contexts:
         chassis: ./libs/chassis
       target: test
-    # The layout mirrors the repository (/srv/services/..., /srv/libs/...) because
-    # uv.lock records chassis as ../../libs/chassis.
     volumes:
       - ./services/notifications/src:/srv/services/notifications/src:ro
       - ./services/notifications/tests:/srv/services/notifications/tests:ro
@@ -515,7 +369,6 @@ services:
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
-    # The role has no CREATEDB: notifications_test already exists, made by db-bootstrap.
     environment:
       - DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_test
       - TEST_DATABASE_URL=postgresql://notifications_svc:notificationspassword@db:5432/notifications_test
@@ -539,7 +392,6 @@ services:
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
-    # The role has no CREATEDB: identity_test already exists, made by db-bootstrap.
     environment:
       - DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_test
       - TEST_DATABASE_URL=postgresql://identity_svc:identitypassword@db:5432/identity_test
@@ -563,7 +415,6 @@ services:
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
-    # The role has no CREATEDB: intake_test already exists, made by db-bootstrap.
     environment:
       - DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_test
       - TEST_DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_test
@@ -587,7 +438,6 @@ services:
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
-    # The role has no CREATEDB: leads_test already exists, made by db-bootstrap.
     environment:
       - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_test
       - TEST_DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_test
