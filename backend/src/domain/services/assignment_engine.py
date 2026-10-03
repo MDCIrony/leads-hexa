@@ -1,9 +1,9 @@
 from typing import Dict, List, Optional, Protocol, TypeVar
 from uuid import UUID
 
-from domain.entities.lead import Lead
-from domain.entities.rule import AssignmentRule
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.rules.assignment_rule import AssignmentRule
+from domain.groups.sales_group import SalesGroup
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 from domain.value_objects.group_id import GroupId

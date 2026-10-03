@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List
 from uuid import UUID
 
-from application.dtos.commands import OutboxEntry
+from application.dtos.outbox import OutboxEntry
 from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
 

@@ -1,23 +1,23 @@
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from application.ports.output.disqualification_rule_repository_port import (
+from application.ports.output.rules.disqualification_rule_repository_port import (
     DisqualificationRuleRepositoryPort,
 )
-from application.ports.output.lead_repository_port import LeadRepositoryPort
+from application.ports.output.leads.lead_repository_port import LeadRepositoryPort
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
-from application.ports.output.rule_repository_port import RuleRepositoryPort
-from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
+from application.ports.output.rules.rule_repository_port import RuleRepositoryPort
+from application.ports.output.groups.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.dtos.commands import OutboxEntry
-from domain.entities.disqualification_rule import DisqualificationRule
+from application.dtos.outbox import OutboxEntry
+from domain.rules.disqualification_rule import DisqualificationRule
 from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
-from infrastructure.adapters.output.persistence.correlation import current_correlation_id
-from tests.unit.mocks.in_memory_advisor_repo import InMemoryAdvisorRepository
-from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
-from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
-from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
+from infrastructure.adapters.output.persistence.outbox.correlation import current_correlation_id
+from tests.unit.mocks.advisors.in_memory_advisor_repo import InMemoryAdvisorRepository
+from tests.unit.mocks.leads.in_memory_lead_repo import InMemoryLeadRepository
+from tests.unit.mocks.rules.in_memory_rule_repo import InMemoryRuleRepository
+from tests.unit.mocks.groups.in_memory_sales_group_repo import InMemorySalesGroupRepository
 
 
 class InMemoryDisqualificationRuleRepository(DisqualificationRuleRepositoryPort):

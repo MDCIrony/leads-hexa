@@ -1,7 +1,7 @@
 from chassis.outbox import OutboxRow
 
-from application.ports.output.webhook_dispatcher_port import WebhookDispatcherPort
-from application.ports.output.webhook_repository_port import WebhookRepositoryPort
+from application.ports.output.webhooks.webhook_dispatcher_port import WebhookDispatcherPort
+from application.ports.output.webhooks.webhook_repository_port import WebhookRepositoryPort
 from domain.value_objects.enums import WebhookEventType
 
 # Only LeadProcessedEvent has a webhook audience today (ADR-0023): a client

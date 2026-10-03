@@ -11,7 +11,7 @@ from domain.advisors.advisor import Advisor
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentRole
 from domain.value_objects.tenant_id import TenantId
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
 
 # What identity holds; conftest empties it before every test.
 IDENTITY: dict[UUID, Advisor] = {}

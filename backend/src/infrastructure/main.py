@@ -5,10 +5,12 @@ from chassis.persistence import MigrationRunner
 from chassis.web import RequestIdMiddleware
 from fastapi import FastAPI
 
-from infrastructure.adapters.input.api.lead_router import router as lead_router
-from infrastructure.adapters.input.api.rule_router import router as rule_router
-from infrastructure.adapters.input.api.advisors.advisors_router import router as advisors_router
-from infrastructure.adapters.input.api.sales_group_router import router as sales_group_router
+from infrastructure.adapters.input.api.advisors.router import router as advisors_router
+from infrastructure.adapters.input.api.groups.router import router as groups_router
+from infrastructure.adapters.input.api.leads.router import router as leads_router
+from infrastructure.adapters.input.api.rules.assignment_router import router as assignment_rules_router
+from infrastructure.adapters.input.api.rules.disqualification_router import router as disqualification_rules_router
+from infrastructure.adapters.input.api.rules.scoring_router import router as scoring_rules_router
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 from infrastructure.adapters.input.internal.admissions_router import router as admissions_router
 from infrastructure.config.settings import ApiSettings
@@ -47,9 +49,11 @@ def health_check():
 app.add_middleware(RequestIdMiddleware)
 
 # Include Routers
-app.include_router(lead_router, prefix="/api/v1/leads", tags=["Leads"])
-app.include_router(rule_router, prefix="/api/v1/rules", tags=["Rules"])
+app.include_router(leads_router, prefix="/api/v1/leads", tags=["Leads"])
+app.include_router(scoring_rules_router, prefix="/api/v1/rules", tags=["Rules"])
+app.include_router(assignment_rules_router, prefix="/api/v1/rules", tags=["Rules"])
+app.include_router(disqualification_rules_router, prefix="/api/v1/rules", tags=["Rules"])
 app.include_router(advisors_router, prefix="/api/v1/advisors", tags=["Advisors"])
-app.include_router(sales_group_router, prefix="/api/v1/groups", tags=["Groups"])
+app.include_router(groups_router, prefix="/api/v1/groups", tags=["Groups"])
 # Outside /api/v1: service to service, never through the gateway.
 app.include_router(admissions_router, prefix="/internal/v1/admissions")

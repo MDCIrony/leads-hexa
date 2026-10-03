@@ -3,8 +3,8 @@ from unittest.mock import Mock
 
 from chassis.outbox import OutboxRow
 
-from domain.entities.lead import Lead
-from domain.entities.webhook import WebhookConfig
+from domain.leads.lead import Lead
+from domain.webhooks.webhook import WebhookConfig
 from domain.events.lead_events import LeadDisqualified, LeadProcessedEvent
 from domain.value_objects.enums import LeadStatus, WebhookEventType
 from domain.value_objects.score_breakdown import AppliedRule

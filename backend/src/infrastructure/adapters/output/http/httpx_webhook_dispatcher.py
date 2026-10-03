@@ -5,7 +5,7 @@ import logging
 import time
 from typing import Any, Dict
 import httpx
-from application.ports.output.webhook_dispatcher_port import WebhookDispatcherPort
+from application.ports.output.webhooks.webhook_dispatcher_port import WebhookDispatcherPort
 
 _LOGGER = logging.getLogger(__name__)
 

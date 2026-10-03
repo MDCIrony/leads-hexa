@@ -1,19 +1,19 @@
 import dataclasses
 from uuid import uuid4
 
-from application.dtos.commands import (
-    CreateAssignmentRuleCommand,
+from application.dtos.groups import (
     CreateSalesGroupCommand,
-    CreateScoringRuleCommand,
-    UpdateAssignmentRuleCommand,
+    GetSalesGroupsQuery,
     UpdateSalesGroupCommand,
 )
-from application.dtos.queries import (
+from application.dtos.rules import (
+    CreateAssignmentRuleCommand,
+    CreateScoringRuleCommand,
     GetAssignmentRulesQuery,
-    GetLeadsQuery,
     GetRulesQuery,
-    GetSalesGroupsQuery,
+    UpdateAssignmentRuleCommand,
 )
+from application.dtos.leads import GetLeadsQuery
 
 _ALL_DTOS = (
     CreateScoringRuleCommand,

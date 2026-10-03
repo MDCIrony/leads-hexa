@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.events.domain_event import DomainEvent
 from domain.events.internal_event import InternalEvent
 from domain.value_objects.enums import LeadStatus

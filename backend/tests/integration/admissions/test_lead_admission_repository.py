@@ -3,9 +3,9 @@ from uuid import uuid4
 
 import pytest
 
-from application.ports.output.lead_repository_port import DuplicateAdmission
-from domain.entities.lead import Lead
-from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
+from application.ports.output.leads.lead_repository_port import DuplicateAdmission
+from domain.leads.lead import Lead
+from infrastructure.adapters.output.persistence.leads.lead_repository import RawSqlLeadRepository
 
 
 def _lead(tenant_id, intake_record_id=None) -> Lead:

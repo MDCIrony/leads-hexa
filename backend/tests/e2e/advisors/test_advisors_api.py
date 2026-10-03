@@ -4,9 +4,9 @@ import uuid
 from domain.exceptions import DomainException
 from infrastructure.main import app
 from tests.advisors_sync import project_identity, seed_advisor
-from tests.e2e.auth_helpers import admin_headers, principal_of, seed_org_manager
-from tests.e2e._admission_helpers import admit_lead
-from tests.e2e.gateway_client import GatewayClient, tenant_of
+from tests.e2e.helpers.auth_helpers import admin_headers, principal_of, seed_org_manager
+from tests.e2e.helpers.admission_helpers import admit_lead
+from tests.e2e.helpers.gateway_client import GatewayClient, tenant_of
 
 
 def _admin(client) -> dict:

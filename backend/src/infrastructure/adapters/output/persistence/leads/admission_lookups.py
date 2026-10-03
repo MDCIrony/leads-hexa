@@ -4,7 +4,7 @@ from uuid import UUID
 import psycopg
 
 from application.dtos.admissions import AdmissionLookupItem
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from infrastructure.adapters.output.persistence.leads.lead_rows import row_to_lead
 
 

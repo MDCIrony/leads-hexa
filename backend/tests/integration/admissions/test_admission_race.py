@@ -4,17 +4,17 @@ import uuid
 from application.dtos.admissions import AdmissionCandidate, AdmissionRequest
 from application.use_cases.admissions.admit_lead import AdmitLeadUseCase
 from domain.advisors.advisor import Advisor
-from domain.entities.lead import Lead
-from domain.entities.rule import AssignmentRule
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.rules.assignment_rule import AssignmentRule
+from domain.groups.sales_group import SalesGroup
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentRole, AssignmentStrategy
 from domain.value_objects.tenant_id import TenantId
-from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
-from infrastructure.adapters.output.persistence.raw_sql_rule_repository import RawSqlRuleRepository
-from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
+from infrastructure.adapters.output.persistence.advisors.advisor_repository import RawSqlAdvisorRepository
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.leads.lead_repository import RawSqlLeadRepository
+from infrastructure.adapters.output.persistence.rules.rule_repository import RawSqlRuleRepository
+from infrastructure.adapters.output.persistence.groups.sales_group_repository import RawSqlSalesGroupRepository
 
 
 def _seed_round_robin(conn, tenant_id) -> None:

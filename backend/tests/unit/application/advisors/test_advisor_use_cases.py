@@ -5,14 +5,14 @@ import pytest
 from application.dtos.advisors import ListAdvisorsQuery, SetAdvisorGroupCommand
 from application.use_cases.advisors.advisor_use_cases import ListAdvisorsUseCase, SetAdvisorGroupUseCase
 from domain.advisors.advisor import Advisor
-from domain.entities.lead import Lead
-from domain.entities.sales_group import SalesGroup
+from domain.leads.lead import Lead
+from domain.groups.sales_group import SalesGroup
 from domain.exceptions import DomainException
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentRole, LeadStatus
 from domain.value_objects.group_id import GroupId
 from domain.value_objects.tenant_id import TenantId
-from tests.unit.mocks.in_memory_advisor_repo import ProjectionOnlyDirectory
+from tests.unit.mocks.advisors.in_memory_advisor_repo import ProjectionOnlyDirectory
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 _TENANT = uuid.uuid4()

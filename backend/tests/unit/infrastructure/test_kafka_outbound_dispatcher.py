@@ -3,7 +3,7 @@ import uuid
 
 from chassis.outbox import OutboxRow
 
-from domain.entities.lead import Lead
+from domain.leads.lead import Lead
 from domain.events.lead_events import LeadProcessedEvent
 from domain.value_objects.enums import LeadStatus
 from domain.value_objects.score_breakdown import AppliedRule
