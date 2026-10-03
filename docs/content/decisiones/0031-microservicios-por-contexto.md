@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — servicios extraídos: `notifications` (F2), `identity` (F3) e `intake` (F4). El resto, en F5 del [plan de desacople](../microservices/06-plan-de-desacople.md) |
+| **Estado** | Aceptada — implantada: los cuatro servicios extraídos (F2–F5). `notifications` (F2), `identity` (F3), `intake` (F4) y `lead-core` (F5, lo que quedó del monolito, con su rol `lead_core_svc`). Ver el [plan de desacople](../microservices/06-plan-de-desacople.md) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Arquitectura · Backend · Infraestructura |
 

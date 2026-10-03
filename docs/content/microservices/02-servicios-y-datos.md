@@ -30,7 +30,7 @@ flowchart LR
     end
     subgraph leads_db
         L["leads"]; RU["scoring · assignment · disqualification rules"]; G["sales_groups"]
-        AD["advisors"]; WH["webhook_configs"]; O3["outbox_events"]; P3["processed_events"]
+        AD["advisors"]; WH["webhook_configs"]; O3["outbox_events"]
     end
     subgraph notifications_db
         N["notifications"]; ME["members"]; P4["processed_events"]
@@ -39,19 +39,25 @@ flowchart LR
 
 | Tabla | Dueño | Nota |
 |---|---|---|
-| `tenants`, `agents`, `auth_*`, `agent_mfa`, `mfa_recovery_codes`, `social_identities` | identity | Copiadas en F3; `agents` sin `group_id`. Las de `leads_db` se quedan, sin crecer, hasta F5 |
-| `lead_sources`, `intake_jobs`, `intake_records`, `intake_errors` | intake | Copiadas en F4, con los mismos ids; sin FK a `tenants` ni a `leads` (`intake_records.lead_id` es un UUID externo). Las de `leads_db` se quedan, sin crecer, hasta F5 |
+| `tenants`, `agents`, `auth_*`, `agent_mfa`, `mfa_recovery_codes`, `social_identities` | identity | Copiadas en F3; `agents` sin `group_id`. Las de `leads_db` se borraron en F5 (migración 019) |
+| `lead_sources`, `intake_jobs`, `intake_records`, `intake_errors` | intake | Copiadas en F4, con los mismos ids; sin FK a `tenants` ni a `leads` (`intake_records.lead_id` es un UUID externo). Las de `leads_db` se borraron en F5 (migración 019) |
 | `intake_files` | intake | **Nueva** (F1): el fichero crudo de un `batch-upload`, en `bytea`, antes de parsearlo |
-| `provisioned_tenants` | intake | **Nueva** (F3, en `leads_db`; movida a `intake_db` en F4): marca que las fuentes por defecto de un tenant ya se crearon una vez |
+| `provisioned_tenants` | intake | **Nueva** (F3, en `leads_db`; movida a `intake_db` en F4 y borrada de `leads_db` en F5): marca que las fuentes por defecto de un tenant ya se crearon una vez |
 | `leads`, reglas, `sales_groups`, `webhook_configs` | lead-core | `leads` gana `intake_record_id` (F4, migración 018) con `UNIQUE (tenant_id, intake_record_id)`, y pierde la FK de `source_id` hacia `lead_sources` |
 | `advisors` | lead-core | **Nueva** (F3, migración 017): proyección de identidad + `group_id` propio; sembrada desde `agents` |
-| `notifications` | notifications | Copiada en F2; `leads_db.notifications` se queda, sin crecer, hasta F5 |
+| `notifications` | notifications | Copiada en F2; `leads_db.notifications` se borró en F5 (migración 019) |
 | `members` | notifications | **Nueva** (F2): proyección de identidad para decidir destinatarios; sembrada en el corte desde `agents` |
 | `outbox_events` | cada productor | Gana la columna `channel` (F1) |
-| `processed_events` | cada consumidor | **Nueva**: `PRIMARY KEY (consumer, event_id)` |
+| `processed_events` | cada consumidor que la necesita: intake y notifications | **Nueva**: `PRIMARY KEY (consumer, event_id)`. lead-core no la tiene: su único consumidor, `lead-core.advisors`, es una proyección idempotente por `version`, y la de `leads_db`, vacía desde F4, se borró en F5. Un consumidor futuro que la necesite la crea en su migración. identity tampoco: sólo produce |
 
-`leads_db` se queda como base de lead-core: es la base actual y lo que se va son las tablas de los
-demás. Las otras tres se crean nuevas.
+`leads_db` se quedó como base de lead-core: es la base original y lo que salió de ella son las tablas
+de los demás. Las otras tres se crearon nuevas. Desde F5 `leads_db` contiene sólo las nueve tablas de
+lead-core (`advisors`, `assignment_rules`, `disqualification_rules`, `leads`, `outbox_events`,
+`sales_groups`, `schema_migrations`, `scoring_rules`, `webhook_configs`), todas de `lead_core_svc`. La
+migración 019 borra las otras quince (las de identity, notifications e intake de arriba, más
+`processed_events`): primero quita por catálogo cualquier FK de una tabla que se queda hacia una que
+se va, y después un único `DROP TABLE IF EXISTS` **sin `CASCADE`**, de modo que una dependencia
+inesperada hace fallar la migración en vez de borrarse en silencio.
 
 ## Proyecciones
 
@@ -147,7 +153,7 @@ Consecuencia aceptada: una ingesta enviada en el primer segundo tras el alta pue
 `SOURCE_NOT_FOUND`. `provisioned_tenants` evita que releer el topic compactado recree una fuente que
 el manager borró después; la migración 017 la sembró con los tenants que ya existían, y el corte de F4 la
 copió a `intake_db`. El consumidor (grupo `intake.tenants`) vive en `intake-worker` desde F4; antes
-era código de intake dentro de `backend-worker`.
+era código de intake dentro del `backend-worker` del monolito.
 
 ## Cambios en el contrato público
 
@@ -198,9 +204,9 @@ repite aquí. Lo que añade cada servicio extraído:
 | `RequestContext` | `RequestContext(principal, tenant_id)` en `application/dtos/context.py`. `Principal` es un dataclass del propio servicio: `agent_id`, `tenant_id`, `role`, `principal_type`. Sustituye a la entidad `Agent` que hoy viaja en el contexto |
 | `AuthorizationPolicy` | Misma lógica que hoy, sobre `Principal`. Vive en `domain/policies` de cada servicio que la necesita |
 | Errores | Mismo sobre `{error, error_code, message}` y misma tabla `STATUS_BY_ERROR_CODE` por servicio |
-| Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que el servicio nuevo pasa sin lista base; sus `src/` y `tests/` se declaran en `scripts/verify-structure.sh`. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
+| Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que los cuatro pasan sin lista base; sus `src/` y `tests/` se declaran en `scripts/verify-structure.sh`. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
 | Configuración | `Settings.from_environment()` falla al arrancar si falta un valor obligatorio, como hoy |
-| Configuración por proceso | identity la separa desde F3 e intake desde F4: `ApiSettings` y `WorkerSettings` (intake añade `ReconcileSettings` para su CLI), cada una exige sólo lo que usa su proceso (el worker no recibe la clave de firma ni la JWKS; la API no exige broker). notifications y el backend siguen con un `Settings` para los dos procesos, así que cada uno exige también las variables del otro; el del backend se separa en F5 |
+| Configuración por proceso | Los cuatro servicios separan `ApiSettings` y `WorkerSettings` (identity desde F3, intake desde F4, lead-core desde F5; intake añade `ReconcileSettings` para su CLI). Cada clase exige sólo lo que usa su proceso: la API de lead-core no exige broker (sólo escribe el outbox) y su worker no recibe la JWKS, `IDENTITY_URL` ni el secreto de servicio. notifications conserva un `Settings` para los dos procesos, así que exige las variables de ambos |
 
 ### notifications, el servicio de referencia
 
@@ -284,6 +290,44 @@ services/intake/
 - **Procesos.** `intake` (API) y `intake-worker`, de la misma imagen. Ninguno tiene credenciales sobre
   `leads_db`: `intake_svc` sólo conecta a `intake_db`.
 
+### lead-core
+
+Cuarto servicio, el residual (F5). No se creó: es el monolito original, que fue adoptando el esqueleto
+de arriba a medida que perdía módulos, y en F5 se movió de `backend/` a `services/lead-core/` con
+`git mv`, de modo que `git log --follow` conserva la historia de cada fichero. Es el único cuyo hexágono
+no se escribió desde cero.
+
+```text
+services/lead-core/
+├── Dockerfile · pyproject.toml · uv.lock · migrations/ (001–019: la cadena completa de leads_db)
+├── src/
+│   ├── domain/            leads/ · rules/ · groups/ · advisors/ · webhooks/ · events/ · services/ · policies/ · value_objects/
+│   ├── application/       dtos/ · ports/{input,output}/ · use_cases/{leads,rules,groups,advisors,admissions}/
+│   └── infrastructure/
+│       ├── main.py                      API: aplica las migraciones al arrancar, /health
+│       ├── worker/                      lead-core-worker: relays del outbox y consumidor lead-core.advisors
+│       ├── config/ · di/
+│       └── adapters/
+│           ├── input/api/{leads,rules,groups,advisors}/  routers y esquemas, agrupados por contexto
+│           ├── input/internal/          admissions (/internal/v1/admissions)
+│           ├── input/consumers/         lead-core.advisors
+│           └── output/                  persistence/{leads,rules,groups,advisors,outbox,webhooks}/ · events/ · http/
+└── tests/                 unit/ · integration/ · e2e/ · architecture/
+```
+
+- **Proceso y configuración.** `lead-core` y `lead-core-worker`, de la misma imagen. `Container`
+  (`di/container.py`) sólo cablea la API, con `ApiSettings`; el worker construye su `RawSqlDatabase` y su
+  unidad de trabajo sin `Container`, como identity. La API exige `DATABASE_URL`, `JWKS_URL` y
+  `SERVICE_CLIENT_SECRET`; el worker, `DATABASE_URL` y `KAFKA_BOOTSTRAP_SERVERS` (obligatoria, aunque
+  arranca sin broker vivo: [ADR-0026](../decisiones/0026-kafka-como-canal-del-producto.md)).
+- **Estructura.** Sin listas base: `structure_baseline.py` y `tests_structure_baseline.py` se
+  vaciaron en F5 y se borraron, y su `tests/architecture/test_structure.py` es el de los demás
+  servicios. La meta que fijó [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md) se cumple.
+- **Unidad de trabajo.** `PostgresUnitOfWork` sólo tiene los repositorios de lead-core
+  (leads, reglas, grupos, asesores, webhooks y outbox).
+- **Datos.** `leads_db` con el rol `lead_core_svc`, que es su dueño y el único con `CONNECT`; la
+  base de pruebas es `leads_test`. Ningún proceso de aplicación entra ya como `postgres`.
+
 ### `libs/chassis`
 
 Una librería de **código técnico**, sin un solo tipo de dominio. Existe porque hay piezas que deben
@@ -306,9 +350,3 @@ contiene ninguna regla de negocio. Lo que sólo usa uno se queda en ese servicio
 Cada servicio es un proyecto `uv` independiente con su `uv.lock`, no un miembro de un `uv workspace`:
 los cinco tienen paquetes de primer nivel llamados `domain`, `application` e `infrastructure`, y en un
 entorno virtual compartido colisionarían.
-
-### `backend/` es lead-core
-
-`backend/` no se vacía ni se copia: es el servicio lead-core desde el primer día y adopta el esqueleto
-de arriba a medida que pierde módulos. Moverlo a `services/lead-core/` es el último paso de F5 y sólo
-renombra.

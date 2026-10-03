@@ -9,7 +9,7 @@ cookie opaca de [ADR-0029](../decisiones/0029-sesiones-opacas.md). Decisión reg
 
 Un contenedor `gateway` con nginx. Ocupa el puerto **8001** del host, el de la API antes del
 gateway, así que `verify-e2e.sh`, las colecciones de Bruno y los
-`GOOGLE_REDIRECT_URI`/`GITHUB_REDIRECT_URI` siguen apuntando al mismo sitio. El `backend` ya no
+`GOOGLE_REDIRECT_URI`/`GITHUB_REDIRECT_URI` siguen apuntando al mismo sitio. `lead-core` no
 publica puerto. El nginx del frontend apunta al gateway
 (`proxy_pass http://gateway_api/api/v1/`, con `gateway_api` un `upstream` que se vuelve a resolver
 por DNS, igual que en el gateway).
@@ -49,14 +49,15 @@ la fuerza bruta de login, y la carga legítima del frontend y de `verify-e2e.sh`
 | `/health` | el propio gateway | No | |
 | Cualquier otra ruta | — | — | `404` con el sobre `NOT_FOUND` |
 
-Durante la migración, un prefijo cuyo servicio todavía no existe apunta a `lead-core` (el monolito).
-Mover una capacidad es añadir un `location` más específico con su `upstream`.
+El resto de `/api/v1/` apunta a `lead-core`. Durante la migración era el monolito, y un prefijo cuyo
+servicio todavía no existía caía ahí; mover una capacidad era añadir un `location` más específico con
+su `upstream`.
 
-!!! note "Tras F4"
+!!! note "Tras F5"
     Van a `identity` la introspección (`/_introspect` y `/_introspect_optional`), `/api/v1/auth/`,
     `/api/v1/agents` y `/api/v1/tenants` (F3); a `notifications`, `/api/v1/notifications` (F2); a
     `intake`, `/api/v1/sources` y `/api/v1/intake/` (F4). Cada prefijo extraído se declara en las dos
-    formas, exacta y con barra: un `location` de prefijo solo mandaría la ruta sin barra al monolito
+    formas, exacta y con barra: un `location` de prefijo solo mandaría la ruta sin barra a `lead-core`
     (`/api/v1/intake/` no tiene forma exacta: no existe `GET /intake`). `/openapi.json` y `/docs` son los
     de lead-core; el contrato de cada servicio extraído se publica aparte, en `/openapi/identity.json`,
     `/openapi/notifications.json` y `/openapi/intake.json`.
@@ -162,7 +163,7 @@ reactivado por su cuenta. Un `tenant_id` sin fila en `tenants` no cuenta como su
 - **`SIGNING_KEYS`** es una lista `kid=<semilla>[,kid=<semilla>…]`, donde la semilla es la semilla
   Ed25519 de 32 bytes en base64url sin relleno (no PEM). La primera firma; todas se publican en la
   JWKS. El valor de desarrollo vive en `docker-compose.yml`.
-- **PyJWT** (`pyjwt[crypto]`) en `chassis`. `cryptography` ya es dependencia del backend.
+- **PyJWT** (`pyjwt[crypto]`) en `chassis`. `cryptography` ya era dependencia del servicio original.
 - **Revocación igual que hoy.** Cada petición vuelve a introspeccionar: logout, desactivación de un
   agente o suspensión de un tenant se aplican en la petición siguiente. Los 60 s no son una ventana
   de revocación; sólo acotan cuánto vale un token si se filtrara dentro de la red.
@@ -238,7 +239,7 @@ upstream identity {
     server identity:8000 resolve;
     keepalive 32;
 }
-# upstream backend y upstream notifications, iguales.
+# upstream intake, upstream lead-core y upstream notifications, iguales.
 
 location = /_introspect {
     internal;
@@ -253,7 +254,7 @@ location /api/v1/auth/ {
     proxy_pass http://identity;
 }
 
-# Extracted services: both forms, or the bare path would fall through to the monolith.
+# Extracted services: both forms, or the bare path would fall through to lead-core.
 location = /api/v1/tenants        { include /etc/nginx/conf.d/protected.inc; proxy_pass http://identity; }
 location   /api/v1/tenants/       { include /etc/nginx/conf.d/protected.inc; proxy_pass http://identity; }
 location = /api/v1/notifications  { include /etc/nginx/conf.d/protected.inc; proxy_pass http://notifications; }
@@ -261,7 +262,7 @@ location   /api/v1/notifications/ { include /etc/nginx/conf.d/protected.inc; pro
 
 location /api/v1/ {
     include    /etc/nginx/conf.d/protected.inc;   # auth_request + proxy_headers.inc + no Cookie
-    proxy_pass http://backend;
+    proxy_pass http://lead-core;
 }
 
 location /internal/ { return 404 '{"error":true,"error_code":"NOT_FOUND","message":"Not Found"}'; }
@@ -366,9 +367,9 @@ POST /internal/v1/service-tokens
 | URL de la JWKS (`JWKS_URL`) | | ✓ (sólo la API) | ✓ | ✓ | |
 
 Desde F3 la tabla es la de `docker-compose.yml`. Sólo `identity` recibe la clave de firma, la de MFA y
-OAuth; `identity-worker` no recibe ninguna, porque su `WorkerSettings` no las pide. En lead-core sólo
-la API exige `SERVICE_CLIENT_SECRET` (lo comprueba al arrancar); `backend-worker` recibe `JWKS_URL`
-porque comparte con ella un único `Settings` hasta F5. Intake separa la configuración por proceso
+OAuth; `identity-worker` no recibe ninguna, porque su `WorkerSettings` no las pide. En lead-core, desde F5,
+la API exige `JWKS_URL` y `SERVICE_CLIENT_SECRET` y `lead-core-worker` no recibe ninguno de los dos (ni
+`IDENTITY_URL`), porque su `WorkerSettings` no los pide. Intake separa la configuración por proceso
 desde F4: `intake` (API) exige `JWKS_URL`, `LEAD_CORE_URL` y `SERVICE_CLIENT_SECRET` (la promoción
 manual admite en línea), e `intake-worker` exige el secreto y `LEAD_CORE_URL` pero no la JWKS, porque
 no verifica ningún token de usuario.

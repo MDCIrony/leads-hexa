@@ -54,7 +54,10 @@ flowchart LR
   anterior. Después, el servicio nuevo acepta escrituras que el monolito no tiene, y volver exigiría
   una migración inversa. Se dice así, sin prometer un interruptor.
 - Las tablas copiadas no se borran del monolito en la fase: el código que las usaba sí se elimina. Las
-  tablas se borran en F5, cuando ya no hay vuelta atrás que proteger.
+  tablas se borraron en F5 (migración 019), cuando ya no había vuelta atrás que proteger.
+- **Tras F5 los scripts no se pueden repetir.** `scripts/migrate/f2_notifications.sh`,
+  `f3_identity.sh` y `f4_intake.sh` copian desde tablas de `leads_db` que ya no existen. Se conservan
+  como registro de cómo se hizo cada corte y no se adaptan.
 
 ---
 
@@ -363,9 +366,11 @@ plan salvo las desviaciones de abajo. El corte copió 76 fuentes, 38 `provisione
 foráneas, estados, contadores y el `md5` del `payload`, del `field_mapping` y del fichero; el texto de
 los errores entra a partir de la revisión final de la fase.
 
-Queda una salvedad del criterio de salida, la misma que en F3: `backend` y `backend-worker` siguen
+Quedó una salvedad del criterio de salida, la misma que en F3: `backend` y `backend-worker` seguían
 entrando en `leads_db` como el superusuario `postgres`, que se salta el `REVOKE CONNECT` sobre
-`intake_db`. Ningún código de lead-core lee tablas de intake; el rol propio de lead-core llega en F5.
+`intake_db`. Ningún código de lead-core leía tablas de intake. **Cerrada en F5**: lead-core tiene su rol
+`lead_core_svc` y ningún proceso de aplicación entra ya como `postgres`
+(ver [F5](#f5-lead-core-residual)).
 
 **Objetivo.** La recepción y la decisión se separan; la idempotencia sustituye a la transacción.
 
@@ -492,25 +497,115 @@ carga de prueba; ningún servicio salvo intake tiene credenciales sobre `intake_
 
 ## F5 · Lead Core residual
 
+**Estado: implantada** (`RANGO_F5`, más el commit que registra este rango). Lo construido sigue el
+plan salvo las desviaciones de abajo. No hubo copia de datos: `leads_db` ya era la base de lead-core
+y lo que cambió es lo que contiene. Antes de aplicar la migración 019 se hizo un `pg_dump -Fc` de las
+15 tablas que salen (`backups/f5-leads_db-frozen.dump`, fuera de git); sus datos ya vivían en sus
+bases desde F2–F4 y la copia sólo protege de un error de lista. Cierre: `CIERRE_F5`.
+
 **Objetivo.** El monolito ya no existe: lo que queda es lead-core.
 
 **Cambios**
 
-- Migración en `leads_db` que borra las tablas copiadas en F2–F4 (`DROP TABLE IF EXISTS`, idempotente)
-  y las FK que todavía apunten a ellas. Las `*.tenant_id → tenants` no llegan hasta aquí: se quitaron
-  en F3 (migración 017).
-- `PostgresUnitOfWork` sólo con los repositorios de lead-core; `Settings` sin variables ajenas;
-  `dependencies.py` sin cableado ajeno.
-- `git mv backend services/lead-core`; servicios de Compose `lead-core` y `lead-core-worker`;
-  `backend-test` → `lead-core-test`.
-- Documentación del sistema actual: C4 de contenedores y componentes, modelo de datos, módulos,
-  eventos y `CLAUDE.md` (comandos de validación por servicio).
+- **Rol propio.** `lead_core_svc` es dueño de `leads_db` y `leads_test` y de todas sus tablas, con
+  `REVOKE CONNECT … FROM PUBLIC` y `GRANT CONNECT` sólo para él. `db-bootstrap` crea `leads_test` y
+  transfiere la propiedad de las tablas existentes en las dos bases, de forma idempotente
+  ([05](05-despliegue-local.md#bases-de-datos)).
+- **Migración 019** en `leads_db`: borra `tenants`, `agents`, `auth_sessions`, `auth_challenges`,
+  `agent_mfa`, `mfa_recovery_codes`, `social_identities`, `notifications`, `lead_sources`,
+  `intake_jobs`, `intake_records`, `intake_errors`, `intake_files`, `provisioned_tenants` y
+  `processed_events`. Quita antes, por catálogo, toda FK de una tabla que se queda hacia una que se va
+  (en la base actual ninguna: 017 y 018 ya las habían quitado) y borra con un solo `DROP TABLE IF EXISTS`. `leads_db`
+  queda con las nueve tablas de lead-core.
+- **Configuración por proceso.** `ApiSettings` y `WorkerSettings`, sin variables ajenas; `Container`
+  sólo para la API, y el worker construye su base y su unidad de trabajo sin él, como identity.
+  `PostgresUnitOfWork` sólo tiene los repositorios de lead-core.
+- **Reordenado por contexto** del dominio, la aplicación, la API pública, la persistencia y los tests,
+  hasta que `structure_baseline.py` y `tests_structure_baseline.py` quedaron vacías y se borraron. Sin
+  reexportaciones de compatibilidad: un único código, los imports se actualizaron.
+- **Traslado.** `git mv backend services/lead-core`, con el esqueleto de los demás: `pyproject.toml`
+  virtual, el `Dockerfile` de intake con otro nombre, `tests/architecture/` igual. Servicios de Compose
+  `lead-core`, `lead-core-worker` y `lead-core-test`; `upstream lead-core` en el gateway;
+  `LEAD_CORE_URL=http://lead-core:8000` en `intake` e `intake-worker`. El `client_id` de servicio sigue
+  siendo `lead-core`, así que `SERVICE_CLIENTS` no cambia.
+- **Estructura.** `scripts/verify-structure.sh` declara `services/lead-core/{src,tests}` sin lista base
+  y hace fallar una raíz que no existe. Queda `scripts/structure_baseline.py` para `test-consumer/` y
+  `demo/`, que no son de lead-core.
+- **Documentación** del sistema actual: C4 de contenedores y componentes, modelo de datos, módulos,
+  eventos, diagramas y `CLAUDE.md` (comandos de validación por servicio).
 
-**`verify_ms_f5`.** El recorrido completo de `verify-e2e.sh`, sin checks nuevos: la fase no cambia
-comportamiento.
+**Desviaciones respecto a lo anterior**
 
-**Criterio de salida.** Cinco servicios con su guardián 4/4; cada base accesible sólo por su rol; la
-sección [Desacople en microservicios](index.md) deja de llevar el aviso de «no desplegada».
+- **El rol va antes del traslado.** El plan listaba el rol sólo como criterio de salida. Se hizo
+  primero, sin código, para que el reordenado y el traslado corrieran ya como `lead_core_svc` y cada
+  fusión a `main` se validara con `verify-e2e.sh` antes de la siguiente. El orden fue: rol, migración
+  019, configuración por proceso, reordenado y, el último, el traslado, que sólo renombra.
+- **019 sin `CASCADE` y con `processed_events`.** El plan decía «`DROP TABLE IF EXISTS` y las FK que
+  apunten a ellas». Sin `CASCADE`, las FK entre las tablas que se van caen con ellas y cualquier otra
+  dependencia inesperada hace fallar la migración en vez de borrarse en silencio. Los nombres se
+  resuelven con `to_regclass`, que respeta `search_path` (lo usa el test de esquema limpio).
+  `processed_events` sale de lead-core con su puerto y su repositorio: estaba vacía, nada la escribe
+  desde F4 y el único consumidor, `lead-core.advisors`, es una proyección idempotente por `version`
+  que no la usa ([02](02-servicios-y-datos.md#proyecciones)). Un consumidor futuro que la necesite la
+  crea en su migración.
+- **Guarda de la migración 005.** `fk_leads_tenant` sólo se crea si no existe y
+  `to_regclass('advisors') IS NULL`: `advisors` nace en 017, la misma migración que quitó las FK hacia
+  `tenants`, así que un esquema que ya la tiene es posterior al corte de identidad y nunca vuelve a
+  ganar esa FK. Con ella, la cadena 001→019 se puede reejecutar sobre una base con leads de tenants
+  nacidos en identity: 002 y siguientes recrean vacías las tablas viejas y 019 las vuelve a borrar.
+  Reaplicar 005 suelta sobre una base posterior a F5 falla en `REFERENCES tenants` sin cambiar nada
+  (cada fichero es atómico). `MigrationRunner` no guarda sumas de comprobación: editar 005 no la
+  reaplica en las bases existentes.
+- **Se retiran tres tests de migraciones de datos históricas** (la normalización de correos de 011, la
+  siembra de `advisors` y `provisioned_tenants` de 017 y el *backfill* de 018), porque operan sobre
+  tablas que 019 borra. La idempotencia de la cadena la prueba el test de esquema limpio; la unicidad
+  de 018 y la ausencia de FK se conservan donde no necesitan esas tablas. Un test de esquema nuevo
+  fija las nueve tablas exactas y que ninguna FK apunta fuera de ellas.
+- **La API ya no recibe `KAFKA_BOOTSTRAP_SERVERS`**, porque sólo escribe el outbox; el worker no
+  recibe `JWKS_URL`, `IDENTITY_URL` ni el secreto de servicio. El broker del worker es obligatorio,
+  como en identity e intake: no arranca sin saber dónde está, aunque sí sin un broker vivo (ADR-0026).
+- **Se retira código sin uso** al limpiar el cableado: los puertos y adaptadores de reloj y de
+  generador de ids que `Container` ya no usaba, y el mock en memoria del despachador de webhooks.
+- **Nombres de Compose.** El plan fijaba `lead-core` y `lead-core-worker`; `backend-test` pasa a
+  `lead-core-test`. Conservar `backend` habría dejado el nombre del monolito en el sistema que ya no lo
+  es.
+- **`verify_ms_f5` sí tiene checks, todos estructurales.** El plan decía «sin checks nuevos» porque la
+  fase no cambia comportamiento, pero su criterio de salida (cada base sólo por su rol, guardianes,
+  nombres viejos fuera) no lo comprobaba nada. Los añade, y no hay ninguno de negocio.
+- **«Cinco servicios con su guardián 4/4» eran cuatro.** El quinto es el gateway, nginx, que no tiene
+  guardián.
+- **Sin cambio de comportamiento.** El contrato público, los eventos y los flujos de Bruno quedaron
+  idénticos: el OpenAPI de lead-core es el mismo byte a byte tras reordenar la API.
+- **Corte.** Se congelaron `backend` y `backend-worker`, se fusionó la rama del traslado y la del
+  corte, y se borró `backend/` entero con `rm -rf` tras comprobar que `git ls-files backend` estaba
+  vacío: `git mv` no mueve los restos sin seguimiento (`.venv`, cachés, carpetas vacías). Compose se
+  levantó con `--remove-orphans`, sin la cual los contenedores `backend*` seguirían apareciendo.
+- **Arrastres.** Entraron: la configuración por proceso del backend (F2–F4), la trampa de 005 (F3),
+  `leads_test` creada por `db-bootstrap` y no por `conftest.py` (F2), `httpx2` en `dev` de lead-core,
+  identity y notifications, que quita el aviso de `TestClient` (F2, F4), y que una raíz inexistente
+  haga fallar `verify-structure.sh` (F4). Quedaron fuera: el error permanente de base, que cambia
+  `chassis` y se anota como riesgo en [07](07-evoluciones-y-riesgos.md#riesgos-que-el-plan-introduce);
+  `PATCH` con `null` como «sin cambios» en grupos y reglas, que cambiaría el contrato público; y el
+  cálculo de carga de `GET /advisors`, sin medida que lo pida.
+
+**`verify_ms_f5`** (sólo comprobaciones estructurales; el negocio lo recorren las demás)
+
+- `leads_db` tiene exactamente las nueve tablas de lead-core, ninguna de las quince que salieron, y
+  todas son de `lead_core_svc`.
+- Matriz de roles: cada uno de los cuatro entra en su base (control positivo) y no en las otras tres.
+- Ninguna conexión de `postgres` a `leads_db`; `lead-core` y `lead-core-worker` entran como
+  `lead_core_svc`; el worker no tiene `JWKS_URL`, `IDENTITY_URL` ni secreto y la API no tiene
+  `KAFKA_BOOTSTRAP_SERVERS`.
+- `GET /leads` por el gateway llega a `lead-core` (`upstream=` del *access log*) con su `X-Request-Id`;
+  `/openapi.json` publica `/api/v1/leads`.
+- Guardián 4/4 en lead-core, identity, intake y notifications.
+- Lo viejo no está: no existe `backend/`, Compose declara `lead-core` y `lead-core-worker` y ningún
+  servicio ni contenedor `backend*`, `nginx -T` tiene `upstream lead-core` y no menciona el nombre
+  viejo, y la configuración compartida tampoco.
+
+**Criterio de salida.** Cuatro servicios Python con su guardián 4/4 (el gateway es nginx y no tiene
+guardián); cada base accesible sólo por su rol; la sección [Desacople en microservicios](index.md)
+deja de llevar el aviso de «no desplegada».
 
 ---
 
@@ -607,3 +702,11 @@ cambio de código. Restaura el código; los datos se restauran con el volcado
 git switch -c rescue monolith-baseline
 docker compose exec -T db pg_restore -U postgres --clean --if-exists -d leads_db < backups/monolith-baseline.dump
 ```
+
+**Tras F5.** El volcado restaura las tablas del monolito como propiedad de `postgres`, y el código del
+tag entra en `leads_db` como `postgres`, así que el rescate funciona con ese rol y no con
+`lead_core_svc`. El `docker-compose.yml` del tag no tiene `db-bootstrap`, de modo que nada vuelve a
+transferir esas tablas a `lead_core_svc`. Lo que no se recupera es lo que escribieron los servicios
+después del tag: sus datos viven en `identity_db`, `intake_db` y `notifications_db`, que el volcado no
+contiene. `backups/f5-leads_db-frozen.dump` guarda las quince tablas que borró la migración 019, tal
+como estaban en ese momento, por si hiciera falta consultarlas; no sirve para volver atrás por sí solo.

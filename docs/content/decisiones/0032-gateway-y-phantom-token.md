@@ -18,7 +18,9 @@ petición siguiente. Esa propiedad tiene que sobrevivir a la separación.
 - **Un gateway nginx** es la única entrada a la API (`:8001`). Enruta por prefijo y concentra lo que
   es del borde: CORS, comprobación de `Origin`, `X-Request-Id`, límites de tamaño (10 MB) y de
   peticiones (sólo `/api/v1/auth/`). `/internal/*` nunca se publica; lo que no es `/api/v1/`, `/health`,
-  `/openapi.json` o `/docs` responde 404.
+  `/openapi.json`, `/docs` ni `/openapi/{identity,notifications,intake}.json` responde 404. Estas
+  últimas publican el OpenAPI de cada servicio extraído, sin `Cookie`, para generar los tipos del
+  frontend.
 - **Introspección en cada petición** con `auth_request` contra
   `GET /internal/v1/auth/introspect` de identity, que valida la cookie o la `X-Api-Key` y devuelve un
   **JWT interno** firmado con **Ed25519**, de **60 s**: `iss`, `aud`, `sub`, `tid`, `role`, `ptype`,

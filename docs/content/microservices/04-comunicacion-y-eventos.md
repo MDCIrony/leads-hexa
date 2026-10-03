@@ -5,7 +5,7 @@ Decisiones registradas en [ADR-0033](../decisiones/0033-eventos-internos-en-kafk
 [ADR-0034](../decisiones/0034-encolado-por-outbox-y-fichero-durable.md) y
 [ADR-0035](../decisiones/0035-admision-sincrona-idempotente.md).
 
-!!! note "Estado de F1, F3 y F4"
+!!! note "Estado de F1, F3, F4 y F5"
     Lo que esta página describe de outbox, eventos internos, RabbitMQ y fichero durable está
     implantado desde F1. Los «hoy» de las secciones de outbox y RabbitMQ se refieren al sistema
     anterior a F1. Lo que se construyó difiere en lo que lista la
@@ -13,9 +13,14 @@ Decisiones registradas en [ADR-0033](../decisiones/0033-eventos-internos-en-kafk
 
     Desde F3, `internal.identity.*` lo produce identity (`identity-worker`, `producer="identity"`).
     Desde F4, la admisión, el worker de intake y el consumidor `intake.tenants` son de
-    `services/intake` (`intake-worker`, `producer="intake"`), y `backend-worker` sólo consume
+    `services/intake` (`intake-worker`, `producer="intake"`), y el worker de lead-core sólo consume
     `lead-core.advisors`. Lo que se construyó difiere en lo que lista la
     [fase F4 del plan](06-plan-de-desacople.md#f4-intake).
+
+    Desde F5 ese worker se llama `lead-core-worker` (antes `backend-worker`) y vive en
+    `services/lead-core`. Sólo cambia el nombre del proceso: los topics, los nombres de grupo y los
+    sobres son los mismos, así que continúa desde sus offsets. Las referencias a `backend-worker`
+    de abajo describen el estado de la fase en que se escribieron.
 
 ## Regla de canal
 
@@ -93,7 +98,7 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
 | `notifications.lead-events` | `internal.lead-core.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
 | `notifications.intake-events` | `internal.intake.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
 | `notifications.members` | `internal.identity.agents` | `notifications-worker` | F2 (nuevo; mantiene `members`) |
-| `lead-core.advisors` | `internal.identity.agents` | `backend-worker` | F3 (nuevo; mantiene `advisors`) |
+| `lead-core.advisors` | `internal.identity.agents` | `lead-core-worker` (hasta F4, `backend-worker`) | F3 (nuevo; mantiene `advisors`) |
 | `intake.tenants` | `internal.identity.tenants` | `intake-worker` (hasta F4, `backend-worker`) | F3 (nuevo; crea las fuentes por defecto); movido a intake en F4, con su DLQ y sus `processed_events` |
 
 ### Sobre de los eventos internos

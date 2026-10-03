@@ -53,7 +53,8 @@ señal, no hecha.
 | **Duplicados** | Todo es al menos una vez | `processed_events` en cada consumidor; `event_id` estable; admisión idempotente por `intake_record_id` |
 | **Ventanas de migración** | Las extracciones copian datos con escrituras congeladas | Scripts que se pueden repetir, verificación por recuentos y md5, vuelta atrás sólo hasta el corte y escrita así |
 | **Observabilidad mínima** | Hoy no hay métricas, trazas ni alertas | `X-Request-Id` de punta a punta y logs correlacionados desde F0; las DLQ se ven en las consolas. Métricas, trazado distribuido y alertas sobre DLQ, *lag* de consumidores y edad del outbox quedan como siguiente paso fuera de este plan |
-| **Más piezas que operar** | De 2 procesos de aplicación (`backend`, `intake-worker`) a 9 (cuatro servicios × `api` + `worker`, más el gateway) | Un patrón idéntico por servicio: quien opera uno sabe operar todos |
+| **Más piezas que operar** | De 2 procesos de aplicación (`backend`, `intake-worker`) a 9: `identity`, `identity-worker`, `intake`, `intake-worker`, `lead-core`, `lead-core-worker`, `notifications`, `notifications-worker` y el `gateway` | Un patrón idéntico por servicio: quien opera uno sabe operar todos |
+| **Un error permanente de base se reintenta para siempre** | Los consumidores esperan a que la base vuelva (`psycopg.OperationalError` es reintentable) y no distinguen una caída de una contraseña mala: con credenciales erróneas el carril no avanza ni acaba en la DLQ. Vive en el bucle de `libs/chassis`, común a los cuatro servicios | Compose fija las contraseñas y `verify_ms_f5` comprueba que cada rol entra en su base, así que un desajuste se ve al arrancar. No se corrige en F5: cambia `chassis` y no es de lead-core. Se aborda cuando un tercero rote credenciales o un orquestador reinicie por salud |
 
 ## Lo que no se reabre sin una razón nueva
 

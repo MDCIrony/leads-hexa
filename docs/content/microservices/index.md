@@ -1,25 +1,15 @@
 # Desacople en microservicios
 
-!!! warning "Arquitectura objetivo, no desplegada"
-    Esta sección define **adónde va** Lead Router y **cómo se llega**. El sistema descrito en el resto
-    del sitio sigue siendo el monolito modular hasta que cada fase de
-    [el plan](06-plan-de-desacople.md) se complete. Las decisiones están registradas como ADR
-    ([0031](../decisiones/0031-microservicios-por-contexto.md)–[0036](../decisiones/0036-cambios-de-contrato-publico.md)).
-
-    **F0 a F4 están implantadas**: el gateway y el *phantom token* sirven la API, la durabilidad
-    pasa por el outbox, y la bandeja de notificaciones (`services/notifications/`), la identidad
-    —autenticación, organizaciones y agentes— (`services/identity/`) y la recepción de leads —fuentes,
-    jobs, registros y ficheros— (`services/intake/`) son ya servicios propios con su base. El resto
-    del sistema (leads, reglas, grupos y asesores) sigue siendo el monolito.
-
-Lead Router es hoy lo que queda del monolito modular hexagonal (lead-core: un proceso API y un
-`backend-worker`, con los relays del outbox y la proyección de asesores, con la misma imagen y la
-misma base), más los servicios `identity` (API e `identity-worker`), `intake` (API e `intake-worker`)
-y `notifications` (API y `notifications-worker`), cada uno con imagen y base propias, RabbitMQ para el
-trabajo de fondo y Kafka para el canal de producto y los eventos internos. Esta
-sección lo separa en **cuatro servicios con datos propios detrás de un gateway**, con el menor número
-de cambios que no deje deuda: se mueve código que ya tiene puertos, se cambian adaptadores y no se
-reescribe dominio.
+Lead Router son cuatro servicios con datos propios detrás de un gateway nginx, y las seis fases del
+[plan](06-plan-de-desacople.md) están implantadas. Cada servicio tiene su API y su worker, con imagen
+y base propias: `identity` (`identity`, `identity-worker`), `intake` (`intake`, `intake-worker`),
+`lead-core` (`lead-core`, `lead-core-worker`) y `notifications` (`notifications`,
+`notifications-worker`). RabbitMQ lleva el trabajo de fondo de intake y Kafka el canal de producto y
+los eventos internos. El monolito modular original ya no existe: lo que quedaba de él es lead-core.
+Las decisiones están registradas como ADR
+([0031](../decisiones/0031-microservicios-por-contexto.md)–[0037](../decisiones/0037-estructura-y-tamano-del-codigo.md)).
+La sección describe **cómo se llegó**: se movió código que ya tenía puertos, se cambiaron adaptadores
+y no se reescribió dominio.
 
 ## Decisiones tomadas
 
@@ -38,7 +28,7 @@ reescribe dominio.
 | Despliegue | Docker Compose; Kubernetes queda como evolución con criterio | [05](05-despliegue-local.md) |
 | Ruta | F0 gateway → F1 durabilidad → F2 Notifications → F3 Identity → F4 Intake → F5 Lead Core | [06](06-plan-de-desacople.md) |
 
-## Vista objetivo
+## Vista del sistema
 
 ```mermaid
 flowchart TB
