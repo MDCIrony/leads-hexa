@@ -28,8 +28,10 @@ límites lo sostienen:
 | Tests de dominio | `tests/unit/domain/**` sólo importa el dominio, la stdlib, `pytest` y sus propios helpers; un import relativo que sale de esa carpeta también falla |
 
 Se agrupa por concepto en subcarpetas: ni una carpeta con decenas de ficheros de conceptos mezclados,
-ni una carpeta por fichero salvo que el concepto lo pida. Al partir un módulo en un paquete se actualizan los imports de quien lo usaba: los `__init__.py`
-quedan vacíos, sin reexportaciones de compatibilidad.
+ni una carpeta por fichero salvo que el concepto lo pida. Al mover o partir código dentro de un servicio se actualizan los imports de quien lo usaba, sin
+reexportaciones de compatibilidad: un único camino de import por nombre. La reexportación desde
+`__init__.py` que describe [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md) es para
+la API pública de una librería con consumidores en otros proyectos, como `libs/chassis`.
 
 Árbol modelo de un servicio:
 
