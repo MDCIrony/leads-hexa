@@ -172,6 +172,7 @@ nav:
 
   - La demo:
       - demo/index.md
+      - demo/microservicios.md
 
   - Desarrollo:
       - desarrollo/index.md
