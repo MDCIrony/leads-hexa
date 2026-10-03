@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — implantada en F0, con la introspección en el monolito; desde F3 la sirve identity, igual que la JWKS y los tokens de servicio |
+| **Estado** | Aceptada — implantada; la introspección la sirve identity, igual que la JWKS y los tokens de servicio |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Seguridad · Infraestructura |
 

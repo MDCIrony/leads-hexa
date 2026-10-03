@@ -89,9 +89,9 @@ aplica `REVOKE CONNECT … FROM PUBLIC` y `GRANT CONNECT` sólo al rol. Las base
 porque ningún rol de servicio tiene `CREATEDB`. `leads_db` ya existía, creada por la imagen de
 PostgreSQL con el superusuario; en cada ejecución el script le cambia el propietario a `lead_core_svc` y
 transfiere a ese rol las tablas de `leads_db` y `leads_test` que siguen siendo de `postgres`, de forma
-idempotente: un volumen anterior a F5 se corrige en cualquier `up`, no sólo en el corte. Ningún proceso
+idempotente: un volumen creado antes de la separación de `leads_db` se corrige en cualquier `up`, no sólo en el corte. Ningún proceso
 de aplicación entra con el superusuario `postgres`, que queda para `db-bootstrap`, los scripts de corte
-y las comprobaciones de `verify-e2e.sh`. Cada fase que extrae un servicio añade el suyo al
+y las comprobaciones de `verify-e2e.sh`. Cada servicio extraído añade el suyo al
 script. No sirve
 `/docker-entrypoint-initdb.d`: sólo se ejecuta con el volumen vacío, y el volumen `pgdata` actual ya
 tiene datos. `CREATE DATABASE` no admite `IF NOT EXISTS`, así que el script usa el patrón:
@@ -155,13 +155,13 @@ Igual que hoy: `src/` y `migrations/` del servicio, más `libs/chassis/src`, mon
 
 **Por proceso.** identity separa la configuración: `identity` exige `DATABASE_URL`, `SIGNING_KEYS`,
 `SERVICE_CLIENTS` y `MFA_ENCRYPTION_KEY`; `identity-worker` sólo `DATABASE_URL` y
-`KAFKA_BOOTSTRAP_SERVERS`. Intake la separa igual desde F4: `intake` exige `DATABASE_URL`,
+`KAFKA_BOOTSTRAP_SERVERS`. Intake la separa igual: `intake` exige `DATABASE_URL`,
 `JWKS_URL`, `LEAD_CORE_URL` y `SERVICE_CLIENT_SECRET` (la promoción manual admite en línea);
 `intake-worker` exige `DATABASE_URL`, `LEAD_CORE_URL`, `SERVICE_CLIENT_SECRET`, `RABBITMQ_URL` y
 `KAFKA_BOOTSTRAP_SERVERS`, y no necesita `JWKS_URL`. La CLI de reconciliación
 (`python -m infrastructure.cli.reconcile`) tiene una tercera clase, `ReconcileSettings`, sin broker, y
 corre desde cualquiera de los dos contenedores. El secreto de servicio va fuera del `repr` de los
-ajustes. Lead-core la separa en F5: `lead-core` exige `DATABASE_URL`, `JWKS_URL` y
+ajustes. Lead-core la separa también: `lead-core` exige `DATABASE_URL`, `JWKS_URL` y
 `SERVICE_CLIENT_SECRET`, y no recibe `KAFKA_BOOTSTRAP_SERVERS` porque sólo escribe el outbox;
 `lead-core-worker` exige `DATABASE_URL` y `KAFKA_BOOTSTRAP_SERVERS`, y no recibe `JWKS_URL`,
 `IDENTITY_URL` ni el secreto. El broker del worker es obligatorio, como en identity e intake: no
@@ -194,32 +194,18 @@ es el mismo en `intake` e `intake-worker`) y las contraseñas de los brokers. Lo
 | `cd services/<svc> && uv run pytest -m unit -q` | El dominio aislado: **sin base y sin variables de entorno**, como hoy |
 | `./scripts/verify-e2e.sh` | El negocio de punta a punta sobre HTTP real, contra el gateway en `:8001` |
 
-`verify-e2e.sh` no cambia de destino ni se reescribe: cada fase de este desacople añade su
-`verify_ms_fN` (una por fase; los nombres `verify_fN` ya son de planes anteriores) y la llama desde
+`verify-e2e.sh` no cambia de destino ni se reescribe: cada servicio extraído añadió su
+`verify_ms_fN` (los nombres de la serie siguen la numeración de la separación; los nombres `verify_fN` ya son de planes anteriores) y la llama desde
 `main`. `verify_ms_f0` va la última porque detiene y arranca lead-core.
 
 Con `--reset` recrea el volumen y espera a que `/api/v1/auth/me` responda 401: el gateway contesta
 `/health` antes de que los servicios hayan migrado, así que `/health` no vale como señal de «listo».
-Desde F3 esa ruta la sirve identity; lead-core no tiene ninguna ruta anónima, así que el script
+Esa ruta la sirve identity; lead-core no tiene ninguna ruta anónima, así que el script
 espera además a que el *healthcheck* de `lead-core` diga `healthy`. Lo que depende de las proyecciones
 lo comprueba el propio `bootstrap`: tras crear cada organización, que tenga sus dos fuentes
 (`await_sources`), y tras crear cada agente, que esté en `GET /advisors` (`await_advisor`), con
 hasta 30 s cada una y un check que falla si no llegan.
 
 Cada servicio lleva sus cuatro tests de guardián y el de estructura, sin lista base. `verify_ms_f5`
-comprueba además lo que la fase deja fijo: las tablas de `leads_db`, qué rol entra en cada base y que
+comprueba además el estado final: las tablas de `leads_db`, qué rol entra en cada base y que
 no quede nada con el nombre del monolito.
-
-## Estados intermedios
-
-El Compose crece una fase cada vez; en ningún momento conviven dos versiones del mismo contexto
-sirviendo tráfico.
-
-| Tras | Servicios de aplicación |
-|---|---|
-| F0 | `gateway`, `backend` (monolito), `intake-worker` |
-| F1 | + `backend-worker` (relay y consumidores) |
-| F2 | + `notifications`, `notifications-worker`, `db-bootstrap`; `backend-worker` conserva los relays y deja de consumir |
-| F3 | + `identity`, `identity-worker`; `backend-worker` vuelve a consumir (`lead-core.advisors`, `intake.tenants`) |
-| F4 | + `intake`; el `intake-worker` pasa a ser suyo (imagen de `services/intake`, `stop_grace_period: 5m`) y `backend-worker` deja de consumir `intake.tenants` |
-| F5 | `backend` → `lead-core`, `backend-worker` → `lead-core-worker`, `backend-test` → `lead-core-test`; la imagen es la de `services/lead-core`, y `leads_db` pasa a ser sólo de `lead_core_svc` |

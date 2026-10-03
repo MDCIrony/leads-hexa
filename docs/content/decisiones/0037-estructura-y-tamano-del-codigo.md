@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada · F1. El backend heredado se reordenó al extraer cada contexto (F3, F4, F5): las listas base del backend están vacías desde F5 y se borraron. Sólo queda `scripts/structure_baseline.py`, de `test-consumer/` y `demo/` |
+| **Estado** | Aceptada. El backend heredado se reordenó al extraer cada contexto: las listas base del backend están vacías y se borraron. Sólo queda `scripts/structure_baseline.py`, de `test-consumer/` y `demo/` |
 | **Fecha** | 2026-10-02 |
 | **Ámbito** | Backend · `libs/chassis` · Tests |
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — implantada en F1. Sustituye parcialmente a [ADR-0027](0027-cola-para-el-trabajo-de-fondo.md) |
+| **Estado** | Aceptada — implantada. Sustituye parcialmente a [ADR-0027](0027-cola-para-el-trabajo-de-fondo.md) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Backend · Mensajería · Ingesta |
 

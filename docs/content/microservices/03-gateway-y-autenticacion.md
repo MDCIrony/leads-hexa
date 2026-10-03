@@ -19,7 +19,7 @@ El gateway no tiene lógica de negocio ni base de datos. Hace sólo lo que es de
 | Responsabilidad | Antes | Con el gateway |
 |---|---|---|
 | Enrutar por prefijo | — (un único upstream) | Tabla de abajo |
-| Autenticar | `get_current_agent` en el backend | `auth_request` contra la introspección (backend en F0, identity desde F3) |
+| Autenticar | `get_current_agent` en el backend | `auth_request` contra la introspección (identity; en el monolito, el backend) |
 | CORS | `CORSMiddleware` en `main.py` | `map $http_origin` en nginx |
 | `Origin` en escrituras | Middleware `reject_untrusted_browser_origins` | `map` + `return 403` con el mismo sobre JSON |
 | `X-Request-Id` | — | Conserva el que llega si es seguro para un log (`[A-Za-z0-9._-]{1,128}`); si no, genera uno (`$request_id`). Lo propaga y lo devuelve |
@@ -53,10 +53,10 @@ El resto de `/api/v1/` apunta a `lead-core`. Durante la migración era el monoli
 servicio todavía no existía caía ahí; mover una capacidad era añadir un `location` más específico con
 su `upstream`.
 
-!!! note "Tras F5"
+!!! note "Rutas extraídas"
     Van a `identity` la introspección (`/_introspect` y `/_introspect_optional`), `/api/v1/auth/`,
-    `/api/v1/agents` y `/api/v1/tenants` (F3); a `notifications`, `/api/v1/notifications` (F2); a
-    `intake`, `/api/v1/sources` y `/api/v1/intake/` (F4). Cada prefijo extraído se declara en las dos
+    `/api/v1/agents` y `/api/v1/tenants`; a `notifications`, `/api/v1/notifications`; a
+    `intake`, `/api/v1/sources` y `/api/v1/intake/`. Cada prefijo extraído se declara en las dos
     formas, exacta y con barra: un `location` de prefijo solo mandaría la ruta sin barra a `lead-core`
     (`/api/v1/intake/` no tiene forma exacta: no existe `GET /intake`). `/openapi.json` y `/docs` son los
     de lead-core; el contrato de cada servicio extraído se publica aparte, en `/openapi/identity.json`,
@@ -321,10 +321,10 @@ POST /internal/v1/service-tokens
 401 sobre UNAUTHORIZED: cliente desconocido, secreto incorrecto o audiencia no permitida (un único mensaje)
 ```
 
-| Llamante | Audiencia permitida | Para | Estado |
-|---|---|---|---|
-| `lead-core` | `identity` | `GET /internal/v1/agents/{agent_id}` | F3 |
-| `intake` | `lead-core` | `POST` y `GET /internal/v1/admissions` | F4 |
+| Llamante | Audiencia permitida | Para |
+|---|---|---|
+| `lead-core` | `identity` | `GET /internal/v1/agents/{agent_id}` |
+| `intake` | `lead-core` | `POST` y `GET /internal/v1/admissions` |
 
 - Los clientes y sus audiencias permitidas son configuración de identity, no una tabla: son un
   conjunto fijo que sólo cambia cuando cambia la arquitectura. `SERVICE_CLIENTS` tiene la forma
@@ -366,11 +366,11 @@ POST /internal/v1/service-tokens
 | DSN de su base | ✓ | ✓ | ✓ | ✓ | |
 | URL de la JWKS (`JWKS_URL`) | | ✓ (sólo la API) | ✓ | ✓ | |
 
-Desde F3 la tabla es la de `docker-compose.yml`. Sólo `identity` recibe la clave de firma, la de MFA y
-OAuth; `identity-worker` no recibe ninguna, porque su `WorkerSettings` no las pide. En lead-core, desde F5,
+La tabla es la de `docker-compose.yml`. Sólo `identity` recibe la clave de firma, la de MFA y
+OAuth; `identity-worker` no recibe ninguna, porque su `WorkerSettings` no las pide. En lead-core,
 la API exige `JWKS_URL` y `SERVICE_CLIENT_SECRET` y `lead-core-worker` no recibe ninguno de los dos (ni
-`IDENTITY_URL`), porque su `WorkerSettings` no los pide. Intake separa la configuración por proceso
-desde F4: `intake` (API) exige `JWKS_URL`, `LEAD_CORE_URL` y `SERVICE_CLIENT_SECRET` (la promoción
+`IDENTITY_URL`), porque su `WorkerSettings` no los pide. Intake separa la configuración por proceso:
+`intake` (API) exige `JWKS_URL`, `LEAD_CORE_URL` y `SERVICE_CLIENT_SECRET` (la promoción
 manual admite en línea), e `intake-worker` exige el secreto y `LEAD_CORE_URL` pero no la JWKS, porque
 no verifica ningún token de usuario.
 
@@ -382,5 +382,5 @@ no verifica ningún token de usuario.
   identidades; mTLS añadiría cifrado y autenticación del transporte. Ver
   [Evoluciones y riesgos](07-evoluciones-y-riesgos.md).
 - **Caché de introspección en el gateway.** Ahorraría la consulta a identity a cambio de que una
-  revocación tarde lo que dure la caché. La medición de F0 (≈3 ms por petición) no la justifica; ver
+  revocación tarde lo que dure la caché. La medición de la línea base (monolito, ≈3 ms por petición) no la justifica; ver
   [Mediciones](07-evoluciones-y-riesgos.md#mediciones).

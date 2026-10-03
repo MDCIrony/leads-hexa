@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — sustituye a [ADR-0019](0019-trabajo-de-fondo-en-proceso.md). Sustituida en parte por [ADR-0034](0034-encolado-por-outbox-y-fichero-durable.md), implantado en F1: el *fallback* en proceso con `BackgroundTasks` y el parseo del fichero en la API ya no existen, y `JobQueuePort` y `RabbitMQJobQueue` se eliminaron (el encolado lo hace el relay del canal `job`). Siguen vigentes la cola cuórum, `x-delivery-limit: 3`, la DLQ, `prefetch_count=1` y el trabajador aparte. Desde F4 ese trabajador es el `intake-worker` de `services/intake`, con la imagen de ese servicio y no la del backend |
+| **Estado** | Aceptada — sustituye a [ADR-0019](0019-trabajo-de-fondo-en-proceso.md). Sustituida en parte por [ADR-0034](0034-encolado-por-outbox-y-fichero-durable.md), implantado: el *fallback* en proceso con `BackgroundTasks` y el parseo del fichero en la API ya no existen, y `JobQueuePort` y `RabbitMQJobQueue` se eliminaron (el encolado lo hace el relay del canal `job`). Siguen vigentes la cola cuórum, `x-delivery-limit: 3`, la DLQ, `prefetch_count=1` y el trabajador aparte. Ese trabajador es el `intake-worker` de `services/intake`, con la imagen de ese servicio y no la del backend |
 | **Fecha** | 2026-08-24 |
 | **Ámbito** | Backend · Infraestructura |
 

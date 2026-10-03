@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — implantada: los cuatro servicios extraídos (F2–F5). `notifications` (F2), `identity` (F3), `intake` (F4) y `lead-core` (F5, lo que quedó del monolito, con su rol `lead_core_svc`). Ver [Arquitectura de servicios](../microservices/index.md) |
+| **Estado** | Aceptada — implantada: los cuatro servicios extraídos. `notifications`, `identity`, `intake` y `lead-core` (lo que quedó del monolito, con su rol `lead_core_svc`). Ver [Arquitectura de servicios](../microservices/index.md) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Arquitectura · Backend · Infraestructura |
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — cambio 1 implantado en F3; cambio 2 implantado en F4 |
+| **Estado** | Aceptada — ambos cambios implantados |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | API · Frontend |
 

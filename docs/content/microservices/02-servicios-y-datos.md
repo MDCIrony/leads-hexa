@@ -39,19 +39,19 @@ flowchart LR
 
 | Tabla | Dueño | Nota |
 |---|---|---|
-| `tenants`, `agents`, `auth_*`, `agent_mfa`, `mfa_recovery_codes`, `social_identities` | identity | Copiadas en F3; `agents` sin `group_id`. Las de `leads_db` se borraron en F5 (migración 019) |
-| `lead_sources`, `intake_jobs`, `intake_records`, `intake_errors` | intake | Copiadas en F4, con los mismos ids; sin FK a `tenants` ni a `leads` (`intake_records.lead_id` es un UUID externo). Las de `leads_db` se borraron en F5 (migración 019) |
-| `intake_files` | intake | **Nueva** (F1): el fichero crudo de un `batch-upload`, en `bytea`, antes de parsearlo |
-| `provisioned_tenants` | intake | **Nueva** (F3, en `leads_db`; movida a `intake_db` en F4 y borrada de `leads_db` en F5): marca que las fuentes por defecto de un tenant ya se crearon una vez |
-| `leads`, reglas, `sales_groups`, `webhook_configs` | lead-core | `leads` gana `intake_record_id` (F4, migración 018) con `UNIQUE (tenant_id, intake_record_id)`, y pierde la FK de `source_id` hacia `lead_sources` |
-| `advisors` | lead-core | **Nueva** (F3, migración 017): proyección de identidad + `group_id` propio; sembrada desde `agents` |
-| `notifications` | notifications | Copiada en F2; `leads_db.notifications` se borró en F5 (migración 019) |
-| `members` | notifications | **Nueva** (F2): proyección de identidad para decidir destinatarios; sembrada en el corte desde `agents` |
-| `outbox_events` | cada productor | Gana la columna `channel` (F1) |
-| `processed_events` | cada consumidor que la necesita: intake y notifications | **Nueva**: `PRIMARY KEY (consumer, event_id)`. lead-core no la tiene: su único consumidor, `lead-core.advisors`, es una proyección idempotente por `version`, y la de `leads_db`, vacía desde F4, se borró en F5. Un consumidor futuro que la necesite la crea en su migración. identity tampoco: sólo produce |
+| `tenants`, `agents`, `auth_*`, `agent_mfa`, `mfa_recovery_codes`, `social_identities` | identity | `agents` sin `group_id`. Copiadas desde `leads_db`, cuyas tablas borró la migración 019 |
+| `lead_sources`, `intake_jobs`, `intake_records`, `intake_errors` | intake | Copiadas desde `leads_db` con los mismos ids, cuyas tablas borró la migración 019; sin FK a `tenants` ni a `leads` (`intake_records.lead_id` es un UUID externo) |
+| `intake_files` | intake | **Nueva**: el fichero crudo de un `batch-upload`, en `bytea`, antes de parsearlo |
+| `provisioned_tenants` | intake | **Nueva**: marca que las fuentes por defecto de un tenant ya se crearon una vez |
+| `leads`, reglas, `sales_groups`, `webhook_configs` | lead-core | `leads` gana `intake_record_id` (migración 018) con `UNIQUE (tenant_id, intake_record_id)`, y pierde la FK de `source_id` hacia `lead_sources` |
+| `advisors` | lead-core | **Nueva** (migración 017): proyección de identidad + `group_id` propio; sembrada desde `agents` |
+| `notifications` | notifications | Copiada desde `leads_db`, cuya tabla `notifications` borró la migración 019 |
+| `members` | notifications | **Nueva**: proyección de identidad para decidir destinatarios; sembrada en el corte desde `agents` |
+| `outbox_events` | cada productor | Lleva la columna `channel` |
+| `processed_events` | cada consumidor que la necesita: intake y notifications | **Nueva**: `PRIMARY KEY (consumer, event_id)`. lead-core no la tiene: su único consumidor, `lead-core.advisors`, es una proyección idempotente por `version`, y la de `leads_db`, vacía, se borró. Un consumidor futuro que la necesite la crea en su migración. identity tampoco: sólo produce |
 
 `leads_db` se quedó como base de lead-core: es la base original y lo que salió de ella son las tablas
-de los demás. Las otras tres se crearon nuevas. Desde F5 `leads_db` contiene sólo las nueve tablas de
+de los demás. Las otras tres se crearon nuevas. `leads_db` contiene sólo las nueve tablas de
 lead-core (`advisors`, `assignment_rules`, `disqualification_rules`, `leads`, `outbox_events`,
 `sales_groups`, `schema_migrations`, `scoring_rules`, `webhook_configs`), todas de `lead_core_svc`. La
 migración 019 borra las otras quince (las de identity, notifications e intake de arriba, más
@@ -115,22 +115,22 @@ sequenceDiagram
 
 ## Cómo se corta cada acoplamiento
 
-| Acoplamiento | Resolución | Fase |
-|---|---|---|
-| `IngestLeadUseCase` lee `agents` y `groups` | Lee `advisors` y `sales_groups`, ambos locales de lead-core | F3 |
-| `IngestLeadUseCase` lee y escribe `intake_records` | Se parte en dos: intake reclama y marca el registro; lead-core decide en `POST /internal/v1/admissions` | F4 |
-| `IngestLeadUseCase.resolve_source_id` | El `source_id` viaja en la admisión, tomado del registro | F4 |
-| `GetLeadStatsUseCase` cuenta registros | `pending_intake` se mueve a `GET /intake/stats` (cambio de contrato 2) | F4 |
-| `AssignLeadUseCase` valida el agente | `AdvisorDirectory` | F3 |
-| `NotificationHandler` busca managers | Proyección `members` | F2 |
-| `SalesGroup*` cuenta y deja huérfanos agentes | Opera sobre `advisors.group_id`, local | F3 |
-| `UpdateAgentUseCase` valida `group_id` | `group_id` sale de `/agents`; pasa a `PATCH /advisors/{agent_id}` (cambio de contrato 1) | F3 |
-| `CreateTenantUseCase` crea fuentes | identity crea tenant + manager y publica el estado del tenant; intake crea las dos fuentes al verlo por primera vez | F3 (consumidor en el monolito), F4 (consumidor en intake) |
-| `DeleteLeadSourceUseCase` cuenta leads | Cuenta `intake_records` de la fuente: todo lead nace de un registro, así que el resultado es el mismo | F4 |
-| `RawSqlLeadRepository` hace `JOIN agents` | `JOIN advisors` | F3 |
-| `KafkaCredentialProvisioner` y el principal `INTEGRATION` | Se mueven a identity | F3 |
+| Acoplamiento | Resolución |
+|---|---|
+| `IngestLeadUseCase` lee `agents` y `groups` | Lee `advisors` y `sales_groups`, ambos locales de lead-core |
+| `IngestLeadUseCase` lee y escribe `intake_records` | Se parte en dos: intake reclama y marca el registro; lead-core decide en `POST /internal/v1/admissions` |
+| `IngestLeadUseCase.resolve_source_id` | El `source_id` viaja en la admisión, tomado del registro |
+| `GetLeadStatsUseCase` cuenta registros | `pending_intake` se mueve a `GET /intake/stats` (cambio de contrato 2) |
+| `AssignLeadUseCase` valida el agente | `AdvisorDirectory` |
+| `NotificationHandler` busca managers | Proyección `members` |
+| `SalesGroup*` cuenta y deja huérfanos agentes | Opera sobre `advisors.group_id`, local |
+| `UpdateAgentUseCase` valida `group_id` | `group_id` sale de `/agents`; pasa a `PATCH /advisors/{agent_id}` (cambio de contrato 1) |
+| `CreateTenantUseCase` crea fuentes | identity crea tenant + manager y publica el estado del tenant; intake crea las dos fuentes al verlo por primera vez |
+| `DeleteLeadSourceUseCase` cuenta leads | Cuenta `intake_records` de la fuente: todo lead nace de un registro, así que el resultado es el mismo |
+| `RawSqlLeadRepository` hace `JOIN agents` | `JOIN advisors` |
+| `KafkaCredentialProvisioner` y el principal `INTEGRATION` | Se mueven a identity |
 
-Los cruces de F3 y de F4 están cortados.
+Todos los cruces están cortados.
 
 ### Alta de una organización
 
@@ -151,20 +151,18 @@ sequenceDiagram
 
 Consecuencia aceptada: una ingesta enviada en el primer segundo tras el alta puede recibir
 `SOURCE_NOT_FOUND`. `provisioned_tenants` evita que releer el topic compactado recree una fuente que
-el manager borró después; la migración 017 la sembró con los tenants que ya existían, y el corte de F4 la
-copió a `intake_db`. El consumidor (grupo `intake.tenants`) vive en `intake-worker` desde F4; antes
-era código de intake dentro del `backend-worker` del monolito.
+el manager borró después; la migración 017 la sembró con los tenants que ya existían, y el corte de intake la
+copió a `intake_db`. El consumidor (grupo `intake.tenants`) vive en `intake-worker`.
 
 ## Cambios en el contrato público
 
 Son dos y están registrados en [ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md). El resto
-de rutas, cuerpos, códigos y el sobre de error no cambian. Los dos están implantados: el primero
-desde F3 y el segundo desde F4.
+de rutas, cuerpos, códigos y el sobre de error no cambian. Los dos están implantados.
 
 | | Antes | Después |
 |---|---|---|
-| Grupo del asesor (F3, implantado) | `POST/PATCH /agents` aceptaban `group_id`; `GET /agents?group_id=` filtraba | `/agents` no lo admite (`422` en el cuerpo). Nuevo `GET /advisors?group_id=&is_active=` (id, nombre, grupo, carga activa) y `PATCH /advisors/{agent_id}` `{group_id}` |
-| Pendientes de ingesta (F4, implantado) | `GET /leads/stats` devuelve `pending_intake` | `GET /leads/stats` lo pierde. Nuevo `GET /intake/stats` → `{pending, rejected, pending_intake}` |
+| Grupo del asesor | `POST/PATCH /agents` aceptaban `group_id`; `GET /agents?group_id=` filtraba | `/agents` no lo admite (`422` en el cuerpo). Nuevo `GET /advisors?group_id=&is_active=` (id, nombre, grupo, carga activa) y `PATCH /advisors/{agent_id}` `{group_id}` |
+| Pendientes de ingesta | `GET /leads/stats` devuelve `pending_intake` | `GET /leads/stats` lo pierde. Nuevo `GET /intake/stats` → `{pending, rejected, pending_intake}` |
 
 Impacto en el frontend del primero: ninguno visible. El MVP nunca tuvo interfaz de grupo
 ([Frontend](../roadmap/frontend.md)), así que sólo quitó `group_id` de su contrato de `/agents` y no
@@ -206,11 +204,11 @@ repite aquí. Lo que añade cada servicio extraído:
 | Errores | Mismo sobre `{error, error_code, message}` y misma tabla `STATUS_BY_ERROR_CODE` por servicio |
 | Guardián | Los cuatro tests AST de hoy, por servicio, más el de estructura de [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md), que los cuatro pasan sin lista base; sus `src/` y `tests/` se declaran en `scripts/verify-structure.sh`. `libs/chassis` cuenta como infraestructura: `domain` y `application` no pueden importarlo |
 | Configuración | `Settings.from_environment()` falla al arrancar si falta un valor obligatorio, como hoy |
-| Configuración por proceso | Los cuatro servicios separan `ApiSettings` y `WorkerSettings` (identity desde F3, intake desde F4, lead-core desde F5; intake añade `ReconcileSettings` para su CLI). Cada clase exige sólo lo que usa su proceso: la API de lead-core no exige broker (sólo escribe el outbox) y su worker no recibe la JWKS, `IDENTITY_URL` ni el secreto de servicio. notifications conserva un `Settings` para los dos procesos, así que exige las variables de ambos |
+| Configuración por proceso | Los cuatro servicios separan `ApiSettings` y `WorkerSettings` (intake añade `ReconcileSettings` para su CLI). Cada clase exige sólo lo que usa su proceso: la API de lead-core no exige broker (sólo escribe el outbox) y su worker no recibe la JWKS, `IDENTITY_URL` ni el secreto de servicio. notifications conserva un `Settings` para los dos procesos, así que exige las variables de ambos |
 
 ### notifications, el servicio de referencia
 
-Primer servicio extraído (F2). Es el árbol modelo de
+Primer servicio extraído. Es el árbol modelo de
 [Convenciones](../desarrollo/convenciones.md#estructura-y-tamano-del-codigo) hecho código: lo que
 identity e intake copian y lo que cambia es el contenido de `domain/` y `use_cases/`.
 
@@ -233,7 +231,7 @@ services/notifications/
 
 ### identity
 
-Segundo servicio extraído (F3), con el mismo árbol:
+Segundo servicio extraído, con el mismo árbol:
 
 ```text
 services/identity/
@@ -259,7 +257,7 @@ Sin `processed_events` ni consumidores: identity sólo produce. `agents.tenant_i
 
 ### intake
 
-Tercer servicio extraído (F4), con el mismo árbol. La decisión sobre un registro no es suya: es de
+Tercer servicio extraído, con el mismo árbol. La decisión sobre un registro no es suya: es de
 lead-core, detrás de `POST /internal/v1/admissions`.
 
 ```text
@@ -292,8 +290,8 @@ services/intake/
 
 ### lead-core
 
-Cuarto servicio, el residual (F5). No se creó: es el monolito original, que fue adoptando el esqueleto
-de arriba a medida que perdía módulos, y en F5 se movió de `backend/` a `services/lead-core/` con
+Cuarto servicio, el residual. No se creó: es el monolito original, que fue adoptando el esqueleto
+de arriba a medida que perdía módulos, y se movió de `backend/` a `services/lead-core/` con
 `git mv`, de modo que `git log --follow` conserva la historia de cada fichero. Es el único cuyo hexágono
 no se escribió desde cero.
 
@@ -321,7 +319,7 @@ services/lead-core/
   `SERVICE_CLIENT_SECRET`; el worker, `DATABASE_URL` y `KAFKA_BOOTSTRAP_SERVERS` (obligatoria, aunque
   arranca sin broker vivo: [ADR-0026](../decisiones/0026-kafka-como-canal-del-producto.md)).
 - **Estructura.** Sin listas base: `structure_baseline.py` y `tests_structure_baseline.py` se
-  vaciaron en F5 y se borraron, y su `tests/architecture/test_structure.py` es el de los demás
+  vaciaron y se borraron, y su `tests/architecture/test_structure.py` es el de los demás
   servicios. La meta que fijó [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md) se cumple.
 - **Unidad de trabajo.** `PostgresUnitOfWork` sólo tiene los repositorios de lead-core
   (leads, reglas, grupos, asesores, webhooks y outbox).
@@ -342,7 +340,7 @@ copiara, bastaría que una copia divergiera para abrir un agujero.
 | `chassis.consumer` | `ConsumerLoop` (`processed_events`, reintentos, DLQ), `run_consumer_lane` (reconstruye el consumidor tras un fallo), `ensure_topics()` y `ensure_topics_until_ready()` |
 | `chassis.kafka_config` | `producer_config` y `consumer_config`: los ajustes de cliente que comparten todos los servicios |
 | `chassis.web` | Middleware de `X-Request-Id` y logging correlacionado |
-| `chassis.testing` | Guardianes de estructura (ADR-0037) y de capas (`layer_violations`, `stdlib_only_violations`, aislamiento de los tests de dominio), parametrizados por la raíz `src/` del servicio. Entró en F2, cuando un segundo servicio lo necesitó. Desde F3, `chassis.testing.contracts` (`load_fixture`, `assert_conforms`, `contracts_root`) comprueba fixtures y salidas contra `contracts/` |
+| `chassis.testing` | Guardianes de estructura (ADR-0037) y de capas (`layer_violations`, `stdlib_only_violations`, aislamiento de los tests de dominio), parametrizados por la raíz `src/` del servicio. Entró cuando un segundo servicio lo necesitó. `chassis.testing.contracts` (`load_fixture`, `assert_conforms`, `contracts_root`) comprueba fixtures y salidas contra `contracts/` |
 
 Criterio de entrada: un módulo entra en `chassis` cuando lo necesitan dos servicios **y** no
 contiene ninguna regla de negocio. Lo que sólo usa uno se queda en ese servicio.

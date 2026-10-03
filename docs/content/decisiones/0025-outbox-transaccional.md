@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada. **Nota F1:** `OutboxRelayThread` y el `OutboxRelay` de aplicación los sustituye `chassis.outbox.OutboxRelay` (con `run_relay`), un relay por canal que corre en `backend-worker` y no en la API ([ADR-0033](0033-eventos-internos-en-kafka.md)); `OutboundDispatcherPort` es hoy el protocolo `Dispatcher` de `chassis.outbox`. La decisión no cambia |
+| **Estado** | Aceptada. **Nota:** `OutboxRelayThread` y el `OutboxRelay` de aplicación los sustituye `chassis.outbox.OutboxRelay` (con `run_relay`), un relay por canal que corre en `backend-worker` y no en la API ([ADR-0033](0033-eventos-internos-en-kafka.md)); `OutboundDispatcherPort` es hoy el protocolo `Dispatcher` de `chassis.outbox`. La decisión no cambia |
 | **Fecha** | 2026-08-24 |
 | **Ámbito** | Backend · Dominio · Aplicación · Infraestructura |
 

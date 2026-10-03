@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — implantada en F4. Lo construido está descrito en [Comunicación y eventos](../microservices/04-comunicacion-y-eventos.md#contrato-de-admision) |
+| **Estado** | Aceptada — implantada. Lo construido está descrito en [Comunicación y eventos](../microservices/04-comunicacion-y-eventos.md#contrato-de-admision) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Backend · Ingesta · Asignación |
 

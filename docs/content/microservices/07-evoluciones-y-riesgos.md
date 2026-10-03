@@ -5,7 +5,7 @@ añadirla. Y lo que el plan introduce tiene un coste, que también se escribe.
 
 ## Mediciones
 
-Línea base de F0, tomada el 2026-10-02 con el stack local de Compose: 200 llamadas secuenciales de un
+Línea base (monolito), tomada el 2026-10-02 con el stack local de Compose: 200 llamadas secuenciales de un
 único cliente por medida. Es la referencia contra la que se decide cualquier evolución de abajo; sin
 ella, «añade latencia» es una opinión.
 
@@ -16,20 +16,20 @@ ella, «añade latencia» es una opinión.
 | `GET /api/v1/leads` por el gateway, con cookie | 10,6 ms | 13,9 ms | Sobrecoste del borde ≈ 3,3 ms en p50, del orden de una introspección |
 | `POST /api/v1/auth/login` por el gateway | 292 ms | 314 ms | Dominado por bcrypt |
 | `GET /api/v1/leads` con `X-Api-Key` por el gateway | 289 ms | 310 ms | bcrypt en cada petición (en la introspección), como antes |
-| Job de 1.000 registros, de `202` a `COMPLETED` (línea base de F0) | 14,5 s | — | Una ejecución; `completed_at − created_at` = 14,2 s. Admisión en proceso, dentro de una única transacción |
-| Job de 1.000 registros, de `202` a `COMPLETED`, tras F4 | 12,9 s y 11,9 s | — | Dos ejecuciones, mismo método. La admisión es una llamada HTTP por registro a lead-core (≈ 1,5 ms de red por llamada); no domina el job, así que la señal de la admisión por lotes no se cumple |
+| Job de 1.000 registros, de `202` a `COMPLETED` (línea base, monolito) | 14,5 s | — | Una ejecución; `completed_at − created_at` = 14,2 s. Admisión en proceso, dentro de una única transacción |
+| Job de 1.000 registros, de `202` a `COMPLETED`, con la admisión por HTTP a lead-core (intake ya extraído) | 12,9 s y 11,9 s | — | Dos ejecuciones, mismo método. La admisión es una llamada HTTP por registro a lead-core (≈ 1,5 ms de red por llamada); no domina el job, así que la señal de la admisión por lotes no se cumple |
 | La misma medida antes de corregir el arranque en desarrollo | 59,8 s | — | ≈ 42 ms por llamada: `uvicorn --reload` entrega el socket al hijo por descriptor y asyncio deja `TCP_NODELAY` desactivado, así que cada respuesta en una conexión reutilizada esperaba el ACK retardado. Las APIs de desarrollo arrancan con `watchfiles`; en producción no hay recargador |
 
-Tras F5, mismo método y mismo stack, con los cuatro servicios separados (2026-10-03):
+Arquitectura actual, mismo método y mismo stack, con los cuatro servicios separados (2026-10-03):
 
-| Medida | p50 | p95 | Frente a F0 |
+| Medida | p50 | p95 | Línea base (monolito) |
 |---|---|---|---|
 | `introspect`, dentro de la red, directo a identity | 3,2 ms | 4,1 ms | 4,7 / 8,4 ms |
 | `GET /api/v1/leads` directo a lead-core con bearer, dentro de la red | 4,1 ms | 7,7 ms | 7,3 / 12,7 ms |
 | `GET /api/v1/leads` por el gateway, con cookie | 5,3 ms | 10,6 ms | 10,6 / 13,9 ms |
 | Job de 1.000 registros, de `202` a `COMPLETED` | 13,0 s y 13,3 s | — | 14,5 s |
 
-Es una sola tanda por medida, así que la diferencia frente a F0 no se atribuye a una causa concreta;
+Es una sola tanda por medida, así que la diferencia frente a la línea base no se atribuye a una causa concreta;
 lo que sí muestra es que la separación no añade latencia medible a las rutas síncronas. Login y
 `X-Api-Key` no se repiten: siguen dominados por bcrypt en identity y su código no cambió.
 
@@ -42,9 +42,9 @@ señal, no hecha.
 
 | Evolución | Qué aporta | Señal que la justifica | Coste |
 |---|---|---|---|
-| **Admisión por lotes** (`POST /internal/v1/admissions:batch`, N registros por llamada) | Menos idas y vueltas en jobs grandes | Tras F4, la admisión domina la duración del job medido arriba | Respuesta parcial por registro; misma idempotencia |
+| **Admisión por lotes** (`POST /internal/v1/admissions:batch`, N registros por llamada) | Menos idas y vueltas en jobs grandes | La admisión pasa a dominar la duración del job medido arriba | Respuesta parcial por registro; misma idempotencia |
 | **gRPC interno** para `admissions` y `agents/{id}` | Contrato binario tipado, HTTP/2, *streaming* | La admisión por lotes no basta, hace falta *streaming*, o entran servicios en otros lenguajes | Segunda pila (`protoc`, código generado, otro puerto); `introspect` sigue en HTTP porque `auth_request` sólo hace HTTP; la API pública sigue en REST. El cambio es un adaptador detrás de `LeadAdmissionPort` y `AdvisorDirectory` |
-| **Caché de introspección** en el gateway | Una consulta a identity menos por petición | p95 de `introspect` relevante frente al total, o carga real sobre identity. Con ≈ 3 ms medidos en F0 no se cumple | La revocación tarda lo que dure la caché; ADR-0029 deja de cumplirse al pie de la letra |
+| **Caché de introspección** en el gateway | Una consulta a identity menos por petición | p95 de `introspect` relevante frente al total, o carga real sobre identity. Con ≈ 3 ms medidos en la línea base no se cumple | La revocación tarda lo que dure la caché; ADR-0029 deja de cumplirse al pie de la letra |
 | **Caché de verificación de `X-Api-Key`** (por hash de la clave, TTL corto) | Quita el bcrypt de cada petición de integración (≈ 290 ms medidos) | Integraciones que consultan `GET /leads` con frecuencia, o p95 de esa ruta que afecte a la carga de identity | Una clave revocada sigue valiendo lo que dure el TTL; el TTL tiene que ser corto y la caché sólo guardar el hash |
 | **Kubernetes** | Réplicas, autorreparación, despliegue progresivo, autoescalado, `NetworkPolicy`, multihost | Más de un host, alta disponibilidad o despliegues sin corte | Operación del clúster. **No reduce latencia**: la red entre pods es equivalente a la de Compose. Cada servicio son dos `Deployment` (`api`, `worker`) con los mismos nombres DNS; el gateway pasa a Ingress o a un `Deployment` de nginx |
 | **mTLS** entre servicios | Cifrado y autenticación del transporte | Red no confiable: varios hosts, red compartida, requisito de cumplimiento | Emisión y rotación de certificados; en Kubernetes, normalmente vía service mesh |
@@ -65,9 +65,9 @@ señal, no hecha.
 | **`chassis` acopla despliegues** | Cambiarlo obliga a reconstruir varias imágenes | Sólo contiene código técnico estable; entra lo que necesitan dos servicios y no contiene reglas de negocio |
 | **Duplicados** | Todo es al menos una vez | `processed_events` en cada consumidor; `event_id` estable; admisión idempotente por `intake_record_id` |
 | **Ventanas de migración** | Las extracciones copian datos con escrituras congeladas | Scripts que se pueden repetir, verificación por recuentos y md5, vuelta atrás sólo hasta el corte y escrita así |
-| **Observabilidad mínima** | Hoy no hay métricas, trazas ni alertas | `X-Request-Id` de punta a punta y logs correlacionados desde F0; las DLQ se ven en las consolas. Métricas, trazado distribuido y alertas sobre DLQ, *lag* de consumidores y edad del outbox quedan como siguiente paso fuera de este plan |
+| **Observabilidad mínima** | Hoy no hay métricas, trazas ni alertas | `X-Request-Id` de punta a punta y logs correlacionados; las DLQ se ven en las consolas. Métricas, trazado distribuido y alertas sobre DLQ, *lag* de consumidores y edad del outbox quedan como siguiente paso fuera de este plan |
 | **Más piezas que operar** | De 2 procesos de aplicación (`backend`, `intake-worker`) a 9: `identity`, `identity-worker`, `intake`, `intake-worker`, `lead-core`, `lead-core-worker`, `notifications`, `notifications-worker` y el `gateway` | Un patrón idéntico por servicio: quien opera uno sabe operar todos |
-| **Un error permanente de base se reintenta para siempre** | Los consumidores esperan a que la base vuelva (`psycopg.OperationalError` es reintentable) y no distinguen una caída de una contraseña mala: con credenciales erróneas el carril no avanza ni acaba en la DLQ. Vive en el bucle de `libs/chassis`, común a los cuatro servicios | Compose fija las contraseñas y `verify_ms_f5` comprueba que cada rol entra en su base, así que un desajuste se ve al arrancar. No se corrige en F5: cambia `chassis` y no es de lead-core. Se aborda cuando un tercero rote credenciales o un orquestador reinicie por salud |
+| **Un error permanente de base se reintenta para siempre** | Los consumidores esperan a que la base vuelva (`psycopg.OperationalError` es reintentable) y no distinguen una caída de una contraseña mala: con credenciales erróneas el carril no avanza ni acaba en la DLQ. Vive en el bucle de `libs/chassis`, común a los cuatro servicios | Compose fija las contraseñas y `verify_ms_f5` comprueba que cada rol entra en su base, así que un desajuste se ve al arrancar. No se corrige en lead-core: cambia `chassis` y no es de lead-core. Se aborda cuando un tercero rote credenciales o un orquestador reinicie por salud |
 
 ## Lo que no se reabre sin una razón nueva
 

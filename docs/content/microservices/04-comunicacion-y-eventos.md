@@ -5,20 +5,16 @@ Decisiones registradas en [ADR-0033](../decisiones/0033-eventos-internos-en-kafk
 [ADR-0034](../decisiones/0034-encolado-por-outbox-y-fichero-durable.md) y
 [ADR-0035](../decisiones/0035-admision-sincrona-idempotente.md).
 
-!!! note "Estado de F1, F3, F4 y F5"
-    Lo que esta página describe de outbox, eventos internos, RabbitMQ y fichero durable está
-    implantado desde F1. Los «hoy» de las secciones de outbox y RabbitMQ se refieren al sistema
-    anterior a F1.
+!!! note "Estado actual"
+    Todo lo que esta página describe de outbox, eventos internos, RabbitMQ y fichero durable está
+    implantado. Los «hoy» y «respecto a hoy» de las secciones de outbox y RabbitMQ se refieren al
+    sistema anterior, el monolito.
 
-    Desde F3, `internal.identity.*` lo produce identity (`identity-worker`, `producer="identity"`).
-    Desde F4, la admisión, el worker de intake y el consumidor `intake.tenants` son de
-    `services/intake` (`intake-worker`, `producer="intake"`), y el worker de lead-core sólo consume
-    `lead-core.advisors`.
-
-    Desde F5 ese worker se llama `lead-core-worker` (antes `backend-worker`) y vive en
-    `services/lead-core`. Sólo cambia el nombre del proceso: los topics, los nombres de grupo y los
-    sobres son los mismos, así que continúa desde sus offsets. Las referencias a `backend-worker`
-    de abajo describen el estado de la fase en que se escribieron.
+    `internal.identity.*` lo produce identity (`identity-worker`, `producer="identity"`). La
+    admisión, el worker de intake y el consumidor `intake.tenants` son de `services/intake`
+    (`intake-worker`, `producer="intake"`), y el worker de lead-core (`lead-core-worker`, en
+    `services/lead-core`) sólo consume `lead-core.advisors`. Antes se llamaba `backend-worker`; el
+    cambio de nombre no tocó topics, grupos ni sobres, así que continúa desde sus offsets.
 
 ## Regla de canal
 
@@ -49,7 +45,7 @@ outbox del servicio y el relay lo entrega después.
 | intake → notifications | Outbox + Kafka | `internal.intake.events` | No |
 
 Todos los clientes HTTP internos reutilizan conexiones (un `httpx.Client` por proceso, no uno por
-llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
+llamada) y declaran timeout. La latencia y su coste se midieron sobre la línea base (monolito); ver
 [Evoluciones y riesgos](07-evoluciones-y-riesgos.md) para lo que se haría si la medición lo pidiera.
 
 ## Kafka
@@ -61,8 +57,8 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
 | `leads.{tenant_id}` | lead-core | `lead_id` | `LeadProcessedEvent`, `LeadDisqualified`. **Contrato externo sin cambios** | Como hoy | Sistemas de cada tenant |
 | `internal.lead-core.events` | lead-core | `lead_id` | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned` | `delete`, 7 días | `notifications.lead-events` |
 | `internal.intake.events` | intake | `intake_record_id` | `IntakeRejected` | `delete`, 7 días | `notifications.intake-events` |
-| `internal.identity.agents` | identity (desde F3; antes, el monolito) | `agent_id` | `AgentState` completo + `version` | **`compact`** | `lead-core.advisors`, `notifications.members` |
-| `internal.identity.tenants` | identity (desde F3; antes, el monolito) | `tenant_id` | `TenantState` completo + `version` | **`compact`** | `intake.tenants` |
+| `internal.identity.agents` | identity (antes, el monolito) | `agent_id` | `AgentState` completo + `version` | **`compact`** | `lead-core.advisors`, `notifications.members` |
+| `internal.identity.tenants` | identity (antes, el monolito) | `tenant_id` | `TenantState` completo + `version` | **`compact`** | `intake.tenants` |
 
 - **Hechos frente a estado.** Los topics `*.events` llevan cosas que ocurrieron. Los topics
   `identity.*` llevan el **estado completo** de una entidad cada vez que cambia (*event-carried state
@@ -78,10 +74,10 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
   cambiarlas con consumidores vivos es una decisión del operador.
 - **Las DLQ las declara el consumidor.** `internal.dlq.<grupo>` (1 partición, `cleanup.policy=delete`,
   7 días) la crea el servicio dueño del grupo, con `ensure_topics_until_ready()`, que reintenta con
-  *backoff* hasta que el broker responde y sólo entonces deja arrancar los carriles. Desde F2 las de
-  los tres grupos de notifications son suyas; desde F3 `backend-worker` declara las de sus dos grupos y ya no declara
-  `internal.identity.*`, que son de `identity-worker`; desde F4 `intake-worker` declara
-  `internal.dlq.intake.tenants` y `backend-worker` sólo `internal.dlq.lead-core.advisors`.
+  *backoff* hasta que el broker responde y sólo entonces deja arrancar los carriles. Las de
+  los tres grupos de notifications son de `notifications-worker`; `intake-worker` declara
+  `internal.dlq.intake.tenants`, `lead-core-worker` sólo `internal.dlq.lead-core.advisors` y las
+  `internal.identity.*` son de `identity-worker`.
 - **Cliente.** `chassis.kafka_config` fija los ajustes de productor y consumidor de todos los
   servicios; entre ellos, `topic.metadata.refresh.interval.ms=10000`, para que un grupo suscrito
   antes de que el productor cree su topic lo vea en segundos y no a los 5 minutos por defecto.
@@ -91,13 +87,13 @@ llamada) y declaran timeout. La latencia y su coste se miden en F0; ver
   el prefijo de grupo de los tenants, que es su nombre de usuario SCRAM. Un grupo lo consume **un
   solo** proceso: si otro se uniera, Kafka repartiría las particiones entre ambos.
 
-| Grupo | Topic | Consume | Estado |
+| Grupo | Topic | Consume | Nota |
 |---|---|---|---|
-| `notifications.lead-events` | `internal.lead-core.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
-| `notifications.intake-events` | `internal.intake.events` | `notifications-worker` | F2 (mismo nombre que tenía el monolito) |
-| `notifications.members` | `internal.identity.agents` | `notifications-worker` | F2 (nuevo; mantiene `members`) |
-| `lead-core.advisors` | `internal.identity.agents` | `lead-core-worker` (hasta F4, `backend-worker`) | F3 (nuevo; mantiene `advisors`) |
-| `intake.tenants` | `internal.identity.tenants` | `intake-worker` (hasta F4, `backend-worker`) | F3 (nuevo; crea las fuentes por defecto); movido a intake en F4, con su DLQ y sus `processed_events` |
+| `notifications.lead-events` | `internal.lead-core.events` | `notifications-worker` | Mismo nombre que tenía el monolito |
+| `notifications.intake-events` | `internal.intake.events` | `notifications-worker` | Mismo nombre que tenía el monolito |
+| `notifications.members` | `internal.identity.agents` | `notifications-worker` | Mantiene `members` |
+| `lead-core.advisors` | `internal.identity.agents` | `lead-core-worker` | Mantiene `advisors` |
+| `intake.tenants` | `internal.identity.tenants` | `intake-worker` | Crea las fuentes por defecto; con su DLQ y sus `processed_events` |
 
 ### Sobre de los eventos internos
 
@@ -218,7 +214,7 @@ sequenceDiagram
 - Desaparece el *fallback* de procesar en el proceso de la API (`BackgroundTasks`). Con RabbitMQ caído
   el job espera en el outbox y sale cuando vuelve: más latencia, ninguna pérdida y una sola ruta de
   ejecución. Sustituye esa parte de [ADR-0027](../decisiones/0027-cola-para-el-trabajo-de-fondo.md).
-  Desde F4 el relay `job` es el de `intake-worker`, sobre el outbox de `intake_db`.
+  El relay `job` es el de `intake-worker`, sobre el outbox de `intake_db`.
 - El relay publica con *publisher confirms* (`confirm_delivery`): sin confirmación no hay `published_at`.
 - El mensaje gana campos aditivos: `{message_id, schema_version, tenant_id, job_id, correlation_id}`.
 
@@ -260,7 +256,7 @@ queda en `PROCESSING` sin nadie que lo retome; con lead-core al otro lado de la 
 transitorio deja de ser raro. El reproceso manual (`POST /intake/jobs/{id}/reprocess`) sigue
 existiendo, ahora encolando por outbox, y es lo que recupera un job desde la DLQ.
 
-Lo que añadió la construcción de F4:
+Lo que añadió la construcción de la admisión:
 
 - **Fallo transitorio** es cualquier respuesta que no sea un 200 con cuerpo válido, un error de
   transporte, un *timeout* o `ServiceTokenUnavailable` (`AdmissionUnavailable`). El registro sigue
@@ -380,7 +376,7 @@ espera en línea.
 registros `PROMOTED` de intake en lotes de 200 y pide a lead-core, con
 `GET /internal/v1/admissions?intake_record_ids=…`, cuáles conoce y con qué `lead_id`. **Sólo informa:**
 no escribe ni readmite. Una diferencia no se corrige escribiendo en la base ajena: se vuelve a admitir
-el registro, que es idempotente, o se atiende la alerta. Se usó como criterio de salida de F4.
+el registro, que es idempotente, o se atiende la alerta. Fue el criterio de salida de la extracción de intake.
 
 | Código | Significado |
 |---|---|

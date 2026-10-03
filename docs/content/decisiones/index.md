@@ -83,14 +83,14 @@ hecho, no una decisión.
 | [0024](0024-el-contrato-de-salida-se-construye-una-vez.md) | El contrato de salida se construye una vez | Aceptada |
 | [0025](0025-outbox-transaccional.md) | Outbox transaccional | Aceptada |
 | [0026](0026-kafka-como-canal-del-producto.md) | Kafka como canal del producto | Aceptada |
-| [0027](0027-cola-para-el-trabajo-de-fondo.md) | Una cola para el trabajo de fondo | Aceptada; sustituida en parte por [0034](0034-encolado-por-outbox-y-fichero-durable.md), implantado en F1 |
+| [0027](0027-cola-para-el-trabajo-de-fondo.md) | Una cola para el trabajo de fondo | Aceptada; sustituida en parte por [0034](0034-encolado-por-outbox-y-fichero-durable.md), implantado |
 | [0028](0028-autenticacion-de-la-mensajeria.md) | Autenticación de la mensajería | Aceptada |
 | [0029](0029-sesiones-opacas.md) | Sesiones humanas opacas | Aceptada |
 | [0030](0030-mfa-totp.md) | MFA TOTP opt-in para cuentas humanas | Aceptada |
-| [0031](0031-microservicios-por-contexto.md) | Microservicios por contexto, una base por servicio | Aceptada · F0–F5; F0–F4 implantadas |
-| [0032](0032-gateway-y-phantom-token.md) | Gateway nginx y *phantom token* | Aceptada · implantada en F0; introspección en identity desde F3 |
-| [0033](0033-eventos-internos-en-kafka.md) | Eventos internos en Kafka, outbox por canal y estado compactado | Aceptada · implantada en F1 |
-| [0034](0034-encolado-por-outbox-y-fichero-durable.md) | Encolado por outbox y fichero crudo durable | Aceptada · implantada en F1 |
-| [0035](0035-admision-sincrona-idempotente.md) | Admisión síncrona e idempotente entre Intake y Lead Core | Aceptada · implantada en F4 |
-| [0036](0036-cambios-de-contrato-publico.md) | Dos cambios en el contrato público | Aceptada · cambios 1 (F3) y 2 (F4) implantados |
-| [0037](0037-estructura-y-tamano-del-codigo.md) | Estructura y tamaño del código | Aceptada · F1; el backend heredado, en F3–F5 |
+| [0031](0031-microservicios-por-contexto.md) | Microservicios por contexto, una base por servicio | Aceptada · implantada |
+| [0032](0032-gateway-y-phantom-token.md) | Gateway nginx y *phantom token* | Aceptada · implantada; la introspección la sirve identity |
+| [0033](0033-eventos-internos-en-kafka.md) | Eventos internos en Kafka, outbox por canal y estado compactado | Aceptada · implantada |
+| [0034](0034-encolado-por-outbox-y-fichero-durable.md) | Encolado por outbox y fichero crudo durable | Aceptada · implantada |
+| [0035](0035-admision-sincrona-idempotente.md) | Admisión síncrona e idempotente entre Intake y Lead Core | Aceptada · implantada |
+| [0036](0036-cambios-de-contrato-publico.md) | Dos cambios en el contrato público | Aceptada · ambos cambios implantados |
+| [0037](0037-estructura-y-tamano-del-codigo.md) | Estructura y tamaño del código | Aceptada · implantada; el backend heredado se reordenó al extraer cada contexto |
