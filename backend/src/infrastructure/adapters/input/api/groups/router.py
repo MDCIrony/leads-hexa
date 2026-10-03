@@ -13,13 +13,13 @@ from application.ports.input.groups.sales_group_use_case_ports import (
     UpdateSalesGroupInputPort,
 )
 from domain.groups.sales_group import SalesGroup
-from infrastructure.adapters.input.api.dependencies import (
+from infrastructure.adapters.input.api.dependencies import require_organization_manager
+from infrastructure.adapters.input.api.groups.schemas import (
+    PaginatedGroupsResponse, SalesGroupCreate, SalesGroupResponse, SalesGroupUpdate,
+)
+from infrastructure.adapters.input.api.use_case_factories import (
     get_create_sales_group_use_case, get_delete_sales_group_use_case,
     get_get_sales_groups_use_case, get_update_sales_group_use_case,
-    require_organization_manager,
-)
-from infrastructure.adapters.input.api.schemas import (
-    PaginatedGroupsResponse, SalesGroupCreate, SalesGroupResponse, SalesGroupUpdate,
 )
 
 router = APIRouter()

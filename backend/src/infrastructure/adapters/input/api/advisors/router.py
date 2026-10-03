@@ -6,13 +6,13 @@ from fastapi import APIRouter, Depends, Query
 from application.dtos.advisors import AdvisorView, ListAdvisorsQuery, SetAdvisorGroupCommand
 from application.dtos.context import RequestContext
 from application.ports.input.advisors.advisor_use_case_ports import ListAdvisorsInputPort, SetAdvisorGroupInputPort
-from infrastructure.adapters.input.api.advisors.dependencies import (
-    get_list_advisors_use_case, get_set_advisor_group_use_case,
-)
 from infrastructure.adapters.input.api.advisors.schemas import (
     AdvisorGroupUpdate, AdvisorResponse, AdvisorsPageResponse,
 )
 from infrastructure.adapters.input.api.dependencies import require_organization_manager
+from infrastructure.adapters.input.api.use_case_factories import (
+    get_list_advisors_use_case, get_set_advisor_group_use_case,
+)
 
 router = APIRouter()
 

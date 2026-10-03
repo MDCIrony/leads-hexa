@@ -23,7 +23,9 @@ import uuid
 from tests.e2e.helpers.gateway_client import GatewayClient
 
 from infrastructure.main import app
-from infrastructure.adapters.input.api import schemas
+from infrastructure.adapters.input.api.groups import schemas as group_schemas
+from infrastructure.adapters.input.api.leads import schemas as lead_schemas
+from infrastructure.adapters.input.api.rules import schemas as rule_schemas
 
 from tests.e2e.helpers.admission_helpers import admit_lead
 from tests.e2e.helpers.auth_helpers import manager_headers, seed_agent
@@ -117,7 +119,7 @@ def test_lead_round_trip_and_schema_contract():
         assert data["id"] == record["lead_id"]
         assert data["tenant_id"] == tenant_id
         assert data["source_id"]
-        assert_schema_fields_filled(schemas.LeadDetailResponse, data)
+        assert_schema_fields_filled(lead_schemas.LeadDetailResponse, data)
 
 
 def test_lead_assigned_agent_id_and_assigned_at_get_filled_when_assigned():
@@ -213,7 +215,7 @@ def test_group_round_trip_and_schema_contract():
             data,
         )
         assert data["default_strategy"] == payload["default_strategy"]
-        assert_schema_fields_filled(schemas.SalesGroupResponse, data)
+        assert_schema_fields_filled(group_schemas.SalesGroupResponse, data)
 
 
 # --- Assignment rule ---
@@ -255,7 +257,7 @@ def test_assignment_rule_round_trip_and_schema_contract():
         )
         assert data["target_agent_ids"] == payload["target_agent_ids"]
         assert data["conditions"]
-        assert_schema_fields_filled(schemas.AssignmentRuleResponse, data)
+        assert_schema_fields_filled(rule_schemas.AssignmentRuleResponse, data)
 
 
 # --- Scoring rule ---
@@ -286,7 +288,7 @@ def test_scoring_rule_round_trip_and_schema_contract():
             data,
         )
         assert data["conditions"]
-        assert_schema_fields_filled(schemas.ScoringRuleResponse, data)
+        assert_schema_fields_filled(rule_schemas.ScoringRuleResponse, data)
 
 
 # --- Disqualification rule ---
@@ -315,7 +317,7 @@ def test_disqualification_rule_round_trip_and_schema_contract():
             data,
         )
         assert data["conditions"]
-        assert_schema_fields_filled(schemas.DisqualificationRuleResponse, data)
+        assert_schema_fields_filled(rule_schemas.DisqualificationRuleResponse, data)
 
 
 # --- Lead stats: not an entity, but its own contract worth pinning down ---
@@ -339,4 +341,4 @@ def test_lead_stats_schema_contract():
         assert set(data["by_status"].keys()) == {
             "NEW", "QUALIFIED", "DISQUALIFIED", "UNASSIGNED", "ASSIGNED", "DISCARDED",
         }
-        assert_schema_fields_filled(schemas.LeadStatsResponse, data)
+        assert_schema_fields_filled(lead_schemas.LeadStatsResponse, data)
