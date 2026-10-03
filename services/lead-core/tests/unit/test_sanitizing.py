@@ -1,3 +1,3 @@
-def test_backend_environment_sanitizing():
-    """Test de sanidad inicial para el entorno de backend."""
+def test_lead_core_environment_sanitizing():
+    """Initial sanity check for the lead-core test environment."""
     assert True

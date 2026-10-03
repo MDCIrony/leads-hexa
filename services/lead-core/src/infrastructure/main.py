@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     migrations_dir = Path(__file__).resolve().parents[2] / "migrations"
     MigrationRunner(container.database, migrations_dir).apply_pending()
 
-    # Delivery (outbox relay, webhooks) runs in the backend-worker process,
+    # Delivery (outbox relay, webhooks) runs in the lead-core-worker process,
     # so the API owns nothing but request handling.
     app.state.container = container
     yield

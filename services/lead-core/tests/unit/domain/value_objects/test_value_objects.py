@@ -1,14 +1,12 @@
 import pytest
 import uuid
-from domain.value_objects import (
-    EmailAddress,
-    Money,
-    LeadId,
-    TenantId,
-    AgentId,
-    Score,
-    AgentRole,
-)
+from domain.value_objects.email import EmailAddress
+from domain.value_objects.money import Money
+from domain.value_objects.lead_id import LeadId
+from domain.value_objects.tenant_id import TenantId
+from domain.value_objects.agent_id import AgentId
+from domain.value_objects.score import Score
+from domain.value_objects.enums import AgentRole
 from domain.exceptions import (
     InvalidEmailException,
     InvalidBudgetException,

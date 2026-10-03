@@ -8,8 +8,7 @@ from infrastructure.adapters.output.persistence.groups.sales_group_repository im
 from domain.advisors.advisor import Advisor
 from domain.leads.lead import Lead
 from domain.groups.sales_group import SalesGroup
-from domain.value_objects import LeadStatus
-from domain.value_objects.enums import AgentRole
+from domain.value_objects.enums import AgentRole, LeadStatus
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.tenant_id import TenantId
 

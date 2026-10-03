@@ -4,14 +4,10 @@ from domain.leads.lead import Lead
 from domain.rules.scoring_rule import ScoringRule
 from domain.webhooks.webhook import WebhookConfig
 from domain.exceptions import InvalidEmailException
-from domain.value_objects import (
-    LeadId,
-    TenantId,
-    AgentId,
-    LeadStatus,
-    Operator,
-    WebhookEventType,
-)
+from domain.value_objects.lead_id import LeadId
+from domain.value_objects.tenant_id import TenantId
+from domain.value_objects.agent_id import AgentId
+from domain.value_objects.enums import LeadStatus, Operator, WebhookEventType
 from domain.value_objects.criterion import Criterion
 
 def test_lead_entity_lifecycle():
