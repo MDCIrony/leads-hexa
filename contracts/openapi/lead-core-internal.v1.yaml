@@ -7,7 +7,7 @@ info:
     cualquier `/internal/` que llegue de fuera. Diseño en
     docs/content/microservices/04-comunicacion-y-eventos.md §Contrato de admisión (ADR-0035).
 servers:
-  - url: http://backend:8000
+  - url: http://lead-core:8000
 paths:
   /internal/v1/admissions:
     post:

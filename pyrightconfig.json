@@ -1,7 +1,7 @@
 {
-  "include": ["backend/src", "backend/tests", "backend/conftest.py"],
-  "extraPaths": ["backend/src"],
-  "venvPath": "backend",
+  "include": ["services/lead-core/src", "services/lead-core/tests"],
+  "extraPaths": ["services/lead-core/src"],
+  "venvPath": "services/lead-core",
   "venv": ".venv",
   "reportMissingImports": "error"
 }

@@ -31,8 +31,8 @@ volúmenes, y la API recarga en caliente lo que cambie en `src/`. Sólo se recon
 `pyproject.toml`, `uv.lock` o el `Dockerfile`.
 
 ```bash
-docker compose --profile test run --rm backend-test    # suite completa     ~4 min
-cd backend && uv run pytest -m unit -q                 # dominio aislado    ~1 s
+docker compose --profile test run --rm lead-core-test  # suite completa     ~4 min
+cd services/lead-core && uv run pytest -m unit -q      # dominio aislado    ~1 s
 ./scripts/verify-e2e.sh                                # negocio sobre HTTP ~3 s
 ./scripts/verify-structure.sh                          # estructura, todo el repo ~1 s
 cd bruno && bru run flows --env local -r               # contrato como cliente ~10 s
@@ -46,23 +46,25 @@ Cada uno demuestra algo que los otros no:
 - **`verify-e2e.sh`** recorre el negocio sobre HTTP real. Los tests pueden estar verdes con el
   producto roto; esto no.
 - **`verify-structure.sh`** aplica la regla de estructura (ADR-0037) a todas las raíces Python del
-  repositorio, sin Docker: `backend/src`, `backend/tests`, `libs/chassis/src`, `libs/chassis/tests`,
-  `services/notifications/src`, `services/notifications/tests`, `services/identity/src`,
-  `services/identity/tests`, `services/intake/src`, `services/intake/tests`, `test-consumer/`,
-  `demo/` y `tools/`. Una raíz Python nueva se declara ahí.
+  repositorio, sin Docker: `libs/chassis/src`, `libs/chassis/tests`, `services/notifications/src`,
+  `services/notifications/tests`, `services/identity/src`, `services/identity/tests`,
+  `services/intake/src`, `services/intake/tests`, `services/lead-core/src`,
+  `services/lead-core/tests`, `test-consumer/`, `demo/` y `tools/`. Una raíz Python nueva se declara
+  ahí; una que no existe cuenta como fallo.
 - **`bru run flows`** recorre los seis flujos de `bruno/` contra el gateway, con una sesión por cookie
   por rol: demuestra que el contrato documentado en `api-referencia.md` es el que ve un cliente. Las
   carpetas de referencia no entran; dependen de variables que siembran los flujos.
 
-Cada servicio extraído (hoy `services/notifications`, `services/identity` y `services/intake`) tiene
-la suya, con las mismas dos formas: `docker compose --profile test run --rm notifications-test` y
-`cd services/notifications && uv run pytest -m unit -q`; `docker compose --profile test run --rm
-identity-test` y `cd services/identity && uv run pytest -m unit -q`; `docker compose --profile test
-run --rm intake-test` y `cd services/intake && uv run pytest -m unit -q` (sin base ni variables de
-entorno). Desde F3 `/auth`, `/tenants` y `/agents` son de identity, no del backend: un cambio de
-autenticación, MFA, OAuth, organizaciones o agentes se prueba en su suite. Desde F4 `/sources` e
-`/intake` son de intake: un cambio de fuentes, jobs, registros o ficheros se prueba en la suya, y la
-decisión (`/internal/v1/admissions`) sigue siendo de lead-core.
+Cada servicio (los cuatro: `services/lead-core`, `services/notifications`, `services/identity` y
+`services/intake`) tiene la suya, con las mismas dos formas: las de lead-core son las de arriba;
+`docker compose --profile test run --rm notifications-test` y `cd services/notifications && uv run
+pytest -m unit -q`; `docker compose --profile test run --rm identity-test` y `cd services/identity &&
+uv run pytest -m unit -q`; `docker compose --profile test run --rm intake-test` y `cd
+services/intake && uv run pytest -m unit -q` (sin base ni variables de entorno). Desde F3 `/auth`,
+`/tenants` y `/agents` son de identity, no de lead-core: un cambio de autenticación, MFA, OAuth,
+organizaciones o agentes se prueba en su suite. Desde F4 `/sources` e `/intake` son de intake: un
+cambio de fuentes, jobs, registros o ficheros se prueba en la suya, y la decisión
+(`/internal/v1/admissions`) sigue siendo de lead-core.
 
 Dentro de la suite de cada servicio viajan cuatro tests que analizan el AST y fallan si el dominio
 importa algo de fuera o la aplicación importa infraestructura. **Deben estar siempre 4/4.**
@@ -70,12 +72,12 @@ importa algo de fuera o la aplicación importa infraestructura. **Deben estar si
 A su lado, `tests/architecture/test_structure.py` aplica la misma regla dentro de la suite, con los
 helpers de `chassis.testing`: ficheros fuente de 150 líneas como mucho; 12 ficheros `.py` por
 carpeta **también en los tests**, que sólo quedan exentos del límite de líneas; y tests de dominio que
-sólo importan dominio, la stdlib, `pytest` y sus propios helpers. Lo heredado vive en
-`structure_baseline.py` (fuentes) y `tests_structure_baseline.py` (carpetas de tests), y en
-`scripts/structure_baseline.py` para `test-consumer/` y `demo/`. Todas **sólo encogen**: si adelgazas
-algo de la lista, baja o quita su entrada en el mismo commit (`cd libs/chassis && uv run python -m
-chassis.testing measure <raíz> [--no-line-limit]` imprime los valores). `libs/chassis` se valida a sí
-mismo, sin lista base: `cd libs/chassis && uv run pytest -q -W error`.
+sólo importan dominio, la stdlib, `pytest` y sus propios helpers. Ningún servicio tiene lista base:
+lo heredado sólo queda en `scripts/structure_baseline.py`, para `test-consumer/` y `demo/`, y **sólo
+encoge**: si adelgazas algo de la lista, baja o quita su entrada en el mismo commit (`cd
+libs/chassis && uv run python -m chassis.testing measure <raíz> [--no-line-limit]` imprime los
+valores). `libs/chassis` se valida a sí mismo, sin lista base:
+`cd libs/chassis && uv run pytest -q -W error`.
 
 `verify-e2e.sh` se **amplía, nunca se reescribe**: cada fase añade su función `verify_fN` y la llama
 desde `main`. No necesita base limpia salvo que una migración lo exija, y entonces se pasa `--reset`.
@@ -86,7 +88,7 @@ que terminó, y el harness dice si es verdad.
 ### Trampas que ya han costado tiempo
 
 - `docker compose run` **reemplaza** el CMD, no lo extiende. Para un subconjunto:
-  `run --rm backend-test pytest -q <ruta>`.
+  `run --rm lead-core-test pytest -q <ruta>`.
 - Ningún fichero de test declara `DATABASE_URL` ni `JWT_SECRET`. Los fija `conftest.py` una sola vez
   antes de importar nada. Copiar un preámbulo `os.environ.setdefault(...)` de otro fichero
   reintroduce un fallo que depende del orden de importación.

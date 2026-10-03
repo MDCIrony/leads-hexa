@@ -16,11 +16,11 @@ REPO=$(cd "$(dirname "$0")/.." && pwd)
 FAILURES=0
 
 check() {
+  # A moved or renamed root must fail here, not pass by checking nothing.
+  [ -d "$1" ] || { echo "missing root: $1" >&2; FAILURES=$((FAILURES + 1)); return; }
   (cd "$REPO/libs/chassis" && uv run --quiet python -m chassis.testing check "$@") || FAILURES=$((FAILURES + 1))
 }
 
-check "$REPO/backend/src"
-check "$REPO/backend/tests"     --no-line-limit
 check "$REPO/libs/chassis/src"
 check "$REPO/libs/chassis/tests" --no-line-limit
 check "$REPO/services/notifications/src"
@@ -29,6 +29,8 @@ check "$REPO/services/identity/src"
 check "$REPO/services/identity/tests" --no-line-limit
 check "$REPO/services/intake/src"
 check "$REPO/services/intake/tests" --no-line-limit
+check "$REPO/services/lead-core/src"
+check "$REPO/services/lead-core/tests" --no-line-limit
 check "$REPO/test-consumer"     --baseline "$REPO/scripts/structure_baseline.py:TEST_CONSUMER"
 check "$REPO/demo"              --baseline "$REPO/scripts/structure_baseline.py:DEMO"
 check "$REPO/tools"
