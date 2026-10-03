@@ -539,7 +539,12 @@ idea: "La admisión por HTTP no encarece el job. El primer número, cuatro veces
 | Monolito, decisión en proceso | 14,5 s |
 | Admisión por HTTP, primera medida | 59,8 s · ≈ 42 ms por llamada |
 | Admisión por HTTP, tras corregir el arranque en desarrollo | 12,9 s y 11,9 s |
-<!-- MEDICION_FINAL -->
+| Arquitectura final: cuatro servicios, cada base con su rol | 13,0 s y 13,3 s |
+
+| Llamadas síncronas, p50 / p95 | Monolito | Arquitectura final |
+|---|---|---|
+| `introspect`, dentro de la red | 4,7 / 8,4 ms | 3,2 / 4,1 ms |
+| `GET /api/v1/leads` por el gateway | 10,6 / 13,9 ms | 5,3 / 10,6 ms |
 
 <div class="destacado">
 <span class="destacado-tag">Causa de los 59,8 s</span>
