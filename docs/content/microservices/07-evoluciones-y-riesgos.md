@@ -20,6 +20,19 @@ ella, «añade latencia» es una opinión.
 | Job de 1.000 registros, de `202` a `COMPLETED`, tras F4 | 12,9 s y 11,9 s | — | Dos ejecuciones, mismo método. La admisión es una llamada HTTP por registro a lead-core (≈ 1,5 ms de red por llamada); no domina el job, así que la señal de la admisión por lotes no se cumple |
 | La misma medida antes de corregir el arranque en desarrollo | 59,8 s | — | ≈ 42 ms por llamada: `uvicorn --reload` entrega el socket al hijo por descriptor y asyncio deja `TCP_NODELAY` desactivado, así que cada respuesta en una conexión reutilizada esperaba el ACK retardado. Las APIs de desarrollo arrancan con `watchfiles`; en producción no hay recargador |
 
+Tras F5, mismo método y mismo stack, con los cuatro servicios separados (2026-10-03):
+
+| Medida | p50 | p95 | Frente a F0 |
+|---|---|---|---|
+| `introspect`, dentro de la red, directo a identity | 3,2 ms | 4,1 ms | 4,7 / 8,4 ms |
+| `GET /api/v1/leads` directo a lead-core con bearer, dentro de la red | 4,1 ms | 7,7 ms | 7,3 / 12,7 ms |
+| `GET /api/v1/leads` por el gateway, con cookie | 5,3 ms | 10,6 ms | 10,6 / 13,9 ms |
+| Job de 1.000 registros, de `202` a `COMPLETED` | 13,0 s y 13,3 s | — | 14,5 s |
+
+Las llamadas son más rápidas que en F0 sobre todo porque las APIs ya no arrancan con `uvicorn --reload`
+(el artefacto de `TCP_NODELAY` también afectaba a las conexiones reutilizadas del gateway). Login y
+`X-Api-Key` no se repiten: siguen dominados por bcrypt en identity y su código no cambió.
+
 **Conclusión.** El gateway con introspección añade ≈ 3 ms por petición: nada de lo medido justifica una
 caché de introspección. La ruta `X-Api-Key` está limitada por bcrypt (≈ 290 ms) y es la primera
 optimización a considerar si las integraciones consultan con frecuencia; queda como evolución con su
