@@ -130,6 +130,12 @@
   border-bottom: none;
 }
 
+/* Consecutive tables would otherwise read as one. */
+.blocked-body table + table,
+.blocked-body table + p {
+  margin-top: 0.8rem;
+}
+
 /* ---------- code ---------- */
 
 .slidev-layout pre {
@@ -182,13 +188,13 @@
 /* ---------- dense tables: the full port inventories ---------- */
 
 .densa table {
-  font-size: 0.6rem;
+  font-size: 0.68rem;
   line-height: 1.25;
 }
 
 .densa th,
 .densa td {
-  padding: 0.16rem 0.5rem 0.16rem 0;
+  padding: 0.22rem 0.5rem 0.22rem 0;
 }
 
 .densa .blocked-body h1 {
@@ -243,4 +249,27 @@
 
 .nota strong {
   color: var(--lr-ink);
+}
+
+.nota ul,
+.nota ol {
+  font-size: 0.76rem;
+  line-height: 1.4;
+  margin: 0.2rem 0 0.4rem;
+}
+
+.blocked-body .nota p {
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+/* Between the default and .densa: three tables that fit at a readable size. */
+.media table {
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.media th,
+.media td {
+  padding: 0.26rem 0.5rem 0.26rem 0;
 }
