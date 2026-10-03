@@ -12,7 +12,7 @@ import urllib.request
 from fastapi import HTTPException
 
 LOGGER = logging.getLogger("inbox")
-API_BASE = os.getenv("LEADS_API_BASE", "http://backend:8000/api/v1")
+API_BASE = os.getenv("LEADS_API_BASE", "http://gateway:8080/api/v1")
 
 
 def new_session():

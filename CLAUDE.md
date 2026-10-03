@@ -1,6 +1,6 @@
 # Cómo se trabaja en este repositorio
 
-MVP docente de enrutamiento de leads. Backend FastAPI, frontend React, PostgreSQL con SQL crudo,
+MVP docente de enrutamiento de leads. Servicios FastAPI, frontend React, PostgreSQL con SQL crudo,
 arquitectura hexagonal.
 
 ## La documentación es la fuente
@@ -89,8 +89,9 @@ que terminó, y el harness dice si es verdad.
 
 - `docker compose run` **reemplaza** el CMD, no lo extiende. Para un subconjunto:
   `run --rm lead-core-test pytest -q <ruta>`.
-- Ningún fichero de test declara `DATABASE_URL` ni `JWT_SECRET`. Los fija `conftest.py` una sola vez
-  antes de importar nada. Copiar un preámbulo `os.environ.setdefault(...)` de otro fichero
+- Ningún fichero de test declara las variables de entorno de su servicio (lead-core: `DATABASE_URL`,
+  `JWKS_URL`, `SERVICE_CLIENT_SECRET`; las de los demás, en su `tests/conftest.py`). Las fija
+  `conftest.py` una sola vez antes de importar nada. Copiar un preámbulo `os.environ.setdefault(...)` de otro fichero
   reintroduce un fallo que depende del orden de importación.
 - La limpieza entre tests lee las tablas del catálogo: una tabla nueva se trunca sola, no hay lista
   que mantener.

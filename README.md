@@ -48,15 +48,15 @@ lead— está en la guía de [puesta en marcha](docs/content/desarrollo/puesta-e
 Cinco comandos, cada uno demuestra algo que los otros no:
 
 ```bash
-docker compose --profile test run --rm backend-test    # suite completa, todas las capas
-cd backend && uv run pytest -m unit -q                 # dominio aislado, sin base de datos
+docker compose --profile test run --rm lead-core-test  # suite completa, todas las capas
+cd services/lead-core && uv run pytest -m unit -q      # dominio aislado, sin base de datos
 ./scripts/verify-e2e.sh                                # el negocio sobre HTTP real
 ./scripts/verify-structure.sh                          # tamaño de ficheros y carpetas, todo el repo
-cd frontend && npm run test                            # la interfaz, sin backend levantado
+cd frontend && npm run test                            # la interfaz, sin la API levantada
 ```
 
 La interfaz se prueba contra una API simulada, y sus respuestas **no están escritas a mano**: se
-capturan del backend real con `npm run gen:fixtures`. Una fixture inventada es una suposición; una
+capturan de la API real con `npm run gen:fixtures`. Una fixture inventada es una suposición; una
 capturada es una prueba de ayer. Los tipos salen de `/openapi.json` con `npm run gen:api`, así que un
 cambio de contrato **rompe la compilación** en vez de aparecer en pantalla.
 
@@ -72,7 +72,7 @@ Los detalles están en [validación](docs/content/desarrollo/validacion.md).
 ## Estructura del repositorio
 
 ```
-backend/
+services/lead-core/
   src/domain/          Entidades, value objects, motores y políticas. Sin dependencias externas
   src/application/     Casos de uso y puertos. No conoce frameworks web ni SQL
   src/infrastructure/  Adaptadores: API, persistencia, seguridad, ficheros, eventos

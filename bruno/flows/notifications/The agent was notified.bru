@@ -72,7 +72,7 @@ docs {
   en una línea de log.
 
   El aviso no existe todavía en el instante en que el trabajo de ingesta termina. El caso de uso
-  deja el evento en el outbox, `backend-worker` lo publica en Kafka y `notifications-worker` lo
+  deja el evento en el outbox, `lead-core-worker` lo publica en Kafka y `notifications-worker` lo
   convierte en aviso: es **eventualmente consistente** (`modulos/notificaciones.md`). Por eso este
   paso sondea la bandeja, como `Await processing` sondea el trabajo, hasta que aparece o se agotan
   los intentos, y las comprobaciones corren una sola vez sobre lo último que leyó.

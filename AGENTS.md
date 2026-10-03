@@ -9,14 +9,15 @@
 - Reutiliza patrones existentes y limita el cambio a la responsabilidad pedida. No introduzcas un
   ORM, gestor de estado global, abstracciones especulativas ni dependencias evitables.
 
-## Backend
+## Servicios Python
 
 - La dependencia apunta hacia dentro: `infrastructure -> application -> domain`.
 - `domain` sólo usa la biblioteca estándar. `application` no importa frameworks, drivers ni
   `infrastructure`. Los cuatro tests AST son una barrera, no una recomendación.
 - Los routers traducen HTTP; las decisiones viven en casos de uso o dominio. El cableado de casos
-  de uso vive en `infrastructure/adapters/input/api/dependencies.py`; `Container` elige adaptadores y
-  ciclos de vida.
+  de uso de lead-core vive en
+  `services/lead-core/src/infrastructure/adapters/input/api/dependencies.py`; `Container` elige
+  adaptadores y ciclos de vida.
 - Crea un `UnitOfWork` por operación. No compartas transacciones ni conexiones de petición.
 - PostgreSQL se usa con SQL crudo y parámetros `%s`; nunca interpolación de SQL. Las migraciones son
   numeradas, idempotentes y se aplican al arrancar. Para constraints sin `IF NOT EXISTS`, consulta
@@ -50,7 +51,7 @@
   `infrastructure`. Las páginas llaman servicios de `application`, nunca `apiClient` directamente.
 - `frontend/src/infrastructure/api/schema.d.ts` se genera con `npm run gen:api`; no se edita.
   Regenera después de cambiar OpenAPI.
-- Las fixtures se capturan del backend real con `npm run gen:fixtures`; no inventes contratos en
+- Las fixtures se capturan de la API real con `npm run gen:fixtures`; no inventes contratos en
   JSON de test.
 - Estado de servidor en hooks, sesión en su contexto, formulario en el formulario y estado visual
   en el componente. No dupliques estado ni agregues un store global.
@@ -74,15 +75,15 @@
 Ejecuta la comprobación mínima que pueda fallar por tu cambio y amplía según el riesgo:
 
 ```bash
-cd backend && uv run pytest -m unit -q
-docker compose --profile test run --rm backend-test
+cd services/lead-core && uv run pytest -m unit -q
+docker compose --profile test run --rm lead-core-test
 cd frontend && npm run test && npm run build
 ./scripts/verify-e2e.sh
 ```
 
 - La suite Docker es la prueba con PostgreSQL real. Para un subconjunto:
-  `docker compose --profile test run --rm backend-test pytest -q <ruta>`.
-- `backend/tests/conftest.py` fija las variables de test y descubre tablas para limpiarlas. No
+  `docker compose --profile test run --rm lead-core-test pytest -q <ruta>`.
+- `tests/conftest.py` de cada servicio fija las variables de test y descubre tablas para limpiarlas. No
   repitas configuración de entorno ni mantengas una lista manual de tablas.
 - Cada bug deja una prueba que falla sin el arreglo. Prueba comportamiento y contratos, no detalles
   internos.

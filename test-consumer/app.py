@@ -1,6 +1,6 @@
 """Nordwind Solar's own inbox: what a customer of the lead router would build.
 
-Deliberately independent of `backend/` (ADR-0026). It imports nothing from the
+Deliberately independent of `services/lead-core/` (ADR-0026). It imports nothing from the
 product, speaks only its published contracts — the Kafka topic and, for
 catching up, GET /leads with an X-Api-Key — and keeps its own database. If this
 app needed anything from the product's source to work, the contract would not

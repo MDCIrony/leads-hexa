@@ -2,7 +2,7 @@
 
 La otra mitad del contrato: lo que escribiría un cliente del enrutador de leads para recibirlos.
 
-No importa nada de `backend/`, y esa es su razón de ser. Habla sólo lo que el producto publica —el
+No importa nada de `services/lead-core/`, y esa es su razón de ser. Habla sólo lo que el producto publica —el
 topic de Kafka y, para ponerse al día, `GET /leads` con una clave de máquina— y guarda lo suyo en su
 propio SQLite. Si necesitara el código fuente del producto para funcionar, el contrato no se
 sostendría solo.
@@ -15,7 +15,7 @@ docker compose --profile demo up -d test-consumer   # desde la raíz del reposit
 
 Queda en <http://localhost:8003>. El perfil `demo` la mantiene fuera del `docker compose up` normal.
 
-Su imagen se construye desde este directorio y de nada más: `backend/`, `frontend/` y `docs/` tienen
+Su imagen se construye desde este directorio y de nada más: `services/`, `frontend/` y `docs/` tienen
 sus propios contextos de construcción, así que nada de este subproyecto viaja en ellos ni al revés.
 
 ## Registrarla
@@ -61,7 +61,7 @@ del enrutador, y además hay una tabla de `event_id` ya vistos.
 | Variable | Por defecto | Para qué |
 |---|---|---|
 | `KAFKA_BOOTSTRAP_SERVERS` | `kafka:9095` | El listener autenticado interno. La credencial reporta `localhost:9094`, que es la dirección para clientes en la máquina anfitriona |
-| `LEADS_API_BASE` | `http://backend:8000/api/v1` | Para el registro y la reconciliación |
+| `LEADS_API_BASE` | `http://gateway:8080/api/v1` | Para el registro y la reconciliación |
 | `INBOX_DB` | `/data/inbox.db` | El SQLite, en un volumen para que sobreviva a un reconstruido |
 
 ## Fuera de la aplicación
