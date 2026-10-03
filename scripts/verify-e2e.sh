@@ -976,7 +976,7 @@ verify_f5() {
 
 # ------------------------------------------------------------- social OAuth ---
 # OAuth's real providers must never be part of this harness. A short-lived,
-# loopback-only backend gets the explicit test adapter; the normal stack and
+# loopback-only identity gets the explicit test adapter; the normal stack and
 # its configuration remain untouched.
 verify_social_oauth() {
   local r start_headers jar bad_jar mfa_jar mfa_headers location state port container health secret totp logs
@@ -1077,7 +1077,7 @@ PY
 
 # ------------------------------------------------ microservicios · F0 ---
 # Gateway and phantom token (ADR-0032): what the edge guarantees and what the
-# service still enforces on its own. Runs last: it stops the backend.
+# service still enforces on its own. Runs last: it stops lead-core.
 verify_ms_f0() {
   local r headers base mgr_a_id forged key status i unprotected config
   section "Microservicios F0 · gateway y phantom token"
@@ -1112,7 +1112,7 @@ verify_ms_f0() {
   check "401 con el mensaje del gateway" "Authentication required" "$(body "$r" | f 'd["message"]')"
 
   mgr_a_id=$(body "$(req "$API/auth/me" -H "Authorization: Bearer $MGR_A")" | f 'd["id"]')
-  forged=$(docker compose exec -T backend python -c '
+  forged=$(docker compose exec -T lead-core python -c '
 import sys, time, uuid
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from chassis.auth import Ed25519Signer
@@ -1124,7 +1124,7 @@ print(Ed25519Signer("dev-1", Ed25519PrivateKey.generate()).sign({"iss": "identit
   check "JWT forjado generado" 3 "$(printf '%s' "$forged" | awk -F. '{print NF}')"
   r=$(req "$API/leads" -H "Authorization: Bearer $forged")
   check "JWT de otra clave por el gateway → 401" 401 "$(code "$r")"
-  status=$(docker compose exec -T backend python -c '
+  status=$(docker compose exec -T lead-core python -c '
 import sys, urllib.request, urllib.error
 req = urllib.request.Request("http://localhost:8000/api/v1/leads", headers={"Authorization": "Bearer " + sys.argv[1]})
 try:
@@ -1191,11 +1191,11 @@ except urllib.error.HTTPError as e:
     sleep 1
   done
   check "identity vuelve tras el corte" 200 "$(code "$(req "$API/leads" -H "Authorization: Bearer $MGR_A")")"
-  docker compose stop backend >/dev/null 2>&1
+  docker compose stop lead-core >/dev/null 2>&1
   r=$(req "$API/leads" -H "Authorization: Bearer $MGR_A")
   check "lead-core caído → 503" 503 "$(code "$r")"
   check "  con el sobre" SERVICE_UNAVAILABLE "$(body "$r" | f 'd.get("error_code")')"
-  docker compose start backend >/dev/null 2>&1
+  docker compose start lead-core >/dev/null 2>&1
   # Through the gateway, not the healthcheck: its upstream re-resolves the
   # container's address within resolver valid=10s.
   for i in $(seq 1 60); do
@@ -1217,7 +1217,7 @@ group_lag() {
 # ------------------------------------------------ microservicios · F1 ---
 # Durable delivery (ADR-0033, ADR-0034): the outbox hands jobs to RabbitMQ and
 # events to Kafka, and a broker outage delays work without losing it. Runs
-# before verify_ms_f0, which stops the backend.
+# before verify_ms_f0, which stops lead-core.
 verify_ms_f1() {
   local r job lead rid i st notices logs csv sum_offsets queues topic lag end begin
   local kafka_bin=/opt/kafka/bin
@@ -1318,11 +1318,11 @@ verify_ms_f1() {
   section "Microservicios F1 · correlación"
   # Since F4 the job runs in intake-worker and the decision in lead-core, reached
   # by the admission call that carries the same X-Request-Id (04 §Correlación).
-  logs=$(docker compose logs intake-worker backend 2>&1)
+  logs=$(docker compose logs intake-worker lead-core 2>&1)
   check "el X-Request-Id de la ingesta aparece en intake-worker" True \
     "$(printf '%s' "$logs" | grep 'intake-worker' | grep -q "\[$rid\]" && printf True || printf False)"
   check "y en la admisión de lead-core" True \
-    "$(printf '%s' "$logs" | grep 'backend-1' | grep "\[$rid\]" | grep -q '/internal/v1/admissions' && printf True || printf False)"
+    "$(printf '%s' "$logs" | grep 'lead-core-1' | grep "\[$rid\]" | grep -q '/internal/v1/admissions' && printf True || printf False)"
   check "y en el outbox de lead-core" True \
     "$(docker compose exec -T db psql -U postgres -d leads_db -tAc "SELECT count(*) > 0 FROM outbox_events WHERE correlation_id = '$rid'" | grep -q t && printf True || printf False)"
 }
@@ -1425,15 +1425,15 @@ verify_ms_f2() {
   done
   check "leads_db ya no tiene la tabla notifications" f "$(leads_db_has_notices)"
 
-  section "Microservicios F2 · el backend ya no tiene el módulo"
-  check "el backend no sirve /api/v1/notifications (404)" 404 "$(docker compose exec -T backend python -c \
+  section "Microservicios F2 · lead-core ya no tiene el módulo"
+  check "lead-core no sirve /api/v1/notifications (404)" 404 "$(docker compose exec -T lead-core python -c \
     "import urllib.request, urllib.error
 try:
     print(urllib.request.urlopen('http://localhost:8000/api/v1/notifications').status)
 except urllib.error.HTTPError as e:
     print(e.code)")"
   # --include: stale .pyc of removed modules would otherwise match.
-  check "backend/src no menciona notificaciones" "" "$(grep -rli --include='*.py' notification "$(dirname "$0")/../backend/src")"
+  check "services/lead-core/src no menciona notificaciones" "" "$(grep -rli --include='*.py' notification "$(dirname "$0")/../services/lead-core/src")"
   rm -f "$mgr_c"
 }
 
@@ -1453,7 +1453,7 @@ dlq_size() {
 }
 
 verify_ms_f3() {
-  local r rid ip group agent agent_jar tenant_d mgr_d mgr_d_id job lead i lag env_backend
+  local r rid ip group agent agent_jar tenant_d mgr_d mgr_d_id job lead i lag env_lead_core
   rid="f3-$STAMP"
   section "Microservicios F3 · identity en su propio servicio"
 
@@ -1464,20 +1464,20 @@ verify_ms_f3() {
     "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -qF "upstream=$ip:8000" && printf True || printf False)"
   check "el id de la petición llega al log de identity" True \
     "$(docker compose logs --since 2m identity | grep -qF "[$rid]" && printf True || printf False)"
-  check "el backend ya no sirve /api/v1/auth/me (404)" 404 "$(docker compose exec -T backend python -c \
+  check "lead-core ya no sirve /api/v1/auth/me (404)" 404 "$(docker compose exec -T lead-core python -c \
     "import urllib.request, urllib.error
 try:
     print(urllib.request.urlopen('http://localhost:8000/api/v1/auth/me').status)
 except urllib.error.HTTPError as e:
     print(e.code)")"
-  env_backend=$(docker compose exec -T backend env)
-  check "el backend no tiene la clave de firma ni MFA ni OAuth" "" \
-    "$(printf '%s\n' "$env_backend" | grep -oE '^(SIGNING_KEYS|MFA_ENCRYPTION_KEY|GOOGLE_[A-Z_]+|GITHUB_[A-Z_]+)=' | tr '\n' ' ')"
+  env_lead_core=$(docker compose exec -T lead-core env)
+  check "lead-core no tiene la clave de firma ni MFA ni OAuth" "" \
+    "$(printf '%s\n' "$env_lead_core" | grep -oE '^(SIGNING_KEYS|MFA_ENCRYPTION_KEY|GOOGLE_[A-Z_]+|GITHUB_[A-Z_]+)=' | tr '\n' ' ')"
   check "identity_svc no puede entrar en leads_db" False \
     "$(docker compose exec -T -e PGPASSWORD=identitypassword db psql -h localhost -U identity_svc -d leads_db -c 'SELECT 1' >/dev/null 2>&1 && printf True || printf False)"
   # --include: stale .pyc of removed modules would otherwise match.
-  check "backend/src no tiene MFA, OAuth ni sesiones" "" \
-    "$(grep -rliE --include='*.py' 'mfa|oauth|auth_session' "$(dirname "$0")/../backend/src")"
+  check "services/lead-core/src no tiene MFA, OAuth ni sesiones" "" \
+    "$(grep -rliE --include='*.py' 'mfa|oauth|auth_session' "$(dirname "$0")/../services/lead-core/src")"
 
   section "Microservicios F3 · el grupo del asesor en lead-core"
   r=$(req -X POST "$API/groups" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
@@ -1505,7 +1505,7 @@ except urllib.error.HTTPError as e:
 
   # The PATCH above may find the projection already there; this pins the
   # hydration path itself: lead-core's service credentials against identity.
-  check "lead-core obtiene un token de servicio y lee el agente en identity" 200 "$(docker compose exec -T backend python -c '
+  check "lead-core obtiene un token de servicio y lee el agente en identity" 200 "$(docker compose exec -T lead-core python -c '
 import os, sys, httpx
 from chassis.auth import ServiceTokenClient
 base = os.environ["IDENTITY_URL"]
@@ -1585,7 +1585,7 @@ verify_ms_f4() {
   ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q intake)")
   check "el gateway la envía al servicio intake" True \
     "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -qF "upstream=$ip:8000" && printf True || printf False)"
-  check "el backend ya no sirve /api/v1/sources (404)" 404 "$(docker compose exec -T backend python -c \
+  check "lead-core ya no sirve /api/v1/sources (404)" 404 "$(docker compose exec -T lead-core python -c \
     "import urllib.request, urllib.error
 try:
     print(urllib.request.urlopen('http://localhost:8000/api/v1/sources').status)
@@ -1660,8 +1660,8 @@ except urllib.error.HTTPError as e:
   email="f4-outage-$STAMP@lead.test"
   dlq_before=$(intake_jobs_dlq)
   # lead-core must come back even if this function is interrupted.
-  trap 'docker compose start backend >/dev/null 2>&1; exit 130' INT TERM
-  docker compose stop backend >/dev/null 2>&1
+  trap 'docker compose start lead-core >/dev/null 2>&1; exit 130' INT TERM
+  docker compose stop lead-core >/dev/null 2>&1
   r=$(req -X POST "$API/intake/leads/ingest" -H "Authorization: Bearer $MGR_A" -H 'Content-Type: application/json' \
     -d "{\"first_name\":\"F4\",\"last_name\":\"Caida\",\"email\":\"$email\",\"company\":\"Acme\",\"industry\":\"Tech\",\"budget\":5000}")
   check "lead-core caído: la ingesta responde 202" 202 "$(code "$r")"
@@ -1677,7 +1677,7 @@ except urllib.error.HTTPError as e:
   check "  y su registro sigue PENDING" PENDING \
     "$(body "$(req "$API/intake/records?job_id=$job" -H "Authorization: Bearer $MGR_A")" | f '(d.get("items") or [{}])[0].get("status") or ""')"
 
-  docker compose start backend >/dev/null 2>&1
+  docker compose start lead-core >/dev/null 2>&1
   trap - INT TERM
   # Through the gateway, as verify_ms_f0 does: its upstream re-resolves the
   # container's address within resolver valid=10s.
@@ -1755,7 +1755,7 @@ if [ "${1:-}" = "--reset" ]; then
     sleep 1
   done
   for _ in $(seq 1 60); do
-    docker compose ps backend --format '{{.Status}}' | grep -q '(healthy)' && break
+    docker compose ps lead-core --format '{{.Status}}' | grep -q '(healthy)' && break
     sleep 1
   done
 fi

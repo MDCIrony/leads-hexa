@@ -32,9 +32,14 @@ services:
         condition: service_healthy
     restart: "no"
 
-  backend:
+  lead-core:
+    # Leads, rules, routing, groups and the advisors projection (ADR-0031, F5):
+    # what is left of the original application, now one service among four.
+    # The layout mirrors the repository (/srv/services/..., /srv/libs/...) because
+    # uv.lock records chassis as ../../libs/chassis. Not published: the gateway
+    # is the only way in.
     build:
-      context: ./backend
+      context: ./services/lead-core
       dockerfile: Dockerfile
       # Named context: the image needs libs/chassis without widening the build
       # context to the whole repository.
@@ -44,17 +49,16 @@ services:
       # Dockerfile, and this service would silently run pytest instead of
       # serving the API. `dev` is `runner` plus a file watcher.
       target: dev
-    # Source mounted read-only and hot-reloaded: a code change needs neither
-    # `--build` nor `restart`. Without the reload the container would keep
+    # Source mounted read-only and restarted on change: a code change needs
+    # neither `--build` nor `restart`. Without it the container would keep
     # serving whatever it loaded at startup, and verify-e2e.sh would pass
     # against the previous version — a green run that proves nothing.
-    # Only src/ and migrations/: mounting /app would shadow the virtualenv the
-    # image builds at /app/.venv and nothing would import. Read-only because the
-    # container must never write back into the working tree.
+    # Only src/ and migrations/: mounting the service root would shadow the
+    # virtualenv the image builds there and nothing would import.
     volumes:
-      - ./backend/src:/app/src:ro
-      - ./backend/migrations:/app/migrations:ro
-      - ./libs/chassis/src:/libs/chassis/src:ro
+      - ./services/lead-core/src:/srv/services/lead-core/src:ro
+      - ./services/lead-core/migrations:/srv/services/lead-core/migrations:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_db
       - JWKS_URL=http://identity:8000/internal/v1/jwks
@@ -70,7 +74,7 @@ services:
       db-bootstrap:
         condition: service_completed_successfully
       # No condition on kafka (ADR-0026): the API only records to the outbox and
-      # backend-worker delivers, so it must come up and keep serving leads
+      # lead-core-worker delivers, so it must come up and keep serving leads
       # whether or not the broker is reachable yet.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -81,7 +85,7 @@ services:
 
   gateway:
     # The only container that publishes the API (ADR-0032). 8001 on the host is
-    # the port the backend used to publish, so every client keeps its URL.
+    # the port the API published before the gateway, so every client keeps its URL.
     image: nginx:1.27-alpine
     volumes:
       # A directory, not three files: a single-file bind mount pins the inode, so
@@ -91,7 +95,7 @@ services:
     ports:
       - "8001:8080"
     # No depends_on: the upstream is re-resolved at runtime (`resolve`), so the
-    # gateway starts, and survives a backend recreate, without ordering.
+    # gateway starts, and survives a service recreate, without ordering.
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 5s
@@ -117,7 +121,7 @@ services:
       # is where "anyone with network access" used to reach in without a
       # credential. PLAINTEXT stays open on purpose — it never leaves the
       # compose network, the same trust perimeter Postgres already assumes —
-      # and it is also how the backend provisions credentials without
+      # and it is also how identity provisions credentials without
       # needing one of its own.
       # SASL_INTERNAL exists because PLAINTEXT_HOST cannot serve both
       # audiences: it advertises `localhost`, which inside another container
@@ -168,8 +172,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     environment:
       # Not "guest"/"guest": RabbitMQ refuses that account outside loopback,
-      # and both the backend and intake-worker reach this over the compose
-      # network, not localhost. Any other username sidesteps the restriction.
+      # and intake-worker reaches this over the compose network, not
+      # localhost. Any other username sidesteps the restriction.
       RABBITMQ_DEFAULT_USER: leads
       RABBITMQ_DEFAULT_PASS: leadspassword
     ports:
@@ -219,7 +223,7 @@ services:
       - DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_db
       - RABBITMQ_URL=amqp://leads:leadspassword@rabbitmq:5672/%2F
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - LEAD_CORE_URL=http://backend:8000
+      - LEAD_CORE_URL=http://lead-core:8000
       - IDENTITY_URL=http://identity:8000
       - SERVICE_CLIENT_ID=intake
       - SERVICE_CLIENT_SECRET=intake-dev-secret-a91b68b5a560
@@ -243,42 +247,39 @@ services:
       # read the tables they create.
       intake:
         condition: service_healthy
-      # No condition on backend: a lead-core outage interrupts a job (nack and
+      # No condition on lead-core: a lead-core outage interrupts a job (nack and
       # redelivery), it does not stop the worker.
     # On stop the worker finishes the job in hand before closing; a 10k-record
     # job takes minutes, and Docker's default 10 s would kill it mid-run.
     stop_grace_period: 5m
     restart: on-failure
 
-  backend-worker:
-    # Same image and target as `backend`: delivery (outbox relay, webhooks) lives
-    # here so the API owns only request handling.
+  lead-core-worker:
+    # Same image and target as `lead-core`: delivery (outbox relay, webhooks) and
+    # the advisors projection live here so the API owns only request handling.
+    # Needs none of the API's credentials.
     build:
-      context: ./backend
+      context: ./services/lead-core
       dockerfile: Dockerfile
       additional_contexts:
         chassis: ./libs/chassis
       target: dev
-    working_dir: /app/src
+    working_dir: /srv/services/lead-core/src
     volumes:
-      - ./backend/src:/app/src:ro
-      - ./libs/chassis/src:/libs/chassis/src:ro
+      - ./services/lead-core/src:/srv/services/lead-core/src:ro
+      - ./libs/chassis/src:/srv/libs/chassis/src:ro
     environment:
       - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_db
-      - LOG_LEVEL=INFO
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - LOG_LEVEL=INFO
     # Reloaded on change, like the API. Stopping mid-pass is safe by design: an
     # unmarked outbox row is delivered again and consumers deduplicate by event id.
-    command: ["watchfiles", "python -m infrastructure.worker", "/app/src", "/libs/chassis/src"]
+    command: ["watchfiles", "python -m infrastructure.worker", "/srv/services/lead-core/src", "/srv/libs/chassis/src"]
     depends_on:
-      db:
-        condition: service_healthy
-      # The backend applies the migrations at startup; the relay reads columns
+      # The API applies the migrations at startup; the relay reads columns
       # and indexes they create (channel, correlation_id, key order).
-      backend:
+      lead-core:
         condition: service_healthy
-      db-bootstrap:
-        condition: service_completed_successfully
       # No condition on kafka (ADR-0026): the worker retries its topics and
       # keeps relaying the rest while the broker is away.
     restart: on-failure
@@ -372,7 +373,7 @@ services:
       - DATABASE_URL=postgresql://intake_svc:intakepassword@db:5432/intake_db
       - JWKS_URL=http://identity:8000/internal/v1/jwks
       # Manual promotion admits in line, so the API needs lead-core and a token too.
-      - LEAD_CORE_URL=http://backend:8000
+      - LEAD_CORE_URL=http://lead-core:8000
       - IDENTITY_URL=http://identity:8000
       - SERVICE_CLIENT_ID=intake
       - SERVICE_CLIENT_SECRET=intake-dev-secret-a91b68b5a560
@@ -391,7 +392,7 @@ services:
       start_period: 10s
 
   notifications:
-    # The inbox, cut over from the monolith in F2 (ADR-0031). The layout mirrors
+    # The inbox, cut over from lead-core in F2 (ADR-0031). The layout mirrors
     # the repository (/srv/services/..., /srv/libs/...) because uv.lock records
     # chassis as ../../libs/chassis. Not published: the gateway is the only way in.
     build:
@@ -468,15 +469,15 @@ services:
     volumes:
       - ./docs/content:/docs/content:ro
     ports:
-      # 8002: 8000 is the backend's container port and 8001 the gateway's host port.
+      # 8002: 8000 is every service's container port and 8001 the gateway's host port.
       - "8002:8000"
-    # No dependency on db or backend: documentation must be readable when the
+    # No dependency on db or any service: documentation must be readable when the
     # product does not start, which is exactly when it is needed most.
 
   test-consumer:
     # The customer's own system, kept behind a profile so the product's stack
     # comes up without it: `docker compose --profile demo up -d test-consumer`.
-    # Its own build context and Dockerfile, sharing nothing with backend/ —
+    # Its own build context and Dockerfile, sharing nothing with services/ —
     # if it needed the product's source it would not be proving the contract.
     profiles: ["demo"]
     build:
@@ -494,40 +495,6 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-
-  backend-test:
-    profiles: ["test"]
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      # Named context: the image needs libs/chassis without widening the build
-      # context to the whole repository.
-      additional_contexts:
-        chassis: ./libs/chassis
-      target: test
-    # Same reasoning as `backend`, plus tests/. This is what makes `--build`
-    # unnecessary on every run: the suite executes the working tree as it is.
-    # Rebuild only when pyproject.toml or uv.lock change.
-    volumes:
-      - ./backend/src:/app/src:ro
-      - ./backend/tests:/app/tests:ro
-      - ./backend/migrations:/app/migrations:ro
-      - ./libs/chassis/src:/libs/chassis/src:ro
-      # Contract fixtures both sides of an interface test against; found by
-      # walking up from the tests, so any ancestor mount point works.
-      - ./contracts:/contracts:ro
-    depends_on:
-      db:
-        condition: service_healthy
-      db-bootstrap:
-        condition: service_completed_successfully
-    environment:
-      - DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_test
-      - TEST_DATABASE_URL=postgresql://lead_core_svc:leadcorepassword@db:5432/leads_test
-      # The mounts are read-only, so bytecode cannot be cached anyway; saying so
-      # avoids a warning per module.
-      - PYTHONDONTWRITEBYTECODE=1
-    command: ["pytest", "-q"]
 
   notifications-test:
     profiles: ["test"]
@@ -604,7 +571,6 @@ services:
     command: ["pytest", "-q"]
 
   lead-core-test:
-    # Pre-declared for F5: services/lead-core arrives with the move out of backend/.
     profiles: ["test"]
     build:
       context: ./services/lead-core

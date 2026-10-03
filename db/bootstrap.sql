@@ -45,8 +45,8 @@ SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', name) FROM service_da
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', name, owner) FROM service_databases
 \gexec
 
--- leads_db is created by POSTGRES_DB as postgres; the backend ran as postgres, so its tables
--- belong to postgres until handed over. Index and sequence ownership follow the table.
+-- leads_db is created by POSTGRES_DB as postgres, and lead-core first ran as postgres, so an older
+-- volume holds tables owned by postgres until handed over. Index and sequence ownership follow the table.
 \connect leads_db
 SELECT format('ALTER TABLE public.%I OWNER TO lead_core_svc', tablename)
 FROM pg_tables WHERE schemaname = 'public' AND tableowner <> 'lead_core_svc'
