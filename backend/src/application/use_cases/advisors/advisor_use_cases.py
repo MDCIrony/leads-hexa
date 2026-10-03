@@ -2,7 +2,7 @@ from application.dtos.advisors import AdvisorsPage, AdvisorView, ListAdvisorsQue
 from application.ports.input.advisors.advisor_use_case_ports import ListAdvisorsInputPort, SetAdvisorGroupInputPort
 from application.ports.output.advisors.advisor_directory_port import AdvisorDirectoryPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.use_cases.sales_group_use_cases import get_owned_group
+from application.use_cases.groups.sales_group_use_cases import get_owned_group
 from domain.exceptions import DomainException
 
 

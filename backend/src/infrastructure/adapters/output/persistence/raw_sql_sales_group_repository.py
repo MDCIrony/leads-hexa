@@ -3,7 +3,7 @@ from uuid import UUID
 
 import psycopg
 
-from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
+from application.ports.output.groups.sales_group_repository_port import SalesGroupRepositoryPort
 from domain.groups.sales_group import SalesGroup
 
 

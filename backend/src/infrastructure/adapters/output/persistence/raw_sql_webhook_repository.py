@@ -3,7 +3,7 @@ from typing import List
 import psycopg
 from chassis.persistence import RawSqlDatabase
 
-from application.ports.output.webhook_repository_port import WebhookRepositoryPort
+from application.ports.output.webhooks.webhook_repository_port import WebhookRepositoryPort
 from domain.webhooks.webhook import WebhookConfig
 from domain.value_objects.enums import WebhookEventType
 

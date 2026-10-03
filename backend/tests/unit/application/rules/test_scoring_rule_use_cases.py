@@ -4,7 +4,7 @@ import pytest
 
 from application.dtos.commands import CreateScoringRuleCommand, UpdateScoringRuleCommand
 from application.dtos.queries import GetRulesQuery
-from application.use_cases.rule_use_cases import (
+from application.use_cases.rules.assignment_rule_use_cases import (
     CreateScoringRuleUseCase,
     DeleteScoringRuleUseCase,
     GetScoringRulesUseCase,
@@ -14,7 +14,7 @@ from domain.rules.scoring_rule import ScoringRule
 from domain.exceptions import DomainException
 from domain.value_objects.criterion import Criterion
 from domain.value_objects.enums import Operator
-from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
+from tests.unit.mocks.rules.in_memory_rule_repo import InMemoryRuleRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 

@@ -7,7 +7,7 @@ from application.dtos.commands import (
     UpdateSalesGroupCommand,
 )
 from application.dtos.queries import GetSalesGroupsQuery
-from application.ports.input.sales_group_use_case_ports import (
+from application.ports.input.groups.sales_group_use_case_ports import (
     CreateSalesGroupInputPort,
     DeleteSalesGroupInputPort,
     GetSalesGroupsInputPort,

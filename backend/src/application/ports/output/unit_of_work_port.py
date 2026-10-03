@@ -2,10 +2,10 @@ from __future__ import annotations
 import abc
 from typing import Any
 
-from application.ports.output.lead_repository_port import LeadRepositoryPort
-from application.ports.output.rule_repository_port import RuleRepositoryPort
-from application.ports.output.disqualification_rule_repository_port import DisqualificationRuleRepositoryPort
-from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
+from application.ports.output.leads.lead_repository_port import LeadRepositoryPort
+from application.ports.output.rules.rule_repository_port import RuleRepositoryPort
+from application.ports.output.rules.disqualification_rule_repository_port import DisqualificationRuleRepositoryPort
+from application.ports.output.groups.sales_group_repository_port import SalesGroupRepositoryPort
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from application.ports.output.advisors.advisor_repository_port import AdvisorRepositoryPort
 

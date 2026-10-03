@@ -6,12 +6,12 @@ from application.dtos.commands import (
 )
 from application.dtos.context import RequestContext
 from application.dtos.queries import GetAssignmentRulesQuery, GetDisqualificationRulesQuery, GetRulesQuery
-from application.ports.input.rule_use_case_ports import (
+from application.ports.input.rules.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
     DeleteScoringRuleInputPort, GetAssignmentRulesInputPort, GetScoringRulesInputPort,
     UpdateAssignmentRuleInputPort, UpdateScoringRuleInputPort,
 )
-from application.ports.input.disqualification_rule_use_case_ports import (
+from application.ports.input.rules.disqualification_rule_use_case_ports import (
     CreateDisqualificationRuleInputPort, DeleteDisqualificationRuleInputPort,
     GetDisqualificationRulesInputPort, UpdateDisqualificationRuleInputPort,
 )

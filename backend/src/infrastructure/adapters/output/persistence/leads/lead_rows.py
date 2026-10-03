@@ -3,7 +3,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from uuid import UUID
 
-from application.ports.output.lead_repository_port import DuplicateAdmission
+from application.ports.output.leads.lead_repository_port import DuplicateAdmission
 from domain.leads.lead import Lead
 from domain.value_objects.score_breakdown import AppliedRule
 

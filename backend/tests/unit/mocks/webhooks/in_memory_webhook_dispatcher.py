@@ -1,5 +1,5 @@
 from typing import Any, Dict, List
-from application.ports.output.webhook_dispatcher_port import WebhookDispatcherPort
+from application.ports.output.webhooks.webhook_dispatcher_port import WebhookDispatcherPort
 
 class InMemoryWebhookDispatcher(WebhookDispatcherPort):
     def __init__(self) -> None:

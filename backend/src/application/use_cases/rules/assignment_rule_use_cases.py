@@ -9,7 +9,7 @@ from application.dtos.commands import (
     UpdateScoringRuleCommand,
 )
 from application.dtos.queries import GetAssignmentRulesQuery, GetRulesQuery
-from application.ports.input.rule_use_case_ports import (
+from application.ports.input.rules.rule_use_case_ports import (
     CreateAssignmentRuleInputPort,
     CreateScoringRuleInputPort,
     DeleteAssignmentRuleInputPort,

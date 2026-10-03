@@ -6,7 +6,7 @@ from application.dtos.commands import (
     UpdateDisqualificationRuleCommand,
 )
 from application.dtos.queries import GetDisqualificationRulesQuery
-from application.ports.input.disqualification_rule_use_case_ports import (
+from application.ports.input.rules.disqualification_rule_use_case_ports import (
     CreateDisqualificationRuleInputPort,
     DeleteDisqualificationRuleInputPort,
     GetDisqualificationRulesInputPort,

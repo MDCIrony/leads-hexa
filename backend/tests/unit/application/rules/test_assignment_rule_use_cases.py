@@ -4,17 +4,17 @@ import pytest
 
 from application.dtos.commands import CreateAssignmentRuleCommand, UpdateAssignmentRuleCommand
 from application.dtos.queries import GetAssignmentRulesQuery
-from application.use_cases.rule_use_cases import (
+from application.use_cases.rules.assignment_rule_use_cases import (
     CreateAssignmentRuleUseCase,
     DeleteAssignmentRuleUseCase,
     GetAssignmentRulesUseCase,
     UpdateAssignmentRuleUseCase,
 )
 from domain.exceptions import DomainException
-from tests.unit.mocks.in_memory_advisor_repo import make_advisor
-from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
-from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
-from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
+from tests.unit.mocks.advisors.in_memory_advisor_repo import make_advisor
+from tests.unit.mocks.leads.in_memory_lead_repo import InMemoryLeadRepository
+from tests.unit.mocks.rules.in_memory_rule_repo import InMemoryRuleRepository
+from tests.unit.mocks.groups.in_memory_sales_group_repo import InMemorySalesGroupRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 

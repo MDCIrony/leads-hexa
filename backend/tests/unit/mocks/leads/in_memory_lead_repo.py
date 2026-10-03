@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Tuple
 from uuid import UUID
 from application.dtos.admissions import AdmissionLookupItem
-from application.ports.output.lead_repository_port import LeadRepositoryPort
+from application.ports.output.leads.lead_repository_port import LeadRepositoryPort
 from domain.leads.lead import Lead
 from domain.value_objects.enums import LeadStatus
 

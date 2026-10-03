@@ -8,7 +8,7 @@ from uuid import UUID
 
 from application.dtos.admissions import AdmissionError, AdmissionRequest, AdmissionResult
 from application.ports.input.admissions.admission_ports import AdmitLeadInputPort
-from application.ports.output.lead_repository_port import DuplicateAdmission
+from application.ports.output.leads.lead_repository_port import DuplicateAdmission
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.leads.lead import Lead
 from domain.groups.sales_group import SalesGroup

@@ -2,7 +2,7 @@ from uuid import UUID
 
 from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand, LeadsPageResult
 from application.dtos.queries import GetLeadQuery, GetMyLeadsQuery
-from application.ports.input.lead_lifecycle_use_case_ports import (
+from application.ports.input.leads.lead_lifecycle_use_case_ports import (
     AssignLeadInputPort,
     DiscardLeadInputPort,
     GetLeadInputPort,

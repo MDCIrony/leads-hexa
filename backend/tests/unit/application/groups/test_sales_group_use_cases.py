@@ -4,7 +4,7 @@ import pytest
 
 from application.dtos.commands import CreateSalesGroupCommand, UpdateSalesGroupCommand
 from application.dtos.queries import GetSalesGroupsQuery
-from application.use_cases.sales_group_use_cases import (
+from application.use_cases.groups.sales_group_use_cases import (
     CreateSalesGroupUseCase,
     DeleteSalesGroupUseCase,
     GetSalesGroupsUseCase,
@@ -16,10 +16,10 @@ from domain.value_objects.enums import AgentRole
 from domain.value_objects.group_id import GroupId
 from domain.value_objects.tenant_id import TenantId
 from domain.exceptions import DomainException
-from tests.unit.mocks.in_memory_advisor_repo import make_advisor
-from tests.unit.mocks.in_memory_lead_repo import InMemoryLeadRepository
-from tests.unit.mocks.in_memory_rule_repo import InMemoryRuleRepository
-from tests.unit.mocks.in_memory_sales_group_repo import InMemorySalesGroupRepository
+from tests.unit.mocks.advisors.in_memory_advisor_repo import make_advisor
+from tests.unit.mocks.leads.in_memory_lead_repo import InMemoryLeadRepository
+from tests.unit.mocks.rules.in_memory_rule_repo import InMemoryRuleRepository
+from tests.unit.mocks.groups.in_memory_sales_group_repo import InMemorySalesGroupRepository
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 

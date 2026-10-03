@@ -4,7 +4,7 @@ import pytest
 
 from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand
 from application.dtos.queries import GetMyLeadsQuery
-from application.use_cases.lead_lifecycle_use_cases import (
+from application.use_cases.leads.lead_lifecycle_use_cases import (
     AssignLeadUseCase,
     DiscardLeadUseCase,
     GetMyLeadsUseCase,
@@ -12,7 +12,7 @@ from application.use_cases.lead_lifecycle_use_cases import (
 from domain.leads.lead import Lead
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentRole, LeadStatus
-from tests.unit.mocks.in_memory_advisor_repo import ProjectionOnlyDirectory, make_advisor
+from tests.unit.mocks.advisors.in_memory_advisor_repo import ProjectionOnlyDirectory, make_advisor
 from tests.unit.mocks.in_memory_uow import InMemoryUnitOfWork
 
 _TENANT = uuid.uuid4()

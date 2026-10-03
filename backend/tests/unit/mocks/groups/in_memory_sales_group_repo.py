@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from application.ports.output.sales_group_repository_port import SalesGroupRepositoryPort
+from application.ports.output.groups.sales_group_repository_port import SalesGroupRepositoryPort
 from domain.groups.sales_group import SalesGroup
 
 

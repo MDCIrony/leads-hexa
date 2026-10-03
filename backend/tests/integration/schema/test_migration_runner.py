@@ -7,7 +7,7 @@ _MIGRATIONS_DIR = Path(__file__).resolve().parents[3] / "migrations"
 
 
 def test_applies_every_migration_on_a_fresh_database(test_db):
-    # test_db already ran init_db() (now the runner itself) at fixture setup,
+    # test_db already applied the migrations at fixture setup,
     # so schema_migrations already has 001 recorded. Drop it to reproduce the
     # actual first-boot state this test is named for: tracking table absent,
     # data tables already there.

@@ -4,39 +4,39 @@ from fastapi import Request, Depends
 from chassis.auth import KeysUnavailable, TokenError
 from application.dtos.context import Principal, RequestContext
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from application.ports.input.get_leads_use_case_port import GetLeadsInputPort
-from application.ports.input.get_lead_stats_use_case_port import GetLeadStatsInputPort
-from application.ports.input.rule_use_case_ports import (
+from application.ports.input.leads.get_leads_use_case_port import GetLeadsInputPort
+from application.ports.input.leads.get_lead_stats_use_case_port import GetLeadStatsInputPort
+from application.ports.input.rules.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
     DeleteScoringRuleInputPort, GetAssignmentRulesInputPort, GetScoringRulesInputPort,
     UpdateAssignmentRuleInputPort, UpdateScoringRuleInputPort,
 )
-from application.ports.input.disqualification_rule_use_case_ports import (
+from application.ports.input.rules.disqualification_rule_use_case_ports import (
     CreateDisqualificationRuleInputPort, DeleteDisqualificationRuleInputPort,
     GetDisqualificationRulesInputPort, UpdateDisqualificationRuleInputPort,
 )
-from application.ports.input.sales_group_use_case_ports import (
+from application.ports.input.groups.sales_group_use_case_ports import (
     CreateSalesGroupInputPort, DeleteSalesGroupInputPort, GetSalesGroupsInputPort,
     UpdateSalesGroupInputPort,
 )
-from application.ports.input.lead_lifecycle_use_case_ports import (
+from application.ports.input.leads.lead_lifecycle_use_case_ports import (
     AssignLeadInputPort, DiscardLeadInputPort, GetLeadInputPort, GetMyLeadsInputPort,
 )
-from application.use_cases.get_leads_use_case import GetLeadsUseCase
-from application.use_cases.get_lead_stats_use_case import GetLeadStatsUseCase
-from application.use_cases.rule_use_cases import (
+from application.use_cases.leads.get_leads_use_case import GetLeadsUseCase
+from application.use_cases.leads.get_lead_stats_use_case import GetLeadStatsUseCase
+from application.use_cases.rules.assignment_rule_use_cases import (
     CreateAssignmentRuleUseCase, CreateScoringRuleUseCase, DeleteAssignmentRuleUseCase,
     DeleteScoringRuleUseCase, GetAssignmentRulesUseCase, GetScoringRulesUseCase,
     UpdateAssignmentRuleUseCase, UpdateScoringRuleUseCase,
 )
-from application.use_cases.disqualification_rule_use_cases import (
+from application.use_cases.rules.disqualification_rule_use_cases import (
     CreateDisqualificationRuleUseCase, DeleteDisqualificationRuleUseCase,
     GetDisqualificationRulesUseCase, UpdateDisqualificationRuleUseCase,
 )
-from application.use_cases.sales_group_use_cases import (
+from application.use_cases.groups.sales_group_use_cases import (
     CreateSalesGroupUseCase, DeleteSalesGroupUseCase, GetSalesGroupsUseCase, UpdateSalesGroupUseCase,
 )
-from application.use_cases.lead_lifecycle_use_cases import (
+from application.use_cases.leads.lead_lifecycle_use_cases import (
     AssignLeadUseCase, DiscardLeadUseCase, GetLeadUseCase, GetMyLeadsUseCase,
 )
 from domain.exceptions import DomainException, UnauthorizedException

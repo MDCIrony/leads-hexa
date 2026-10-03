@@ -3,7 +3,7 @@ from uuid import uuid4
 
 import pytest
 
-from application.ports.output.lead_repository_port import DuplicateAdmission
+from application.ports.output.leads.lead_repository_port import DuplicateAdmission
 from domain.leads.lead import Lead
 from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
 

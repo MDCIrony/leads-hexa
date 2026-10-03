@@ -4,7 +4,7 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
-from application.ports.output.disqualification_rule_repository_port import (
+from application.ports.output.rules.disqualification_rule_repository_port import (
     DisqualificationRuleRepositoryPort,
 )
 from domain.rules.disqualification_rule import DisqualificationRule
