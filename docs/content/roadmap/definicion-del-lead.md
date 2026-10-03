@@ -64,7 +64,7 @@ validación de forma ya no puede ocurrir en un tipo estático del borde, tiene q
 contra la definición de la organización que corresponda. El `422` no se corrige con una
 comprobación más — desaparece porque deja de existir un esquema único contra el que fallar antes
 de guardar. Es la misma clase de inversión que ya resolvió el caso del correo, aplicada al resto
-de los campos. Ver [Dónde se valida lo que entra](../otros/donde-se-valida-lo-que-entra.md).
+de los campos.
 
 ## Qué hay que decidir antes de construirlo
 

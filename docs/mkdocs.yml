@@ -103,14 +103,12 @@ nav:
       - Modelo de datos: arquitectura/modelo-de-datos.md
       - El recorrido de un lead: arquitectura/recorrido-de-un-lead.md
 
-  - Desacople en microservicios:
+  - Arquitectura de servicios:
       - microservices/index.md
-      - "01 · Punto de partida": microservices/01-punto-de-partida.md
       - "02 · Servicios y datos": microservices/02-servicios-y-datos.md
       - "03 · Gateway y autenticación": microservices/03-gateway-y-autenticacion.md
       - "04 · Comunicación y eventos": microservices/04-comunicacion-y-eventos.md
       - "05 · Despliegue local": microservices/05-despliegue-local.md
-      - "06 · Plan de desacople": microservices/06-plan-de-desacople.md
       - "07 · Evoluciones y riesgos": microservices/07-evoluciones-y-riesgos.md
 
   - Decisiones:
@@ -186,10 +184,6 @@ nav:
       - Identidad del contacto: roadmap/identidad-del-contacto.md
       - La definición del lead: roadmap/definicion-del-lead.md
       - Deuda técnica: roadmap/deuda-tecnica.md
-
-  - Otros:
-      - otros/index.md
-      - Dónde se valida lo que entra: otros/donde-se-valida-lo-que-entra.md
 
   - Negocio:
       - negocio/index.md

@@ -4,34 +4,6 @@ Puntos ya construidos que funcionan hoy, pero que cuestan mantener o arriesgan u
 el uso. A diferencia de la sección anterior, aquí no falta una decisión de producto: falta tiempo
 de ingeniería.
 
-## Los diagramas quedaron desfasados
-
-Los tres diagramas de arquitectura del repositorio dibujan un sistema anterior al actual: les
-faltan piezas centrales del modelo de dominio y el diagrama de flujo de un lead lo muestra en una
-sola etapa, cuando hoy son tres.
-
-**Qué cuesta:** regenerarlos contra el modelo actual. No es trabajo de investigación, es
-transcripción cuidadosa.
-
-**Riesgo de no hacerlo:** son material de clase. Un diagrama desactualizado no informa menos que
-ningún diagrama: informa mal, con la autoridad visual de un diagrama, y quien lo lea confiará en
-una estructura que ya no existe.
-
-## Una conexión de arranque se comparte entre hilos sin sincronización
-
-Al arrancar, el proceso abre una conexión de base de datos en modo autocommit que vive mientras
-dura el proceso, y la usa el manejador de eventos de webhooks salientes para leer configuración.
-Esa conexión se comparte entre todas las peticiones que atiende el servidor, sin ningún mecanismo
-que serialice el acceso concurrente.
-
-**Qué cuesta:** que ese manejador pida su conexión al mismo fondo de conexiones que usa el resto
-de la aplicación, en vez de abrir la suya propia de por vida.
-
-**Riesgo de no hacerlo:** una conexión de psycopg no está pensada para que varios hilos operen
-cursores sobre ella a la vez. Con tráfico bajo no se nota; con tráfico concurrente real, dos
-peticiones que caen en el mismo instante pueden interferirse entre sí de formas difíciles de
-reproducir.
-
 ## Cada lead de un lote recarga las reglas de su organización
 
 Al procesar una carga de fichero, cada fila dispara sus propias consultas para traer las reglas de
@@ -74,13 +46,3 @@ consumo externo, no sólo para el frontend propio.
 
 **Riesgo de no hacerlo:** ninguno funcional mientras el único consumidor sea la interfaz que se
 construye a la vez que la API. El coste aparece si un tercero integra directamente contra ella.
-
-## El documento de diseño maestro sigue marcado como propuesta
-
-El documento de diseño de referencia se sigue titulando "propuesto, pendiente de revisión", con la
-mayor parte de sus fases ya cerradas y verificadas contra el sistema real.
-
-**Qué cuesta:** actualizar su encabezado cuando se dé por adoptado.
-
-**Riesgo de no hacerlo:** ninguno funcional. Es una inconsistencia menor entre lo que el
-documento dice de sí mismo y lo que demuestra el resto de esta documentación.

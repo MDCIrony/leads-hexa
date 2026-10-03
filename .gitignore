@@ -56,3 +56,6 @@ test-consumer/data/
 
 # Database dumps taken as restore points (e.g. monolith-baseline): data, not source.
 backups/
+
+# Exported decks (slidev export): regenerated from the slides, not versioned.
+.slides*/*.pdf

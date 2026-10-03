@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — implantada en F4. Lo construido difiere en lo que lista la [fase F4 del plan](../microservices/06-plan-de-desacople.md#f4-intake) |
+| **Estado** | Aceptada — implantada en F4. Lo construido está descrito en [Comunicación y eventos](../microservices/04-comunicacion-y-eventos.md#contrato-de-admision) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Backend · Ingesta · Asignación |
 

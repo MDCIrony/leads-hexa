@@ -118,9 +118,9 @@ razón.
 
 El script se amplía, nunca se reescribe: cada fase de trabajo añade su propia función `verify_fN` y
 la llama desde `main`, de modo que las comprobaciones anteriores siguen corriendo y probando que lo
-que ya funcionaba sigue funcionando. Las fases del [desacople en microservicios](../microservices/06-plan-de-desacople.md)
-usan una `verify_ms_fN` por fase (`verify_ms_f0` es la primera), porque los nombres `verify_fN` ya eran
-de planes anteriores.
+que ya funcionaba sigue funcionando. Las comprobaciones de la separación en servicios
+(ver [Arquitectura de servicios](../microservices/index.md)) usan el prefijo `verify_ms_fN`, porque
+los nombres `verify_fN` ya eran de planes anteriores.
 
 Las notificaciones llegan **de forma asíncrona** (relay, Kafka y consumidor), así que las
 comprobaciones que leen el buzón no pueden asumir que el aviso ya está. Dos ayudantes del script lo

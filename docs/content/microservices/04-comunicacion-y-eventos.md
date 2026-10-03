@@ -8,14 +8,12 @@ Decisiones registradas en [ADR-0033](../decisiones/0033-eventos-internos-en-kafk
 !!! note "Estado de F1, F3, F4 y F5"
     Lo que esta página describe de outbox, eventos internos, RabbitMQ y fichero durable está
     implantado desde F1. Los «hoy» de las secciones de outbox y RabbitMQ se refieren al sistema
-    anterior a F1. Lo que se construyó difiere en lo que lista la
-    [fase F1 del plan](06-plan-de-desacople.md#f1-durabilidad-en-el-monolito).
+    anterior a F1.
 
     Desde F3, `internal.identity.*` lo produce identity (`identity-worker`, `producer="identity"`).
     Desde F4, la admisión, el worker de intake y el consumidor `intake.tenants` son de
     `services/intake` (`intake-worker`, `producer="intake"`), y el worker de lead-core sólo consume
-    `lead-core.advisors`. Lo que se construyó difiere en lo que lista la
-    [fase F4 del plan](06-plan-de-desacople.md#f4-intake).
+    `lead-core.advisors`.
 
     Desde F5 ese worker se llama `lead-core-worker` (antes `backend-worker`) y vive en
     `services/lead-core`. Sólo cambia el nombre del proceso: los topics, los nombres de grupo y los

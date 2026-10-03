@@ -115,7 +115,7 @@ sequenceDiagram
 
 ## Cómo se corta cada acoplamiento
 
-| Acoplamiento ([01](01-punto-de-partida.md)) | Resolución | Fase |
+| Acoplamiento | Resolución | Fase |
 |---|---|---|
 | `IngestLeadUseCase` lee `agents` y `groups` | Lee `advisors` y `sales_groups`, ambos locales de lead-core | F3 |
 | `IngestLeadUseCase` lee y escribe `intake_records` | Se parte en dos: intake reclama y marca el registro; lead-core decide en `POST /internal/v1/admissions` | F4 |

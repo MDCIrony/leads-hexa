@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Estado** | Aceptada — implantada: los cuatro servicios extraídos (F2–F5). `notifications` (F2), `identity` (F3), `intake` (F4) y `lead-core` (F5, lo que quedó del monolito, con su rol `lead_core_svc`). Ver el [plan de desacople](../microservices/06-plan-de-desacople.md) |
+| **Estado** | Aceptada — implantada: los cuatro servicios extraídos (F2–F5). `notifications` (F2), `identity` (F3), `intake` (F4) y `lead-core` (F5, lo que quedó del monolito, con su rol `lead_core_svc`). Ver [Arquitectura de servicios](../microservices/index.md) |
 | **Fecha** | 2026-10-01 |
 | **Ámbito** | Arquitectura · Backend · Infraestructura |
 
@@ -11,7 +11,7 @@
 El backend es un monolito modular hexagonal ([ADR-0001](0001-arquitectura-hexagonal.md)) con una única
 unidad de trabajo sobre una única base. Los contextos ya se reconocen en el código, pero cualquier
 caso de uso puede leer cualquier tabla en la misma transacción, y nueve cruces concretos lo hacen
-(inventario en [Punto de partida](../microservices/01-punto-de-partida.md)). El objetivo es que
+(el modo en que se cortó cada uno está en [Servicios y datos](../microservices/02-servicios-y-datos.md#como-se-corta-cada-acoplamiento)). El objetivo es que
 identidad, ingesta, decisión de leads y notificaciones cambien, se desplieguen y fallen por separado,
 con el menor número de cambios que no deje deuda.
 
@@ -59,6 +59,6 @@ aplicación a nueve. Cambiar `chassis` obliga a reconstruir las imágenes que lo
 
 ## Ver también
 
-- [Desacople en microservicios](../microservices/index.md)
+- [Arquitectura de servicios](../microservices/index.md)
 - [Servicios y datos](../microservices/02-servicios-y-datos.md)
 - [ADR-0001 · Arquitectura hexagonal](0001-arquitectura-hexagonal.md)

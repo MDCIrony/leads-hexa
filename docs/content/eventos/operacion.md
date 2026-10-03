@@ -18,7 +18,7 @@ bloqueantes del servicio `lead-core`, que sólo escribe en el outbox: si no est�
 `lead-core-worker`, `identity-worker` e `intake-worker` reintentan; `notifications-worker` y los
 consumidores de `lead-core-worker` e `intake-worker` lo hacen con sus carriles. Está verificado — con ambos brókeres apagados, `/health` responde `200`
 y los leads se guardan; con sólo RabbitMQ apagado, una ingesta responde `202` y su trabajo queda
-`PENDING` hasta que el bróker vuelve (`verify_ms_f1`).
+`PENDING` hasta que el bróker vuelve (`verify-e2e.sh`).
 
 `lead-core-worker` tampoco espera a los brókeres: reintenta la creación de sus topics y entrega por
 canales independientes, así que Kafka caído no detiene los jobs ni RabbitMQ caído detiene las
@@ -259,10 +259,10 @@ par en par era seguridad de teatro. El ADR-0028 cierra ambas en la misma tanda.
 | Un lead guardado tiene su evento registrado, y al revés | Test de integración: un `record()` seguido de `rollback` no deja fila |
 | Una entrada que falla no se pierde ni bloquea a las demás | Test de integración: 25 fallos seguidos y sigue en el lote, detrás de las nuevas |
 | La API arranca y sirve con ambos brókeres caídos | `/health` responde `200`; verificado a mano |
-| Con RabbitMQ caído una ingesta no se pierde | `verify_ms_f1`: `202`, el trabajo sigue `PENDING`, y al volver el bróker termina y el lead existe |
-| Una notificación llega por Kafka sin duplicarse al releer el grupo desde el principio | `verify_ms_f1` |
-| Los topics de identidad están compactados y las DLQ existen y están vacías | `verify_ms_f1` (los dos grupos de avisos) y `verify_ms_f2` (los tres) |
-| La bandeja la sirve `notifications` a través del gateway y lead-core no la tiene | `verify_ms_f2` |
-| Con lead-core parado una ingesta espera `PENDING` en su trabajo y, al volver, termina sin duplicar el lead | `verify_ms_f4` |
-| La reconciliación de intake y lead-core sale sin diferencias, e `intake.tenants` no tiene *lag* ni DLQ | `verify_ms_f4` |
+| Con RabbitMQ caído una ingesta no se pierde | `verify-e2e.sh` (comprobaciones de la separación): `202`, el trabajo sigue `PENDING`, y al volver el bróker termina y el lead existe |
+| Una notificación llega por Kafka sin duplicarse al releer el grupo desde el principio | `verify-e2e.sh` (comprobaciones de la separación) |
+| Los topics de identidad están compactados y las DLQ existen y están vacías | `verify-e2e.sh` (comprobaciones de la separación) |
+| La bandeja la sirve `notifications` a través del gateway y lead-core no la tiene | `verify-e2e.sh` (comprobaciones de la separación) |
+| Con lead-core parado una ingesta espera `PENDING` en su trabajo y, al volver, termina sin duplicar el lead | `verify-e2e.sh` (comprobaciones de la separación) |
+| La reconciliación de intake y lead-core sale sin diferencias, e `intake.tenants` no tiene *lag* ni DLQ | `verify-e2e.sh` (comprobaciones de la separación) |
 | El recorrido completo sobre HTTP | `./scripts/verify-e2e.sh` |

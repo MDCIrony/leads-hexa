@@ -208,7 +208,7 @@ hasta 30 s cada una y un check que falla si no llegan.
 
 Cada servicio lleva sus cuatro tests de guardián y el de estructura, sin lista base. `verify_ms_f5`
 comprueba además lo que la fase deja fijo: las tablas de `leads_db`, qué rol entra en cada base y que
-no quede nada con el nombre del monolito (ver [06](06-plan-de-desacople.md#f5-lead-core-residual)).
+no quede nada con el nombre del monolito.
 
 ## Estados intermedios
 

@@ -1,32 +1,35 @@
-# Desacople en microservicios
+# Arquitectura de servicios
 
-Lead Router son cuatro servicios con datos propios detrás de un gateway nginx, y las seis fases del
-[plan](06-plan-de-desacople.md) están implantadas. Cada servicio tiene su API y su worker, con imagen
-y base propias: `identity` (`identity`, `identity-worker`), `intake` (`intake`, `intake-worker`),
-`lead-core` (`lead-core`, `lead-core-worker`) y `notifications` (`notifications`,
-`notifications-worker`). RabbitMQ lleva el trabajo de fondo de intake y Kafka el canal de producto y
-los eventos internos. El monolito modular original ya no existe: lo que quedaba de él es lead-core.
-Las decisiones están registradas como ADR
+Lead Router son cuatro servicios con datos propios detrás de un gateway nginx. Cada servicio tiene su
+API y su worker, con imagen y base propias:
+
+| Servicio | Procesos | Posee |
+|---|---|---|
+| `identity` | `identity`, `identity-worker` | Autenticación, MFA, OAuth, organizaciones, agentes, credenciales de integración. Único con la clave de firma |
+| `intake` | `intake`, `intake-worker` | Fuentes, trabajos, registros y ficheros de ingesta. Pide la decisión de cada registro a lead-core |
+| `lead-core` | `lead-core`, `lead-core-worker` | Leads, reglas, grupos y asesores; decide viabilidad, puntuación y asignación |
+| `notifications` | `notifications`, `notifications-worker` | La bandeja de avisos y sus tres consumidores |
+
+El `gateway` (nginx, `:8001`) es la única entrada: autentica con `auth_request` contra identity y enruta por
+prefijo. RabbitMQ lleva el trabajo de fondo de intake y Kafka el canal de producto y los eventos
+internos. Las decisiones están registradas como ADR
 ([0031](../decisiones/0031-microservicios-por-contexto.md)–[0037](../decisiones/0037-estructura-y-tamano-del-codigo.md)).
-La sección describe **cómo se llegó**: se movió código que ya tenía puertos, se cambiaron adaptadores
-y no se reescribió dominio.
 
 ## Decisiones tomadas
 
 | Tema | Decisión | Dónde |
 |---|---|---|
-| Servicios | `identity`, `intake`, `lead-core`, `notifications` + `gateway` | [02](02-servicios-y-datos.md) |
-| Datos | Una base por servicio en el mismo PostgreSQL, rol propio, sin consultas cruzadas | [02](02-servicios-y-datos.md) |
-| Código | Monorepo `services/<svc>/`, mismo esqueleto en todos, `libs/chassis` sólo técnico | [02](02-servicios-y-datos.md) |
-| Gateway | nginx con `auth_request`; única entrada en `:8001` | [03](03-gateway-y-autenticacion.md) |
-| Autenticación | Cookie opaca en el navegador (ADR-0029 intacto) + *phantom token*: JWT interno Ed25519 de 60 s que cada servicio verifica en local | [03](03-gateway-y-autenticacion.md) |
+| Servicios | `identity`, `intake`, `lead-core`, `notifications` + `gateway` | [02](02-servicios-y-datos.md), [ADR-0031](../decisiones/0031-microservicios-por-contexto.md) |
+| Datos | Una base por servicio en el mismo PostgreSQL, rol propio, sin consultas cruzadas | [02](02-servicios-y-datos.md), [ADR-0031](../decisiones/0031-microservicios-por-contexto.md) |
+| Código | Monorepo `services/<svc>/`, mismo esqueleto en todos, `libs/chassis` sólo técnico | [02](02-servicios-y-datos.md), [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md) |
+| Gateway | nginx con `auth_request`; única entrada en `:8001` | [03](03-gateway-y-autenticacion.md), [ADR-0032](../decisiones/0032-gateway-y-phantom-token.md) |
+| Autenticación | Cookie opaca en el navegador (ADR-0029 intacto) + *phantom token*: JWT interno Ed25519 de 60 s que cada servicio verifica en local | [03](03-gateway-y-autenticacion.md), [ADR-0032](../decisiones/0032-gateway-y-phantom-token.md) |
 | Servicio a servicio | HTTP/JSON con token de servicio; gRPC descartado por ahora | [03](03-gateway-y-autenticacion.md), [07](07-evoluciones-y-riesgos.md) |
-| Hechos | Kafka: `leads.{tenant_id}` sin cambios + topics `internal.*`; estado en topics compactados | [04](04-comunicacion-y-eventos.md) |
-| Trabajo | RabbitMQ `intake.jobs` sin cambios de topología; encolado por outbox | [04](04-comunicacion-y-eventos.md) |
-| Ingesta → decisión | `POST /internal/v1/admissions` síncrono e idempotente por `intake_record_id` | [04](04-comunicacion-y-eventos.md) |
-| Contrato público | Dos cambios acotados: `/advisors` y `/intake/stats` | [02](02-servicios-y-datos.md) |
+| Hechos | Kafka: `leads.{tenant_id}` sin cambios + topics `internal.*`; estado en topics compactados | [04](04-comunicacion-y-eventos.md), [ADR-0033](../decisiones/0033-eventos-internos-en-kafka.md) |
+| Trabajo | RabbitMQ `intake.jobs` sin cambios de topología; encolado por outbox | [04](04-comunicacion-y-eventos.md), [ADR-0034](../decisiones/0034-encolado-por-outbox-y-fichero-durable.md) |
+| Ingesta → decisión | `POST /internal/v1/admissions` síncrono e idempotente por `intake_record_id` | [04](04-comunicacion-y-eventos.md), [ADR-0035](../decisiones/0035-admision-sincrona-idempotente.md) |
+| Contrato público | Dos cambios acotados: `/advisors` y `/intake/stats` | [02](02-servicios-y-datos.md), [ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md) |
 | Despliegue | Docker Compose; Kubernetes queda como evolución con criterio | [05](05-despliegue-local.md) |
-| Ruta | F0 gateway → F1 durabilidad → F2 Notifications → F3 Identity → F4 Intake → F5 Lead Core | [06](06-plan-de-desacople.md) |
 
 ## Vista del sistema
 
@@ -65,27 +68,25 @@ flowchart TB
 
 | Página | Responde |
 |---|---|
-| [01 · Punto de partida](01-punto-de-partida.md) | Qué hay hoy y qué acoplamientos concretos hay que cortar |
-| [02 · Servicios y datos](02-servicios-y-datos.md) | Qué servicios, qué posee cada uno, cómo se corta cada acoplamiento, el patrón de construcción |
+| [02 · Servicios y datos](02-servicios-y-datos.md) | Qué servicios, qué posee cada uno, el patrón de construcción |
 | [03 · Gateway y autenticación](03-gateway-y-autenticacion.md) | Cómo entra una petición y cómo cada servicio sabe quién la hace |
 | [04 · Comunicación y eventos](04-comunicacion-y-eventos.md) | Cuándo HTTP, RabbitMQ o Kafka; topics, outbox, consumidores, contrato de admisión |
 | [05 · Despliegue local](05-despliegue-local.md) | Compose, bases, imágenes, puertos y tests |
-| [06 · Plan de desacople](06-plan-de-desacople.md) | Las fases, qué cambia en cada una y cuándo se da por terminada |
 | [07 · Evoluciones y riesgos](07-evoluciones-y-riesgos.md) | Lo que se descartó por ahora y la señal que lo justificaría |
 
 ## Invariantes que la separación no negocia
 
-Todas las del monolito siguen vigentes en **cada** servicio, más tres nuevas:
+Las invariantes de la plataforma rigen en **cada** servicio, más tres propias de la separación:
 
 - **La organización sale del token** (ADR-0004). En el borde, del JWT interno; entre servicios, del
   dato persistido por el servicio que llama, nunca de la entrada del usuario final.
 - **404, no 403**, al leer una entidad de otra organización (ADR-0005).
 - **SQL crudo**, migraciones idempotentes, guardián 4/4 por servicio.
-- **Nuevo · Cada servicio sólo lee y escribe su base.** Lo que necesita de otro llega por API,
+- **Cada servicio sólo lee y escribe su base.** Lo que necesita de otro llega por API,
   evento o proyección. Nunca un `JOIN` entre bases.
-- **Nuevo · Toda publicación sale de un outbox local**, en la transacción del agregado que la
+- **Toda publicación sale de un outbox local**, en la transacción del agregado que la
   produce. Todo consumidor deduplica por `event_id`.
-- **Nuevo · Ningún servicio importa código de otro.** Sólo `libs/chassis`, y sólo desde
+- **Ningún servicio importa código de otro.** Sólo `libs/chassis`, y sólo desde
   `infrastructure`.
 
 ## Qué queda fuera a propósito
