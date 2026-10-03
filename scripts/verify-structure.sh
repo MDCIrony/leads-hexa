@@ -19,8 +19,8 @@ check() {
   (cd "$REPO/libs/chassis" && uv run --quiet python -m chassis.testing check "$@") || FAILURES=$((FAILURES + 1))
 }
 
-check "$REPO/backend/src"       --baseline "$REPO/backend/tests/architecture/structure_baseline.py"
-check "$REPO/backend/tests"     --no-line-limit --baseline "$REPO/backend/tests/architecture/tests_structure_baseline.py"
+check "$REPO/backend/src"
+check "$REPO/backend/tests"     --no-line-limit
 check "$REPO/libs/chassis/src"
 check "$REPO/libs/chassis/tests" --no-line-limit
 check "$REPO/services/notifications/src"
