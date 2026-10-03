@@ -1741,6 +1741,109 @@ except urllib.error.HTTPError as e:
 }
 
 
+# ------------------------------------------------ microservicios · F5 ---
+# The residual (ADR-0031, ADR-0037): what is left of the original application is
+# lead-core, one service among four. No business check: the phase changes no
+# behaviour, and the earlier functions already cover it. This proves the exit
+# criteria nothing else does: one database and one role per service, every
+# guardian at 4/4, and the old names gone. Runs before verify_ms_f1, which
+# rewinds a group, and verify_ms_f0, which stops lead-core.
+
+# pg_enters <role> <password> <database> — True if the role may connect.
+pg_enters() {
+  docker compose exec -T -e PGPASSWORD="$2" db psql -h localhost -U "$1" -d "$3" -c 'SELECT 1' >/dev/null 2>&1 \
+    && printf True || printf False
+}
+
+verify_ms_f5() {
+  local r rid ip base repo tables expected owners entry role pass own db svc env_core env_worker out config old
+  rid="f5-$STAMP"
+  base=${API%/api/v1}
+  repo="$(dirname "$0")/.."
+  # Spelled in two halves so this file passes its own search below.
+  old=back""end
+  section "Microservicios F5 · leads_db es sólo de lead-core"
+
+  expected="advisors assignment_rules disqualification_rules leads outbox_events sales_groups schema_migrations scoring_rules webhook_configs"
+  tables=$(docker compose exec -T db psql -U postgres -d leads_db -tAc \
+    "SELECT string_agg(tablename, ' ' ORDER BY tablename) FROM pg_tables WHERE schemaname = 'public'")
+  check "leads_db tiene exactamente las 9 tablas de lead-core" "$expected" "$tables"
+  check "  ninguna de las 15 que ya no son suyas" 0 "$(docker compose exec -T db psql -U postgres -d leads_db -tAc \
+    "SELECT count(*) FROM unnest(ARRAY['tenants','agents','auth_sessions','auth_challenges','agent_mfa',
+      'mfa_recovery_codes','social_identities','notifications','lead_sources','intake_jobs','intake_records',
+      'intake_errors','intake_files','provisioned_tenants','processed_events']) AS t
+     WHERE to_regclass('public.' || t) IS NOT NULL")"
+  # Over the same 9: an empty result would otherwise read as "every owner matches".
+  owners=$(docker compose exec -T db psql -U postgres -d leads_db -tAc \
+    "SELECT count(*) FILTER (WHERE tableowner = 'lead_core_svc') || '/' || count(*) FROM pg_tables WHERE schemaname = 'public'")
+  check "  todas son de lead_core_svc" "9/9" "$owners"
+
+  section "Microservicios F5 · cada rol entra sólo en su base"
+  # Each role's own database first: it is the positive control that keeps a
+  # wrong password from passing the three denials after it.
+  for entry in identity_svc:identitypassword:identity_db intake_svc:intakepassword:intake_db \
+               lead_core_svc:leadcorepassword:leads_db notifications_svc:notificationspassword:notifications_db; do
+    IFS=: read -r role pass own <<< "$entry"
+    check "$role entra en $own" True "$(pg_enters "$role" "$pass" "$own")"
+    for db in identity_db intake_db leads_db notifications_db; do
+      [ "$db" = "$own" ] && continue
+      check "  y no en $db" False "$(pg_enters "$role" "$pass" "$db")"
+    done
+  done
+
+  section "Microservicios F5 · ningún proceso usa el superusuario"
+  # The query names itself so it can leave its own connection out of the count.
+  check "sin conexiones de postgres a leads_db" 0 "$(docker compose exec -T -e PGAPPNAME=verify-ms-f5 db psql -U postgres -d leads_db -tAc \
+    "SELECT count(*) FROM pg_stat_activity WHERE usename = 'postgres' AND datname = 'leads_db' AND application_name <> 'verify-ms-f5'")"
+  # Only the user part of the URL is printed, never the password.
+  env_core=$(docker compose exec -T lead-core env)
+  env_worker=$(docker compose exec -T lead-core-worker env)
+  check "lead-core entra como lead_core_svc" lead_core_svc \
+    "$(printf '%s\n' "$env_core" | sed -nE 's#^DATABASE_URL=postgresql://([^:@/]+).*#\1#p')"
+  check "lead-core-worker entra como lead_core_svc" lead_core_svc \
+    "$(printf '%s\n' "$env_worker" | sed -nE 's#^DATABASE_URL=postgresql://([^:@/]+).*#\1#p')"
+  check "lead-core-worker sin JWKS_URL, IDENTITY_URL ni secreto" "" \
+    "$(printf '%s\n' "$env_worker" | grep -oE '^(JWKS_URL|IDENTITY_URL|SERVICE_CLIENT_SECRET)=' | tr '\n' ' ')"
+  check "lead-core sin KAFKA_BOOTSTRAP_SERVERS" "" \
+    "$(printf '%s\n' "$env_core" | grep -oE '^KAFKA_BOOTSTRAP_SERVERS=')"
+
+  section "Microservicios F5 · el gateway enruta a lead-core"
+  r=$(req "$API/leads" -H "Authorization: Bearer $MGR_A" -H "X-Request-Id: $rid")
+  check "GET /leads por el gateway" 200 "$(code "$r")"
+  ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q lead-core)")
+  check "el gateway la envía al servicio lead-core" True \
+    "$(docker compose logs --since 2m gateway | grep "rid=$rid " | grep -qF "upstream=$ip:8000" && printf True || printf False)"
+  check "el id de la petición llega al log de lead-core" True \
+    "$(docker compose logs --since 2m lead-core | grep -F "[$rid]" | grep -qF '"GET /api/v1/leads' && printf True || printf False)"
+  r=$(req "$base/openapi.json")
+  check "/openapi.json por el gateway" 200 "$(code "$r")"
+  check "  con /api/v1/leads" True "$(body "$r" | f '"/api/v1/leads" in (d.get("paths") or {})')"
+
+  section "Microservicios F5 · guardianes 4/4"
+  for svc in lead-core identity intake notifications; do
+    # The summary must start with "4 passed": pytest lists failures and errors first.
+    out=$(cd "$repo/services/$svc" 2>/dev/null && uv run --quiet pytest -q tests/architecture/test_dependency_rule.py 2>&1 | tail -1)
+    check "guardián de $svc" "4 passed" "$(printf '%s' "$out" | grep -oE '^[0-9]+ passed')"
+  done
+
+  section "Microservicios F5 · lo viejo ya no está"
+  check "no existe $old/" False "$([ -e "$repo/$old" ] && printf True || printf False)"
+  # Positive control: an empty listing would pass the absence check below.
+  check "Compose declara lead-core y lead-core-worker" 2 \
+    "$(docker compose --profile test --profile demo config --services 2>/dev/null | grep -cxE 'lead-core|lead-core-worker')"
+  check "  y ningún servicio $old*" 0 \
+    "$(docker compose --profile test --profile demo config --services 2>/dev/null | grep -c "^$old")"
+  check "ningún contenedor $old*, ni huérfano" 0 "$(docker compose ps -a --format '{{.Service}}' | grep -c "^$old")"
+  config=$(docker compose exec -T gateway nginx -T 2>/dev/null)
+  check "nginx -T tiene el upstream lead-core" True \
+    "$(printf '%s\n' "$config" | grep -qE '^[[:blank:]]*upstream lead-core ' && printf True || printf False)"
+  check "  y no menciona $old" 0 "$(printf '%s\n' "$config" | grep -c "$old")"
+  check "git grep de lead-core en la configuración compartida (>=1)" True \
+    "$(test "$(git -C "$repo" grep -c lead-core -- docker-compose.yml | cut -d: -f2)" -ge 1 2>/dev/null && printf True || printf False)"
+  check "  y ninguna mención de $old" "" "$(git -C "$repo" grep -n "$old" -- docker-compose.yml gateway \
+    scripts/verify-e2e.sh scripts/verify-structure.sh db contracts pyrightconfig.json CLAUDE.md)"
+}
+
 # ------------------------------------------------------------------- main ---
 
 if [ "${1:-}" = "--reset" ]; then
@@ -1775,6 +1878,7 @@ verify_social_oauth
 verify_ms_f2
 verify_ms_f3
 verify_ms_f4
+verify_ms_f5
 verify_ms_f1
 verify_ms_f0
 
