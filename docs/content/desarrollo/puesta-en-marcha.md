@@ -14,17 +14,17 @@ fijadas en `docker-compose.yml` para desarrollo local, así que no hace falta cr
 docker compose up -d
 ```
 
-Levanta `db` (PostgreSQL 16), `backend` (la API, que aplica las migraciones pendientes al arrancar y
-recarga en caliente lo que cambie en `backend/src`), `gateway` (nginx, la única entrada de la API),
+Levanta `db` (PostgreSQL 16), `lead-core` (la API, que aplica las migraciones pendientes al arrancar y
+recarga en caliente lo que cambie en `services/lead-core/src`), `gateway` (nginx, la única entrada de la API),
 `frontend` (nginx sirviendo la interfaz) y `docs` (este sitio), más `rabbitmq`, `kafka`, `kafka-ui`,
-`backend-worker` (la entrega: los relays del outbox, y la proyección de asesores), el servicio de
+`lead-core-worker` (la entrega: los relays del outbox, y la proyección de asesores), el servicio de
 recepción —`intake` (fuentes, trabajos y registros; aplica sus migraciones al arrancar) e
 `intake-worker` (relays, `intake.jobs` y las fuentes por defecto de cada organización)—, el servicio de identidad —`identity` (autenticación, organizaciones y agentes; aplica
 sus migraciones al arrancar) e `identity-worker` (publica sus eventos)— y el de notificaciones:
 `notifications` (su API; aplica sus migraciones al arrancar) y `notifications-worker` (sus consumidores
 de Kafka). Un servicio de una sola ejecución, `db-bootstrap`, crea antes los roles y las bases de
-`identity`, `intake` y `notifications`. `backend` espera a que `db` esté sano; `gateway` no espera a
-nadie (vuelve a resolver `backend`, `identity`, `intake` y `notifications` por DNS); `frontend` espera a que `gateway`
+`lead-core`, `identity`, `intake` y `notifications`. `lead-core` espera a que `db` esté sano; `gateway` no espera a
+nadie (vuelve a resolver `lead-core`, `identity`, `intake` y `notifications` por DNS); `frontend` espera a que `gateway`
 esté sano.
 
 Puertos reales en el host:
@@ -37,10 +37,10 @@ Puertos reales en el host:
 | Documentación | `8002` | `8001` es el gateway, y `8000` es un puerto común que suele estar ocupado |
 
 Dentro de la red de `compose` cada servicio sigue escuchando en su puerto estándar (el gateway en
-`8080`, `backend` en `8000`, la base en `5432`); el remapeo sólo afecta a cómo se les llega desde el
-host. **`backend` no publica ningún puerto**: la API sólo es alcanzable por el gateway en `8001`, y
-`8001` ya no es el `backend` sino el gateway. Para depurar con el backend directamente hay que entrar
-en el contenedor (`docker compose exec backend …`).
+`8080`, `lead-core` en `8000`, la base en `5432`); el remapeo sólo afecta a cómo se les llega desde el
+host. **`lead-core` no publica ningún puerto**: la API sólo es alcanzable por el gateway en `8001`, y
+`8001` es el gateway, no lead-core. Para depurar con lead-core directamente hay que entrar
+en el contenedor (`docker compose exec lead-core …`).
 
 El directorio `gateway/` (`nginx.conf` y los `*.inc` que incluye: `proxy_headers.inc`,
 `introspect.inc`, `protected.inc` y `protected_optional.inc`) está montado entero como volumen. Tras
@@ -256,11 +256,11 @@ La referencia completa de estos endpoints está en [API · Referencia](api-refer
 
 ## Cuando algo no arranca
 
-- **Estado de los contenedores**: `docker compose ps` muestra si `db`, `backend` y `gateway` están
-  `healthy`. `backend` no arranca hasta que `db` lo está. Un `gateway` sano sólo prueba que nginx
-  responde: `/health` lo contesta él mismo, no el backend. Un `503 SERVICE_UNAVAILABLE` en la API
-  significa que el gateway no alcanza `backend`; mira `docker compose logs backend`.
-- **Logs**: `docker compose logs -f backend` — las migraciones se aplican al arrancar el proceso
+- **Estado de los contenedores**: `docker compose ps` muestra si `db`, `lead-core` y `gateway` están
+  `healthy`. `lead-core` no arranca hasta que `db` lo está. Un `gateway` sano sólo prueba que nginx
+  responde: `/health` lo contesta él mismo, no lead-core. Un `503 SERVICE_UNAVAILABLE` en la API
+  significa que el gateway no alcanza `lead-core`; mira `docker compose logs lead-core`.
+- **Logs**: `docker compose logs -f lead-core` — las migraciones se aplican al arrancar el proceso
   (antes de aceptar peticiones), así que un contenedor que reinicia en bucle casi siempre señala un
   fallo de migración o de conexión a la base, visible ahí.
 - **Puerto ocupado**: si `8001`, `5433`, `80` u `8002` ya los usa otro proceso en el host, `docker

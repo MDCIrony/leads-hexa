@@ -1,47 +1,35 @@
 # Modelo de datos
 
-El modelo entidad-relación completo, tal como lo dejan las migraciones de `backend/migrations/`, y
-las tres máquinas de estados que gobiernan el ciclo de vida de un lead mientras lo atraviesa.
+El modelo entidad-relación de `leads_db`, la base de lead-core, tal como lo dejan las migraciones de
+`services/lead-core/migrations/`, y las máquinas de estados que gobiernan el ciclo de vida de un lead
+y de la ingesta que lo origina. `leads_db` tiene nueve tablas y sólo la abre el rol `lead_core_svc`;
+cada servicio tiene su base y su rol (ADR-0031).
 
-!!! note "Tras F3"
-    `TENANT` y `AGENT` viven en `identity_db` (`services/identity/migrations/`), sin `group_id`; sus
-    copias en `leads_db` se quedan congeladas hasta F5. lead-core enruta sobre su propia tabla
-    `ADVISOR` (`advisors`), una proyección de los agentes con el `group_id` que es suyo. La migración
-    017 quitó todas las claves foráneas `tenant_id → tenants` de `leads_db`: las relaciones con
-    `TENANT` del diagrama son lógicas, garantizadas por el token. `NOTIFICATION` vive en
-    `notifications_db` desde F2.
+| Tabla | Qué guarda |
+|---|---|
+| `leads` | Los leads: datos, puntuación, estado y asesor asignado. `UNIQUE (tenant_id, intake_record_id)` es la clave de idempotencia de la admisión |
+| `advisors` | Proyección de los agentes de identity (`version` la escribe el consumidor `lead-core.advisors`) más el `group_id`, que es de lead-core |
+| `sales_groups` | Grupos de venta |
+| `scoring_rules`, `assignment_rules`, `disqualification_rules` | Las tres familias de reglas, con sus condiciones en JSONB |
+| `webhook_configs` | Destinos de webhooks salientes |
+| `outbox_events` | El outbox transaccional que entrega `lead-core-worker` ([Outbox](../eventos/outbox.md)) |
+| `schema_migrations` | Migraciones ya aplicadas |
 
-!!! note "Tras F4"
-    `LEAD_SOURCE`, `INTAKE_JOB`, `INTAKE_RECORD`, `INTAKE_ERROR` (y `intake_files` y
-    `provisioned_tenants`, que el diagrama no dibuja) viven en `intake_db`
-    (`services/intake/migrations/`), con los mismos ids; sus copias en `leads_db` se quedan
-    congeladas hasta F5. En `intake_db` `INTAKE_RECORD.lead_id` es un UUID externo y ninguna tabla
-    lleva clave foránea hacia `tenants` ni `leads`. En `leads_db`, `LEAD` gana `intake_record_id` con
-    `UNIQUE (tenant_id, intake_record_id)` (la clave de la idempotencia de la admisión) y la migración
-    018 quitó la clave foránea de `LEAD.source_id` hacia `LEAD_SOURCE`: `source_id` es ya una
-    referencia lógica.
+Las entidades de los demás servicios viven en sus bases y no se dibujan aquí:
+
+| Servicio | Base | Tablas | Documentación |
+|---|---|---|---|
+| identity | `identity_db` | organizaciones, agentes, sesiones, MFA, identidades sociales | [Identidad y acceso](../modulos/identidad-y-acceso.md), [Organizaciones](../modulos/organizaciones.md) |
+| intake | `intake_db` | fuentes, trabajos, registros, errores y ficheros de ingesta | [Ingesta](../modulos/ingesta.md) |
+| notifications | `notifications_db` | la bandeja de avisos | [Notificaciones](../modulos/notificaciones.md) |
+
+Ninguna tabla de `leads_db` lleva clave foránea hacia ellas: `tenant_id`, `source_id` y
+`assigned_agent_id` son referencias lógicas, garantizadas por el token y por la admisión.
 
 ## Diagrama entidad-relación
 
 ```mermaid
 erDiagram
-    TENANT {
-        uuid id PK
-        text name
-        text slug UK
-        boolean is_active
-        timestamptz created_at
-    }
-    AGENT {
-        uuid id PK
-        uuid tenant_id "nulo sólo para ADMIN"
-        text name
-        text email "único en la plataforma"
-        text role
-        text hashed_password
-        boolean is_active
-        bigint version
-    }
     ADVISOR {
         uuid agent_id PK "el id del agente en identity"
         uuid tenant_id
@@ -61,21 +49,10 @@ erDiagram
         boolean is_active
         timestamptz created_at
     }
-    LEAD_SOURCE {
-        uuid id PK
-        uuid tenant_id
-        text name "único por organización"
-        text kind
-        jsonb field_mapping
-        text secret_hash "reservado, sin uso"
-        boolean is_active
-        timestamptz created_at
-        timestamptz updated_at
-    }
     LEAD {
         uuid id PK
         uuid tenant_id
-        uuid source_id "referencia lógica desde F4"
+        uuid source_id "referencia lógica a intake"
         uuid intake_record_id "único con tenant_id"
         text first_name
         text last_name
@@ -127,48 +104,6 @@ erDiagram
         integer priority
         boolean is_active
     }
-    INTAKE_JOB {
-        uuid id PK
-        uuid tenant_id
-        uuid source_id FK
-        text kind
-        text status
-        integer total_items
-        integer succeeded
-        integer failed
-        timestamptz created_at
-        timestamptz completed_at
-    }
-    INTAKE_RECORD {
-        uuid id PK
-        uuid tenant_id
-        uuid source_id FK
-        uuid job_id FK
-        jsonb payload
-        text status
-        uuid lead_id FK
-        timestamptz received_at
-        timestamptz processed_at
-    }
-    INTAKE_ERROR {
-        uuid id PK
-        uuid intake_record_id FK
-        text field
-        text received_value
-        text message
-        text error_code
-    }
-    NOTIFICATION {
-        uuid id PK
-        uuid tenant_id
-        uuid recipient_id FK
-        text kind
-        uuid lead_id "puntero sin clave foránea"
-        uuid intake_record_id "puntero sin clave foránea"
-        text message
-        boolean is_read
-        timestamptz created_at
-    }
     WEBHOOK_CONFIG {
         uuid id PK
         uuid tenant_id "sin clave foránea física"
@@ -177,83 +112,32 @@ erDiagram
         text secret_token
     }
 
-    TENANT |o--o{ AGENT : tiene
-    AGENT ||--o| ADVISOR : "se proyecta en"
-    TENANT ||--o{ SALES_GROUP : tiene
-    TENANT ||--o{ LEAD_SOURCE : tiene
-    TENANT ||--o{ LEAD : tiene
-    TENANT ||--o{ SCORING_RULE : tiene
-    TENANT ||--o{ ASSIGNMENT_RULE : tiene
-    TENANT ||--o{ DISQUALIFICATION_RULE : tiene
-    TENANT ||--o{ INTAKE_JOB : tiene
-    TENANT ||--o{ INTAKE_RECORD : tiene
-    TENANT ||--o{ NOTIFICATION : tiene
-    TENANT ||--o{ WEBHOOK_CONFIG : tiene
     SALES_GROUP |o--o{ ADVISOR : agrupa
     SALES_GROUP |o--o{ ASSIGNMENT_RULE : "destino de"
-    LEAD_SOURCE ||--o{ LEAD : origina
-    LEAD_SOURCE ||--o{ INTAKE_RECORD : origina
-    LEAD_SOURCE ||--o{ INTAKE_JOB : origina
-    INTAKE_JOB |o--o{ INTAKE_RECORD : agrupa
-    INTAKE_RECORD ||--o{ INTAKE_ERROR : detalla
-    INTAKE_RECORD ||--o| LEAD : promueve
     ADVISOR |o--o{ LEAD : "asignado a"
-    AGENT ||--o{ NOTIFICATION : recibe
 ```
 
 ## Los agregados
 
-### Tenant
-
-`services/identity/src/domain/tenants/tenant.py`, tabla `tenants` de `identity_db`. Representa a la
-organización cliente. `name` no puede quedar vacío; `slug` se deriva del nombre plegando tildes y
-símbolos (`slugify()`) y es único en toda la plataforma, no sólo dentro de una organización — evita
-que "Solución" y "Solucion" produzcan dos organizaciones indistinguibles en el listado del
-administrador. Crear una organización crea, en la misma transacción, su primer gestor; sus dos
-fuentes por defecto (`Formulario manual`, `Carga de fichero`) las crea intake en cuanto recibe el
-`TenantState` ([Organizaciones](../modulos/organizaciones.md#el-alta-una-transaccion-y-un-evento)).
-`version` sube en cada escritura.
-
-### Agent
-
-`services/identity/src/domain/agents/agent.py`, tabla `agents` de `identity_db`. Es la credencial
-de acceso; lo que lo hace receptor de leads es su copia en `advisors`. `tenant_id` es nulo
-únicamente para `ADMIN`, y no lleva clave foránea. `email` es único en toda la plataforma una vez
-normalizado (`idx_agents_email_normalized`, sobre `lower(email)`), porque el login busca la cuenta
-sólo por correo. El hash de la contraseña vive en la misma fila (`hashed_password`); no hay un
-agregado de credenciales separado, y es el mapeador de respuesta del router quien evita que ese
-campo llegue al cliente, omitiéndolo explícitamente. El formato del correo no lo valida el dominio
-—`email` es un `str` llano— sino el esquema Pydantic de entrada. No tiene grupo: el grupo es un dato
-de enrutado y vive en `advisors`.
-
 ### Advisor
 
-`backend/src/domain/advisors/advisor.py`, tabla `advisors` de `leads_db` (migración 017). La copia
-del agente que lead-core necesita para enrutar: `name`, `role`, `is_active` y `version`, que escribe
-sólo el consumidor `lead-core.advisors` con un *upsert* condicionado por `version`, más `group_id`,
-que es de lead-core y sólo cambia `PATCH /advisors/{agent_id}`. La migración la sembró desde
-`agents` (con su `group_id`), sin el `ADMIN`. Junto a ella, `provisioned_tenants` marca las
-organizaciones cuyas fuentes por defecto ya se crearon.
+`services/lead-core/src/domain/advisors/advisor.py`, tabla `advisors`. La copia del agente que
+lead-core necesita para enrutar: `name`, `role`, `is_active` y `version`, que escribe sólo el
+consumidor `lead-core.advisors` con un *upsert* condicionado por `version`, más `group_id`, que es de
+lead-core y sólo cambia `PATCH /advisors/{agent_id}`. El agente en sí (credenciales, correo, MFA) es
+de identity y no se guarda aquí.
 
 ### SalesGroup
 
-`domain/entities/sales_group.py`, tabla `sales_groups`. Agrupa asesores que comparten política de
+`services/lead-core/src/domain/groups/sales_group.py`, tabla `sales_groups`. Agrupa asesores que comparten política de
 asignación. `name` no vacío y único por organización; `capacity_per_agent`, si se define, debe ser
 mayor que cero. Borrar un grupo no arrastra sus asesores ni las reglas que lo señalan: `group_id`
 en `advisors` y `target_group_id` en `assignment_rules` quedan en `NULL`, así que el gestor ve el
 hueco en vez de perder datos en cascada.
 
-### LeadSource
-
-`services/intake/src/domain/sources/lead_source.py`, tabla `lead_sources` de `intake_db`. El canal por el que entra un lead. `name`
-no vacío y único por organización; `field_mapping`, si se define, exige claves y valores no
-vacíos. Toda organización nace con dos fuentes activas, `MANUAL_FORM` y `FILE_UPLOAD`. La columna
-`secret_hash` está reservada para el webhook entrante — la entidad de dominio no tiene hoy ningún
-atributo que la use.
-
 ### Lead
 
-`domain/entities/lead.py`, tabla `leads`. El prospecto comercial: existe si sus datos son
+`services/lead-core/src/domain/leads/lead.py` (las transiciones, en `lead_transitions.py`), tabla `leads`. El prospecto comercial: existe si sus datos son
 coherentes, no si son comercialmente útiles. `budget` es un `Money` (`Decimal` no negativo);
 `email`, si viene, debe tener formato válido, pero su ausencia ya no impide crear el lead. Cada
 transición de estado está guardada en su propio método — ver la máquina de estados más abajo.
@@ -262,7 +146,7 @@ lead a un asesor de otra organización, comparando `tenant_id` en memoria antes 
 
 ### ScoringRule y AssignmentRule
 
-`domain/entities/rule.py`, tablas `scoring_rules` y `assignment_rules`. Comparten `conditions`,
+`services/lead-core/src/domain/rules/scoring_rule.py` y `assignment_rule.py`, tablas `scoring_rules` y `assignment_rules`. Comparten `conditions`,
 una lista de `Criterion` serializada en JSONB. `ScoringRule` no exige un nombre no vacío — a
 diferencia de `AssignmentRule` y `DisqualificationRule`, que sí lo hacen. `AssignmentRule` exige
 al menos un `target_group_id` o un `target_agent_id` (si no, no podría producir ningún candidato),
@@ -271,37 +155,20 @@ reparto rotatorio, persistido en la fila para que sobreviva entre peticiones.
 
 ### DisqualificationRule
 
-`domain/entities/disqualification_rule.py`, tabla `disqualification_rules`. Exige nombre no vacío
+`services/lead-core/src/domain/rules/disqualification_rule.py`, tabla `disqualification_rules`. Exige nombre no vacío
 y al menos una condición: una regla sin condiciones se cumpliría para cualquier lead y
 descalificaría a la organización entera.
 
-### IntakeJob, IntakeRecord e IntakeError
-
-`services/intake/src/domain/jobs/intake_job.py` y `services/intake/src/domain/records/intake_record.py`;
-tablas `intake_jobs`, `intake_records` e `intake_errors` de `intake_db`. Un `IntakeJob` agrupa una operación de ingesta completa, sea de
-un único lead o de un fichero entero. Cada payload recibido genera su propio `IntakeRecord`, con el
-dato **tal cual llegó** en `payload`. Los errores de validación viven en su propia tabla,
-`intake_errors`, no embebidos en JSONB: un registro puede fallar por varios campos a la vez, y el
-gestor necesita saber cuáles. `promote()` y `reject()` sólo aceptan un registro en `PENDING` o
-`REJECTED`; `reject()` exige además al menos un error.
-
-### Notification
-
-`services/notifications/src/domain/notifications/notification.py`, tabla `notifications` de
-`notifications_db` (el servicio `notifications`, desde F2; la tabla de `leads_db` queda sin uso hasta
-F5, por lo que el diagrama de arriba aún la dibuja). El aviso interno; exige un `message` no
-vacío. `lead_id` e `intake_record_id` son punteros informativos sin clave foránea: sólo permiten
-que la interfaz navegue al elemento relacionado, y la notificación sobrevive aunque ese elemento
-se borre.
-
 ### WebhookConfig
 
-`domain/entities/webhook.py`, tabla `webhook_configs`. Configura un destino externo para el
+`services/lead-core/src/domain/webhooks/webhook.py`, tabla `webhook_configs`. Configura un destino externo para el
 webhook saliente firmado. No declara invariantes propias más allá del tipado de sus
 identificadores, y hoy no existe ningún endpoint que lo dé de alta: sólo el despachador que lo
 consume está escrito. Ver [ADR-0017](../decisiones/0017-retirada-de-webhook-dispatched.md).
 
 ## Máquinas de estados
+
+La del lead es de lead-core. Las de `IntakeRecord` e `IntakeJob` son de intake (`services/intake/src/domain/`); se incluyen porque el recorrido de un lead empieza en ellas.
 
 ### Lead
 
@@ -331,7 +198,7 @@ stateDiagram-v2
 los excluye a propósito de sus estados de partida — ya salieron del flujo por su cuenta, y
 descartarlos otra vez no aporta información.
 
-### IntakeRecord
+### IntakeRecord (intake)
 
 ```mermaid
 stateDiagram-v2
@@ -350,7 +217,7 @@ stateDiagram-v2
 reabribles: son los dos desde los que `promote()` y `reject()` aceptan actuar, lo que deja al
 gestor corregir un registro rechazado y reintentarlo tantas veces como haga falta.
 
-### IntakeJob
+### IntakeJob (intake)
 
 ```mermaid
 stateDiagram-v2
@@ -372,7 +239,7 @@ estado.
 ## Ver también
 
 - [El recorrido de un lead](recorrido-de-un-lead.md) muestra cuándo se dispara cada transición.
-- [Organizaciones](../modulos/organizaciones.md) explica `Tenant`, `SalesGroup` y `LeadSource` desde
-  el negocio.
+- [Organizaciones](../modulos/organizaciones.md) explica organizaciones, grupos de venta y fuentes
+  desde el negocio.
 - [ADR-0007 · Tipos nativos de SQL](../decisiones/0007-tipos-nativos-de-sql.md)
 - [ADR-0013 · Condiciones en JSONB](../decisiones/0013-condiciones-en-jsonb.md)

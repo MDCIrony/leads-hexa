@@ -45,7 +45,7 @@ entre trabajadores disponibles pasa a depender de las particiones en vez de reso
 ```mermaid
 flowchart LR
     API["API"] -->|misma transacción| DB[("PostgreSQL<br/>datos + outbox")]
-    DB -.->|"lee lo no publicado,<br/>un relay por canal"| BW["backend-worker"]
+    DB -.->|"lee lo no publicado,<br/>un relay por canal"| BW["lead-core-worker"]
     BW -->|"product"| K["Kafka<br/>leads.{organización}"]
     BW -->|"product"| WH["Webhooks"]
     BW -->|"internal"| KI["Kafka<br/>internal.*"]
@@ -66,7 +66,7 @@ flowchart LR
 1. **[El outbox](outbox.md)** — el evento, el aviso interno o la orden de procesar un trabajo se
    registran en la misma transacción que el dato que los origina. Es lo que impide que exista un
    lead del que el cliente nunca se entere, o un `202` cuyo trabajo nadie ejecute. La API sólo
-   escribe: entrega `backend-worker`, con un relay por canal (`product`, `internal`), e
+   escribe: entrega `lead-core-worker`, con un relay por canal (`product`, `internal`), e
    `intake-worker` para el outbox de intake (`internal` y `job`).
 2. **[Kafka](kafka.md)** — el canal del producto, un topic por organización con retención, que es lo
    que el cliente compra y puede volver a leer; y los topics `internal.*`, con los hechos y el estado

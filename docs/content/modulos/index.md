@@ -5,14 +5,14 @@ hexagonales —dominio, aplicación, infraestructura—, que atraviesan los seis
 responsabilidad de negocio: cada módulo agrupa las entidades, los casos de uso y los adaptadores de
 una misma capacidad, de punta a punta.
 
-| Módulo | Qué hace |
-|---|---|
-| [Ingesta](ingesta.md) | Recibe leads por sus vías de entrada sin perder ninguno |
-| [Reglas y motores](reglas.md) | Decide si un lead se puede trabajar y cuánto vale |
-| [Asignación](asignacion.md) | Decide qué asesor recibe cada lead calificado |
-| [Notificaciones](notificaciones.md) | Avisa a quien debe actuar |
-| [Identidad y acceso](identidad-y-acceso.md) | Autentica y autoriza cada petición |
-| [Organizaciones](organizaciones.md) | Administra tenants, asesores y grupos de venta |
+| Módulo | Qué hace | Servicio |
+|---|---|---|
+| [Ingesta](ingesta.md) | Recibe leads por sus vías de entrada sin perder ninguno | `intake`; la decisión sobre cada lead, `lead-core` |
+| [Reglas y motores](reglas.md) | Decide si un lead se puede trabajar y cuánto vale | `lead-core` |
+| [Asignación](asignacion.md) | Decide qué asesor recibe cada lead calificado | `lead-core` |
+| [Notificaciones](notificaciones.md) | Avisa a quien debe actuar | `notifications` |
+| [Identidad y acceso](identidad-y-acceso.md) | Autentica y autoriza cada petición | `identity` |
+| [Organizaciones](organizaciones.md) | Administra tenants, asesores y grupos de venta | `identity` (organizaciones, agentes); `lead-core` (asesores, grupos) |
 
 ## Cómo se relacionan
 

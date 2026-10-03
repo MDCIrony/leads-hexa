@@ -5,22 +5,22 @@ Cómo se levanta, qué mirar cuando algo no llega, y qué no está resuelto toda
 ## Levantar la pila
 
 ```bash
-docker compose up -d db backend identity intake  # las API, sin mensajería
+docker compose up -d db lead-core identity intake  # las API, sin mensajería
 docker compose up -d kafka rabbitmq            # los brókeres
-docker compose up -d backend-worker            # los relays del outbox y el consumidor de asesores
+docker compose up -d lead-core-worker            # los relays del outbox y el consumidor de asesores
 docker compose up -d identity-worker           # el relay del outbox de identity
 docker compose up -d notifications notifications-worker  # la bandeja y sus tres consumidores
 docker compose up -d intake-worker             # el trabajador de ingesta: relays, jobs y fuentes por defecto
 ```
 
 **El orden no importa y la API no espera a nadie.** Ni `kafka` ni `rabbitmq` son `depends_on`
-bloqueantes del servicio `backend`, que sólo escribe en el outbox: si no están, las filas esperan y
-`backend-worker`, `identity-worker` e `intake-worker` reintentan; `notifications-worker` y los
-consumidores de `backend-worker` e `intake-worker` lo hacen con sus carriles. Está verificado — con ambos brókeres apagados, `/health` responde `200`
+bloqueantes del servicio `lead-core`, que sólo escribe en el outbox: si no están, las filas esperan y
+`lead-core-worker`, `identity-worker` e `intake-worker` reintentan; `notifications-worker` y los
+consumidores de `lead-core-worker` e `intake-worker` lo hacen con sus carriles. Está verificado — con ambos brókeres apagados, `/health` responde `200`
 y los leads se guardan; con sólo RabbitMQ apagado, una ingesta responde `202` y su trabajo queda
 `PENDING` hasta que el bróker vuelve (`verify_ms_f1`).
 
-`backend-worker` tampoco espera a los brókeres: reintenta la creación de sus topics y entrega por
+`lead-core-worker` tampoco espera a los brókeres: reintenta la creación de sus topics y entrega por
 canales independientes, así que Kafka caído no detiene los jobs ni RabbitMQ caído detiene las
 notificaciones. Al reiniciarlo no se pierde nada: una fila sin marcar se entrega otra vez, y los
 consumidores deduplican por `event_id`.
@@ -36,7 +36,7 @@ reparan solos y su fallo queda en el log.
 los consumidores leen esas tablas. Y es el único que espera a un bróker, con
 `depends_on: rabbitmq: condition: service_healthy`: sin RabbitMQ no tiene nada que hacer, y esperar
 evita un ciclo de arrancar y morir. Una vez arriba, si el bróker cae, reconecta solo. **No espera a
-`backend`**: una caída de lead-core interrumpe el trabajo en curso (`nack` tras 10 s), no al worker.
+`lead-core`**: una caída de lead-core interrumpe el trabajo en curso (`nack` tras 10 s), no al worker.
 Al pararlo termina el trabajo en curso, con un plazo de 5 minutos (`stop_grace_period`).
 
 | Servicio | Puerto en el equipo | Para qué |
@@ -82,11 +82,11 @@ LIMIT 20;
 Un `attempts` que crece sin parar señala un destino roto. **Nada se descarta por eso**: la entrada se
 hunde en el orden del lote para no bloquear a las nuevas, y se sigue reintentando. El `channel` dice
 qué proceso mirar: `product` es Kafka del cliente y webhooks, `internal` son los topics `internal.*`
-y `job` es RabbitMQ. En `leads_db` entrega `backend-worker` (`product` e `internal`). El outbox de
+y `job` es RabbitMQ. En `leads_db` entrega `lead-core-worker` (`product` e `internal`). El outbox de
 identity (`identity_db`, sólo canal `internal`) lo entrega `identity-worker`, y el de intake
 (`intake_db`, canales `internal` y `job`) lo entrega `intake-worker`: la consulta de arriba se ejecuta
 contra la base del servicio que produjo el evento. Lo que se entrega a `internal.*` lo consumen
-`notifications-worker` y, para los topics `internal.identity.*`, también `backend-worker` e
+`notifications-worker` y, para los topics `internal.identity.*`, también `lead-core-worker` e
 `intake-worker`.
 
 ### 2 · ¿Llegó al topic?
@@ -107,7 +107,7 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
 ```
 
 Si `internal.*` no aparece en la lista, su productor aún no ha podido crear sus topics
-(`backend-worker` para `internal.lead-core.events`, `identity-worker` para `internal.identity.*`,
+(`lead-core-worker` para `internal.lead-core.events`, `identity-worker` para `internal.identity.*`,
 `intake-worker` para `internal.intake.events`): sus logs dicen
 `Kafka topics not ready` mientras reintenta. Lo mismo vale para `internal.dlq.*` y el servicio dueño
 de cada grupo.
@@ -115,7 +115,7 @@ de cada grupo.
 ### 3 · ¿Se aplicó en el consumidor?
 
 ```bash
-docker compose logs notifications-worker backend-worker --tail=50
+docker compose logs notifications-worker lead-core-worker --tail=50
 
 docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
   --bootstrap-server localhost:9092 --describe --group notifications.lead-events
@@ -125,7 +125,7 @@ docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
 se aplica y acabará en la DLQ. Si además aparece `not settled, rewinding` con un `OperationalError`, la base no
 responde: el evento queda retenido y se reintenta, nunca va a la DLQ. Los grupos son `notifications.lead-events`,
 `notifications.intake-events` y `notifications.members` (en `notifications-worker`), y
-`lead-core.advisors` (en `backend-worker`) e `intake.tenants` (en `intake-worker`). Un evento ya
+`lead-core.advisors` (en `lead-core-worker`) e `intake.tenants` (en `intake-worker`). Un evento ya
 aplicado figura en `processed_events` de su base, `notifications_db` o `intake_db` (las proyecciones
 `notifications.members` y `lead-core.advisors` no la usan):
 
@@ -144,7 +144,7 @@ docker compose exec rabbitmq rabbitmqctl list_queues name messages
 Una `intake.jobs` que crece y no baja significa que el worker no está consumiendo. Mensajes en
 `intake.jobs.dlq` son trabajos que fallaron tres veces: **nadie avisa de ellos**, hay que mirar. Un
 trabajo interrumpido aparece en el log como `left records pending, requeueing`: lead-core no
-respondió, y la causa está en `docker compose logs backend`.
+respondió, y la causa está en `docker compose logs lead-core`.
 
 Para comprobar que intake y lead-core coinciden sobre lo admitido, la reconciliación (sólo informa;
 sale con 1 si hay diferencias y con 2 si no pudo obtener respuesta):
@@ -158,7 +158,7 @@ El `X-Request-Id` de la petición que originó el problema (el que devuelve la A
 tocaron, la admisión de lead-core incluida:
 
 ```bash
-docker compose logs backend backend-worker notifications-worker intake intake-worker | rg <request-id>
+docker compose logs lead-core lead-core-worker notifications-worker intake intake-worker | rg <request-id>
 ```
 
 `notifications-worker` no escribe una línea por mensaje: el `X-Request-Id` sólo aparece en sus logs si
@@ -203,7 +203,7 @@ ejemplo antes de que un consumidor nuevo se suscriba:
 docker compose exec identity-worker python -m infrastructure.cli.publish_identity_snapshot
 ```
 
-Desde F3 el comando es de identity y sólo necesita `DATABASE_URL`. Registra un `AgentState` o
+El comando es de identity y sólo necesita `DATABASE_URL`. Registra un `AgentState` o
 `TenantState` por fila en el outbox `internal` de `identity_db`, por páginas de 100, e
 `identity-worker` los entrega. Se puede repetir sin riesgo: cada mensaje lleva la `version` de su fila,
 y una proyección descarta lo que ya tiene.
@@ -262,7 +262,7 @@ par en par era seguridad de teatro. El ADR-0028 cierra ambas en la misma tanda.
 | Con RabbitMQ caído una ingesta no se pierde | `verify_ms_f1`: `202`, el trabajo sigue `PENDING`, y al volver el bróker termina y el lead existe |
 | Una notificación llega por Kafka sin duplicarse al releer el grupo desde el principio | `verify_ms_f1` |
 | Los topics de identidad están compactados y las DLQ existen y están vacías | `verify_ms_f1` (los dos grupos de avisos) y `verify_ms_f2` (los tres) |
-| La bandeja la sirve `notifications` a través del gateway y el backend ya no la tiene | `verify_ms_f2` |
+| La bandeja la sirve `notifications` a través del gateway y lead-core no la tiene | `verify_ms_f2` |
 | Con lead-core parado una ingesta espera `PENDING` en su trabajo y, al volver, termina sin duplicar el lead | `verify_ms_f4` |
 | La reconciliación de intake y lead-core sale sin diferencias, e `intake.tenants` no tiene *lag* ni DLQ | `verify_ms_f4` |
 | El recorrido completo sobre HTTP | `./scripts/verify-e2e.sh` |

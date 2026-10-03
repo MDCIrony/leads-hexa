@@ -36,7 +36,7 @@ lead.
 sequenceDiagram
     participant UC as Caso de uso
     participant DB as PostgreSQL
-    participant R as Relay (backend-worker, intake-worker)
+    participant R as Relay (lead-core-worker, intake-worker)
     participant K as Kafka / Webhook / RabbitMQ
 
     rect rgba(63,81,181,0.07)
@@ -79,7 +79,7 @@ el mensaje sale dos veces con el mismo identificador.
 **`correlation_id`** se toma del `X-Request-Id` de la petición en curso (`request_id_var` de
 `chassis.web`). Viaja en el sobre, en la cabecera Kafka y en el mensaje de RabbitMQ, y el relay y
 los consumidores lo ponen en sus propias líneas de log: la misma petición se sigue de la API al
-`intake-worker`, a lead-core (la admisión lleva el mismo `X-Request-Id`) y al `backend-worker`.
+`intake-worker`, a lead-core (la admisión lleva el mismo `X-Request-Id`) y al `lead-core-worker`.
 
 ## Un canal por tipo de entrega
 
@@ -93,15 +93,15 @@ los consumidores lo ponen en sus propias líneas de log: la misma petición se s
 | `product` | `LeadProcessedEvent`, `LeadDisqualified` | `leads.{tenant_id}` y los webhooks de la organización | `KafkaOutboundDispatcher`, `WebhookOutboundDispatcher` |
 | `internal` | `LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned` | Topics `internal.*` | `KafkaEventDispatcher` |
 
-Desde F3 `AgentState` y `TenantState` ya no pasan por este outbox: los registra identity en el suyo
+`AgentState` y `TenantState` no pasan por este outbox: los registra identity en el suyo
 (`identity_db`, sólo canal `internal`) y los entrega `identity-worker`, con el mismo
-`chassis.outbox` y `producer="identity"`. Desde F4 pasa lo mismo con la ingesta: `IntakeRejected`
+`chassis.outbox` y `producer="identity"`. Lo mismo ocurre con la ingesta: `IntakeRejected`
 (`internal`) y `IntakeJobRequested` (`job`, a la cola `intake.jobs` con `RabbitJobDispatcher`) los
 registra intake en el suyo (`intake_db`) y los entrega `intake-worker`, con `producer="intake"`. El
 `CHECK` de `channel` en `leads_db` conserva los tres valores, pero lead-core ya no escribe ni releva
 `job`.
 
-Un relay por canal, **cada uno en su hilo** dentro de `backend-worker` (y de cada worker que releva un outbox propio). La entrega es secuencial
+Un relay por canal, **cada uno en su hilo** dentro de `lead-core-worker` (y de cada worker que releva un outbox propio). La entrega es secuencial
 dentro de un relay, así que uno compartido dejaría a un Kafka interno inalcanzable reteniendo los
 webhooks que tiene detrás. Con un hilo por canal, un destino caído sólo atasca su propio canal.
 
@@ -109,7 +109,7 @@ El canal `internal` arranca sin despachador y lo recibe cuando sus topics existe
 ver [Kafka](kafka.md#los-topics-internos)): mientras no, sus filas esperan sin gastar intentos.
 
 La API **no ejecuta ningún relay**: sólo escribe filas. Reiniciarla no interrumpe la entrega, y
-reiniciar `backend-worker` no pierde nada, porque una fila sin marcar se entrega otra vez.
+reiniciar `lead-core-worker` no pierde nada, porque una fila sin marcar se entrega otra vez.
 
 ## Un ciclo del relay son tres pasos
 
@@ -178,13 +178,13 @@ cliente y lo que se queda dentro son criterios distintos, y por eso son canales 
 
 | Pieza | Fichero |
 |---|---|
-| La tabla | `backend/migrations/009_outbox.sql`, `015_durability.sql` (canal y correlación), `016_outbox_key_order.sql` (índice del orden por clave) |
-| El puerto | `application/ports/output/outbox_repository_port.py` |
-| El adaptador SQL | `infrastructure/adapters/output/persistence/raw_sql_outbox_repository.py` |
+| La tabla | `services/lead-core/migrations/009_outbox.sql`, `015_durability.sql` (canal y correlación), `016_outbox_key_order.sql` (índice del orden por clave) |
+| El puerto | `application/ports/output/outbox_repository_port.py` (en `services/lead-core/src/`) |
+| El adaptador SQL | `infrastructure/adapters/output/persistence/outbox/outbox_repository.py` |
 | El relay y los despachadores genéricos | `libs/chassis/src/chassis/outbox/` (`OutboxRelay`, `run_relay`, `KafkaEventDispatcher`), `chassis/rabbit.py` (`RabbitJobDispatcher`) |
-| El almacén que lee el relay | `infrastructure/adapters/output/persistence/outbox_store.py` |
+| El almacén que lee el relay | `infrastructure/adapters/output/persistence/outbox/outbox_store.py` |
 | Los despachadores del producto | `infrastructure/adapters/output/events/*_outbound_dispatcher.py` |
 | Qué topic recibe cada evento interno | `infrastructure/adapters/output/events/internal_topics.py` |
-| El proceso que lo ejecuta | `infrastructure/worker/`, servicio `backend-worker`: los relays y, desde F3, el consumidor `lead-core.advisors` |
+| El proceso que lo ejecuta | `infrastructure/worker/`, servicio `lead-core-worker`: los relays y el consumidor `lead-core.advisors` |
 | El outbox de identity | `services/identity/migrations/005_outbox.sql`, `services/identity/src/infrastructure/worker/` (`identity-worker`) |
 | El outbox de intake | `services/intake/migrations/004_outbox.sql`, `services/intake/src/infrastructure/worker/relays.py` (`intake-worker`) |

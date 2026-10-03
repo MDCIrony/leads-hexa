@@ -3,9 +3,9 @@
 Autentica cada petición humana con una sesión opaca en cookie, recarga la identidad del actor desde base de datos y decide qué
 puede hacer según su rol y su organización.
 
-Desde F3 es un **servicio propio**, `services/identity/`, con su base `identity_db` y su rol
+Es un **servicio propio**, `services/identity/`, con su base `identity_db` y su rol
 `identity_svc`: ningún otro servicio lee ni escribe sus tablas
-([06](../microservices/06-plan-de-desacople.md#f3-identity)). Corre en dos procesos de la misma
+([02](../microservices/02-servicios-y-datos.md#identity)). Corre en dos procesos de la misma
 imagen: `identity` (API pública de `/auth`, `/tenants` y `/agents`, más la introspección, la JWKS y
 los tokens de servicio internos) e `identity-worker` (el relay de su outbox). Los demás servicios
 sólo reciben un JWT interno y lo verifican en local; la autorización por rol sigue en cada uno.
@@ -155,4 +155,4 @@ organización responde `404`, no `403` —confirmar que existe en otro sitio ya 
 - `services/identity/src/infrastructure/adapters/input/internal/router.py` — introspección, JWKS, tokens de servicio y `GET /internal/v1/agents/{agent_id}`
 - `services/identity/src/infrastructure/security/` — emisores de tokens y `SERVICE_CLIENTS`
 - `services/identity/src/infrastructure/adapters/output/security/` — `BcryptPasswordHasher` y `TotpMfaCrypto`
-- `backend/src/infrastructure/adapters/input/api/dependencies.py` — verificación del token y guardas de lead-core
+- `services/lead-core/src/infrastructure/adapters/input/api/dependencies.py` — verificación del token y guardas de lead-core

@@ -26,14 +26,14 @@ exactamente el mismo aislamiento que 9094.
 El hueco que cerraba este trabajo —«cualquiera con acceso a la red lee los topics de todas las
 organizaciones»— vivía únicamente en `PLAINTEXT_HOST`. `PLAINTEXT` se queda abierto: nunca sale de
 la red de compose, el mismo perímetro de confianza que ya asume Postgres, y es además la vía que usa
-identity (desde F3; antes, el backend) para aprovisionar credenciales sin necesitar una cuenta de
+identity para aprovisionar credenciales sin necesitar una cuenta de
 arranque propia —una conexión sin SASL resuelve al principal `User:ANONYMOUS`, declarado
 `super.users`.
 
 ```mermaid
 flowchart LR
     subgraph interna["Red de compose"]
-        Backend["backend-worker"] -->|"9092 · sin auth<br/>produce"| Kafka["kafka"]
+        LeadCore["lead-core-worker"] -->|"9092 · sin auth<br/>produce"| Kafka["kafka"]
         Identity["identity"] -->|"9092 · sin auth<br/>aprovisiona"| Kafka
     end
     subgraph externa["Fuera de la red"]
@@ -54,7 +54,7 @@ log de arranque, es el mecanismo estándar de la JVM: un fichero JAAS real
 
 ## Un usuario por organización, con ACL
 
-El productor sigue siendo uno solo —el backend, sobre el listener sin autenticación—, así que no
+El productor sigue siendo uno solo —lead-core, sobre el listener sin autenticación—, así que no
 hace falta un usuario Kafka por organización en ese lado. El consumo es distinto: es ahí donde un
 tercero se conecta directo al bróker expuesto, y sin ACL por organización la credencial de una leería
 el topic de cualquier otra.
@@ -136,7 +136,7 @@ teatro que este trabajo cierra. Verificado que ese fallo tarda hasta 10 s en con
 `POST /agents` (no se crea por la vía genérica, sólo por `POST /agents/integration-credential`, que
 genera su propio secreto en vez de aceptar uno en el cuerpo). Pero vivir en la tabla `agents` traía
 un hueco que el primer borrador de este trabajo no cerraba: `GET /agents` y el pool de candidatos del
-motor de asignación seguían devolviendo la fila. Desde F3 cada consulta vive en su servicio: el
+motor de asignación seguían devolviendo la fila. Cada consulta vive en su servicio: el
 listado en identity y el pool en la proyección `advisors` de lead-core, que copia también al agente
 `INTEGRATION` porque `AgentState` no filtra por rol.
 
@@ -162,5 +162,5 @@ filtrarla ahí la rompería.
 | El adaptador Kafka | `services/identity/src/infrastructure/adapters/output/messaging/kafka_credential_provisioner.py` |
 | El caso de uso | `services/identity/src/application/use_cases/agents/integration_credential.py` (`IssueIntegrationCredentialUseCase`) |
 | La cabecera | `services/identity/src/application/use_cases/auth/introspect.py` (`IntrospectUseCase`), detrás de `GET /internal/v1/auth/introspect` |
-| El contexto en lead-core | `backend/src/infrastructure/adapters/input/api/dependencies.py` (`require_manager_or_integration`) |
+| El contexto en lead-core | `services/lead-core/src/infrastructure/adapters/input/api/dependencies.py` (`require_manager_or_integration`) |
 | El fichero JAAS | `kafka/kafka_server_jaas.conf` |

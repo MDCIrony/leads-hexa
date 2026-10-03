@@ -4,7 +4,7 @@ Recibe los leads por las vías de entrada habilitadas para la organización, gar
 payload se pierde —se pueda interpretar o no— y lo convierte en un `Lead` en una fase de
 procesamiento independiente de la petición HTTP que lo trajo.
 
-!!! note "Desde F4, un servicio propio"
+!!! note "Un servicio propio"
     La recepción vive en `services/intake/` (API `intake` y `intake-worker`, base `intake_db`). Lo que
     decide qué es un lead —viabilidad, puntuación y asignación— se queda en lead-core, y intake se lo
     pide por `POST /internal/v1/admissions`
@@ -67,8 +67,8 @@ flowchart TD
 ### Las tres vías de entrada
 
 Cada organización recibe dos fuentes (`LeadSource`) al darse de alta: una `MANUAL_FORM` para el
-formulario individual y otra `FILE_UPLOAD` para la carga de fichero. Desde F3 llegan unos segundos
-después del alta, cuando el consumidor `intake.tenants` (de intake desde F4) recibe el estado de la organización nueva
+formulario individual y otra `FILE_UPLOAD` para la carga de fichero. Llegan unos segundos
+después del alta, cuando el consumidor `intake.tenants` recibe el estado de la organización nueva
 que publica identity ([Organizaciones](organizaciones.md#el-alta-una-transaccion-y-un-evento)). `ReceiveIntakeUseCase`
 resuelve la fuente activa según el tipo de trabajo, así que ninguna de las dos exige configuración
 previa. Una tercera vía, `WEBHOOK`, está declarada en `LeadSourceKind` pero todavía no tiene un
@@ -157,5 +157,5 @@ está en la [referencia de la API](../desarrollo/api-referencia.md).
 - `services/intake/src/infrastructure/adapters/output/admissions/` — `HttpLeadAdmission` y su cliente con token de servicio
 - `services/intake/src/infrastructure/worker/` — el `intake-worker`: relays, consumidor de `intake.jobs` y de `intake.tenants`
 - `services/intake/src/infrastructure/cli/reconcile.py` — la reconciliación
-- `backend/src/application/use_cases/admissions/admit_lead.py` — `AdmitLeadUseCase`, la decisión de lead-core
-- `backend/src/infrastructure/adapters/input/internal/admissions_router.py` — `POST` y `GET /internal/v1/admissions`
+- `services/lead-core/src/application/use_cases/admissions/admit_lead.py` — `AdmitLeadUseCase`, la decisión de lead-core
+- `services/lead-core/src/infrastructure/adapters/input/internal/admissions_router.py` — `POST` y `GET /internal/v1/admissions`

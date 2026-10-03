@@ -115,14 +115,14 @@ python consume.py --tenant <uuid> --sasl-username tenant-<uuid> --sasl-password 
 `--sasl-username`/`--sasl-password` los emite `POST /agents/integration-credential` — ver
 [Autenticación](autenticacion.md).
 
-El script no importa nada del backend **a propósito**: es lo que un cliente escribiría por su
+El script no importa nada de lead-core **a propósito**: es lo que un cliente escribiría por su
 cuenta, y si necesitara una librería nuestra sería señal de que el contrato no se sostiene solo.
 
-## El backend arranca sin Kafka
+## lead-core arranca sin Kafka
 
-El servicio `kafka` no lleva `depends_on` desde `backend` ni desde `backend-worker`. Si el bróker no
+El servicio `kafka` no lleva `depends_on` desde `lead-core` ni desde `lead-core-worker`. Si el bróker no
 responde, la API sigue aceptando y guardando leads: sólo escribe en el outbox. El relay del canal
-`product`, que vive en `backend-worker`, falla al entregar, lo registra y reintenta en el ciclo
+`product`, que vive en `lead-core-worker`, falla al entregar, lo registra y reintenta en el ciclo
 siguiente; lo que no salió se queda en el outbox. Es exactamente el comportamiento que el outbox
 existe para dar, y está verificado: con Kafka apagado, `/health` responde `200` y los leads se
 guardan.
@@ -148,11 +148,11 @@ estado lleva la `version` de su fila (la sube la base en cada escritura), para q
 proyecte descarte lo que ya tiene.
 
 **Los `internal.*` de hechos y de estado los crea al arrancar su productor**, con `ensure_topics`,
-idempotente y con reintentos mientras Kafka no responda: `backend-worker` crea
-`internal.lead-core.events`; `identity-worker`, desde F3, `internal.identity.agents` e
-`internal.identity.tenants`; `intake-worker`, desde F4, `internal.intake.events`. **Las `internal.dlq.<grupo>` las crea el
+idempotente y con reintentos mientras Kafka no responda: `lead-core-worker` crea
+`internal.lead-core.events`; `identity-worker`, `internal.identity.agents` e
+`internal.identity.tenants`; `intake-worker`, `internal.intake.events`. **Las `internal.dlq.<grupo>` las crea el
 servicio dueño del grupo**, al arrancar y con `ensure_topics_until_ready`: `notifications-worker` las
-de sus tres grupos, `backend-worker` la de `lead-core.advisors` e `intake-worker` la de
+de sus tres grupos, `lead-core-worker` la de `lead-core.advisors` e `intake-worker` la de
 `intake.tenants`. Si un topic existente difiere de lo declarado (particiones
 o configuración), `ensure_topics` no lo toca y registra un `WARNING`. El productor interno lleva `allow.auto.create.topics=false`: un topic que se
 perdiera después debe fallar a la vista, no reaparecer sin compactación por la creación automática del
@@ -190,13 +190,12 @@ sobre válido de ejemplo, están en `contracts/events/` y `contracts/fixtures/ev
 
 La clave del mensaje es el `aggregate_id` (el lead, el registro de ingesta, el agente o la organización), y `event_type` y
 `correlation_id` viajan también como cabeceras. `producer` dice qué servicio publicó: `lead-core`
-en los de hechos de lead, `intake` en `IntakeRejected` desde F4 (hasta entonces lo publicaba el
-monolito en su nombre) e `identity` en `AgentState` y `TenantState` desde F3. Ningún consumidor filtra por él.
+en los de hechos de lead, `intake` en `IntakeRejected` e `identity` en `AgentState` y `TenantState`. Ningún consumidor filtra por él.
 
 ### El consumidor de notificaciones
 
-Desde F2 corre en el servicio `notifications` (proceso `notifications-worker`), un hilo por grupo,
-sobre `chassis.consumer`; el backend ya no consume ningún topic. Los grupos son
+Corre en el servicio `notifications` (proceso `notifications-worker`), un hilo por grupo,
+sobre `chassis.consumer`. Los grupos son
 `notifications.lead-events` y `notifications.intake-events` (`NotificationConsumer`) y
 `notifications.members` (`MemberConsumer`, la proyección de agentes; ver
 [Notificaciones](../modulos/notificaciones.md#la-proyeccion-members)):
@@ -226,19 +225,17 @@ sobre `chassis.consumer`; el backend ya no consume ningún topic. Los grupos son
 
 ### Los consumidores de lead-core e intake
 
-Desde F3 `backend-worker` vuelve a consumir, y desde F4 `intake-worker` también, con el mismo
+`lead-core-worker` e `intake-worker` consumen, con el mismo
 `chassis.consumer` y un carril por grupo:
 
 | Grupo | Topic | Proceso | Efecto |
 |---|---|---|---|
-| `lead-core.advisors` | `internal.identity.agents` | `backend-worker` | `AdvisorConsumer` mantiene la proyección `advisors`: el mismo *upsert* condicionado por `version` que `members`, sin `processed_events`. Nunca toca `group_id`, que es de lead-core |
-| `intake.tenants` | `internal.identity.tenants` | `intake-worker` (hasta F4, `backend-worker`) | `TenantConsumer` crea las dos fuentes por defecto del primer `TenantState` de cada organización. Crear fuentes no es idempotente, así que escribe `processed_events` y la marca de `provisioned_tenants` en la misma transacción que las fuentes, en `intake_db` |
+| `lead-core.advisors` | `internal.identity.agents` | `lead-core-worker` | `AdvisorConsumer` mantiene la proyección `advisors`: el mismo *upsert* condicionado por `version` que `members`, sin `processed_events`. Nunca toca `group_id`, que es de lead-core |
+| `intake.tenants` | `internal.identity.tenants` | `intake-worker` | `TenantConsumer` crea las dos fuentes por defecto del primer `TenantState` de cada organización. Crear fuentes no es idempotente, así que escribe `processed_events` y la marca de `provisioned_tenants` en la misma transacción que las fuentes, en `intake_db` |
 
 Los dos esperan a la base cuando no responde (`psycopg.OperationalError` es `retryable`): aparcar un
 estado dejaría `advisors` divergida, o una organización sin fuentes, para siempre. Un `TenantState`
-sin un `tenant_id` válido sí se aparca, al tercer intento, en `internal.dlq.intake.tenants`. El grupo
-conservó su nombre al pasar a intake, así que mantuvo sus offsets: el corte copió también sus
-`processed_events`.
+sin un `tenant_id` válido sí se aparca, al tercer intento, en `internal.dlq.intake.tenants`.
 
 ## Límites de hoy
 

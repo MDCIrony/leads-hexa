@@ -7,38 +7,45 @@ la suite.
 
 ## Las tres capas
 
-`backend/src/` contiene las tres, cada una en su propio paquete:
+`services/lead-core/src/` contiene las tres, cada una en su propio paquete. Dentro de cada capa el
+código se agrupa por contexto (`advisors`, `groups`, `leads`, `rules`, `admissions`, `webhooks`):
+`servicio → capa → contexto`.
 
 | Capa | Ruta | Contenido |
 |---|---|---|
-| Dominio | `backend/src/domain/` | Entidades, value objects, los tres motores de negocio, políticas, eventos y excepciones |
-| Aplicación | `backend/src/application/` | Puertos de entrada y salida (ABC), casos de uso, DTOs y manejadores de eventos |
-| Infraestructura | `backend/src/infrastructure/` | Routers FastAPI, adaptadores de salida, configuración y el composition root |
+| Dominio | `services/lead-core/src/domain/` | Agregados por contexto, value objects, los tres motores de negocio, políticas, eventos y excepciones |
+| Aplicación | `services/lead-core/src/application/` | Puertos de entrada y salida (ABC), casos de uso y DTOs |
+| Infraestructura | `services/lead-core/src/infrastructure/` | Routers FastAPI, adaptadores de salida, configuración, el worker y el composition root |
 
 ### Dominio
 
-Es el núcleo: `entities/` (agregados con comportamiento, no estructuras de datos pasivas),
+Es el núcleo: una carpeta por contexto con sus agregados (`leads/`, `rules/`, `groups/`,
+`advisors/`, `webhooks/`; comportamiento, no estructuras de datos pasivas),
 `value_objects/` (invariantes atados al constructor: un `EmailAddress` o un `Money` inválidos no
 llegan a existir), `services/` (los tres motores: `ViabilityEngine`, `ScoringEngine`,
 `AssignmentEngine`), `policies/` (`AuthorizationPolicy`, quién puede hacer qué) y `events/` (lo
-que las entidades emiten). `exceptions.py` no conoce HTTP: una excepción de dominio lleva un
+que los agregados emiten). `exceptions.py` no conoce HTTP: una excepción de dominio lleva un
 `error_code`, nunca un código de estado.
 
 ### Aplicación
 
-Orquesta sin tomar decisiones de negocio. `ports/input/` declara un contrato ABC por caso de uso;
-`ports/output/` declara lo que la infraestructura debe implementar (repositorios, hasher de
-contraseñas, servicio de tokens, reloj, generador de identificadores, outbox, parser de ficheros). `use_cases/` implementa los puertos de entrada. `dtos/` son
-`@dataclass(frozen=True)`, nunca Pydantic. El aviso a partir de un evento interno ya no se hace
+Orquesta sin tomar decisiones de negocio. `ports/input/<contexto>/` declara un contrato ABC por
+caso de uso; `ports/output/<contexto>/` declara lo que la infraestructura debe implementar
+(repositorios, directorio de asesores, cliente de identity, despachador de webhooks, outbox y
+unidad de trabajo). `use_cases/` implementa los puertos de entrada. `dtos/` son
+`@dataclass(frozen=True)`, nunca Pydantic. El aviso a partir de un evento interno no se hace
 aquí: lo hace el servicio [`notifications`](../modulos/notificaciones.md).
 
 ### Infraestructura
 
 Todo lo que depende de un framework o de un driver externo. `adapters/input/api/` son los routers
-FastAPI, finos: convierten HTTP en comandos y comandos en respuestas, sin lógica de negocio propia.
-`adapters/output/` implementa cada puerto de salida sobre PostgreSQL con SQL crudo (`psycopg`),
-el cliente HTTP de identity (`httpx`) y las escrituras en el outbox, que entrega `backend-worker` con sus despachadores (Kafka y webhooks). `di/container.py` es el composition
-root: decide qué implementación concreta recibe cada puerto y su ciclo de vida.
+FastAPI, finos: convierten HTTP en comandos y comandos en respuestas, sin lógica de negocio propia;
+`adapters/input/internal/` sirve el contrato de admisión y `adapters/input/consumers/` el consumidor
+de asesores. `adapters/output/` implementa cada puerto de salida sobre PostgreSQL con SQL crudo
+(`psycopg`), el cliente HTTP de identity (`httpx`) y las escrituras en el outbox, que entrega
+`lead-core-worker` (`infrastructure/worker/`) con sus despachadores (Kafka y webhooks).
+`di/container.py` es el composition root de la API: decide qué implementación concreta recibe cada
+puerto y su ciclo de vida. El worker construye el suyo, sin identity ni JWKS.
 
 ## La regla de dependencia
 
@@ -82,7 +89,7 @@ sin tocar una sola regla de negocio.
 
 La regla de dependencia no se sostiene sola bajo presión: sin algo que la compruebe, un import de
 `infrastructure` dentro de un caso de uso pasaría el resto de la suite en verde.
-`backend/tests/architecture/test_dependency_rule.py` la hace irrompible.
+`services/lead-core/tests/architecture/test_dependency_rule.py` la hace irrompible.
 
 En vez de importar cada módulo —lo que fallaría en cuanto faltase una dependencia externa—,
 recorre su árbol de sintaxis con `ast` y lee los imports directamente del código fuente, sin
@@ -92,8 +99,8 @@ ejecutarlo. Son cuatro pruebas:
   `infrastructure`.
 - `test_application_does_not_import_infrastructure` — `application/` no importa `infrastructure`.
 - `test_domain_does_not_import_third_party_frameworks` — `domain/` no importa Pydantic, FastAPI,
-  Starlette, SQLAlchemy, psycopg, passlib, bcrypt, `jwt` (PyJWT), httpx, pandas, numpy, openpyxl
-  ni ningún cliente de mensajería.
+  Starlette, SQLAlchemy, psycopg, passlib, bcrypt, `jwt` (PyJWT), `chassis`, httpx, pandas, numpy,
+  openpyxl ni ningún cliente de mensajería.
 - `test_application_does_not_import_infrastructure_libraries` — `application/` no importa FastAPI,
   Starlette, Pydantic, psycopg, httpx, pandas ni ningún cliente de mensajería: llega a todo eso
   por un puerto.

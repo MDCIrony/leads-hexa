@@ -3,8 +3,8 @@
 El formato de error unificado, de dónde sale cada código HTTP y qué significa cada código de
 dominio. Cada servicio tiene su tabla de códigos, con el mismo sobre y el mismo criterio, y esa
 tabla es la autoridad real: `infrastructure/adapters/input/api/exception_handlers.py` bajo
-`backend/src/` (lead-core), `services/identity/src/` (autenticación, organizaciones y agentes) y
-`services/notifications/src/`. Las respuestas que genera el gateway antes de llegar a un servicio se
+`services/lead-core/src/`, `services/identity/src/` (autenticación, organizaciones y agentes),
+`services/intake/src/` y `services/notifications/src/`. Las respuestas que genera el gateway antes de llegar a un servicio se
 listan [al final](#errores-del-gateway) y salen de `gateway/nginx.conf`.
 
 ## El dominio no conoce HTTP

@@ -99,8 +99,7 @@ flowchart TD
 
 ## Dónde vive
 
-- `backend/src/domain/value_objects/criterion.py`
-- `backend/src/domain/entities/rule.py`
-- `backend/src/domain/entities/disqualification_rule.py`
-- `backend/src/domain/services/viability_engine.py`
-- `backend/src/domain/services/scoring_engine.py`
+- `services/lead-core/src/domain/value_objects/criterion.py`
+- `services/lead-core/src/domain/rules/scoring_rule.py`, `assignment_rule.py` y `disqualification_rule.py`
+- `services/lead-core/src/domain/services/viability_engine.py`
+- `services/lead-core/src/domain/services/scoring_engine.py`

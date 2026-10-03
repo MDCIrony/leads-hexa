@@ -3,9 +3,8 @@
 Administra las organizaciones clientes, su alta con el primer gestor, y el catálogo de asesores y
 grupos de venta sobre el que operan las reglas y la asignación.
 
-Desde F3 vive repartido entre dos servicios, cada uno con lo suyo
-([06](../microservices/06-plan-de-desacople.md#f3-identity)): **identity** es dueño de las
-organizaciones y de las cuentas de los agentes; **lead-core** (el backend), de los grupos de venta y
+Vive repartido entre dos servicios, cada uno con lo suyo: **identity** es dueño de las
+organizaciones y de las cuentas de los agentes; **lead-core**, de los grupos de venta y
 de su copia de los asesores, `advisors`, que es lo que enruta.
 
 ## Cómo funciona
@@ -23,10 +22,9 @@ transacción. Antes de escribir comprueba que el nombre —por su `slug`— y el
 únicos. Una organización sin gestor no es un estado intermedio útil: nadie podría entrar a
 administrarla.
 
-Las dos `LeadSource` por defecto (`MANUAL_FORM` y `FILE_UPLOAD`, ver [Ingesta](ingesta.md)) ya no
+Las dos `LeadSource` por defecto (`MANUAL_FORM` y `FILE_UPLOAD`, ver [Ingesta](ingesta.md)) no
 nacen en esa transacción, porque son de otro servicio. Las crea intake al recibir el primer
-`TenantState` de la organización, con el consumidor `intake.tenants` de `intake-worker` (hasta F4,
-código de intake dentro del monolito). `provisioned_tenants` marca que ya se crearon una vez: releer el topic
+`TenantState` de la organización, con el consumidor `intake.tenants` de `intake-worker`. `provisioned_tenants` (en `intake_db`) marca que ya se crearon una vez: releer el topic
 compactado no vuelve a crear una fuente que el gestor borró después.
 
 ```mermaid
@@ -104,10 +102,10 @@ El esquema completo de estas tablas está en [Modelo de datos](../arquitectura/m
 - `services/identity/src/domain/tenants/` y `services/identity/src/domain/agents/`
 - `services/identity/src/application/use_cases/tenants/` y `services/identity/src/application/use_cases/agents/`
 - `services/identity/src/infrastructure/adapters/input/api/tenants/` y `.../api/agents/`
-- `backend/src/domain/advisors/advisor.py` y `backend/src/application/use_cases/advisors/`
-- `backend/src/infrastructure/adapters/input/consumers/advisor_consumer.py`
+- `services/lead-core/src/domain/advisors/advisor.py` y `services/lead-core/src/application/use_cases/advisors/`
+- `services/lead-core/src/infrastructure/adapters/input/consumers/advisor_consumer.py`
 - `services/intake/src/infrastructure/adapters/input/consumers/tenant_consumer.py` y `services/intake/src/application/use_cases/tenants/provision_tenant_sources.py` — las fuentes por defecto
-- `backend/src/infrastructure/adapters/output/persistence/advisors/` — repositorio y `HydratingAdvisorDirectory`
-- `backend/src/domain/entities/sales_group.py`
-- `backend/src/application/use_cases/sales_group_use_cases.py`
-- `backend/src/infrastructure/adapters/input/api/sales_group_router.py`
+- `services/lead-core/src/infrastructure/adapters/output/persistence/advisors/` — repositorio y `HydratingAdvisorDirectory`
+- `services/lead-core/src/domain/groups/sales_group.py`
+- `services/lead-core/src/application/use_cases/groups/sales_group_use_cases.py`
+- `services/lead-core/src/infrastructure/adapters/input/api/groups/router.py`

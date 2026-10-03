@@ -13,17 +13,17 @@ entienda sin abrir el diff.
 Los cinco comandos de [Validación](validacion.md) sobre el cambio completo:
 
 ```bash
-docker compose --profile test run --rm backend-test
-cd backend && uv run pytest -m unit -q
+docker compose --profile test run --rm lead-core-test
+cd services/lead-core && uv run pytest -m unit -q
 ./scripts/verify-e2e.sh
 ./scripts/verify-structure.sh
 cd bruno && bru run flows --env local -r
 ```
 
-Los cuatro tests de arquitectura deben seguir en 4/4, y los guardianes de estructura
+Los cuatro tests de arquitectura de cada servicio deben seguir en 4/4, y los guardianes de estructura
 (`tests/architecture/test_structure.py` y `verify-structure.sh`, [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md))
 en verde: un fichero fuente de más de 150 líneas, una carpeta de más de 12 ficheros —también de
-tests— o una entrada de lista base que crece hacen fallar el cambio. Si el cambio toca `scripts/verify-e2e.sh`, se
+tests— o una entrada de lista base que crece (sólo quedan las de `test-consumer/` y `demo/`) hacen fallar el cambio. Si el cambio toca `scripts/verify-e2e.sh`, se
 amplía —una función `verify_fN` nueva, llamada desde `main`— y no se reescribe: las comprobaciones
 anteriores son la prueba de que lo que ya funcionaba sigue funcionando.
 

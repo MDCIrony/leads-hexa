@@ -2,15 +2,14 @@
 
 Referencia completa de la API HTTP, organizada por recurso. Todas las rutas cuelgan de `/api/v1`,
 salvo `GET /health`. En desarrollo local, con la plataforma levantada, la API responde en
-`http://localhost:8001`, que es el gateway nginx (`backend` no publica puerto); ver
+`http://localhost:8001`, que es el gateway nginx (`lead-core` no publica puerto); ver
 [Puesta en marcha](puesta-en-marcha.md). Los códigos de error se
 explican una sola vez, completos, en [API · Errores](api-errores.md); aquí sólo se nombra cuáles
 puede devolver cada endpoint.
 
-Detrás del gateway responden cuatro servicios: `identity` sirve `/auth`, `/tenants` y `/agents`
-(desde F3); `intake`, `/sources` e `/intake` (desde F4); `notifications`, `/notifications` (desde F2);
-el backend (lead-core), todo lo demás. El contrato hacia el cliente es uno solo, con el mismo sobre
-de error en todos. `/openapi.json` y `/docs` son los del backend; los de los servicios extraídos se
+Detrás del gateway responden cuatro servicios: `identity` sirve `/auth`, `/tenants` y `/agents`;
+`intake`, `/sources` e `/intake`; `notifications`, `/notifications`; `lead-core`, todo lo demás. El contrato hacia el cliente es uno solo, con el mismo sobre
+de error en todos. `/openapi.json` y `/docs` son los de lead-core; los de los otros servicios se
 publican en `/openapi/identity.json`, `/openapi/intake.json` y `/openapi/notifications.json`. Esta
 página es la referencia completa de los cuatro. Las rutas `/internal/v1/*` (introspección, JWKS,
 tokens de servicio, agentes y admisiones) no son parte de la API pública: el gateway responde `404` a
@@ -275,7 +274,7 @@ Errores: `404 Not Found` (`TENANT_NOT_FOUND`) si la organización no existe; `40
 Servidos por `identity`. `MANAGER` en los seis endpoints, siempre dentro de su propia organización.
 Un `ADMIN` o un `AGENT` reciben `403 Forbidden`.
 
-Desde F3 un agente **no tiene grupo** en estas rutas: el grupo es un dato de enrutado y vive en
+Un agente **no tiene grupo** en estas rutas: el grupo es un dato de enrutado y vive en
 lead-core, en [Asesores](#asesores) ([ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)).
 `POST` y `PATCH` rechazan cualquier campo que no declaran con `422 VALIDATION_ERROR`, `group_id`
 incluido, en vez de ignorarlo.
@@ -423,8 +422,8 @@ Sus asesores no se borran: quedan sin grupo (`group_id: null` en `GET /advisors`
 La vista de lead-core sobre los agentes de su organización: lo que necesita para enrutar (nombre,
 estado, grupo) y la carga de cada uno. La cuenta es de identity y llega por evento; el grupo es de
 lead-core y sólo se escribe aquí. Excluye a `INTEGRATION` e incluye a `AGENT` y `MANAGER`. Los dos
-endpoints exigen `MANAGER`; un `AGENT` o un `ADMIN` reciben `403 Forbidden`. Nuevos en F3
-([ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md)).
+endpoints exigen `MANAGER`; un `AGENT` o un `ADMIN` reciben `403 Forbidden`. Ver
+[ADR-0036](../decisiones/0036-cambios-de-contrato-publico.md).
 
 ### `GET /api/v1/advisors`
 
@@ -469,7 +468,7 @@ si el agente no estaba en lead-core e identity no responde.
 ## Orígenes de leads
 
 `LeadSource` responde «¿de dónde vienen mis leads?»: cada lead ingerido lleva el `source_id` de la
-fuente por la que entró. Los sirve `intake` (desde F4). Al crear una organización nacen
+fuente por la que entró. Los sirve `intake`. Al crear una organización nacen
 automáticamente dos, `MANUAL_FORM` y `FILE_UPLOAD` — las que usan la ingesta individual y la carga de
 ficheros —, pocos segundos después de `POST /tenants`, cuando intake recibe el estado de la
 organización nueva. Se crean una sola vez: si el gestor borra una, no vuelve a aparecer. Los cuatro
@@ -815,7 +814,7 @@ consultas viajan en una única transacción, así que las cifras son la misma fo
 
 `by_status` lleva siempre los seis valores de `LeadStatus`, con `0` donde no haya leads. `unassigned`
 es redundante a propósito con `by_status["UNASSIGNED"]`: el indicador propio que pide el Panel, sin
-que el cliente tenga que conocer ese nombre de estado interno. Desde F4 no lleva `pending_intake`:
+que el cliente tenga que conocer ese nombre de estado interno. No lleva `pending_intake`:
 los registros de entrada son de intake y su cifra está en `GET /api/v1/intake/stats`.
 `load_by_agent` reutiliza la misma consulta que el motor de asignación (`active_load_by_agent`), con
 el nombre de cada asesor añadido para que el Panel no necesite una segunda petición a
@@ -1037,8 +1036,8 @@ Errores: `404 Not Found` (`DISQUALIFICATION_RULE_NOT_FOUND`).
 La campana que avisa a quien debe actuar sin que tenga que ir a buscarlo. La crea
 `NotificationHandler` al
 asignarse o reasignarse un lead, al quedar uno sin asesor, o al rechazarse un registro de ingesta.
-Desde F2 estas rutas **las sirve el servicio `notifications`**, no el backend: el gateway las enruta
-a él y el contrato no cambia ([06](../microservices/06-plan-de-desacople.md#f2-notifications)).
+Estas rutas **las sirve el servicio `notifications`**, no lead-core: el gateway las enruta
+a él.
 Los tres endpoints exigen organización propia (`MANAGER` o `AGENT`); el destinatario sale siempre
 del token, nunca de la URL. Un `ADMIN` recibe `403 Forbidden`: no pertenece a ninguna organización.
 

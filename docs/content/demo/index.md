@@ -220,7 +220,7 @@ bandeja del cliente aparece el lead que se ingirió con Kafka apagado.
 ## Anexo · El harness
 
 ```bash
-docker compose --profile test run --rm backend-test   # 629 pruebas, todas las capas
+docker compose --profile test run --rm lead-core-test   # 471 pruebas, todas las capas
 ./scripts/verify-e2e.sh                               # el negocio sobre HTTP real
 cd frontend && npm run build && npm test              # el contrato compila, 140 pruebas
 ```

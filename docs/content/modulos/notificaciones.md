@@ -4,9 +4,8 @@ Convierte los eventos que publican los casos de uso en avisos internos para quie
 expone su listado y el contador de no leídas de cada usuario.
 
 Es un **servicio propio**, `services/notifications/`, con su base `notifications_db` y su rol
-`notifications_svc`: ningún otro servicio lee ni escribe sus tablas. Desde F2 el monolito sólo
-*publica* los eventos; no los consume ni sirve `/notifications`
-([06](../microservices/06-plan-de-desacople.md#f2-notifications)). Corre en dos procesos de la misma
+`notifications_svc`: ningún otro servicio lee ni escribe sus tablas. lead-core sólo
+*publica* los eventos; no los consume ni sirve `/notifications`. Corre en dos procesos de la misma
 imagen: `notifications` (API, aplica sus migraciones al arrancar) y `notifications-worker` (los tres
 consumidores).
 
@@ -17,7 +16,7 @@ Un caso de uso —`AdmitLeadUseCase` de lead-core, `IngestLeadUseCase` de intake
 si el lead se guarda, el aviso existe, y si se deshace, el aviso se deshace con él. Ya no hay un
 paso posterior que pueda perderse si el proceso cae entre el commit y el aviso.
 
-`backend-worker` entrega las filas de lead-core a `internal.lead-core.events` e `intake-worker` las de
+`lead-core-worker` entrega las filas de lead-core a `internal.lead-core.events` e `intake-worker` las de
 intake (`IntakeRejected`) a `internal.intake.events`, y
 `notifications-worker` la lee con dos consumidores, uno por grupo. `NotificationConsumer` abre **una** unidad de trabajo por
 mensaje: marca el evento en `processed_events` y, sólo si es nuevo, deja que `NotificationHandler`
@@ -29,7 +28,7 @@ relay y el consumidor, no en el mismo instante que la acción que lo origina.
 sequenceDiagram
     participant UC as Caso de uso
     participant DB as PostgreSQL
-    participant R as Relay internal (backend-worker o intake-worker)
+    participant R as Relay internal (lead-core-worker o intake-worker)
     participant K as Kafka internal.*
     participant NC as NotificationConsumer (notifications-worker)
     participant NH as NotificationHandler
@@ -59,9 +58,8 @@ Los grupos son tres:
 | `notifications.intake-events` | `internal.intake.events` | Avisos de registros rechazados |
 | `notifications.members` | `internal.identity.agents` | Mantiene la proyección `members` |
 
-Los dos primeros conservan los nombres que usaba el monolito, así que sus offsets continúan en lugar
-de empezar de cero. Cada grupo tiene su DLQ `internal.dlq.<grupo>` (1 partición, 7 días), que **declara el propio
-servicio**, no el backend. Un mensaje que falla tres veces se aparca en ella y el offset avanza; el
+Cada grupo tiene su DLQ `internal.dlq.<grupo>` (1 partición, 7 días), que **declara el propio
+servicio**, no el que produce. Un mensaje que falla tres veces se aparca en ella y el offset avanza; el
 detalle del consumidor está en
 [Kafka](../eventos/kafka.md#el-consumidor-de-notificaciones) y cómo recuperarlo en
 [Operar la mensajería](../eventos/operacion.md#las-colas-muertas-y-como-reinyectar-un-mensaje).
@@ -77,7 +75,7 @@ detalle del consumidor está en
 
 Cuando el destinatario son "los gestores", `NotificationHandler` los pide a la proyección `members`
 (`active_manager_ids`: rol `MANAGER` activo del tenant): no hay una tabla de suscripciones, la regla
-vive en el manejador. En el backend, `domain/events/lead_events.py` define además los dos eventos del canal
+vive en el manejador. En lead-core, `domain/events/lead_events.py` define además los dos eventos del canal
 de salida —`LeadProcessedEvent` y `LeadDisqualified`, ver [ADR-0023](../decisiones/0023-eventos-del-canal-de-salida.md)—,
 que no pasan por `NotificationHandler`: describen lo que se publica hacia fuera, por el canal
 `product` del outbox.
@@ -92,8 +90,7 @@ organización (`agent_id`, `tenant_id`, `role`, `is_active`, `version`), aliment
   un estado repetido, desordenado o escrito por dos consumidores a la vez no deshace un cambio más
   reciente. Por eso este consumidor no usa `processed_events`.
 - El administrador de plataforma no tiene tenant y no entra en la proyección.
-- Se sembró en el corte desde `agents` y desde entonces la mantiene el topic (las cifras del corte
-  están en [06](../microservices/06-plan-de-desacople.md#f2-notifications)).
+- La mantiene sólo el topic `internal.identity.agents`.
 
 **Carrera aceptada.** `members` y los eventos de lead viajan por grupos distintos, sin orden entre
 ellos. Si un lead queda sin asignar en un tenant cuyo manager todavía no está en `members` (un tenant
@@ -123,7 +120,7 @@ gestor sobre un lead ya existente.
 | `notifications/router.py` | Listado, marcado individual y marcado masivo de avisos propios; el principal sale del JWT interno |
 
 Los eventos (`LeadAssigned`, `LeadReassigned`, `LeadLeftUnassigned`, `IntakeRejected`, `AgentState`) los
-publican lead-core (`backend-worker`), identity (`identity-worker`) e intake (`intake-worker`); el servicio sólo conoce su sobre y su `payload`.
+publican lead-core (`lead-core-worker`), identity (`identity-worker`) e intake (`intake-worker`); el servicio sólo conoce su sobre y su `payload`.
 
 ## Decisiones que lo explican
 
@@ -141,5 +138,5 @@ publican lead-core (`backend-worker`), identity (`identity-worker`) e intake (`i
 - `services/notifications/src/infrastructure/adapters/output/persistence/` — repositorios y unidad de trabajo
 - `services/notifications/src/infrastructure/worker/` — el proceso de `notifications-worker`
 - `services/notifications/migrations/` — `notifications`, `members` y `processed_events`
-- `backend/src/domain/events/` y `backend/src/infrastructure/adapters/output/events/internal_topics.py` — los eventos que produce lead-core
+- `services/lead-core/src/domain/events/` y `services/lead-core/src/infrastructure/adapters/output/events/internal_topics.py` — los eventos que produce lead-core
 - `services/intake/src/domain/events/` y `services/intake/src/infrastructure/adapters/output/events/internal_topics.py` — `IntakeRejected`

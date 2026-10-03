@@ -7,11 +7,11 @@ estilo: la suite las hace cumplir.
 
 | Capa | Ruta | Puede importar | No puede importar |
 |---|---|---|---|
-| Dominio | `backend/src/domain` | La biblioteca estándar de Python | `application`, `infrastructure`, cualquier framework o librería de terceros |
-| Aplicación | `backend/src/application` | `domain` | `infrastructure`, FastAPI o cualquier otro framework web |
-| Infraestructura | `backend/src/infrastructure` | `domain`, `application` | — es la única capa que conoce el mundo exterior |
+| Dominio | `services/lead-core/src/domain` | La biblioteca estándar de Python | `application`, `infrastructure`, cualquier framework o librería de terceros |
+| Aplicación | `services/lead-core/src/application` | `domain` | `infrastructure`, FastAPI o cualquier otro framework web |
+| Infraestructura | `services/lead-core/src/infrastructure` | `domain`, `application` | — es la única capa que conoce el mundo exterior |
 
-Cuatro tests analizan esto por AST en cada corrida de la suite completa; ver
+Cuatro tests por servicio analizan esto por AST en cada corrida de su suite; ver
 [Validación](validacion.md). El razonamiento completo está en
 [ADR-0001](../decisiones/0001-arquitectura-hexagonal.md).
 
@@ -28,8 +28,8 @@ límites lo sostienen:
 | Tests de dominio | `tests/unit/domain/**` sólo importa el dominio, la stdlib, `pytest` y sus propios helpers; un import relativo que sale de esa carpeta también falla |
 
 Se agrupa por concepto en subcarpetas: ni una carpeta con decenas de ficheros de conceptos mezclados,
-ni una carpeta por fichero salvo que el concepto lo pida. Al partir un módulo en un paquete, su
-`__init__.py` reexporta los nombres públicos, para que nadie cambie sus imports.
+ni una carpeta por fichero salvo que el concepto lo pida. Al partir un módulo en un paquete se actualizan los imports de quien lo usaba: los `__init__.py`
+quedan vacíos, sin reexportaciones de compatibilidad.
 
 Árbol modelo de un servicio:
 
@@ -48,7 +48,7 @@ ni una carpeta por fichero salvo que el concepto lo pida. Al partir un módulo e
 │       ├── main.py                     # proceso api
 │       └── worker/                     # proceso worker: producers, relays, topics, lanes, main, __main__
 └── tests/
-    ├── architecture/                   # guardián de capas, de estructura y su lista base
+    ├── architecture/                   # guardián de capas y de estructura
     └── unit/{domain,application,infrastructure}/<contexto>/
 ```
 
@@ -72,32 +72,28 @@ chassis/
 ./scripts/verify-structure.sh
 ```
 
-El script recorre cada raíz Python declarada —`backend/src`, `backend/tests`, `libs/chassis/src`,
-`libs/chassis/tests`, `services/notifications/src`, `services/notifications/tests`,
-`services/identity/src`, `services/identity/tests`, `services/intake/src`, `services/intake/tests`,
-`test-consumer/`, `demo/` y `tools/`— y aplica su lista base a las heredadas; en las de tests sólo mide carpetas. Los
-servicios extraídos no tienen lista base. Además, `chassis.testing` ofrece `assert_structure` (con
+El script recorre cada raíz Python declarada —`libs/chassis/src`, `libs/chassis/tests`,
+`services/lead-core/src`, `services/lead-core/tests`, `services/notifications/src`,
+`services/notifications/tests`, `services/identity/src`, `services/identity/tests`,
+`services/intake/src`, `services/intake/tests`, `test-consumer/`, `demo/` y `tools/`— y aplica su
+lista base a las que la tienen; en las de tests sólo mide carpetas. Los cuatro servicios, lead-core
+incluido, no tienen lista base. Además, `chassis.testing` ofrece `assert_structure` (con
 `max_lines=None` para los tests), `assert_domain_tests_isolated` y, para el guardián de capas,
 `layer_violations` y `stdlib_only_violations`, y cada servicio los llama desde
 `tests/architecture/test_structure.py`, así que la suite tampoco deja pasar un incumplimiento.
 `libs/chassis` se valida a sí mismo sin excepciones. Una raíz Python nueva se añade al script.
 
-**Lo heredado.** Lo que ya incumplía al llegar la regla está en tres listas base, con lo que medía
-cada fichero y cada carpeta:
-
-| Lista | Raíz |
-|---|---|
-| `backend/tests/architecture/structure_baseline.py` | `backend/src` |
-| `backend/tests/architecture/tests_structure_baseline.py` | `backend/tests`, sólo carpetas |
-| `scripts/structure_baseline.py` | `test-consumer/` y `demo/` |
+**Lo heredado.** Lo que ya incumplía al llegar la regla está en una lista base por raíz, con lo que
+medía cada fichero y cada carpeta. Hoy sólo queda `scripts/structure_baseline.py`, para
+`test-consumer/` y `demo/`: ni los servicios ni `libs/chassis` tienen lista.
 
 Las listas sólo encogen: fallan si una entrada crece, si queda por encima de lo que mide el árbol y si
 ya cumple el límite. Quien adelgaza algo heredado actualiza su lista en el mismo commit; los valores
 se imprimen con:
 
 ```bash
-cd libs/chassis && uv run python -m chassis.testing measure ../../backend/src
-cd libs/chassis && uv run python -m chassis.testing measure ../../backend/tests --no-line-limit
+cd libs/chassis && uv run python -m chassis.testing measure ../../test-consumer
+cd libs/chassis && uv run python -m chassis.testing measure ../../services/lead-core/tests --no-line-limit
 ```
 
 El código nuevo cumple sin entrar en la lista. El porqué y las alternativas están en
@@ -107,7 +103,7 @@ El código nuevo cumple sin entrar en la lista. El porqué y las alternativas es
 
 Toda consulta usa marcadores `%s` de psycopg — nunca f-strings ni `.format()` sobre el texto SQL,
 que abrirían la puerta a una inyección. Ejemplo real, de
-`raw_sql_lead_repository.py`:
+`services/lead-core/src/infrastructure/adapters/output/persistence/leads/lead_repository.py`:
 
 ```python
 cursor = self.connection.execute(
@@ -120,23 +116,27 @@ El porqué de prescindir de un ORM está en [ADR-0002](../decisiones/0002-sql-cr
 ## Migraciones idempotentes
 
 La suite reejecuta las migraciones a propósito, contra un esquema que puede ya tenerlas aplicadas,
-así que cada fichero en `backend/migrations/` debe poder correr dos veces sin fallar.
+así que cada fichero en `services/<servicio>/migrations/` debe poder correr dos veces sin fallar.
 
 `CREATE TABLE` y `ALTER TABLE … ADD COLUMN` aceptan `IF NOT EXISTS` de forma nativa. `ADD
 CONSTRAINT` no: PostgreSQL no tiene esa sintaxis, y la guarda se escribe a mano contra el catálogo
-`pg_constraint`. Ejemplo real, de `backend/migrations/005_lead_sources_and_intake.sql`:
+`pg_constraint`. Ejemplo real, de `services/lead-core/migrations/005_lead_sources_and_intake.sql`:
 
 ```sql
 DO $$
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'fk_leads_tenant'
-    ) THEN
+    ) AND to_regclass('advisors') IS NULL THEN
         ALTER TABLE leads ADD CONSTRAINT fk_leads_tenant
             FOREIGN KEY (tenant_id) REFERENCES tenants (id) ON DELETE CASCADE;
     END IF;
 END $$;
 ```
+
+La segunda condición, `to_regclass('advisors') IS NULL`, es la guarda de esta migración concreta:
+`advisors` nace en 017, que ya quitó las claves hacia `tenants`; un esquema que la tiene es
+posterior y no debe recuperar esa clave. `to_regclass` respeta el `search_path`.
 
 Ver [ADR-0006](../decisiones/0006-migraciones-idempotentes.md).
 

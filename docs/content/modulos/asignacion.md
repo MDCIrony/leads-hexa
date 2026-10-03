@@ -80,7 +80,7 @@ organización, así que un lead reasignado o descartado deja de contar de inmedi
 
 ## Dónde vive
 
-- `backend/src/domain/services/assignment_engine.py`
-- `backend/src/domain/entities/rule.py`
-- `backend/src/domain/entities/sales_group.py`
-- `backend/src/domain/value_objects/enums.py`
+- `services/lead-core/src/domain/services/assignment_engine.py`
+- `services/lead-core/src/domain/rules/assignment_rule.py` y `assignment_rule_behavior.py`
+- `services/lead-core/src/domain/groups/sales_group.py`
+- `services/lead-core/src/domain/value_objects/enums.py`
