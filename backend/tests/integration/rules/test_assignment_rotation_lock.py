@@ -15,9 +15,9 @@ from domain.rules.assignment_rule import AssignmentRule
 from domain.groups.sales_group import SalesGroup
 from domain.value_objects.enums import AssignmentStrategy
 from chassis.persistence import RawSqlDatabase
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.persistence.raw_sql_rule_repository import RawSqlRuleRepository
-from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.rules.rule_repository import RawSqlRuleRepository
+from infrastructure.adapters.output.persistence.groups.sales_group_repository import (
     RawSqlSalesGroupRepository,
 )
 

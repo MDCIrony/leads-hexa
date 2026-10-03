@@ -16,10 +16,10 @@ from infrastructure.adapters.output.events.internal_topics import INTERNAL_TOPIC
 from infrastructure.adapters.output.events.kafka_outbound_dispatcher import KafkaOutboundDispatcher
 from infrastructure.adapters.output.events.webhook_outbound_dispatcher import WebhookOutboundDispatcher
 from infrastructure.adapters.output.http.httpx_webhook_dispatcher import HttpxWebhookDispatcher
-from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
-from infrastructure.adapters.output.persistence.raw_sql_webhook_repository import PooledWebhookRepository
+from infrastructure.adapters.output.persistence.outbox.outbox_store import open_outbox_store
+from infrastructure.adapters.output.persistence.webhooks.webhook_repository import PooledWebhookRepository
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
 from infrastructure.config.settings import WorkerSettings
 from infrastructure.logging_config import configure_logging
 from infrastructure.worker.producers import PRODUCER_NAME

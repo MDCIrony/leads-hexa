@@ -6,7 +6,7 @@ import pytest
 from domain.groups.sales_group import SalesGroup
 from domain.value_objects.enums import AssignmentStrategy
 from domain.value_objects.tenant_id import TenantId
-from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
+from infrastructure.adapters.output.persistence.groups.sales_group_repository import (
     RawSqlSalesGroupRepository,
 )
 

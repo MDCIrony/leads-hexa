@@ -9,7 +9,7 @@ from domain.groups.sales_group import SalesGroup
 from domain.exceptions import DomainException
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
 from domain.value_objects.tenant_id import TenantId
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import (
+from infrastructure.adapters.output.persistence.unit_of_work import (
     PostgresUnitOfWork,
 )
 

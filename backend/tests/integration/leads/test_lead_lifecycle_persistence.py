@@ -3,7 +3,7 @@ from typing import Optional
 
 from domain.leads.lead import Lead
 from domain.value_objects.enums import LeadStatus
-from infrastructure.adapters.output.persistence.raw_sql_lead_repository import (
+from infrastructure.adapters.output.persistence.leads.lead_repository import (
     RawSqlLeadRepository,
 )
 

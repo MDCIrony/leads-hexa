@@ -5,8 +5,8 @@ from domain.groups.sales_group import SalesGroup
 from domain.value_objects.agent_id import AgentId
 from domain.value_objects.enums import AgentRole
 from domain.value_objects.tenant_id import TenantId
-from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
-from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
+from infrastructure.adapters.output.persistence.advisors.advisor_repository import RawSqlAdvisorRepository
+from infrastructure.adapters.output.persistence.groups.sales_group_repository import RawSqlSalesGroupRepository
 
 
 def _advisor(tenant, agent_id=None, name="Ana", role=AgentRole.AGENT, is_active=True, version=1) -> Advisor:

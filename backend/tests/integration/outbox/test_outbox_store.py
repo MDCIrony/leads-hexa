@@ -6,8 +6,8 @@ from chassis.outbox import OutboxRow
 
 from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import LeadAssigned, LeadDisqualified
-from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.outbox.outbox_store import open_outbox_store
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
 
 
 def _product_event() -> LeadDisqualified:

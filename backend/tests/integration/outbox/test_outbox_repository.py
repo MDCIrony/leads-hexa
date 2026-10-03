@@ -6,8 +6,8 @@ from chassis.web import request_id_var
 from application.dtos.admissions import AdmissionCandidate, AdmissionRequest
 from application.use_cases.admissions.admit_lead import AdmitLeadUseCase
 from domain.events.lead_events import LeadDisqualified
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
-from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.outbox.outbox_repository import RawSqlOutboxRepository
 
 
 def _repo(test_db):

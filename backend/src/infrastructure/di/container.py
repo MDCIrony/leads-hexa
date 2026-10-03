@@ -10,7 +10,7 @@ from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.services.assignment_engine import AssignmentEngine
 from infrastructure.adapters.output.http.advisors.http_identity_agents import HttpIdentityAgents
 from infrastructure.adapters.output.persistence.advisors.hydrating_advisor_directory import HydratingAdvisorDirectory
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
 from infrastructure.config.settings import ApiSettings
 
 

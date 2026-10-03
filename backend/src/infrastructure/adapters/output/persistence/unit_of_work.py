@@ -7,14 +7,14 @@ from chassis.persistence import RawSqlDatabase
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 # infrastructure → domain is an allowed direction; the inverse is not.
 from domain.exceptions import DomainException
-from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
-from infrastructure.adapters.output.persistence.raw_sql_rule_repository import RawSqlRuleRepository
-from infrastructure.adapters.output.persistence.raw_sql_disqualification_rule_repository import (
+from infrastructure.adapters.output.persistence.leads.lead_repository import RawSqlLeadRepository
+from infrastructure.adapters.output.persistence.rules.rule_repository import RawSqlRuleRepository
+from infrastructure.adapters.output.persistence.rules.disqualification_rule_repository import (
     RawSqlDisqualificationRuleRepository,
 )
-from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import RawSqlSalesGroupRepository
-from infrastructure.adapters.output.persistence.raw_sql_outbox_repository import RawSqlOutboxRepository
-from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
+from infrastructure.adapters.output.persistence.groups.sales_group_repository import RawSqlSalesGroupRepository
+from infrastructure.adapters.output.persistence.outbox.outbox_repository import RawSqlOutboxRepository
+from infrastructure.adapters.output.persistence.advisors.advisor_repository import RawSqlAdvisorRepository
 
 
 class PostgresUnitOfWork(UnitOfWorkPort):

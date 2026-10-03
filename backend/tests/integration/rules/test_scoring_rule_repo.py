@@ -4,7 +4,7 @@ import psycopg
 
 from domain.value_objects.tenant_id import TenantId
 from domain.rules.scoring_rule import ScoringRule
-from infrastructure.adapters.output.persistence.raw_sql_rule_repository import (
+from infrastructure.adapters.output.persistence.rules.rule_repository import (
     RawSqlRuleRepository,
 )
 

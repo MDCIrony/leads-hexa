@@ -13,7 +13,7 @@ from application.dtos.outbox import OutboxEntry
 from domain.rules.disqualification_rule import DisqualificationRule
 from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
-from infrastructure.adapters.output.persistence.correlation import current_correlation_id
+from infrastructure.adapters.output.persistence.outbox.correlation import current_correlation_id
 from tests.unit.mocks.advisors.in_memory_advisor_repo import InMemoryAdvisorRepository
 from tests.unit.mocks.leads.in_memory_lead_repo import InMemoryLeadRepository
 from tests.unit.mocks.rules.in_memory_rule_repo import InMemoryRuleRepository

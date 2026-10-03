@@ -7,10 +7,10 @@ from domain.value_objects.tenant_id import TenantId
 from domain.rules.assignment_rule import AssignmentRule
 from domain.groups.sales_group import SalesGroup
 from domain.value_objects.enums import AgentMatchMode, AssignmentStrategy
-from infrastructure.adapters.output.persistence.raw_sql_rule_repository import (
+from infrastructure.adapters.output.persistence.rules.rule_repository import (
     RawSqlRuleRepository,
 )
-from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
+from infrastructure.adapters.output.persistence.groups.sales_group_repository import (
     RawSqlSalesGroupRepository,
 )
 

@@ -8,7 +8,7 @@ from application.dtos.outbox import OutboxEntry
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent
-from infrastructure.adapters.output.persistence.correlation import current_correlation_id
+from infrastructure.adapters.output.persistence.outbox.correlation import current_correlation_id
 
 class RawSqlOutboxRepository(OutboxRepositoryPort):
     def __init__(self, connection: psycopg.Connection) -> None:

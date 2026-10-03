@@ -7,8 +7,8 @@ import pytest
 from chassis.outbox import OutboxRelay
 
 from domain.events.lead_events import LeadAssigned
-from infrastructure.adapters.output.persistence.outbox_store import open_outbox_store
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.outbox.outbox_store import open_outbox_store
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
 
 
 def _count(test_db, sql: str, params: tuple = ()) -> int:

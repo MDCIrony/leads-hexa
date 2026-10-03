@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from infrastructure.adapters.output.persistence.advisors.raw_sql_advisor_repository import RawSqlAdvisorRepository
-from infrastructure.adapters.output.persistence.raw_sql_lead_repository import RawSqlLeadRepository
-from infrastructure.adapters.output.persistence.raw_sql_sales_group_repository import (
+from infrastructure.adapters.output.persistence.advisors.advisor_repository import RawSqlAdvisorRepository
+from infrastructure.adapters.output.persistence.leads.lead_repository import RawSqlLeadRepository
+from infrastructure.adapters.output.persistence.groups.sales_group_repository import (
     RawSqlSalesGroupRepository,
 )
 from domain.advisors.advisor import Advisor

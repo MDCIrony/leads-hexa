@@ -7,7 +7,7 @@ from chassis.outbox import OutboxRow, OutboxStore
 from chassis.persistence import RawSqlDatabase
 
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
 
 
 class UnitOfWorkOutboxStore:

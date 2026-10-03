@@ -8,7 +8,7 @@ from infrastructure.adapters.input.consumers.advisor_consumer import AdvisorCons
 from infrastructure.adapters.input.consumers.groups import (
     ADVISORS_GROUP, CONSUMER_GROUPS, DLQ_TOPIC_SPECS,
 )
-from infrastructure.adapters.output.persistence.postgres_unit_of_work import PostgresUnitOfWork
+from infrastructure.adapters.output.persistence.unit_of_work import PostgresUnitOfWork
 
 
 def _envelope(**payload_changes) -> Envelope:
