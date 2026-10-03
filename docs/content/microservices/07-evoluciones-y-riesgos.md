@@ -29,8 +29,8 @@ Tras F5, mismo método y mismo stack, con los cuatro servicios separados (2026-1
 | `GET /api/v1/leads` por el gateway, con cookie | 5,3 ms | 10,6 ms | 10,6 / 13,9 ms |
 | Job de 1.000 registros, de `202` a `COMPLETED` | 13,0 s y 13,3 s | — | 14,5 s |
 
-Las llamadas son más rápidas que en F0 sobre todo porque las APIs ya no arrancan con `uvicorn --reload`
-(el artefacto de `TCP_NODELAY` también afectaba a las conexiones reutilizadas del gateway). Login y
+Es una sola tanda por medida, así que la diferencia frente a F0 no se atribuye a una causa concreta;
+lo que sí muestra es que la separación no añade latencia medible a las rutas síncronas. Login y
 `X-Api-Key` no se repiten: siguen dominados por bcrypt en identity y su código no cambió.
 
 **Conclusión.** El gateway con introspección añade ≈ 3 ms por petición: nada de lo medido justifica una
