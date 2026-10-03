@@ -2,8 +2,11 @@ import uuid
 
 import pytest
 
-from application.dtos.commands import CreateSalesGroupCommand, UpdateSalesGroupCommand
-from application.dtos.queries import GetSalesGroupsQuery
+from application.dtos.groups import (
+    CreateSalesGroupCommand,
+    GetSalesGroupsQuery,
+    UpdateSalesGroupCommand,
+)
 from application.use_cases.groups.sales_group_use_cases import (
     CreateSalesGroupUseCase,
     DeleteSalesGroupUseCase,

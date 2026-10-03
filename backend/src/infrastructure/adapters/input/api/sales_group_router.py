@@ -2,9 +2,12 @@ from typing import Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 
-from application.dtos.commands import CreateSalesGroupCommand, UpdateSalesGroupCommand
+from application.dtos.groups import (
+    CreateSalesGroupCommand,
+    GetSalesGroupsQuery,
+    UpdateSalesGroupCommand,
+)
 from application.dtos.context import RequestContext
-from application.dtos.queries import GetSalesGroupsQuery
 from application.ports.input.groups.sales_group_use_case_ports import (
     CreateSalesGroupInputPort, DeleteSalesGroupInputPort, GetSalesGroupsInputPort,
     UpdateSalesGroupInputPort,

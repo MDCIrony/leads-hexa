@@ -1,13 +1,12 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
+
 if TYPE_CHECKING:
     from domain.rules.disqualification_rule import DisqualificationRule
-    from domain.leads.lead import Lead
     from domain.rules.scoring_rule import ScoringRule
-    from domain.groups.sales_group import SalesGroup
+
 
 
 @dataclass(frozen=True)
@@ -35,44 +34,15 @@ class UpdateScoringRuleCommand:
 
 
 @dataclass(frozen=True)
+class GetRulesQuery:
+    tenant_id: UUID
+    limit: int = 100
+    offset: int = 0
+
+
+@dataclass(frozen=True)
 class ScoringRulesPageResult:
     items: List["ScoringRule"]
-    total: int
-
-
-@dataclass(frozen=True)
-class CreateSalesGroupCommand:
-    tenant_id: UUID
-    name: str
-    description: Optional[str] = None
-    default_strategy: str = "LOWEST_LOAD"
-    capacity_per_agent: Optional[int] = None
-
-
-@dataclass(frozen=True)
-class UpdateSalesGroupCommand:
-    tenant_id: UUID
-    group_id: UUID
-    # Every field below is None-means-unchanged (same
-    # convention as the rule updates). That makes capacity_per_agent unable to be
-    # PATCHed back to "uncapped" without a sentinel value; no brief exercises
-    # that case, so it is not worth the extra machinery yet.
-    name: Optional[str] = None
-    description: Optional[str] = None
-    default_strategy: Optional[str] = None
-    capacity_per_agent: Optional[int] = None
-    is_active: Optional[bool] = None
-
-
-@dataclass(frozen=True)
-class SalesGroupSummary:
-    group: "SalesGroup"
-    agent_count: int
-
-
-@dataclass(frozen=True)
-class SalesGroupsPageResult:
-    items: List[SalesGroupSummary]
     total: int
 
 
@@ -111,6 +81,11 @@ class UpdateAssignmentRuleCommand:
 
 
 @dataclass(frozen=True)
+class GetAssignmentRulesQuery:
+    tenant_id: UUID
+
+
+@dataclass(frozen=True)
 class CreateDisqualificationRuleCommand:
     tenant_id: UUID
     name: str
@@ -132,59 +107,13 @@ class UpdateDisqualificationRuleCommand:
 
 
 @dataclass(frozen=True)
+class GetDisqualificationRulesQuery:
+    tenant_id: UUID
+    limit: int = 100
+    offset: int = 0
+
+
+@dataclass(frozen=True)
 class DisqualificationRulesPageResult:
     items: List["DisqualificationRule"]
     total: int
-
-
-@dataclass(frozen=True)
-class LeadsPageResult:
-    items: List["Lead"]
-    total: int
-
-
-@dataclass(frozen=True)
-class AssignLeadCommand:
-    tenant_id: UUID
-    lead_id: UUID
-    agent_id: UUID
-
-
-@dataclass(frozen=True)
-class DiscardLeadCommand:
-    tenant_id: UUID
-    lead_id: UUID
-    reason: str
-
-
-@dataclass(frozen=True)
-class AgentLoad:
-    agent_id: UUID
-    name: str
-    active_leads: int
-
-
-@dataclass(frozen=True)
-class LeadStatsResult:
-    total: int
-    by_status: Dict[str, int]
-    unassigned: int
-    load_by_agent: List[AgentLoad]
-
-
-@dataclass(frozen=True)
-class OutboxEntry:
-    """One row of the transactional outbox, read back for delivery.
-
-    Delivery mechanics, not a domain concept — the outbox doesn't know what
-    a lead is, only that this payload needs to reach a transport."""
-
-    id: UUID
-    # None for state with no organization, e.g. the platform admin's identity.
-    tenant_id: Optional[str]
-    partition_key: str
-    event_type: str
-    payload: Dict[str, Any]
-    occurred_on: datetime
-    channel: str = "product"
-    correlation_id: Optional[str] = None

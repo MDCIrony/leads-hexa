@@ -4,9 +4,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand
+from application.dtos.leads import AssignLeadCommand, DiscardLeadCommand, GetLeadQuery, GetLeadStatsQuery, GetLeadsQuery, GetMyLeadsQuery
 from application.dtos.context import RequestContext
-from application.dtos.queries import GetLeadQuery, GetLeadStatsQuery, GetLeadsQuery, GetMyLeadsQuery
 from application.ports.input.leads.get_leads_use_case_port import GetLeadsInputPort
 from application.ports.input.leads.get_lead_stats_use_case_port import GetLeadStatsInputPort
 from application.ports.input.leads.lead_lifecycle_use_case_ports import (

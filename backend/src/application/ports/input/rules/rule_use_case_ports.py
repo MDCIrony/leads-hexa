@@ -2,14 +2,15 @@ from abc import ABC, abstractmethod
 from typing import List
 from uuid import UUID
 
-from application.dtos.commands import (
+from application.dtos.rules import (
     CreateAssignmentRuleCommand,
     CreateScoringRuleCommand,
+    GetAssignmentRulesQuery,
+    GetRulesQuery,
     ScoringRulesPageResult,
     UpdateAssignmentRuleCommand,
     UpdateScoringRuleCommand,
 )
-from application.dtos.queries import GetAssignmentRulesQuery, GetRulesQuery
 from domain.rules.assignment_rule import AssignmentRule
 from domain.rules.scoring_rule import ScoringRule
 

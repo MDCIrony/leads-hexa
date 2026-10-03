@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from application.dtos.commands import (
+from application.dtos.rules import (
     CreateDisqualificationRuleCommand,
     DisqualificationRulesPageResult,
+    GetDisqualificationRulesQuery,
     UpdateDisqualificationRuleCommand,
 )
-from application.dtos.queries import GetDisqualificationRulesQuery
 from domain.rules.disqualification_rule import DisqualificationRule
 
 

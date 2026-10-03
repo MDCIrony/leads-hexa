@@ -1,11 +1,11 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
-from application.dtos.commands import (
+from application.dtos.rules import (
     CreateAssignmentRuleCommand, CreateDisqualificationRuleCommand, CreateScoringRuleCommand,
+    GetAssignmentRulesQuery, GetDisqualificationRulesQuery, GetRulesQuery,
     UpdateAssignmentRuleCommand, UpdateDisqualificationRuleCommand, UpdateScoringRuleCommand,
 )
 from application.dtos.context import RequestContext
-from application.dtos.queries import GetAssignmentRulesQuery, GetDisqualificationRulesQuery, GetRulesQuery
 from application.ports.input.rules.rule_use_case_ports import (
     CreateAssignmentRuleInputPort, CreateScoringRuleInputPort, DeleteAssignmentRuleInputPort,
     DeleteScoringRuleInputPort, GetAssignmentRulesInputPort, GetScoringRulesInputPort,

@@ -1,11 +1,11 @@
 from uuid import UUID
 
-from application.dtos.commands import (
+from application.dtos.rules import (
     CreateDisqualificationRuleCommand,
     DisqualificationRulesPageResult,
+    GetDisqualificationRulesQuery,
     UpdateDisqualificationRuleCommand,
 )
-from application.dtos.queries import GetDisqualificationRulesQuery
 from application.ports.input.rules.disqualification_rule_use_case_ports import (
     CreateDisqualificationRuleInputPort,
     DeleteDisqualificationRuleInputPort,

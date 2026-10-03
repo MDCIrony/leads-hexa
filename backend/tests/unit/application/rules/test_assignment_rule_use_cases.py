@@ -2,8 +2,11 @@ import uuid
 
 import pytest
 
-from application.dtos.commands import CreateAssignmentRuleCommand, UpdateAssignmentRuleCommand
-from application.dtos.queries import GetAssignmentRulesQuery
+from application.dtos.rules import (
+    CreateAssignmentRuleCommand,
+    GetAssignmentRulesQuery,
+    UpdateAssignmentRuleCommand,
+)
 from application.use_cases.rules.assignment_rule_use_cases import (
     CreateAssignmentRuleUseCase,
     DeleteAssignmentRuleUseCase,

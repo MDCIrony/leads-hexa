@@ -2,8 +2,7 @@ import uuid
 
 import pytest
 
-from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand
-from application.dtos.queries import GetMyLeadsQuery
+from application.dtos.leads import AssignLeadCommand, DiscardLeadCommand, GetMyLeadsQuery
 from application.use_cases.leads.lead_lifecycle_use_cases import (
     AssignLeadUseCase,
     DiscardLeadUseCase,

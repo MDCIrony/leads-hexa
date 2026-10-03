@@ -2,9 +2,8 @@ import uuid
 
 import pytest
 
-from application.dtos.commands import CreateScoringRuleCommand, UpdateScoringRuleCommand
-from application.dtos.queries import GetRulesQuery
-from application.use_cases.rules.assignment_rule_use_cases import (
+from application.dtos.rules import CreateScoringRuleCommand, GetRulesQuery, UpdateScoringRuleCommand
+from application.use_cases.rules.scoring_rule_use_cases import (
     CreateScoringRuleUseCase,
     DeleteScoringRuleUseCase,
     GetScoringRulesUseCase,

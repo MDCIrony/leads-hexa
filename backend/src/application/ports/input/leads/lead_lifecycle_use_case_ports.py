@@ -1,7 +1,12 @@
 from abc import ABC, abstractmethod
 
-from application.dtos.commands import AssignLeadCommand, DiscardLeadCommand, LeadsPageResult
-from application.dtos.queries import GetLeadQuery, GetMyLeadsQuery
+from application.dtos.leads import (
+    AssignLeadCommand,
+    DiscardLeadCommand,
+    GetLeadQuery,
+    GetMyLeadsQuery,
+    LeadsPageResult,
+)
 from domain.leads.lead import Lead
 
 

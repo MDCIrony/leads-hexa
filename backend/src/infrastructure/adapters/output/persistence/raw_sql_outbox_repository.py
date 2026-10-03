@@ -4,7 +4,7 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
-from application.dtos.commands import OutboxEntry
+from application.dtos.outbox import OutboxEntry
 from application.ports.output.outbox_repository_port import OutboxRepositoryPort
 from domain.events.internal_event import InternalEvent
 from domain.events.lead_events import OutboundEvent

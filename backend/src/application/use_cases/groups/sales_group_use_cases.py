@@ -1,12 +1,12 @@
 from uuid import UUID
 
-from application.dtos.commands import (
+from application.dtos.groups import (
     CreateSalesGroupCommand,
-    SalesGroupsPageResult,
+    GetSalesGroupsQuery,
     SalesGroupSummary,
+    SalesGroupsPageResult,
     UpdateSalesGroupCommand,
 )
-from application.dtos.queries import GetSalesGroupsQuery
 from application.ports.input.groups.sales_group_use_case_ports import (
     CreateSalesGroupInputPort,
     DeleteSalesGroupInputPort,

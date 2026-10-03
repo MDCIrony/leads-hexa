@@ -1,5 +1,4 @@
-from application.dtos.queries import GetLeadsQuery
-from application.dtos.commands import LeadsPageResult
+from application.dtos.leads import GetLeadsQuery, LeadsPageResult
 from application.ports.input.leads.get_leads_use_case_port import GetLeadsInputPort
 from application.ports.output.unit_of_work_port import UnitOfWorkPort
 from domain.exceptions import DomainException

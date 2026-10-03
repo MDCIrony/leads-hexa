@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from application.dtos.commands import (
+from application.dtos.groups import (
     CreateSalesGroupCommand,
+    GetSalesGroupsQuery,
     SalesGroupsPageResult,
     UpdateSalesGroupCommand,
 )
-from application.dtos.queries import GetSalesGroupsQuery
 from domain.groups.sales_group import SalesGroup
 
 

@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
-from application.dtos.queries import GetLeadsQuery
-from application.dtos.commands import LeadsPageResult
+from application.dtos.leads import GetLeadsQuery, LeadsPageResult
 
 class GetLeadsInputPort(ABC):
     @abstractmethod
