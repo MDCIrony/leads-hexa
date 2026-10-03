@@ -1,10 +1,10 @@
 import uuid
 
-from gateway_client import GatewayClient
+from tests.e2e.helpers.gateway_client import GatewayClient
 from infrastructure.main import app
 
-from _admission_helpers import admit_lead
-from auth_helpers import admin_headers, manager_headers, seed_agent
+from tests.e2e.helpers.admission_helpers import admit_lead
+from tests.e2e.helpers.auth_helpers import admin_headers, manager_headers, seed_agent
 
 
 def _manager_auth_headers(tenant_id: str) -> dict:

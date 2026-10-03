@@ -1,10 +1,10 @@
 from typing import Tuple
 
-from gateway_client import GatewayClient, tenant_of
+from tests.e2e.helpers.gateway_client import GatewayClient, tenant_of
 from infrastructure.main import app
 
-from _admission_helpers import admit_lead
-from auth_helpers import agent_of, seed_org_manager
+from tests.e2e.helpers.admission_helpers import admit_lead
+from tests.e2e.helpers.auth_helpers import agent_of, seed_org_manager
 
 
 def _create_tenant_and_manager_headers(client: GatewayClient) -> Tuple[str, dict]:

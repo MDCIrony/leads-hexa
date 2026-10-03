@@ -1,10 +1,10 @@
 import uuid
 
-from auth_helpers import admin_headers, agent_of, seed_org_manager
-from gateway_client import GatewayClient, subject_of, tenant_of
+from tests.e2e.helpers.auth_helpers import admin_headers, agent_of, seed_org_manager
+from tests.e2e.helpers.gateway_client import GatewayClient, subject_of, tenant_of
 
 from infrastructure.main import app
-from _admission_helpers import admit_lead
+from tests.e2e.helpers.admission_helpers import admit_lead
 
 
 def _bootstrap_admin(client: GatewayClient) -> dict:

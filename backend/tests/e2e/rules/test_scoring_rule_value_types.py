@@ -1,5 +1,5 @@
-from auth_helpers import seed_org_manager
-from gateway_client import GatewayClient
+from tests.e2e.helpers.auth_helpers import seed_org_manager
+from tests.e2e.helpers.gateway_client import GatewayClient
 
 from infrastructure.main import app
 

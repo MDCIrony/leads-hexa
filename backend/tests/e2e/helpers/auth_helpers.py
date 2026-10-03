@@ -8,7 +8,7 @@ from uuid import uuid4
 from domain.value_objects.enums import AgentRole
 from infrastructure.main import app
 from tests.advisors_sync import seed_advisor
-from tests.e2e.gateway_client import as_principal, tenant_of
+from tests.e2e.helpers.gateway_client import as_principal, tenant_of
 
 
 def _database():

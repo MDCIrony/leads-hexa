@@ -2,8 +2,8 @@
 that rides it proves nothing about the real stack (ADR-0031)."""
 import uuid
 
-from auth_helpers import integration_headers, manager_headers, seed_agent
-from gateway_client import GatewayClient
+from tests.e2e.helpers.auth_helpers import integration_headers, manager_headers, seed_agent
+from tests.e2e.helpers.gateway_client import GatewayClient
 from infrastructure.main import app
 from tests.tokens import mint_token
 

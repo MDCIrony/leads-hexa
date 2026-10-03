@@ -1,6 +1,6 @@
 import uuid
 
-from gateway_client import GatewayClient
+from tests.e2e.helpers.gateway_client import GatewayClient
 
 from infrastructure.main import app
 from test_lead_endpoints import _manager_auth_headers

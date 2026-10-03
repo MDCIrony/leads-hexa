@@ -20,13 +20,13 @@ entry is exactly how the fifth case gets back in.
 """
 import uuid
 
-from gateway_client import GatewayClient
+from tests.e2e.helpers.gateway_client import GatewayClient
 
 from infrastructure.main import app
 from infrastructure.adapters.input.api import schemas
 
-from _admission_helpers import admit_lead
-from auth_helpers import manager_headers, seed_agent
+from tests.e2e.helpers.admission_helpers import admit_lead
+from tests.e2e.helpers.auth_helpers import manager_headers, seed_agent
 
 
 # --- Auth helper, same shortcut as test_lead_endpoints.py ---

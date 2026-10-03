@@ -1,8 +1,8 @@
 """The platform plane reaches no organization data, and within an organization
 the pipeline is the manager's. Who is who comes from identity; what each one
 reaches here is lead-core's to enforce."""
-from auth_helpers import admin_headers, agent_of, seed_org_manager
-from gateway_client import GatewayClient
+from tests.e2e.helpers.auth_helpers import admin_headers, agent_of, seed_org_manager
+from tests.e2e.helpers.gateway_client import GatewayClient
 from infrastructure.main import app
 
 

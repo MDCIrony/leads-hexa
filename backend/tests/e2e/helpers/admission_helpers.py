@@ -2,7 +2,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from tests.e2e.gateway_client import tenant_of
+from tests.e2e.helpers.gateway_client import tenant_of
 from tests.tokens import mint_service_token
 
 

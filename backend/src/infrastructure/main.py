@@ -5,10 +5,10 @@ from chassis.persistence import MigrationRunner
 from chassis.web import RequestIdMiddleware
 from fastapi import FastAPI
 
-from infrastructure.adapters.input.api.lead_router import router as lead_router
-from infrastructure.adapters.input.api.rule_router import router as rule_router
-from infrastructure.adapters.input.api.advisors.advisors_router import router as advisors_router
-from infrastructure.adapters.input.api.sales_group_router import router as sales_group_router
+from infrastructure.adapters.input.api.leads.router import router as lead_router
+from infrastructure.adapters.input.api.rules.scoring_router import router as rule_router
+from infrastructure.adapters.input.api.advisors.router import router as advisors_router
+from infrastructure.adapters.input.api.groups.router import router as sales_group_router
 from infrastructure.adapters.input.api.exception_handlers import add_exception_handlers
 from infrastructure.adapters.input.internal.admissions_router import router as admissions_router
 from infrastructure.config.settings import ApiSettings
