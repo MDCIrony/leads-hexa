@@ -148,7 +148,8 @@ En **Consumers**:
     `outbox_events` en la misma transacción.
   - El worker publica esa fila y sólo la marca como publicada cuando Kafka confirma.
   - El consumidor aplica el efecto y anota el `event_id` en `processed_events`, también en una
-    transacción, así que un duplicado se ignora.
+    transacción, así que un duplicado se ignora. `lead-core.advisors` es la excepción: es
+    idempotente por `version` y no escribe en `processed_events`.
 - **Qué tiene que verse:**
   - El *Lag* de todos los grupos vuelve a 0.
   - En la aplicación, la campana de notificaciones de un asesor con leads nuevos muestra avisos.

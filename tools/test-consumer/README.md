@@ -1,9 +1,9 @@
 # Consumidor de prueba
 
-Script mínimo y sin dependencias del backend que se suscribe al topic de una organización y
+Script mínimo y sin dependencias de los servicios que se suscribe al topic de una organización y
 muestra por pantalla lo que Kafka le entrega. Es la comprobación manual de que el contrato descrito
 en [ADR-0026](../../docs/content/decisiones/0026-kafka-como-canal-del-producto.md) se sostiene
-solo: si necesitara importar algo de `backend/`, sería señal de que no lo hace. Es exactamente lo
+solo: si necesitara importar algo de `services/`, sería señal de que no lo hace. Es exactamente lo
 que un cliente externo escribiría para integrarse.
 
 ## Requisitos

@@ -72,12 +72,21 @@ Los detalles están en [validación](docs/content/desarrollo/validacion.md).
 ## Estructura del repositorio
 
 ```
-services/lead-core/
-  src/domain/          Entidades, value objects, motores y políticas. Sin dependencias externas
-  src/application/     Casos de uso y puertos. No conoce frameworks web ni SQL
-  src/infrastructure/  Adaptadores: API, persistencia, seguridad, ficheros, eventos
-  migrations/          SQL numerado, idempotente, aplicado al arrancar
-  tests/               unit · integration · e2e · architecture
+services/
+  identity/            Autenticación, MFA, OAuth, organizaciones y agentes
+  intake/              Fuentes, trabajos y registros de ingesta
+  notifications/       La bandeja de notificaciones
+  lead-core/           Leads, reglas, grupos y asesores
+    src/domain/          Entidades, value objects, motores y políticas. Sin dependencias externas
+    src/application/     Casos de uso y puertos. No conoce frameworks web ni SQL
+    src/infrastructure/  Adaptadores: API, consumidores, persistencia, HTTP hacia identity,
+                         eventos y webhooks
+    migrations/          SQL numerado, idempotente, aplicado al arrancar
+    tests/               unit · integration · e2e · architecture
+libs/chassis/          Biblioteca compartida por los servicios
+gateway/               Nginx: única entrada de la API
+db/                    Inicialización de PostgreSQL (una base y un rol por servicio)
+contracts/             Contratos entre servicios
 frontend/
   src/domain/          Modelos y enums de negocio. No conoce el contrato de la API
   src/application/     Servicios, hooks de datos, sesión y mappers

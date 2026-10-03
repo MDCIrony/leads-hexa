@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Standalone consumer for one tenant's `leads.<tenant_id>` topic.
 
-Deliberately independent of the backend (ADR-0026): this is what an external
+Deliberately independent of the services (ADR-0026): this is what an external
 client integrating with the product would write on their own, and importing
-anything from `backend/` here would mean the contract does not stand alone.
+anything from `services/` here would mean the contract does not stand alone.
 """
 import argparse
 import json

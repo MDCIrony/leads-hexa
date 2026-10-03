@@ -190,7 +190,7 @@ es el mismo en `intake` e `intake-worker`) y las contraseñas de los brokers. Lo
 
 | Comando | Qué demuestra |
 |---|---|
-| `docker compose --profile test run --rm <svc>-test` | La suite completa de un servicio, con su base `*_test` (`identity-test`, `intake-test`, `lead-core-test` y `notifications-test`). `intake-test` monta además `contracts/`, para los tests de contrato de la admisión |
+| `docker compose --profile test run --rm <svc>-test` | La suite completa de un servicio, con su base `*_test` (`identity-test`, `intake-test`, `lead-core-test` y `notifications-test`). Los cuatro montan `contracts/`, para los tests de contrato |
 | `cd services/<svc> && uv run pytest -m unit -q` | El dominio aislado: **sin base y sin variables de entorno**, como hoy |
 | `./scripts/verify-e2e.sh` | El negocio de punta a punta sobre HTTP real, contra el gateway en `:8001` |
 

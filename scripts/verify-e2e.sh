@@ -1339,7 +1339,7 @@ leads_db_has_notices() {
 }
 
 verify_ms_f2() {
-  local r rid before ip lead job notif_id tenant_c mgr_c mgr_c_id lead_c i lag group topic end begin sum_offsets
+  local r rid ip lead job notif_id tenant_c mgr_c mgr_c_id lead_c i lag group topic end begin sum_offsets
   local kafka_bin=/opt/kafka/bin
   rid="f2-$STAMP"
   section "Microservicios F2 · la bandeja en su propio servicio"
