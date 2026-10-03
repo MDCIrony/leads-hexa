@@ -497,11 +497,15 @@ carga de prueba; ningún servicio salvo intake tiene credenciales sobre `intake_
 
 ## F5 · Lead Core residual
 
-**Estado: implantada** (`RANGO_F5`, más el commit que registra este rango). Lo construido sigue el
+**Estado: implantada** (`f13bc5c..dec8db2`, más el commit que registra este rango). Lo construido sigue el
 plan salvo las desviaciones de abajo. No hubo copia de datos: `leads_db` ya era la base de lead-core
 y lo que cambió es lo que contiene. Antes de aplicar la migración 019 se hizo un `pg_dump -Fc` de las
 15 tablas que salen (`backups/f5-leads_db-frozen.dump`, fuera de git); sus datos ya vivían en sus
-bases desde F2–F4 y la copia sólo protege de un error de lista. Cierre: `CIERRE_F5`.
+bases desde F2–F4 y la copia sólo protege de un error de lista. Cierre: `verify-e2e.sh` con 410 checks en verde en frío (`--reset`) y en
+caliente; suites lead-core 471, identity 417, intake 421 y notifications 93, sin avisos; `pytest -m
+unit` sin entorno 288 · 263 · 310 · 45; chassis 231; guardianes 4/4 en los cuatro servicios; Bruno
+91/91 tests y 123/123 aserciones; frontend 176 tests y build; `npm run gen:api` sin diff (el contrato
+público no cambió).
 
 **Objetivo.** El monolito ya no existe: lo que queda es lead-core.
 
