@@ -23,7 +23,7 @@ cd bruno && bru run flows --env local -r
 Los cuatro tests de arquitectura de cada servicio deben seguir en 4/4, y los guardianes de estructura
 (`tests/architecture/test_structure.py` y `verify-structure.sh`, [ADR-0037](../decisiones/0037-estructura-y-tamano-del-codigo.md))
 en verde: un fichero fuente de más de 150 líneas, una carpeta de más de 12 ficheros —también de
-tests— o una entrada de lista base que crece (sólo quedan las de `test-consumer/` y `demo/`) hacen fallar el cambio. Si el cambio toca `scripts/verify-e2e.sh`, se
+tests— o una entrada de lista base que crece (sólo queda la de `test-consumer/`) hacen fallar el cambio. Si el cambio toca `scripts/verify-e2e.sh`, se
 amplía —una función `verify_fN` nueva, llamada desde `main`— y no se reescribe: las comprobaciones
 anteriores son la prueba de que lo que ya funcionaba sigue funcionando.
 

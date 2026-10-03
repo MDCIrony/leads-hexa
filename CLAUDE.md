@@ -49,7 +49,7 @@ Cada uno demuestra algo que los otros no:
   repositorio, sin Docker: `libs/chassis/src`, `libs/chassis/tests`, `services/notifications/src`,
   `services/notifications/tests`, `services/identity/src`, `services/identity/tests`,
   `services/intake/src`, `services/intake/tests`, `services/lead-core/src`,
-  `services/lead-core/tests`, `test-consumer/`, `demo/` y `tools/`. Una raíz Python nueva se declara
+  `services/lead-core/tests`, `test-consumer/` y `tools/`. Una raíz Python nueva se declara
   ahí; una que no existe cuenta como fallo.
 - **`bru run flows`** recorre los seis flujos de `bruno/` contra el gateway, con una sesión por cookie
   por rol: demuestra que el contrato documentado en `api-referencia.md` es el que ve un cliente. Las
@@ -73,7 +73,7 @@ A su lado, `tests/architecture/test_structure.py` aplica la misma regla dentro d
 helpers de `chassis.testing`: ficheros fuente de 150 líneas como mucho; 12 ficheros `.py` por
 carpeta **también en los tests**, que sólo quedan exentos del límite de líneas; y tests de dominio que
 sólo importan dominio, la stdlib, `pytest` y sus propios helpers. Ningún servicio tiene lista base:
-lo heredado sólo queda en `scripts/structure_baseline.py`, para `test-consumer/` y `demo/`, y **sólo
+lo heredado sólo queda en `scripts/structure_baseline.py`, para `test-consumer/`, y **sólo
 encoge**: si adelgazas algo de la lista, baja o quita su entrada en el mismo commit (`cd
 libs/chassis && uv run python -m chassis.testing measure <raíz> [--no-line-limit]` imprime los
 valores). `libs/chassis` se valida a sí mismo, sin lista base:

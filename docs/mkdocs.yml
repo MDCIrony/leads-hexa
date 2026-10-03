@@ -170,10 +170,6 @@ nav:
       - Autenticación: eventos/autenticacion.md
       - Operar la mensajería: eventos/operacion.md
 
-  - La demo:
-      - demo/index.md
-      - demo/microservicios.md
-
   - Desarrollo:
       - desarrollo/index.md
       - Puesta en marcha: desarrollo/puesta-en-marcha.md

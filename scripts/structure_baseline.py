@@ -6,7 +6,3 @@ Regenerate an entry with `cd libs/chassis && uv run python -m chassis.testing me
 TEST_CONSUMER = {
     "app.py": 551,
 }
-
-DEMO = {
-    "seed.py": 294,
-}

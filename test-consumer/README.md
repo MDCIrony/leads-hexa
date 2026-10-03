@@ -24,11 +24,8 @@ En la pantalla inicial, el correo y la contraseña de la gestora de la organizac
 hace dos llamadas públicas —`POST /auth/login` y `POST /agents/integration-credential`— y guarda lo
 que recibe. **La contraseña de la persona no se almacena**: sólo la credencial de máquina.
 
-Con la semilla de `demo/seed.py`, eso es `gestor@nordwindsolar.test` / `Demo1234`.
-
 `POST /agents/integration-credential` es un *upsert*: cada emisión rota el secreto y **invalida el
-anterior**. Si se registra esta aplicación después de ejecutar `demo/seed.py`, el fichero
-`demo/credenciales.local.json` queda obsoleto — vuelve a ejecutar el sembrado para refrescarlo.
+anterior**.
 
 ## Las dos puertas de entrada
 

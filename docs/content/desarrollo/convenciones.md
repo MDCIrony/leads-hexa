@@ -77,7 +77,7 @@ chassis/
 El script recorre cada raíz Python declarada —`libs/chassis/src`, `libs/chassis/tests`,
 `services/lead-core/src`, `services/lead-core/tests`, `services/notifications/src`,
 `services/notifications/tests`, `services/identity/src`, `services/identity/tests`,
-`services/intake/src`, `services/intake/tests`, `test-consumer/`, `demo/` y `tools/`— y aplica su
+`services/intake/src`, `services/intake/tests`, `test-consumer/` y `tools/`— y aplica su
 lista base a las que la tienen; en las de tests sólo mide carpetas. Los cuatro servicios, lead-core
 incluido, no tienen lista base. Además, `chassis.testing` ofrece `assert_structure` (con
 `max_lines=None` para los tests), `assert_domain_tests_isolated` y, para el guardián de capas,
@@ -87,7 +87,7 @@ incluido, no tienen lista base. Además, `chassis.testing` ofrece `assert_struct
 
 **Lo heredado.** Lo que ya incumplía al llegar la regla está en una lista base por raíz, con lo que
 medía cada fichero y cada carpeta. Hoy sólo queda `scripts/structure_baseline.py`, para
-`test-consumer/` y `demo/`: ni los servicios ni `libs/chassis` tienen lista.
+`test-consumer/`: ni los servicios ni `libs/chassis` tienen lista.
 
 Las listas sólo encogen: fallan si una entrada crece, si queda por encima de lo que mide el árbol y si
 ya cumple el límite. Quien adelgaza algo heredado actualiza su lista en el mismo commit; los valores

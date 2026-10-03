@@ -32,7 +32,6 @@ check "$REPO/services/intake/tests" --no-line-limit
 check "$REPO/services/lead-core/src"
 check "$REPO/services/lead-core/tests" --no-line-limit
 check "$REPO/test-consumer"     --baseline "$REPO/scripts/structure_baseline.py:TEST_CONSUMER"
-check "$REPO/demo"              --baseline "$REPO/scripts/structure_baseline.py:DEMO"
 check "$REPO/tools"
 
 if [ "$FAILURES" -gt 0 ]; then

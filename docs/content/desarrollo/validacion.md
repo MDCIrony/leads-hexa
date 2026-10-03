@@ -314,9 +314,9 @@ entorno que no sea `test`, no usa credenciales de proveedor y el contenedor temp
 a cada raíz Python del repositorio —`libs/chassis/src`, `libs/chassis/tests`, `services/lead-core/src`,
 `services/lead-core/tests`, `services/notifications/src`, `services/notifications/tests`,
 `services/identity/src`, `services/identity/tests`, `services/intake/src`, `services/intake/tests`,
-`test-consumer/`, `demo/` y `tools/`— con `python -m chassis.testing check`, sobre el entorno de `libs/chassis` y sin
+`test-consumer/` y `tools/`— con `python -m chassis.testing check`, sobre el entorno de `libs/chassis` y sin
 Docker. Las fuentes no pasan de 150 líneas por fichero; fuentes y
-tests, de 12 ficheros `.py` por carpeta. Sólo `test-consumer/` y `demo/` se comparan con una lista base,
+tests, de 12 ficheros `.py` por carpeta. Sólo `test-consumer/` se compara con una lista base,
 que sólo encoge; las demás raíces, incluidas las de lead-core, no tienen. Imprime `ok` por raíz, o lo que
 falla y por qué, y sale con código distinto de cero si alguna falla (o si una raíz declarada no existe).
 Ver [Convenciones](convenciones.md#estructura-y-tamano-del-codigo).
